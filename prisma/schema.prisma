@@ -1,0 +1,519 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// BETTER AUTH REQUIRED MODELS
+// ==========================================
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean
+  image         String?
+  createdAt     DateTime
+  updatedAt     DateTime
+  
+  // Custom AHA Smart Tracker Fields
+  role          String    @default("member") // 'leader' or 'member'
+  status        String    @default("active") @db.VarChar(20) // 'active', 'away', 'busy', 'offline'
+  accountStatus String    @default("active") @map("account_status") @db.VarChar(30) // 'pending_activation', 'pending_setup', 'pending_approval', 'active', 'rejected'
+  teamId        String?
+  team          Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  // Relations
+  sessions      Session[]
+  accounts      Account[]
+  tasks         Task[]    @relation("AssigneeTasks")
+  completedTasks Task[]   @relation("CompletedByTasks")
+  notifications Notification[]
+  createdMeetings  Meeting[] @relation("MeetingCreator")
+  assignedMeetings Meeting[] @relation("MeetingAssignee")
+  meetingGuests    MeetingGuest[]
+  googleToken      GoogleToken?
+
+  // Chat / DM Relations (legacy)
+  conversationParticipants ConversationParticipant[]
+  sentMessages             DirectMessage[]
+
+  // Channel Relations
+  createdChannels      Channel[]          @relation("ChannelCreator")
+  channelMemberships   ChannelMember[]
+  channelMessages      ChannelMessage[]   @relation("ChannelMessageSender")
+  threadReplies        ThreadReply[]      @relation("ThreadReplySender")
+  messageReactions     MessageReaction[]
+  savedMessages        SavedMessage[]
+  channelReadStatuses  ChannelReadStatus[]
+
+  // AHA ORBIT Relations
+  routineTemplates      RoutineTaskTemplate[]  @relation("RoutineTemplateCreator")
+  routineClaims         RoutineTaskClaim[]     @relation("RoutineClaimUser")
+  delegationsFrom       RoutineTaskDelegation[] @relation("DelegationFrom")
+  delegationsTo         RoutineTaskDelegation[] @relation("DelegationTo")
+  activityLogs          ActivityLog[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime
+  updatedAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime
+  updatedAt             DateTime
+
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime?
+  updatedAt  DateTime?
+
+  @@map("verification")
+}
+
+// ==========================================
+// AHA SMART TRACKER MODELS (Migrated from Supabase)
+// ==========================================
+
+model Team {
+  id        String    @id @default(uuid())
+  name      String    @db.VarChar(255)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  users     User[]
+  projects  Project[]
+
+  @@map("teams")
+}
+
+model Project {
+  id                 String    @id @default(uuid())
+  name               String    @db.VarChar(255)
+  description        String?
+  status             String    @default("active") // 'active', 'on-hold', 'completed', 'archived'
+  deadline           DateTime? @db.Date
+  color              String?   @default("#6366f1") @db.VarChar(7)
+  teamId             String    @map("team_id")
+  team               Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  googleSheetSyncId  String?   @map("google_sheet_sync_id") @db.VarChar(255)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  tasks              Task[]
+
+  @@map("projects")
+}
+
+model Task {
+  id                    String    @id @default(uuid())
+  title                 String    @db.VarChar(255)
+  description           String?
+  status                String    @default("todo") // 'todo', 'in-progress', 'review', 'done', 'pending_completion_details'
+  priority              String    @default("medium") // 'low', 'medium', 'high'
+  
+  // Ticketing System Fields
+  requesterName         String?   @map("requester_name") @db.VarChar(255)
+  requesterEmail        String?   @map("requester_email") @db.VarChar(255)
+  requesterDivision     String?   @map("requester_division") @db.VarChar(255)
+  urgency               String?   @db.VarChar(50) // 'P1', 'P2', 'P3', 'P4', '5-minute'
+  attachments           Json      @default("[]")
+  customFields          Json      @default("{}") @map("custom_fields")
+
+  // Completion Workflow Fields
+  difficultyScore       Int?      @map("difficulty_score")
+  feedbackNotes         String?   @map("feedback_notes")
+
+  // Request & Meeting Fields
+  requestType           String?   @map("request_type")
+  attachmentLink        String?   @map("attachment_link")
+  impactDescription     String?   @map("impact_description")
+  relatedProjectName    String?   @map("related_project_name")
+  meetingDateRange      String?   @map("meeting_date_range")
+  meetingDuration       String?   @map("meeting_duration")
+  meetingPurpose        String?   @map("meeting_purpose")
+  taskToken             String?   @map("task_token")
+
+  // Completion fields
+  completedBy           String?   @map("completed_by")
+  completedByUser       User?     @relation("CompletedByTasks", fields: [completedBy], references: [id], onDelete: SetNull)
+  actualTimeSpent       Float?    @map("actual_time_spent")
+  timeUnit              String?   @map("time_unit")
+  resolutionSummary     String?   @map("resolution_summary")
+
+  dueDate               DateTime? @map("due_date") @db.Date
+  projectId             String?   @map("project_id")
+  project               Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assigneeId            String?   @map("assignee_id")
+  assignee              User?     @relation("AssigneeTasks", fields: [assigneeId], references: [id], onDelete: SetNull)
+  notes                 String?
+  isRecurring           Boolean   @default(false) @map("is_recurring")
+  recurrenceType        String?   @map("recurrence_type") @db.VarChar(20)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt           DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  reviews               TaskReview[]
+
+  @@map("tasks")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   @db.VarChar(50) // 'task_assigned', 'task_updated', 'reminder', 'mention'
+  title     String   @db.VarChar(255)
+  message   String
+  read      Boolean  @default(false)
+  data      Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("notifications")
+}
+
+model Meeting {
+  id            String    @id @default(uuid())
+  title         String    @db.VarChar(255)
+  description   String?
+  meetingDate   String    @map("meeting_date") @db.VarChar(10) // YYYY-MM-DD
+  startTime     String    @map("start_time") @db.VarChar(8)   // HH:MM
+  endTime       String    @map("end_time") @db.VarChar(8)
+  createdBy     String    @map("created_by")
+  creator       User      @relation("MeetingCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  assignedTo    String    @map("assigned_to")
+  assignee      User      @relation("MeetingAssignee", fields: [assignedTo], references: [id], onDelete: Cascade)
+  source        String    @default("member") @db.VarChar(50) // 'leader', 'member', 'partner_relations'
+  status        String    @default("confirmed") @db.VarChar(50) // 'confirmed', 'pending', 'cancelled'
+  notifyBefore  Int       @default(0) @map("notify_before")
+  googleEventId String?   @map("google_event_id")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  guests        MeetingGuest[]
+
+  @@map("meetings")
+}
+
+model MeetingGuest {
+  id        String   @id @default(uuid())
+  meetingId String   @map("meeting_id")
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([meetingId, userId])
+  @@map("meeting_guests")
+}
+
+model GoogleToken {
+  id           String   @id @default(uuid())
+  userId       String   @unique @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken  String   @map("access_token")
+  refreshToken String   @map("refresh_token")
+  expiryDate   BigInt?  @map("expiry_date")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("google_tokens")
+}
+
+// ==========================================
+// TASK REVIEWS
+// ==========================================
+
+model TaskReview {
+  id           String   @id @default(uuid())
+  taskId       String   @map("task_id")
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  reviewerType String   @map("reviewer_type") @db.VarChar(20) // 'requester' or 'completer'
+  rating       Int      // 1-5 stars
+  comment      String?
+  reviewerName String?  @map("reviewer_name") @db.VarChar(255)
+  reviewerEmail String? @map("reviewer_email") @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([taskId, reviewerType])
+  @@map("task_reviews")
+}
+
+// ==========================================
+// CHAT / DIRECT MESSAGES
+// ==========================================
+
+model Conversation {
+  id           String    @id @default(uuid())
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  participants ConversationParticipant[]
+  messages     DirectMessage[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id              String       @id @default(uuid())
+  conversationId  String       @map("conversation_id")
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId          String       @map("user_id")
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt      DateTime?    @map("last_read_at") @db.Timestamptz(6)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+model DirectMessage {
+  id              String       @id @default(uuid())
+  conversationId  String       @map("conversation_id")
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId        String       @map("sender_id")
+  sender          User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content         String
+  attachments     Json         @default("[]")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([conversationId, createdAt])
+  @@map("direct_messages")
+}
+
+// ==========================================
+// THREADED COMMENT CHANNELS
+// ==========================================
+
+model Channel {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  description String?
+  createdBy   String   @map("created_by")
+  creator     User     @relation("ChannelCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  isPrivate   Boolean  @default(false) @map("is_private")
+  isArchived  Boolean  @default(false) @map("is_archived")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  messages     ChannelMessage[]
+  readStatuses ChannelReadStatus[]
+  members      ChannelMember[]
+
+  @@map("channels")
+}
+
+model ChannelMember {
+  id        String   @id @default(uuid())
+  channelId String   @map("channel_id")
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([channelId, userId])
+  @@map("channel_members")
+}
+
+model ChannelMessage {
+  id          String   @id @default(uuid())
+  channelId   String   @map("channel_id")
+  channel     Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  senderId    String   @map("sender_id")
+  sender      User     @relation("ChannelMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  content     String
+  attachments Json     @default("[]")
+  mentions    Json     @default("[]")
+  replyCount  Int      @default(0) @map("reply_count")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  replies     ThreadReply[]
+  reactions   MessageReaction[] @relation("MessageReactions")
+  savedBy     SavedMessage[]
+
+  @@index([channelId, createdAt])
+  @@map("channel_messages")
+}
+
+model ThreadReply {
+  id          String         @id @default(uuid())
+  messageId   String         @map("message_id")
+  message     ChannelMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  senderId    String         @map("sender_id")
+  sender      User           @relation("ThreadReplySender", fields: [senderId], references: [id], onDelete: Cascade)
+  content     String
+  attachments Json           @default("[]")
+  mentions    Json           @default("[]")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  reactions   MessageReaction[] @relation("ReplyReactions")
+  savedBy     SavedMessage[]
+
+  @@index([messageId, createdAt])
+  @@map("thread_replies")
+}
+
+model MessageReaction {
+  id        String          @id @default(uuid())
+  emoji     String          @db.VarChar(32)
+  userId    String          @map("user_id")
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId String?         @map("message_id")
+  message   ChannelMessage? @relation("MessageReactions", fields: [messageId], references: [id], onDelete: Cascade)
+  replyId   String?         @map("reply_id")
+  reply     ThreadReply?    @relation("ReplyReactions", fields: [replyId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, emoji, messageId])
+  @@unique([userId, emoji, replyId])
+  @@map("message_reactions")
+}
+
+model SavedMessage {
+  id        String         @id @default(uuid())
+  userId    String         @map("user_id")
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId String         @map("message_id")
+  message   ChannelMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  replyId   String?        @map("reply_id")
+  reply     ThreadReply?   @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, messageId, replyId])
+  @@map("saved_messages")
+}
+
+model ChannelReadStatus {
+  id         String   @id @default(uuid())
+  channelId  String   @map("channel_id")
+  channel    Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime @default(now()) @map("last_read_at") @db.Timestamptz(6)
+
+  @@unique([channelId, userId])
+  @@map("channel_read_status")
+}
+
+// ==========================================
+// AHA ORBIT - ROUTINE TASK MANAGEMENT
+// ==========================================
+
+model RoutineTaskTemplate {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(255)
+  description String?
+  frequency   String   @db.VarChar(20) // 'daily', 'weekly', 'monthly'
+  category    String?  @db.VarChar(100)
+  deadlineTime String? @map("deadline_time") @db.VarChar(5) // HH:MM format, e.g. "17:00"
+  deadlineDay  Int?    @map("deadline_day") // For weekly: 1=Mon..7=Sun, for monthly: 1-31
+  isActive    Boolean  @default(true) @map("is_active")
+  createdBy   String   @map("created_by")
+  creator     User     @relation("RoutineTemplateCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  claims      RoutineTaskClaim[]
+
+  @@map("routine_task_templates")
+}
+
+model RoutineTaskClaim {
+  id          String    @id @default(uuid())
+  templateId  String    @map("template_id")
+  template    RoutineTaskTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  claimedBy   String    @map("claimed_by")
+  claimer     User      @relation("RoutineClaimUser", fields: [claimedBy], references: [id], onDelete: Cascade)
+  period      String    @db.VarChar(20)
+  status         String    @default("claimed") @db.VarChar(20)
+  completedAt    DateTime? @map("completed_at") @db.Timestamptz(6)
+  completionNote String?   @map("completion_note")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  delegations RoutineTaskDelegation[]
+
+  @@unique([templateId, period])
+  @@map("routine_task_claims")
+}
+
+model RoutineTaskDelegation {
+  id         String   @id @default(uuid())
+  claimId    String   @map("claim_id")
+  claim      RoutineTaskClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  fromUserId String   @map("from_user_id")
+  fromUser   User     @relation("DelegationFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId   String   @map("to_user_id")
+  toUser     User     @relation("DelegationTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  status     String   @default("pending") @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("routine_task_delegations")
+}
+
+// ==========================================
+// ACCOUNT ACTIVATION
+// ==========================================
+
+model ActivationToken {
+  id        String   @id @default(uuid())
+  email     String
+  name      String
+  token     String   @unique
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("activation_tokens")
+}
+
+// ==========================================
+// ACTIVITY LOG
+// ==========================================
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action      String   @db.VarChar(50)  // 'task_claimed', 'task_completed', 'status_changed', 'channel_message', 'orbit_claimed', etc.
+  description String
+  entityType  String?  @map("entity_type") @db.VarChar(50) // 'task', 'channel', 'orbit', 'user'
+  entityId    String?  @map("entity_id")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@map("activity_logs")
+}

@@ -1,0 +1,339 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession } from '@/lib/auth-client';
+import { useAuth } from '@/lib/auth-context';
+import { RotateCcw, Plus, Pencil, Trash2, X, ArrowLeft } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import Link from 'next/link';
+
+interface Template {
+  id: string;
+  name: string;
+  description: string | null;
+  frequency: string;
+  category: string | null;
+  isActive: boolean;
+  creator: { id: string; name: string };
+  createdAt: string;
+}
+
+const FREQ_COLORS: Record<string, string> = {
+  daily: 'bg-blue-100 text-blue-700',
+  weekly: 'bg-purple-100 text-purple-700',
+  monthly: 'bg-amber-100 text-amber-700',
+};
+
+export default function ManageOrbitPage() {
+  const router = useRouter();
+  const { data: session, isPending } = useSession();
+  const { isLeader } = useAuth();
+
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Form
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [frequency, setFrequency] = useState('daily');
+  const [category, setCategory] = useState('');
+  const [deadlineTime, setDeadlineTime] = useState('');
+  const [deadlineDay, setDeadlineDay] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isPending && !session) router.push('/login');
+    if (!isPending && session && !isLeader) router.push('/orbit');
+  }, [session, isPending, isLeader, router]);
+
+  useEffect(() => {
+    if (session && isLeader) fetchTemplates();
+  }, [session, isLeader]);
+
+  const fetchTemplates = async () => {
+    try {
+      const res = await fetch('/api/orbit/templates');
+      if (res.ok) setTemplates(await res.json());
+    } catch {} finally { setLoading(false); }
+  };
+
+  const resetForm = () => {
+    setEditId(null);
+    setName('');
+    setDescription('');
+    setFrequency('weekly');
+    setCategory('');
+    setDeadlineTime('');
+    setDeadlineDay('');
+    setError('');
+    setShowForm(false);
+  };
+
+  const handleEdit = (t: Template) => {
+    setEditId(t.id);
+    setName(t.name);
+    setDescription(t.description || '');
+    setFrequency(t.frequency);
+    setCategory(t.category || '');
+    setDeadlineTime((t as any).deadlineTime || '');
+    setDeadlineDay((t as any).deadlineDay?.toString() || '');
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+
+    try {
+      const url = editId ? `/api/orbit/templates/${editId}` : '/api/orbit/templates';
+      const method = editId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description, frequency, category, deadlineTime, deadlineDay }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed');
+      }
+
+      resetForm();
+      fetchTemplates();
+    } catch (err: any) {
+      setError(err.message);
+    } finally { setSaving(false); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deactivate this routine task template?')) return;
+    await fetch(`/api/orbit/templates/${id}`, { method: 'DELETE' });
+    fetchTemplates();
+  };
+
+  if (isPending || !session) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto px-6 py-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Link href="/orbit" className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">Manage Routine Tasks</h1>
+            <p className="text-sm text-slate-400">Create and manage routine task templates</p>
+          </div>
+        </div>
+        <button
+          onClick={() => { resetForm(); setShowForm(true); }}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Template
+        </button>
+      </div>
+
+      {/* Create/Edit Form */}
+      {showForm && (
+        <div className="bg-white border border-indigo-200 rounded-2xl p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-bold text-slate-700">{editId ? 'Edit Template' : 'New Template'}</h2>
+            <button onClick={resetForm} className="p-1 text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {error && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 text-sm mb-4">{error}</div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-600">Task Name *</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                  placeholder="e.g. Update sales report"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-600">Category</label>
+                <input
+                  type="text"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                  placeholder="e.g. Reporting, Operations"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-600">Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors resize-none"
+                placeholder="Describe the routine task..."
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-600">Frequency *</label>
+              <div className="flex gap-2 mt-1">
+                {['weekly', 'monthly'].map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFrequency(f)}
+                    className={cn(
+                      'px-4 py-2 rounded-xl text-sm font-medium border transition-all capitalize',
+                      frequency === f
+                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'
+                    )}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Deadline Settings */}
+            <div className="grid grid-cols-2 gap-4">
+              {(frequency === 'weekly' || frequency === 'monthly') && (
+                <div>
+                  <label className="text-sm font-medium text-slate-600">
+                    {frequency === 'weekly' ? 'Due Day of Week' : 'Due Day of Month'}
+                  </label>
+                  {frequency === 'weekly' ? (
+                    <select
+                      value={deadlineDay}
+                      onChange={(e) => setDeadlineDay(e.target.value)}
+                      className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    >
+                      <option value="">Select day...</option>
+                      <option value="1">Monday</option>
+                      <option value="2">Tuesday</option>
+                      <option value="3">Wednesday</option>
+                      <option value="4">Thursday</option>
+                      <option value="5">Friday</option>
+                      <option value="6">Saturday</option>
+                      <option value="7">Sunday</option>
+                    </select>
+                  ) : (
+                    <select
+                      value={deadlineDay}
+                      onChange={(e) => setDeadlineDay(e.target.value)}
+                      className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    >
+                      <option value="">Select date...</option>
+                      {Array.from({ length: 31 }, (_, i) => (
+                        <option key={i + 1} value={i + 1}>{i + 1}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-medium text-slate-600">Due Time</label>
+                <input
+                  type="time"
+                  value={deadlineTime}
+                  onChange={(e) => setDeadlineTime(e.target.value)}
+                  className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={saving || !name.trim()}
+              className="w-full py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors text-sm"
+            >
+              {saving ? 'Saving...' : editId ? 'Update Template' : 'Create Template'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Templates List */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : templates.length === 0 ? (
+        <div className="text-center py-20">
+          <RotateCcw className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-lg font-semibold text-slate-600 mb-1">No templates yet</h3>
+          <p className="text-sm text-slate-400">Create your first routine task template.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {templates.map((t) => (
+            <div key={t.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-5 py-4 hover:border-indigo-200 transition-colors">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="font-semibold text-sm text-slate-800">{t.name}</span>
+                  <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium capitalize', FREQ_COLORS[t.frequency])}>
+                    {t.frequency}
+                  </span>
+                  {t.category && (
+                    <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">
+                      {t.category}
+                    </span>
+                  )}
+                </div>
+                {t.description && (
+                  <p className="text-xs text-slate-400 truncate">{t.description}</p>
+                )}
+                {((t as any).deadlineTime || (t as any).deadlineDay) && (
+                  <p className="text-xs text-indigo-400 mt-0.5">
+                    Due: {(t as any).deadlineDay && t.frequency === 'weekly'
+                      ? ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(t as any).deadlineDay] + ' '
+                      : (t as any).deadlineDay && t.frequency === 'monthly'
+                        ? `Day ${(t as any).deadlineDay} `
+                        : ''
+                    }{(t as any).deadlineTime ? `at ${(t as any).deadlineTime}` : ''}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-1 ml-4">
+                <button
+                  onClick={() => handleEdit(t)}
+                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(t.id)}
+                  className="p-2 text-slate-400 hover:text-rose-500 hover:bg-slate-50 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

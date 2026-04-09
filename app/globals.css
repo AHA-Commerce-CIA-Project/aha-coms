@@ -1,26 +1,121 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0a0f;
+  --foreground: #ededed;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-manrope);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Brand Blue Scale (Mapped to Slate for UI elements) */
+  --color-slate-950: #0a0c33;
+  --color-slate-900: #161B67;
+  --color-slate-800: #161B67;
+  --color-slate-700: #1d2382;
+  --color-slate-600: #2e38b3;
+  --color-slate-500: #424dd4;
+  --color-slate-400: #646cde;
+  --color-slate-300: #b5bcf4;
+  --color-slate-200: #daddf9;
+  --color-slate-100: #f0f1fc;
+
+  /* Brand Accents */
+  --color-indigo-600: #161B67;
+  --color-indigo-500: #161B67;
+  --color-indigo-400: #161B67;
+  --color-indigo-300: #646cde;
+
+  --color-purple-500: #6D50B8;
+  --color-purple-600: #4a3482;
+
+  --color-amber-400: #F4C144;
+  --color-amber-500: #d6a32d;
+  
+  --color-white: #FFFFFF;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #f8fafc;
+  color: #161B67;
+  font-family: var(--font-manrope), 'Manrope', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Smooth transitions */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(29, 56, 139, 0.5); /* #1D388B */
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(150, 173, 245, 0.15); /* #96ADF5 */
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #818cf8 0%, #a78bfa 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effects */
+.glow-indigo {
+  box-shadow: 0 0 40px -10px rgba(99, 102, 241, 0.4);
+}
+
+.glow-purple {
+  box-shadow: 0 0 40px -10px rgba(168, 85, 247, 0.4);
+}
+
+/* Animation keyframes */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
 }
