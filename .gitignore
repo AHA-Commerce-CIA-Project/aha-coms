@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.output/
+.vinxi/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun.lockb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude / AI tooling
+CLAUDE.md
+.claude/
+
+# Internal docs (not for public repo)
+docs/
+
+# Infra (contains sensitive config — manage separately)
+infra/
+
+# Type cache
+*.tsbuildinfo
