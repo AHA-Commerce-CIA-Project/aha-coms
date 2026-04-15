@@ -38,8 +38,23 @@ CLAUDE.md
 # Internal docs (not for public repo)
 docs/
 
-# Infra (contains sensitive config — manage separately)
-infra/
-
 # Type cache
 *.tsbuildinfo
+.gitnexus
+
+# OpenTofu / Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/*.tfvars
+!infra/*.tfvars.example
+infra/.terraform.lock.hcl
+
+# Personal folders
+my-document/
+
+# Dev scripts (local-only)
+scripts/
+
+# Vinxi build artifacts
+app.config.timestamp_*.js
