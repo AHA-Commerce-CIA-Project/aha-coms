@@ -13,6 +13,10 @@ import { initGip } from './gip'
 initGip()
 
 export const app = new Elysia({ prefix: '/api' })
+  .onError(({ error, path }) => {
+    console.error(`[API Error] ${path}:`, error)
+    return { message: error instanceof Error ? error.message : 'Internal error' }
+  })
   .get('/health', () => ({ status: 'ok' }))
   .use(authRoutes)
   .group('/v1', (app) =>
