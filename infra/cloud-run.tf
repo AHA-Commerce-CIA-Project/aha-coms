@@ -92,3 +92,18 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
+
+# Grant default compute SA access to secrets
+data "google_project" "current" {}
+
+resource "google_secret_manager_secret_iam_member" "compute_sa_database_url" {
+  secret_id = google_secret_manager_secret.database_url.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_secret_manager_secret_iam_member" "compute_sa_gip_api_key" {
+  secret_id = google_secret_manager_secret.gip_api_key.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+}

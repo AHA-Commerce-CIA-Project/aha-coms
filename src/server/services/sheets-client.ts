@@ -1,4 +1,5 @@
-import { google } from 'googleapis'
+import { sheets } from '@googleapis/sheets'
+import { JWT } from 'google-auth-library'
 import { readFileSync } from 'fs'
 
 export interface SheetRow {
@@ -17,7 +18,7 @@ function buildSheetsAuth() {
 
   // No `subject` needed — Sheets API doesn't require DWD,
   // just share the sheet with the service account email
-  return new google.auth.JWT({
+  return new JWT({
     email: key.client_email,
     key: key.private_key,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
@@ -33,12 +34,12 @@ export async function readPersonalEmailSheet(): Promise<SheetRow[]> {
   }
 
   const auth = buildSheetsAuth()
-  const sheets = google.sheets({ version: 'v4', auth })
+  const sheetsClient = sheets({ version: 'v4', auth })
 
   // Column A = full name, Column C = personal email
   const range = `'${sheetName}'!A:C`
 
-  const response = await sheets.spreadsheets.values.get({
+  const response = await sheetsClient.spreadsheets.values.get({
     spreadsheetId,
     range,
   })

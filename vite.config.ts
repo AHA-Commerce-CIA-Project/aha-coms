@@ -16,6 +16,19 @@ export default defineConfig({
         routesDirectory: 'routes',
         generatedRouteTree: 'routeTree.gen.ts',
       },
+      importProtection: {
+        client: {
+          specifiers: [
+            '@googleapis/sheets',
+            '@googleapis/admin',
+            'google-auth-library',
+            'firebase-admin',
+            'postgres',
+            'drizzle-orm',
+          ],
+          files: ['**/server/services/**', '**/server/routes/**', '**/db/**'],
+        },
+      },
     }),
     viteReact(),
   ],

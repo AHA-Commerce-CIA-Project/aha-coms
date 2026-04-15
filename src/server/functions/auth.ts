@@ -1,9 +1,4 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequest } from '@tanstack/react-start/server'
-import { getAuth } from 'firebase-admin/auth'
-import { initGip } from '../gip'
-
-initGip()
 
 export interface SessionUser {
   gipUid: string
@@ -14,14 +9,14 @@ export interface SessionUser {
   apps: string[]
 }
 
-/**
- * TanStack Start server function — verifies the __session cookie server-side
- * and returns the current user, or null if unauthenticated.
- *
- * Used in src/routes/_authed.tsx beforeLoad to guard all authenticated routes.
- */
 export const getSessionFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<SessionUser | null> => {
+    const { getRequest } = await import('@tanstack/react-start/server')
+    const { getAuth } = await import('firebase-admin/auth')
+    const { initGip } = await import('../gip')
+
+    initGip()
+
     const request = getRequest()
     const cookieHeader = request.headers.get('cookie') ?? ''
     const match = cookieHeader.match(/__session=([^;]+)/)

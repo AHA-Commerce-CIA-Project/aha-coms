@@ -1,4 +1,5 @@
-import { google } from 'googleapis'
+import { admin } from '@googleapis/admin'
+import { JWT } from 'google-auth-library'
 import { readFileSync } from 'fs'
 
 export interface WorkspaceUser {
@@ -33,7 +34,7 @@ function buildAuth() {
 
   const key = JSON.parse(readFileSync(keyFile, 'utf-8'))
 
-  return new google.auth.JWT({
+  return new JWT({
     email: key.client_email,
     key: key.private_key,
     scopes: ['https://www.googleapis.com/auth/admin.directory.user.readonly'],
@@ -76,13 +77,13 @@ export async function listAllWorkspaceUsers(): Promise<WorkspaceUser[]> {
   const customerId = process.env.WORKSPACE_CUSTOMER_ID ?? 'my_customer'
 
   const auth = buildAuth()
-  const admin = google.admin({ version: 'directory_v1', auth })
+  const adminClient = admin({ version: 'directory_v1', auth })
 
   const users: WorkspaceUser[] = []
   let pageToken: string | undefined
 
   do {
-    const response = await admin.users.list({
+    const response = await adminClient.users.list({
       customer: customerId,
       maxResults: 500,
       orderBy: 'email',
