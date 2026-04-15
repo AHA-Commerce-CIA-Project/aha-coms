@@ -38,8 +38,9 @@ LABEL org.opencontainers.image.title="COMS Portal" \
 
 WORKDIR /app
 
-# Copy built output and production node_modules only
+# Copy built output, server entry, and production node_modules only
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/server.ts ./server.ts
 COPY --from=install /app/node_modules ./node_modules
 
 EXPOSE 3000
@@ -47,4 +48,4 @@ EXPOSE 3000
 # Run as the non-root bun user provided by the base image
 USER bun
 
-CMD ["bun", "dist/server/server.js"]
+CMD ["bun", "server.ts"]
