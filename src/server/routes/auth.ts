@@ -28,9 +28,16 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }
 
       // Closed registration: only pre-provisioned employees may log in
-      const user = await db.query.identityUsers.findFirst({
-        where: eq(identityUsers.email, decoded.email ?? ''),
-      })
+      let user
+      try {
+        user = await db.query.identityUsers.findFirst({
+          where: eq(identityUsers.email, decoded.email ?? ''),
+        })
+      } catch (e) {
+        console.error('DB lookup failed:', e)
+        set.status = 500
+        return { message: 'Database error during login' }
+      }
 
       if (!user) {
         set.status = 403
@@ -42,30 +49,36 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         return { message: 'Account is inactive or suspended.' }
       }
 
-      // Link GIP UID on first login if not yet stored
-      if (!user.gipUid) {
-        await db
-          .update(identityUsers)
-          .set({ gipUid: decoded.uid, updatedAt: new Date() })
-          .where(eq(identityUsers.id, user.id))
+      try {
+        // Link GIP UID on first login if not yet stored
+        if (!user.gipUid) {
+          await db
+            .update(identityUsers)
+            .set({ gipUid: decoded.uid, updatedAt: new Date() })
+            .where(eq(identityUsers.id, user.id))
+        }
+
+        // Sync custom claims (portalRole, teamIds, apps)
+        await resolveAndSyncClaims(user.gipUid ?? decoded.uid, user.id)
+
+        const expiresIn = SESSION_COOKIE_OPTIONS.maxAge * 1000
+        const sessionCookie = await getAuth().createSessionCookie(body.idToken, { expiresIn })
+
+        cookie[SESSION_COOKIE_OPTIONS.name].set({
+          value: sessionCookie,
+          path: SESSION_COOKIE_OPTIONS.path,
+          httpOnly: SESSION_COOKIE_OPTIONS.httpOnly,
+          secure: SESSION_COOKIE_OPTIONS.secure,
+          sameSite: SESSION_COOKIE_OPTIONS.sameSite,
+          maxAge: SESSION_COOKIE_OPTIONS.maxAge,
+        })
+
+        return { ok: true }
+      } catch (e) {
+        console.error('Session creation failed:', e)
+        set.status = 500
+        return { message: e instanceof Error ? e.message : 'Session creation failed' }
       }
-
-      // Sync custom claims (portalRole, teamIds, apps)
-      await resolveAndSyncClaims(user.gipUid ?? decoded.uid, user.id)
-
-      const expiresIn = SESSION_COOKIE_OPTIONS.maxAge * 1000
-      const sessionCookie = await getAuth().createSessionCookie(body.idToken, { expiresIn })
-
-      cookie[SESSION_COOKIE_OPTIONS.name].set({
-        value: sessionCookie,
-        path: SESSION_COOKIE_OPTIONS.path,
-        httpOnly: SESSION_COOKIE_OPTIONS.httpOnly,
-        secure: SESSION_COOKIE_OPTIONS.secure,
-        sameSite: SESSION_COOKIE_OPTIONS.sameSite,
-        maxAge: SESSION_COOKIE_OPTIONS.maxAge,
-      })
-
-      return { ok: true }
     },
     { body: t.Object({ idToken: t.String() }) },
   )
