@@ -26,11 +26,21 @@ Bun.serve({
     // Reverse-proxy Firebase auth handler so popup/redirect runs same-origin
     if (url.pathname.startsWith('/__/')) {
       const firebaseUrl = `https://fbi-dev-484410.firebaseapp.com${url.pathname}${url.search}`
-      return fetch(firebaseUrl, {
+      const upstream = await fetch(firebaseUrl, {
         method: request.method,
         headers: { ...Object.fromEntries(request.headers.entries()), host: 'fbi-dev-484410.firebaseapp.com' },
         body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
         redirect: 'manual',
+      })
+      // Build clean response — fetch() decompresses the body so we must strip
+      // content-encoding/content-length to avoid a browser decoding mismatch.
+      const headers = new Headers(upstream.headers)
+      headers.delete('content-encoding')
+      headers.delete('content-length')
+      return new Response(upstream.body, {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        headers,
       })
     }
 
