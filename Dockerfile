@@ -13,6 +13,14 @@ FROM oven/bun:1 AS build
 
 WORKDIR /app
 
+# Firebase client config — inlined by Vite at build time (public, not secret)
+ARG VITE_GIP_API_KEY
+ARG VITE_GIP_AUTH_DOMAIN
+ARG VITE_GIP_PROJECT_ID
+ENV VITE_GIP_API_KEY=$VITE_GIP_API_KEY
+ENV VITE_GIP_AUTH_DOMAIN=$VITE_GIP_AUTH_DOMAIN
+ENV VITE_GIP_PROJECT_ID=$VITE_GIP_PROJECT_ID
+
 # Copy installed modules from install stage
 COPY --from=install /app/node_modules ./node_modules
 
