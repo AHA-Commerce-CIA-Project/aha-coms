@@ -12,10 +12,13 @@ import { authPlugin } from './auth'
 export function requireRole(...roles: PortalRole[]) {
   return new Elysia({ name: `rbac-${roles.join('-')}` })
     .use(authPlugin)
-    .derive({ as: 'scoped' }, async ({ authUser, error }) => {
-      if (!roles.includes(authUser.portalRole)) {
-        throw error(403, { message: 'Insufficient portal role' })
+    .derive({ as: 'scoped' }, async ({ authUser, status }) => {
+      if (!authUser) {
+        throw status(401, { message: 'Unauthorized' })
       }
-      return {}
+      if (!roles.includes(authUser.portalRole)) {
+        throw status(403, { message: 'Insufficient portal role' })
+      }
+      return { authUser }
     })
 }

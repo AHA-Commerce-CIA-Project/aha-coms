@@ -47,7 +47,10 @@ function EmployeeDetailPage() {
     e.preventDefault()
     setSaving(true)
     setMessage(null)
-    const { error } = await api.api.v1.employees({ id }).patch(form)
+    const patch = Object.fromEntries(
+      Object.entries(form).map(([k, v]) => [k, v === null ? undefined : v]),
+    )
+    const { error } = await api.api.v1.employees({ id }).patch(patch)
     if (error) {
       setMessage({ type: 'error', text: (error.value as { message?: string })?.message ?? 'Failed' })
     } else {

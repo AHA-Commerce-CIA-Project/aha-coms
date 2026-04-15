@@ -17,8 +17,8 @@ interface AuditEntry {
   action: string
   targetType: string
   targetId: string
-  details: Record<string, unknown> | null
-  createdAt: string
+  details: unknown
+  createdAt: Date
   actor: { name: string; email: string } | null
 }
 
@@ -31,7 +31,7 @@ function AuditPage() {
 
   useEffect(() => {
     setLoading(true)
-    api.api.v1.access.audit.get({ query: { page, limit } }).then(({ data }) => {
+    api.api.v1.access.audit.get({ query: { page: String(page), limit: String(limit) } }).then(({ data }) => {
       if (data) {
         const d = data as { entries: AuditEntry[]; total: number }
         setEntries(d.entries)

@@ -17,11 +17,16 @@ interface Employee {
   id: string
   email: string
   name: string
+  phone: string | null
   department: string | null
   position: string | null
   portalRole: string
+  personalEmail: string | null
+  hasGoogleWorkspace: boolean
   status: string
-  createdAt: string
+  gipUid: string | null
+  createdAt: Date
+  updatedAt: Date
 }
 
 function EmployeesPage() {
@@ -35,10 +40,10 @@ function EmployeesPage() {
 
   useEffect(() => {
     setLoading(true)
-    api.api.v1.employees.get({ query: { page, limit, search: search || undefined } }).then(({ data }) => {
+    api.api.v1.employees.get({ query: { page: String(page), limit: String(limit), search: search || undefined } }).then(({ data }) => {
       if (data) {
-        setEmployees((data as { employees: Employee[]; total: number }).employees)
-        setTotal((data as { employees: Employee[]; total: number }).total)
+        setEmployees((data as { data: Employee[]; total: number }).data)
+        setTotal((data as { data: Employee[]; total: number }).total)
       }
       setLoading(false)
     })

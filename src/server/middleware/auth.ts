@@ -21,13 +21,13 @@ export interface AuthUser {
  */
 export const authPlugin = new Elysia({ name: 'auth-plugin' }).derive(
   { as: 'scoped' },
-  async ({ request, error }) => {
+  async ({ request, status }) => {
     const cookieHeader = request.headers.get('cookie') ?? ''
     const match = cookieHeader.match(/__session=([^;]+)/)
     const sessionCookie = match?.[1]
 
     if (!sessionCookie) {
-      throw error(401, { message: 'No session cookie' })
+      throw status(401, { message: 'No session cookie' })
     }
 
     try {
@@ -44,7 +44,7 @@ export const authPlugin = new Elysia({ name: 'auth-plugin' }).derive(
 
       return { authUser }
     } catch {
-      throw error(401, { message: 'Invalid or expired session' })
+      throw status(401, { message: 'Invalid or expired session' })
     }
   },
 )

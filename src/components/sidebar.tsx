@@ -32,7 +32,7 @@ export function Sidebar({ user }: Props) {
   async function handleSignOut() {
     await api.api.auth.logout.post({})
     await signOut(clientAuth)
-    await router.navigate({ to: '/login' })
+    await router.navigate({ to: '/login', search: { redirect: '/' } })
   }
 
   return (

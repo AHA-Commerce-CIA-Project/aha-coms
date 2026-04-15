@@ -17,6 +17,7 @@ const employeeBody = t.Object({
     t.Union([t.Literal('employee'), t.Literal('admin'), t.Literal('super_admin')]),
   ),
   teamId: t.Optional(t.String()),
+  hasGoogleWorkspace: t.Optional(t.Boolean()),
 })
 
 export const employeeRoutes = new Elysia({ prefix: '/employees' })

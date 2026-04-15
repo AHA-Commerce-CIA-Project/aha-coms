@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Generate route tree
+        run: bun run build
+
       - name: Typecheck
         run: bun run typecheck
 
