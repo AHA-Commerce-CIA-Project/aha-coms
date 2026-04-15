@@ -40,22 +40,11 @@ function LoginPage() {
     setLoading(true)
     try {
       const cred = await signInWithPopup(clientAuth, googleProvider)
-      let idToken: string
-      try {
-        idToken = await getIdToken(cred.user)
-      } catch (tokenErr) {
-        throw new Error(`[getIdToken] ${tokenErr instanceof Error ? tokenErr.message : tokenErr}`)
-      }
-      try {
-        await exchangeToken(idToken)
-      } catch (exchErr) {
-        throw new Error(`[exchangeToken] ${exchErr instanceof Error ? exchErr.message : exchErr}`)
-      }
+      const idToken = await getIdToken(cred.user)
+      await exchangeToken(idToken)
     } catch (e) {
       await signOut(clientAuth).catch(() => {})
-      const msg = e instanceof Error ? e.message : 'Google sign-in failed'
-      console.error('Google sign-in error:', e)
-      setError(msg)
+      setError(e instanceof Error ? e.message : 'Google sign-in failed')
     } finally {
       setLoading(false)
     }

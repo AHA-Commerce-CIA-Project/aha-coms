@@ -3,11 +3,9 @@ import type { App } from '~/server/index'
 
 /**
  * Type-safe API client via Eden Treaty.
- * Empty string origin = same-origin requests (no CORS needed).
- * All routes and types are inferred from the Elysia App type.
- *
- * Usage:
- *   const { data } = await api.api.v1.dashboard.get()
- *   const { data } = await api.api.v1.employees.post({ body: { ... } })
+ * Eden mangles an empty-string base into "https:/" which breaks fetches,
+ * so we pass the real origin on the client and a localhost fallback for SSR.
  */
-export const api = treaty<App>('')
+export const api = treaty<App>(
+  typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000',
+)
