@@ -23,6 +23,17 @@ Bun.serve({
   async fetch(request) {
     const url = new URL(request.url)
 
+    // Reverse-proxy Firebase auth handler so popup/redirect runs same-origin
+    if (url.pathname.startsWith('/__/')) {
+      const firebaseUrl = `https://fbi-dev-484410.firebaseapp.com${url.pathname}${url.search}`
+      return fetch(firebaseUrl, {
+        method: request.method,
+        headers: { ...Object.fromEntries(request.headers.entries()), host: 'fbi-dev-484410.firebaseapp.com' },
+        body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
+        redirect: 'manual',
+      })
+    }
+
     // Serve static assets from dist/client
     if (url.pathname.startsWith('/assets/') || url.pathname === '/favicon.ico') {
       const filePath = join(CLIENT_DIR, url.pathname)

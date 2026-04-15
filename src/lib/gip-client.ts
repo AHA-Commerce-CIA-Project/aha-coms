@@ -3,7 +3,12 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_GIP_API_KEY,
-  authDomain: import.meta.env.VITE_GIP_AUTH_DOMAIN,
+  // Use the app's own domain so the auth handler runs same-origin (proxied to Firebase).
+  // Falls back to the Firebase domain on the server where window is unavailable.
+  authDomain:
+    typeof window !== 'undefined'
+      ? window.location.host
+      : (import.meta.env.VITE_GIP_AUTH_DOMAIN ?? ''),
   projectId: import.meta.env.VITE_GIP_PROJECT_ID,
 }
 
