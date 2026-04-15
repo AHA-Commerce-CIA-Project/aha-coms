@@ -10,6 +10,7 @@ export const identityUsers = pgTable('identity_users', {
   department: varchar('department', { length: 100 }),
   position: varchar('position', { length: 100 }),
   portalRole: varchar('portal_role', { length: 20 }).notNull().default('employee'),
+  personalEmail: varchar('personal_email', { length: 255 }),
   hasGoogleWorkspace: boolean('has_google_workspace').notNull().default(false),
   status: varchar('status', { length: 20 }).notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

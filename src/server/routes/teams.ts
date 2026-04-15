@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
-import { teams, teamMembers } from '~/db/schema'
+import { teams, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
 import { eq, sql } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { addTeamMember, removeTeamMember, deleteTeam } from '../services/teams'
@@ -47,7 +47,12 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
       set.status = 404
       return { message: 'Not found' }
     }
-    return team
+    const appAccess = await db
+      .select({ id: teamAppAccess.id, appId: teamAppAccess.appId, name: appRegistry.name, slug: appRegistry.slug })
+      .from(teamAppAccess)
+      .innerJoin(appRegistry, eq(appRegistry.id, teamAppAccess.appId))
+      .where(eq(teamAppAccess.teamId, params.id))
+    return { ...team, appAccess }
   })
 
   .patch(
@@ -82,7 +87,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
   .post(
     '/:id/members',
     async ({ params, body, authUser }) => {
-      await addTeamMember(params.id, body.userId)
+      await addTeamMember(params.id, body.userId, body.roleInTeam)
       await logAudit({
         actorId: authUser.gipUid,
         action: 'add_team_member',
@@ -92,7 +97,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
       })
       return { ok: true }
     },
-    { body: t.Object({ userId: t.String() }) },
+    { body: t.Object({ userId: t.String(), roleInTeam: t.Optional(t.String()) }) },
   )
 
   .delete('/:id/members/:userId', async ({ params, authUser }) => {

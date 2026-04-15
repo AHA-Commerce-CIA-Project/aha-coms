@@ -1,0 +1,28 @@
+# Dependencies (reinstalled during build)
+node_modules/
+
+# Git history
+.git/
+.gitignore
+
+# Build artifacts (produced during Docker build)
+.output/
+.vinxi/
+dist/
+
+# Environment files — never bake secrets into the image
+.env
+.env.*
+!.env.example
+
+# Infrastructure as code
+infra/
+
+# Documentation
+*.md
+
+# CI/CD config
+.github/
+
+# Local dev artifacts
+docs/

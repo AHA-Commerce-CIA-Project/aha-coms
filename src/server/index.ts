@@ -5,6 +5,8 @@ import { teamRoutes } from './routes/teams'
 import { appRoutes } from './routes/apps'
 import { accessRoutes } from './routes/access'
 import { dashboardRoutes } from './routes/dashboard'
+import { workspaceSyncRoutes } from './routes/workspace-sync'
+import { personalEmailSyncRoutes } from './routes/personal-email-sync'
 import { authPlugin } from './middleware/auth'
 import { initGip } from './gip'
 
@@ -20,7 +22,9 @@ export const app = new Elysia({ prefix: '/api' })
       .use(teamRoutes)
       .use(appRoutes)
       .use(accessRoutes)
-      .use(dashboardRoutes),
+      .use(dashboardRoutes)
+      .use(workspaceSyncRoutes)
+      .use(personalEmailSyncRoutes),
   )
 
 export type App = typeof app

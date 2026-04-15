@@ -21,6 +21,7 @@ const ADMIN_NAV = [
 
 const SUPER_NAV = [
   { to: '/admin/apps', label: 'App Registry' },
+  { to: '/admin/workspace-sync', label: 'Workspace Sync' },
 ]
 
 export function Sidebar({ user }: Props) {

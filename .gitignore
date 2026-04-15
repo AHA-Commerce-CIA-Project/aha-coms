@@ -58,3 +58,6 @@ scripts/
 
 # Vinxi build artifacts
 app.config.timestamp_*.js
+
+# TanStack generated route tree
+src/routeTree.gen.ts

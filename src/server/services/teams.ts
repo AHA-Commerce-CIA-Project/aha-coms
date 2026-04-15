@@ -3,8 +3,8 @@ import { teams, teamMembers, identityUsers } from '~/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { resolveAndSyncClaims } from './claims'
 
-export async function addTeamMember(teamId: string, userId: string): Promise<void> {
-  await db.insert(teamMembers).values({ teamId, userId })
+export async function addTeamMember(teamId: string, userId: string, roleInTeam?: string): Promise<void> {
+  await db.insert(teamMembers).values({ teamId, userId, ...(roleInTeam ? { roleInTeam } : {}) })
 
   const user = await db.query.identityUsers.findFirst({
     where: eq(identityUsers.id, userId),

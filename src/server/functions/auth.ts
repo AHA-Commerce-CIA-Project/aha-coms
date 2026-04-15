@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getWebRequest } from '@tanstack/react-start/server'
+import { getRequest } from '@tanstack/react-start/server'
 import { getAuth } from 'firebase-admin/auth'
 import { initGip } from '../gip'
 
@@ -22,7 +22,7 @@ export interface SessionUser {
  */
 export const getSessionFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<SessionUser | null> => {
-    const request = getWebRequest()
+    const request = getRequest()
     const cookieHeader = request.headers.get('cookie') ?? ''
     const match = cookieHeader.match(/__session=([^;]+)/)
     const sessionCookie = match?.[1]

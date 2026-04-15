@@ -31,6 +31,7 @@ function EmployeeDetailPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [resetStatus, setResetStatus] = useState<string | null>(null)
 
   useEffect(() => {
     api.api.v1.employees({ id }).get().then(({ data }) => {
@@ -59,6 +60,16 @@ function EmployeeDetailPage() {
     if (!confirm('Deactivate this employee? They will lose portal access.')) return
     const { error } = await api.api.v1.employees({ id }).delete()
     if (!error) window.location.href = '/admin/employees'
+  }
+
+  async function handleResetPassword() {
+    setResetStatus(null)
+    const { error } = await api.api.v1.employees({ id })['reset-password'].post({})
+    if (error) {
+      setResetStatus('Failed to send password reset email.')
+    } else {
+      setResetStatus(`Password reset email sent to ${employee?.email ?? 'the employee'}.`)
+    }
   }
 
   if (loading) return <div className="p-8 text-neutral-400">Loading…</div>
@@ -109,6 +120,13 @@ function EmployeeDetailPage() {
           >
             {saving ? 'Saving…' : 'Save changes'}
           </button>
+          <button
+            type="button"
+            onClick={handleResetPassword}
+            className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-300 hover:bg-neutral-800"
+          >
+            Reset Password
+          </button>
           {employee.status === 'active' && (
             <button
               type="button"
@@ -119,6 +137,9 @@ function EmployeeDetailPage() {
             </button>
           )}
         </div>
+        {resetStatus && (
+          <p className="mt-2 text-sm text-neutral-400">{resetStatus}</p>
+        )}
       </form>
     </div>
   )

@@ -1,3 +1,4 @@
+import { getAuth } from 'firebase-admin/auth'
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
 import { identityUsers } from '~/db/schema'
@@ -99,4 +100,16 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       targetId: params.id,
     })
     return { ok: true }
+  })
+
+  .post('/:id/reset-password', async ({ params, set }) => {
+    const employee = await db.query.identityUsers.findFirst({
+      where: eq(identityUsers.id, params.id),
+    })
+    if (!employee) {
+      set.status = 404
+      return { message: 'Not found' }
+    }
+    await getAuth().generatePasswordResetLink(employee.email)
+    return { ok: true, email: employee.email }
   })

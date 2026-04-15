@@ -1,5 +1,4 @@
-import { createRootRoute, Outlet, ScrollRestoration } from '@tanstack/react-router'
-import { Meta, Scripts } from '@tanstack/react-start'
+import { createRootRoute, HeadContent, Outlet, Scripts, ScrollRestoration } from '@tanstack/react-router'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -17,7 +16,7 @@ function RootLayout() {
   return (
     <html lang="en" className="h-full">
       <head>
-        <Meta />
+        <HeadContent />
       </head>
       <body className="h-full bg-neutral-950 text-neutral-100 antialiased">
         <Outlet />

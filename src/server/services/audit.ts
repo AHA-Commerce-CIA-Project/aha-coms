@@ -15,8 +15,12 @@ export type AuditAction =
   | 'register_app'
   | 'update_app'
   | 'deregister_app'
+  | 'workspace_sync_triggered'
+  | 'workspace_sync_completed'
+  | 'workspace_sync_failed'
+  | 'personal_email_sync_triggered'
 
-export type AuditTargetType = 'user' | 'team' | 'app'
+export type AuditTargetType = 'user' | 'team' | 'app' | 'workspace_sync' | 'personal_email_sync'
 
 export async function logAudit(params: {
   actorId: string

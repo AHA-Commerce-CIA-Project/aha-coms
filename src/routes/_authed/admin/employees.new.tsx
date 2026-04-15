@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api } from '~/lib/eden'
 
@@ -9,115 +9,165 @@ export const Route = createFileRoute('/_authed/admin/employees/new')({
       throw redirect({ to: '/' })
     }
   },
-  component: NewEmployeePage,
+  component: CreateEmployeePage,
 })
 
-function NewEmployeePage() {
+interface CreateForm {
+  email: string
+  name: string
+  phone: string
+  department: string
+  position: string
+  portalRole: 'employee' | 'admin'
+  hasGoogleWorkspace: boolean
+}
+
+function CreateEmployeePage() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<CreateForm>({
     email: '',
     name: '',
     phone: '',
     department: '',
     position: '',
-    portalRole: 'employee' as string,
+    portalRole: 'employee',
     hasGoogleWorkspace: false,
   })
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  function update(field: string, value: string | boolean) {
-    setForm((f) => ({ ...f, [field]: value }))
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setSubmitting(true)
     setError(null)
-    setLoading(true)
-    try {
-      const { error } = await api.api.v1.employees.post({
-        ...form,
-        phone: form.phone || undefined,
-        department: form.department || undefined,
-        position: form.position || undefined,
-      })
-      if (error) throw new Error((error.value as { message?: string })?.message ?? 'Failed')
-      await navigate({ to: '/admin/employees' })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create employee')
-    } finally {
-      setLoading(false)
+
+    const { error: apiError } = await api.api.v1.employees.post({
+      email: form.email,
+      name: form.name,
+      phone: form.phone || undefined,
+      department: form.department || undefined,
+      position: form.position || undefined,
+      portalRole: form.portalRole,
+      hasGoogleWorkspace: form.hasGoogleWorkspace,
+    })
+
+    if (apiError) {
+      setError((apiError.value as { message?: string })?.message ?? 'Failed to create employee.')
+      setSubmitting(false)
+      return
     }
+
+    navigate({ to: '/admin/employees' })
+  }
+
+  function setField<K extends keyof CreateForm>(key: K, value: CreateForm[K]) {
+    setForm((f) => ({ ...f, [key]: value }))
   }
 
   return (
     <div className="p-8">
-      <h1 className="mb-6 text-xl font-semibold">Add Employee</h1>
+      <h1 className="mb-6 text-xl font-semibold">Create Employee</h1>
 
       <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
-        <Field label="Email *" type="email" value={form.email} onChange={(v) => update('email', v)} required />
-        <Field label="Full Name *" value={form.name} onChange={(v) => update('name', v)} required />
-        <Field label="Phone" value={form.phone} onChange={(v) => update('phone', v)} />
-        <Field label="Department" value={form.department} onChange={(v) => update('department', v)} />
-        <Field label="Position" value={form.position} onChange={(v) => update('position', v)} />
+        <div>
+          <label className="mb-1 block text-xs capitalize text-neutral-400">
+            Email <span className="text-red-400">*</span>
+          </label>
+          <input
+            type="email"
+            required
+            value={form.email}
+            onChange={(e) => setField('email', e.target.value)}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs capitalize text-neutral-400">
+            Name <span className="text-red-400">*</span>
+          </label>
+          <input
+            type="text"
+            required
+            value={form.name}
+            onChange={(e) => setField('name', e.target.value)}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs capitalize text-neutral-400">Phone</label>
+          <input
+            type="text"
+            value={form.phone}
+            onChange={(e) => setField('phone', e.target.value)}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs capitalize text-neutral-400">Department</label>
+          <input
+            type="text"
+            value={form.department}
+            onChange={(e) => setField('department', e.target.value)}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs capitalize text-neutral-400">Position</label>
+          <input
+            type="text"
+            value={form.position}
+            onChange={(e) => setField('position', e.target.value)}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+          />
+        </div>
 
         <div>
           <label className="mb-1 block text-xs text-neutral-400">Portal Role</label>
           <select
             value={form.portalRole}
-            onChange={(e) => update('portalRole', e.target.value)}
+            onChange={(e) => setField('portalRole', e.target.value as 'employee' | 'admin')}
             className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
           >
             <option value="employee">Employee</option>
             <option value="admin">Admin</option>
-            <option value="super_admin">Super Admin</option>
           </select>
         </div>
 
-        <label className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-3">
           <input
+            id="hasGoogleWorkspace"
             type="checkbox"
             checked={form.hasGoogleWorkspace}
-            onChange={(e) => update('hasGoogleWorkspace', e.target.checked)}
-            className="rounded border-neutral-700"
+            onChange={(e) => setField('hasGoogleWorkspace', e.target.checked)}
+            className="h-4 w-4 rounded border-neutral-700 bg-neutral-900 accent-indigo-500"
           />
-          Has Google Workspace account
-        </label>
+          <label htmlFor="hasGoogleWorkspace" className="text-sm text-neutral-300">
+            Already has a Google Workspace account
+          </label>
+        </div>
 
         {error && <p className="text-xs text-red-400">{error}</p>}
 
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={loading}
+            disabled={submitting}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
           >
-            {loading ? 'Creating…' : 'Create employee'}
+            {submitting ? 'Creating…' : 'Create Employee'}
           </button>
-          <a href="/admin/employees" className="rounded-lg px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200">
+          <Link
+            to="/admin/employees"
+            className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-300 hover:bg-neutral-800"
+          >
             Cancel
-          </a>
+          </Link>
         </div>
       </form>
-    </div>
-  )
-}
-
-function Field({
-  label, value, onChange, type = 'text', required,
-}: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean
-}) {
-  return (
-    <div>
-      <label className="mb-1 block text-xs text-neutral-400">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-      />
     </div>
   )
 }
