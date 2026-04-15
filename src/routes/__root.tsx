@@ -1,4 +1,5 @@
 import { createRootRoute, HeadContent, Outlet, Scripts, ScrollRestoration } from '@tanstack/react-router'
+import appCss from '~/styles.css?url'
 
 export const Route = createRootRoute({
   head: () => ({
@@ -7,7 +8,10 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { title: 'COMS — Company Portal' },
     ],
-    links: [{ rel: 'icon', href: '/favicon.ico' }],
+    links: [
+      { rel: 'icon', href: '/favicon.ico' },
+      { rel: 'stylesheet', href: appCss },
+    ],
   }),
   component: RootLayout,
 })
