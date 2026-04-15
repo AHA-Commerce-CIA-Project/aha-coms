@@ -2,8 +2,9 @@ import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import {
   signInWithRedirect,
-  getRedirectResult,
+  onAuthStateChanged,
   signInWithEmailAndPassword,
+  signOut,
   getIdToken,
 } from 'firebase/auth'
 import { clientAuth, googleProvider } from '~/lib/gip-client'
@@ -35,20 +36,24 @@ function LoginPage() {
     await navigate({ to: redirectTo })
   }
 
-  // Handle redirect result when returning from Google OAuth
+  // After Google redirect, Firebase restores the signed-in user.
+  // onAuthStateChanged fires with that user — exchange the token for a session.
   useEffect(() => {
-    getRedirectResult(clientAuth)
-      .then(async (result) => {
-        if (result) {
-          setLoading(true)
-          const idToken = await getIdToken(result.user)
-          await exchangeToken(idToken)
-        }
-      })
-      .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Google sign-in failed')
-      })
-      .finally(() => setLoading(false))
+    const unsubscribe = onAuthStateChanged(clientAuth, async (user) => {
+      if (!user) return
+      setLoading(true)
+      try {
+        const idToken = await getIdToken(user)
+        await exchangeToken(idToken)
+      } catch (e) {
+        // If session exchange fails (e.g. 403 not in DB), sign out of Firebase too
+        await signOut(clientAuth)
+        setError(e instanceof Error ? e.message : 'Login failed')
+      } finally {
+        setLoading(false)
+      }
+    })
+    return () => unsubscribe()
   }, [])
 
   async function handleGoogle() {
