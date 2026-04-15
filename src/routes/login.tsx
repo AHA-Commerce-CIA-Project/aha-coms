@@ -1,6 +1,11 @@
 import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
-import { useState } from 'react'
-import { signInWithPopup, signInWithEmailAndPassword, getIdToken } from 'firebase/auth'
+import { useState, useEffect } from 'react'
+import {
+  signInWithRedirect,
+  getRedirectResult,
+  signInWithEmailAndPassword,
+  getIdToken,
+} from 'firebase/auth'
 import { clientAuth, googleProvider } from '~/lib/gip-client'
 import { api } from '~/lib/eden'
 import { getSessionFn } from '~/server/functions/auth'
@@ -30,18 +35,26 @@ function LoginPage() {
     await navigate({ to: redirectTo })
   }
 
+  // Handle redirect result when returning from Google OAuth
+  useEffect(() => {
+    getRedirectResult(clientAuth)
+      .then(async (result) => {
+        if (result) {
+          setLoading(true)
+          const idToken = await getIdToken(result.user)
+          await exchangeToken(idToken)
+        }
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Google sign-in failed')
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
   async function handleGoogle() {
     setError(null)
     setLoading(true)
-    try {
-      const result = await signInWithPopup(clientAuth, googleProvider)
-      const idToken = await getIdToken(result.user)
-      await exchangeToken(idToken)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Google sign-in failed')
-    } finally {
-      setLoading(false)
-    }
+    await signInWithRedirect(clientAuth, googleProvider)
   }
 
   async function handleEmail(e: React.FormEvent) {
