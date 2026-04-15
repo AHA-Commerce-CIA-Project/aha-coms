@@ -18,7 +18,14 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   .post(
     '/session',
     async ({ body, set, cookie }) => {
-      const decoded = await getAuth().verifyIdToken(body.idToken)
+      let decoded
+      try {
+        decoded = await getAuth().verifyIdToken(body.idToken)
+      } catch (e) {
+        console.error('verifyIdToken failed:', e)
+        set.status = 401
+        return { message: e instanceof Error ? e.message : 'Invalid token' }
+      }
 
       // Closed registration: only pre-provisioned employees may log in
       const user = await db.query.identityUsers.findFirst({
