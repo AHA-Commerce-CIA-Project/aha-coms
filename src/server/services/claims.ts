@@ -1,4 +1,4 @@
-import { getAuth } from 'firebase-admin/auth'
+import { setCustomUserClaims } from '../gip-admin'
 import { db } from '~/db'
 import { identityUsers, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
 import { eq, inArray } from 'drizzle-orm'
@@ -51,5 +51,5 @@ export async function resolveAndSyncClaims(gipUid: string, userId: string): Prom
     claimsUpdatedAt: Date.now(),
   }
 
-  await getAuth().setCustomUserClaims(gipUid, claims)
+  await setCustomUserClaims(gipUid, claims)
 }

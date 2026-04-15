@@ -12,10 +12,7 @@ export interface SessionUser {
 export const getSessionFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<SessionUser | null> => {
     const { getRequest } = await import('@tanstack/react-start/server')
-    const { getAuth } = await import('firebase-admin/auth')
-    const { initGip } = await import('../gip')
-
-    initGip()
+    const { verifySessionCookie } = await import('../gip-admin')
 
     const request = getRequest()
     const cookieHeader = request.headers.get('cookie') ?? ''
@@ -25,7 +22,7 @@ export const getSessionFn = createServerFn({ method: 'GET' }).handler(
     if (!sessionCookie) return null
 
     try {
-      const decoded = await getAuth().verifySessionCookie(sessionCookie, true)
+      const decoded = await verifySessionCookie(sessionCookie)
       return {
         gipUid: decoded.uid,
         email: decoded.email ?? '',

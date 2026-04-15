@@ -1,9 +1,6 @@
 import { Elysia } from 'elysia'
-import { getAuth } from 'firebase-admin/auth'
-import { initGip } from '../gip'
+import { verifySessionCookie } from '../gip-admin'
 import type { PortalClaims } from '~/shared/constants/roles'
-
-initGip()
 
 export interface AuthUser {
   gipUid: string
@@ -31,7 +28,7 @@ export const authPlugin = new Elysia({ name: 'auth-plugin' }).derive(
     }
 
     try {
-      const decoded = await getAuth().verifySessionCookie(sessionCookie, true)
+      const decoded = await verifySessionCookie(sessionCookie)
 
       const authUser: AuthUser = {
         gipUid: decoded.uid,

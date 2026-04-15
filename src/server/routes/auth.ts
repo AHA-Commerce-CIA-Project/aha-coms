@@ -1,13 +1,15 @@
 import { Elysia, t } from 'elysia'
-import { getAuth } from 'firebase-admin/auth'
+import {
+  verifyIdToken,
+  createSessionCookie,
+  verifySessionCookie,
+  revokeRefreshTokens,
+} from '../gip-admin'
 import { db } from '~/db'
 import { identityUsers } from '~/db/schema'
 import { eq } from 'drizzle-orm'
-import { initGip } from '../gip'
 import { SESSION_COOKIE_OPTIONS } from '~/shared/constants/roles'
 import { resolveAndSyncClaims } from '../services/claims'
-
-initGip()
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
   /**
@@ -20,7 +22,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     async ({ body, set, cookie }) => {
       let decoded
       try {
-        decoded = await getAuth().verifyIdToken(body.idToken)
+        decoded = await verifyIdToken(body.idToken)
       } catch (e) {
         console.error('verifyIdToken failed:', e)
         set.status = 401
@@ -28,16 +30,9 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }
 
       // Closed registration: only pre-provisioned employees may log in
-      let user
-      try {
-        user = await db.query.identityUsers.findFirst({
-          where: eq(identityUsers.email, decoded.email ?? ''),
-        })
-      } catch (e) {
-        console.error('DB lookup failed:', e)
-        set.status = 500
-        return { message: 'Database error during login' }
-      }
+      const user = await db.query.identityUsers.findFirst({
+        where: eq(identityUsers.email, decoded.email ?? ''),
+      })
 
       if (!user) {
         set.status = 403
@@ -49,36 +44,30 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         return { message: 'Account is inactive or suspended.' }
       }
 
-      try {
-        // Link GIP UID on first login if not yet stored
-        if (!user.gipUid) {
-          await db
-            .update(identityUsers)
-            .set({ gipUid: decoded.uid, updatedAt: new Date() })
-            .where(eq(identityUsers.id, user.id))
-        }
-
-        // Sync custom claims (portalRole, teamIds, apps)
-        await resolveAndSyncClaims(user.gipUid ?? decoded.uid, user.id)
-
-        const expiresIn = SESSION_COOKIE_OPTIONS.maxAge * 1000
-        const sessionCookie = await getAuth().createSessionCookie(body.idToken, { expiresIn })
-
-        cookie[SESSION_COOKIE_OPTIONS.name].set({
-          value: sessionCookie,
-          path: SESSION_COOKIE_OPTIONS.path,
-          httpOnly: SESSION_COOKIE_OPTIONS.httpOnly,
-          secure: SESSION_COOKIE_OPTIONS.secure,
-          sameSite: SESSION_COOKIE_OPTIONS.sameSite,
-          maxAge: SESSION_COOKIE_OPTIONS.maxAge,
-        })
-
-        return { ok: true }
-      } catch (e) {
-        console.error('Session creation failed:', e)
-        set.status = 500
-        return { message: e instanceof Error ? e.message : 'Session creation failed' }
+      // Link GIP UID on first login if not yet stored
+      if (!user.gipUid) {
+        await db
+          .update(identityUsers)
+          .set({ gipUid: decoded.uid, updatedAt: new Date() })
+          .where(eq(identityUsers.id, user.id))
       }
+
+      // Sync custom claims (portalRole, teamIds, apps)
+      await resolveAndSyncClaims(user.gipUid ?? decoded.uid, user.id)
+
+      const expiresIn = SESSION_COOKIE_OPTIONS.maxAge * 1000
+      const sessionCookie = await createSessionCookie(body.idToken, expiresIn)
+
+      cookie[SESSION_COOKIE_OPTIONS.name].set({
+        value: sessionCookie,
+        path: SESSION_COOKIE_OPTIONS.path,
+        httpOnly: SESSION_COOKIE_OPTIONS.httpOnly,
+        secure: SESSION_COOKIE_OPTIONS.secure,
+        sameSite: SESSION_COOKIE_OPTIONS.sameSite,
+        maxAge: SESSION_COOKIE_OPTIONS.maxAge,
+      })
+
+      return { ok: true }
     },
     { body: t.Object({ idToken: t.String() }) },
   )
@@ -94,8 +83,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
     if (sessionCookie) {
       try {
-        const decoded = await getAuth().verifySessionCookie(sessionCookie)
-        await getAuth().revokeRefreshTokens(decoded.uid)
+        const decoded = await verifySessionCookie(sessionCookie)
+        await revokeRefreshTokens(decoded.uid)
       } catch {
         // Already invalid — clear anyway
       }
@@ -125,7 +114,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     }
 
     try {
-      const decoded = await getAuth().verifySessionCookie(sessionCookie, true)
+      const decoded = await verifySessionCookie(sessionCookie)
 
       const user = await db.query.identityUsers.findFirst({
         where: eq(identityUsers.gipUid, decoded.uid),
