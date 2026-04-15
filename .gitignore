@@ -44,3 +44,19 @@ next-env.d.ts
 
 # uploaded files
 /public/uploads/
+
+# Claude Code per-user settings (may contain local-only permission rules incl. credentials)
+.claude/settings.local.json
+
+# local gcloud SDK download
+google-cloud-cli.tar.gz
+google-cloud-sdk/
+
+# terraform — never commit state, vars, provider cache, or CLI binary
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+terraform/*.tfvars.json
+terraform/terraform.exe
+terraform/terraform.zip

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { useAuth } from '@/lib/auth-context';
@@ -10,6 +10,7 @@ import { ChannelMessageFeed } from '@/components/channels/ChannelMessageFeed';
 import { ChannelMessageComposer } from '@/components/channels/ChannelMessageComposer';
 import { ThreadPanel } from '@/components/channels/ThreadPanel';
 import { CreateChannelModal } from '@/components/channels/CreateChannelModal';
+import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';
 import { Hash, MessageSquare } from 'lucide-react';
 
 interface Attachment {
@@ -50,7 +51,7 @@ interface MentionUser {
   image: string | null;
 }
 
-export default function ChannelsPage() {
+function ChannelsPageContent() {
   const router = useRouter();
   const searchParamsObj = useSearchParams();
   const { data: session, isPending } = useSession();
@@ -69,8 +70,22 @@ export default function ChannelsPage() {
   const [searchResults, setSearchResults] = useState<{ messages: any[]; replies: any[] } | null>(null);
   const [searching, setSearching] = useState(false);
   const [perChannelUnread, setPerChannelUnread] = useState<Record<string, number>>({});
+  const [typingUsers, setTypingUsers] = useState<{ id: string; name: string }[]>([]);
+  const [forwardMessage, setForwardMessage] = useState<any | null>(null);
+  const [scrollTrigger, setScrollTrigger] = useState(0);
 
   const messageIdsRef = useRef<Set<string>>(new Set());
+
+  // Scroll feed to bottom when typing indicator appears
+  useEffect(() => {
+    if (typingUsers.length > 0) {
+      setScrollTrigger(prev => prev + 1);
+    }
+  }, [typingUsers.length]);
+
+  const handleTypingUsersChange = useCallback((users: { id: string; name: string }[]) => {
+    setTypingUsers(users);
+  }, []);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -119,6 +134,24 @@ export default function ChannelsPage() {
       }
     }
   }, [channels, searchParamsObj]);
+
+  // Highlight message from URL query param (from "Open in channel" / Later page)
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  useEffect(() => {
+    const highlightParam = searchParamsObj.get('highlight');
+    if (highlightParam && messages.length > 0) {
+      setHighlightedMessageId(highlightParam);
+      // Scroll to the message
+      setTimeout(() => {
+        const el = document.getElementById(`msg-${highlightParam}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Remove highlight after 3 seconds
+          setTimeout(() => setHighlightedMessageId(null), 3000);
+        }
+      }, 300);
+    }
+  }, [messages, searchParamsObj]);
 
   // Fetch per-channel unread counts
   useEffect(() => {
@@ -278,7 +311,7 @@ export default function ChannelsPage() {
   if (!session) return null;
 
   return (
-    <div className="flex h-[calc(100vh-64px)] bg-white">
+    <div className="flex h-[calc(100vh-120px)] bg-white -mx-6 -mt-6">
       {/* Channel list */}
       <div className="w-[280px] border-r border-slate-200 flex-shrink-0">
         <ChannelList
@@ -408,12 +441,42 @@ export default function ChannelsPage() {
                   onReaction={handleReaction}
                   onSave={handleSave}
                   onMessageUpdated={() => fetchMessages(selectedChannel.id)}
+                  onForward={(msg) => setForwardMessage({
+                    originalAuthor: msg.sender.name,
+                    originalContent: msg.content?.replace(/<!--forward:.*?-->/s, '').trim() || '',
+                    originalAttachments: msg.attachments || [],
+                    originalChannelName: selectedChannel.name,
+                    originalChannelId: selectedChannel.id,
+                    originalMessageId: msg.id,
+                    originalDate: msg.createdAt,
+                  })}
                   allUsers={users}
+                  highlightedMessageId={highlightedMessageId}
+                  scrollTrigger={scrollTrigger}
                 />
+                {/* Typing indicator */}
+                {typingUsers.length > 0 && (
+                  <div className="px-6 py-1.5 bg-white border-t border-slate-100 flex items-center gap-2">
+                    <div className="flex gap-[3px] items-center">
+                      <span className="w-[5px] h-[5px] rounded-full bg-indigo-400 animate-[typingBounce_1.2s_ease-in-out_infinite]" />
+                      <span className="w-[5px] h-[5px] rounded-full bg-indigo-400 animate-[typingBounce_1.2s_ease-in-out_0.2s_infinite]" />
+                      <span className="w-[5px] h-[5px] rounded-full bg-indigo-400 animate-[typingBounce_1.2s_ease-in-out_0.4s_infinite]" />
+                    </div>
+                    <span className="text-xs text-slate-500 font-medium">
+                      {typingUsers.length === 1
+                        ? `${typingUsers[0].name} is typing`
+                        : typingUsers.length === 2
+                        ? `${typingUsers[0].name} and ${typingUsers[1].name} are typing`
+                        : `${typingUsers[0].name} and ${typingUsers.length - 1} others are typing`}
+                    </span>
+                  </div>
+                )}
                 <ChannelMessageComposer
+                  channelId={selectedChannel.id}
                   channelName={selectedChannel.name}
                   onSend={handleSendMessage}
                   users={users}
+                  onTypingUsersChange={handleTypingUsersChange}
                 />
               </>
             )}
@@ -451,6 +514,27 @@ export default function ChannelsPage() {
         onClose={() => setShowCreateModal(false)}
         onCreated={fetchChannels}
       />
+      <ForwardToChannelModal
+        open={!!forwardMessage}
+        onClose={() => setForwardMessage(null)}
+        originalAuthor={forwardMessage?.originalAuthor || ''}
+        originalContent={forwardMessage?.originalContent || ''}
+        originalAttachments={forwardMessage?.originalAttachments || []}
+        originalChannelName={forwardMessage?.originalChannelName}
+        originalChannelId={forwardMessage?.originalChannelId}
+        originalMessageId={forwardMessage?.originalMessageId}
+        originalDate={forwardMessage?.originalDate}
+        isTaskForward={forwardMessage?.isTaskForward}
+        taskToken={forwardMessage?.taskToken}
+      />
     </div>
+  );
+}
+
+export default function ChannelsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>}>
+      <ChannelsPageContent />
+    </Suspense>
   );
 }

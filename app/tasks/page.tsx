@@ -4,11 +4,14 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/lib/auth-context';
+import { RichEditor } from '@/components/RichEditor';
+import { DueCountdown } from '@/components/DueCountdown';
 
 import {
     CheckCircle2, Clock, AlertCircle, Inbox, FileText,
     X, UserPlus, Eye, Star, Calendar as CalendarIcon, Plus,
-    ChevronLeft, ChevronRight, Trash2, Pencil, Users, Bell, UserMinus
+    ChevronLeft, ChevronRight, Trash2, Pencil, Users, Bell, UserMinus,
+    StickyNote, Pin, PinOff, Palette, ExternalLink, MessageSquare, Send as SendIcon
 } from 'lucide-react';
 
 interface ClaimedTask {
@@ -24,7 +27,13 @@ interface ClaimedTask {
     created_at: string;
     due_date: string | null;
     request_type: string | null;
+    source?: string | null;
+    direct_assignee_id?: string | null;
     assignee?: { name: string } | null;
+    image_url?: string | null;
+    attachment_link?: string | null;
+    custom_fields?: { fileUrls?: string[]; referenceUrls?: string[] };
+    reviews?: { id: string; reviewer_type: string; rating: number; comment: string | null; reviewer_name: string | null; created_at: string }[];
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -57,11 +66,23 @@ function MyTasksContent() {
     const [claimedTasks, setClaimedTasks] = useState<ClaimedTask[]>([]);
     const [loadingClaimed, setLoadingClaimed] = useState(true);
     const [viewTask, setViewTask] = useState<ClaimedTask | null>(null);
+    const [taskComments, setTaskComments] = useState<any[]>([]);
+    const [commentText, setCommentText] = useState('');
+    const [commentSending, setCommentSending] = useState(false);
     const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([]);
     const [reassignTo, setReassignTo] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
     const [showReassign, setShowReassign] = useState(false);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
+    const [claimTab, setClaimTab] = useState<'direct' | 'queue'>('queue');
+    const [notes, setNotes] = useState<any[]>([]);
+    const [showNoteForm, setShowNoteForm] = useState(false);
+    const [noteTitle, setNoteTitle] = useState('');
+    const [noteContent, setNoteContent] = useState('');
+    const [noteColor, setNoteColor] = useState('default');
+    const [editingNote, setEditingNote] = useState<any | null>(null);
+    const [showAllNotes, setShowAllNotes] = useState(false);
+    const NOTES_PREVIEW_COUNT = 2;
     const [showCompleteForm, setShowCompleteForm] = useState(false);
     const [completeForm, setCompleteForm] = useState({
         completedAt: new Date().toISOString().slice(0, 16),
@@ -86,16 +107,49 @@ function MyTasksContent() {
     const fetchClaimedTasks = async () => {
         setLoadingClaimed(true);
         try {
-            const res = await fetch('/api/nexus');
-            if (res.ok) {
-                const all = await res.json();
-                const mine = all.filter((t: any) => t.assignee_id === user?.id);
-                setClaimedTasks(mine);
+            const [nexusRes, directRes] = await Promise.all([
+                fetch('/api/nexus'),
+                fetch('/api/tasks/my-direct-requests'),
+            ]);
+            let allMine: any[] = [];
+            if (nexusRes.ok) {
+                const all = await nexusRes.json();
+                const queueMine = all.filter((t: any) => t.assignee_id === user?.id);
+                allMine = [...allMine, ...queueMine];
             }
+            if (directRes.ok) {
+                const directTasks = await directRes.json();
+                allMine = [...allMine, ...directTasks];
+            }
+            setClaimedTasks(allMine);
         } catch (err) {
             console.error('Error fetching claimed tasks:', err);
         }
         setLoadingClaimed(false);
+    };
+
+    const fetchTaskComments = async (taskId: string) => {
+        try {
+            const res = await fetch(`/api/tasks/${taskId}/comments`);
+            if (res.ok) setTaskComments(await res.json());
+        } catch {}
+    };
+
+    const handleSendTaskComment = async () => {
+        if (!commentText.trim() || !viewTask) return;
+        setCommentSending(true);
+        try {
+            const res = await fetch(`/api/tasks/${viewTask.id}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: commentText.trim() }),
+            });
+            if (res.ok) {
+                setCommentText('');
+                fetchTaskComments(viewTask.id);
+            }
+        } catch {}
+        setCommentSending(false);
     };
 
     const fetchTeamMembers = async () => {
@@ -172,6 +226,111 @@ function MyTasksContent() {
         setActionLoading(false);
     };
 
+    // ─── Notes ────────────────────────────────────────────────────────────────
+    const noteColors: Record<string, { bg: string; border: string }> = {
+        default: { bg: 'bg-white', border: 'border-slate-200' },
+        yellow: { bg: 'bg-amber-50', border: 'border-amber-200' },
+        green: { bg: 'bg-emerald-50', border: 'border-emerald-200' },
+        blue: { bg: 'bg-blue-50', border: 'border-blue-200' },
+        purple: { bg: 'bg-purple-50', border: 'border-purple-200' },
+        pink: { bg: 'bg-pink-50', border: 'border-pink-200' },
+        red: { bg: 'bg-rose-50', border: 'border-rose-200' },
+        orange: { bg: 'bg-orange-50', border: 'border-orange-200' },
+    };
+
+    const fetchNotes = async () => {
+        try {
+            const res = await fetch('/api/notes');
+            if (res.ok) {
+                const data = await res.json();
+                setNotes(data);
+            }
+        } catch (err) {
+            console.error('Error fetching notes:', err);
+        }
+    };
+
+    const handleCreateNote = async () => {
+        if (!noteTitle.trim() && !noteContent.trim()) return;
+        try {
+            const res = await fetch('/api/notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: noteTitle, content: noteContent, color: noteColor }),
+            });
+            if (res.ok) {
+                await fetchNotes();
+                setNoteTitle('');
+                setNoteContent('');
+                setNoteColor('default');
+                setShowNoteForm(false);
+            }
+        } catch (err) {
+            console.error('Error creating note:', err);
+        }
+    };
+
+    const handleUpdateNote = async (note: any) => {
+        try {
+            const res = await fetch('/api/notes', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: note.id, title: note.title, content: note.content, color: note.color, pinned: note.pinned }),
+            });
+            if (res.ok) {
+                await fetchNotes();
+                setEditingNote(null);
+            }
+        } catch (err) {
+            console.error('Error updating note:', err);
+        }
+    };
+
+    const handleDeleteNote = async (id: string) => {
+        try {
+            const res = await fetch('/api/notes', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id }),
+            });
+            if (res.ok) {
+                await fetchNotes();
+                setEditingNote(null);
+            }
+        } catch (err) {
+            console.error('Error deleting note:', err);
+        }
+    };
+
+    const handlePinNote = async (note: any) => {
+        try {
+            const res = await fetch('/api/notes', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: note.id, pinned: !note.pinned }),
+            });
+            if (res.ok) {
+                await fetchNotes();
+            }
+        } catch (err) {
+            console.error('Error pinning note:', err);
+        }
+    };
+
+    useEffect(() => {
+        if (user) {
+            fetchNotes();
+        }
+    }, [user]);
+
+    const sortedNotes = useMemo(() => {
+        return [...notes].sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+    }, [notes]);
+
     // Claimed tasks stats (exclude archived)
     const activeClaimed = claimedTasks.filter(t => t.status !== 'archived');
     const claimedStats = {
@@ -200,6 +359,10 @@ function MyTasksContent() {
 
     const activeProjectId = selectedProjectId || myProjects[0]?.id;
     const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    // Split claimed tasks by source
+    const directRequestTasks = claimedTasks.filter(t => t.source === 'direct_request');
+    const queueTasks = claimedTasks.filter(t => t.source !== 'direct_request');
 
     return (
         <div className="space-y-6">
@@ -249,104 +412,208 @@ function MyTasksContent() {
                 </div>
             </div>
 
-            {/* Claimed Tasks Table */}
-            <div>
-                <h2 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-indigo-400" />
-                    Claimed Tasks from Fast
-                </h2>
-                {loadingClaimed ? (
-                    <div className="text-center py-8">
-                        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                        <p className="text-slate-500 text-sm">Loading claimed tasks...</p>
-                    </div>
-                ) : claimedTasks.length === 0 ? (
-                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center max-w-sm mx-auto shadow-sm">
-                        <Inbox className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                        <h3 className="text-lg font-medium text-slate-900">No active tasks</h3>
-                        <p className="text-slate-500 text-xs mt-1">Go to List Task Queue → View a task → Click &quot;Claim This Task&quot;</p>
-                    </div>
-                ) : (
-                    <div className="bg-white shadow-sm border-slate-200 border border-slate-200 rounded-2xl overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="border-b border-slate-200">
-                                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Token</th>
-                                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Priority</th>
-                                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Title</th>
-                                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Requester</th>
-                                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Deadline</th>
-                                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Status</th>
-                                        <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800/50">
-                                    {claimedTasks.map(task => {
-                                        const urgency = urgencyConfig[task.urgency || 'P3'];
-                                        const status = statusConfig[task.status] || statusConfig['in-progress'];
-                                        const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
-                                        return (
-                                            <tr key={task.id} className="hover:bg-slate-100/30 transition-colors">
-                                                <td className="px-4 py-3">
-                                                    <span className="font-mono text-sm text-indigo-400">{task.task_token || '—'}</span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <span
-                                                        className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${urgency?.bg || 'bg-slate-700'} ${urgency?.style ? '' : 'text-slate-900'}`}
-                                                        style={urgency?.style}
-                                                    >
-                                                        {urgency?.label || '—'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <p className="text-sm text-slate-900 font-medium truncate max-w-[250px]">{task.title}</p>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <p className="text-sm text-slate-600">{task.requester_name || '—'}</p>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <span className={`text-sm ${isOverdue ? 'text-rose-400 font-medium' : 'text-slate-500'}`}>
-                                                        {task.due_date ? formatDate(task.due_date) : '—'}
-                                                    </span>
-                                                    {isOverdue && (
-                                                        <span className="ml-1.5 text-xs bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded border border-rose-500/30">
-                                                            Overdue
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-medium border ${status.bg} ${status.color}`}>
-                                                        {status.label}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <button
-                                                        onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); }}
-                                                        className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-1"
-                                                    >
-                                                        <Eye className="w-3.5 h-3.5" /> View
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+            {/* Claimed Tasks Tables */}
+            {loadingClaimed ? (
+                <div className="text-center py-8">
+                    <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-slate-500 text-sm">Loading claimed tasks...</p>
+                </div>
+            ) : claimedTasks.length === 0 ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center max-w-sm mx-auto shadow-sm">
+                    <Inbox className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                    <h3 className="text-lg font-medium text-slate-900">No active tasks</h3>
+                    <p className="text-slate-500 text-xs mt-1">Go to List Task Queue &rarr; View a task &rarr; Click &quot;Claim This Task&quot;</p>
+                </div>
+            ) : (
+                <div>
+                    {/* Tab Toggle — Centered */}
+                    <div className="flex justify-center mb-4">
+                        <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex gap-1">
+                            <button
+                                onClick={() => setClaimTab('direct')}
+                                className={`px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${claimTab === 'direct' ? 'bg-white shadow-md text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                <UserPlus className="w-4 h-4" />
+                                Direct Requests
+                                {directRequestTasks.length > 0 && (
+                                    <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full font-bold">{directRequestTasks.length}</span>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => setClaimTab('queue')}
+                                className={`px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${claimTab === 'queue' ? 'bg-white shadow-md text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                <FileText className="w-4 h-4" />
+                                FAST Queue
+                                {queueTasks.length > 0 && (
+                                    <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-bold">{queueTasks.length}</span>
+                                )}
+                            </button>
                         </div>
                     </div>
-                )}
-            </div>
+
+                    {/* Tab Content */}
+                    {claimTab === 'direct' ? (
+                        directRequestTasks.length === 0 ? (
+                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
+                                <p className="text-slate-400 text-sm">No tasks from direct requests</p>
+                            </div>
+                        ) : (
+                            <div className="bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full table-fixed">
+                                        <thead>
+                                            <tr className="border-b border-slate-200">
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[10%]">Token</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[8%]">Priority</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[25%]">Title</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[18%]">Requester</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[15%]">Deadline</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[12%]">Status</th>
+                                                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[10%]">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-800/50">
+                                            {directRequestTasks.map(task => {
+                                                const urgency = urgencyConfig[task.urgency || 'P3'];
+                                                const status = statusConfig[task.status] || statusConfig['in-progress'];
+                                                const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
+                                                return (
+                                                    <tr key={task.id} className="hover:bg-slate-100/30 transition-colors">
+                                                        <td className="px-4 py-3">
+                                                            <span className="font-mono text-sm text-indigo-400">{task.task_token || '\u2014'}</span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span
+                                                                className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${urgency?.bg || 'bg-slate-700'} ${urgency?.style ? '' : 'text-slate-900'}`}
+                                                                style={urgency?.style}
+                                                            >
+                                                                {urgency?.label || '\u2014'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm text-slate-900 font-medium truncate max-w-[250px]">{task.title}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm text-slate-600">{task.requester_name || '\u2014'}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            {task.due_date && task.status !== 'done' ? (
+                                                                <DueCountdown dueDate={task.due_date} />
+                                                            ) : task.due_date ? (
+                                                                <span className="text-sm text-emerald-500 font-medium">✓</span>
+                                                            ) : (
+                                                                <span className="text-sm text-slate-400">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-medium border ${status.bg} ${status.color}`}>
+                                                                {status.label}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <button
+                                                                onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); setTaskComments([]); setCommentText(''); fetchTaskComments(task.id); }}
+                                                                className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-1"
+                                                            >
+                                                                <Eye className="w-3.5 h-3.5" /> View
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )
+                    ) : (
+                        queueTasks.length === 0 ? (
+                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
+                                <p className="text-slate-400 text-sm">No tasks from the FAST queue</p>
+                            </div>
+                        ) : (
+                            <div className="bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full table-fixed">
+                                        <thead>
+                                            <tr className="border-b border-slate-200">
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[10%]">Token</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[8%]">Priority</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[25%]">Title</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[18%]">Requester</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[15%]">Deadline</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[12%]">Status</th>
+                                                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[10%]">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-800/50">
+                                            {queueTasks.map(task => {
+                                                const urgency = urgencyConfig[task.urgency || 'P3'];
+                                                const status = statusConfig[task.status] || statusConfig['in-progress'];
+                                                const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
+                                                return (
+                                                    <tr key={task.id} className="hover:bg-slate-100/30 transition-colors">
+                                                        <td className="px-4 py-3">
+                                                            <span className="font-mono text-sm text-indigo-400">{task.task_token || '\u2014'}</span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span
+                                                                className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${urgency?.bg || 'bg-slate-700'} ${urgency?.style ? '' : 'text-slate-900'}`}
+                                                                style={urgency?.style}
+                                                            >
+                                                                {urgency?.label || '\u2014'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm text-slate-900 font-medium truncate max-w-[250px]">{task.title}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm text-slate-600">{task.requester_name || '\u2014'}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            {task.due_date && task.status !== 'done' ? (
+                                                                <DueCountdown dueDate={task.due_date} />
+                                                            ) : task.due_date ? (
+                                                                <span className="text-sm text-emerald-500 font-medium">✓</span>
+                                                            ) : (
+                                                                <span className="text-sm text-slate-400">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-medium border ${status.bg} ${status.color}`}>
+                                                                {status.label}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <button
+                                                                onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); setTaskComments([]); setCommentText(''); fetchTaskComments(task.id); }}
+                                                                className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-1"
+                                                            >
+                                                                <Eye className="w-3.5 h-3.5" /> View
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )
+                    )}
+                </div>
+            )}
 
             {/* View Task Detail Modal */}
             {viewTask && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
+                    <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
                         {/* Header */}
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white">
                             <div>
-                                <span className="font-mono text-sm text-indigo-400">{viewTask.task_token}</span>
-                                <h2 className="text-lg font-semibold text-slate-900 mt-1">{viewTask.title}</h2>
+                                <span className="font-mono text-base text-indigo-400">{viewTask.task_token}</span>
+                                <h2 className="text-xl font-bold text-slate-900 mt-1">{viewTask.title}</h2>
                             </div>
                             <button onClick={() => setViewTask(null)} className="p-1 text-slate-500 hover:text-slate-900">
                                 <X className="w-5 h-5" />
@@ -354,28 +621,151 @@ function MyTasksContent() {
                         </div>
 
                         {/* Detail Content */}
-                        <div className="p-6 space-y-4 text-sm">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><p className="text-slate-500">Requester</p><p className="text-slate-900">{viewTask.requester_name || '—'}</p></div>
-                                <div><p className="text-slate-500">Division</p><p className="text-slate-900">{viewTask.requester_division || '—'}</p></div>
-                                <div><p className="text-slate-500">Priority</p><p className="text-slate-900">{viewTask.urgency || '—'}</p></div>
+                        <div className="p-6 space-y-5 text-base">
+                            <div className="grid grid-cols-2 gap-5">
+                                <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Requester</p><p className="text-base text-slate-900 font-medium">{viewTask.requester_name || '—'}</p></div>
+                                <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Division</p><p className="text-base text-slate-900 font-medium">{viewTask.requester_division || '—'}</p></div>
+                                <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Priority</p><p className="text-base text-slate-900 font-medium">{viewTask.urgency || '—'}</p></div>
                                 <div>
-                                    <p className="text-slate-500">Status</p>
-                                    <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-medium border ${(statusConfig[viewTask.status] || statusConfig['in-progress']).bg} ${(statusConfig[viewTask.status] || statusConfig['in-progress']).color}`}>
+                                    <p className="text-sm font-medium text-indigo-600 mb-0.5">Status</p>
+                                    <span className={`inline-flex px-3 py-1 rounded-lg text-sm font-medium border ${(statusConfig[viewTask.status] || statusConfig['in-progress']).bg} ${(statusConfig[viewTask.status] || statusConfig['in-progress']).color}`}>
                                         {(statusConfig[viewTask.status] || statusConfig['in-progress']).label}
                                     </span>
                                 </div>
-                                <div><p className="text-slate-500">Submitted</p><p className="text-slate-900">{formatDate(viewTask.created_at)}</p></div>
-                                {viewTask.due_date && <div><p className="text-slate-500">Deadline</p><p className="text-slate-900">{formatDate(viewTask.due_date)}</p></div>}
-                                {viewTask.request_type && <div><p className="text-slate-500">Type</p><p className="text-slate-900 capitalize">{viewTask.request_type.replace('_', ' ')}</p></div>}
+                                <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Assigned To</p><p className="text-base text-slate-900 font-medium">{viewTask.assignee?.name || 'Unassigned'}</p></div>
+                                <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Submitted</p><p className="text-base text-slate-900 font-medium">{formatDate(viewTask.created_at)}</p></div>
+                                {viewTask.due_date && <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Deadline</p><p className="text-base text-slate-900 font-medium">{formatDate(viewTask.due_date)}</p></div>}
+                                {viewTask.request_type && <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Type</p><p className="text-base text-slate-900 font-medium capitalize">{viewTask.request_type.replace('_', ' ')}</p></div>}
                             </div>
 
                             {viewTask.description && (
                                 <div>
-                                    <p className="text-slate-500 mb-1">Description</p>
+                                    <p className="text-sm font-medium text-indigo-600 mb-1.5">Description</p>
                                     <p className="text-slate-600 bg-slate-50 rounded-xl p-3">{viewTask.description}</p>
                                 </div>
                             )}
+
+                            {/* Attached Image */}
+                            {(viewTask.image_url || viewTask.attachment_link) && (
+                                <div>
+                                    <p className="text-sm font-medium text-indigo-600 mb-1.5">Attached Image</p>
+                                    <a href={viewTask.image_url || viewTask.attachment_link || ''} target="_blank" rel="noopener noreferrer">
+                                        <img
+                                            src={viewTask.image_url || viewTask.attachment_link || ''}
+                                            alt="Attachment"
+                                            className="w-full max-h-64 object-contain rounded-xl border border-slate-300 bg-slate-50 hover:opacity-90 transition-opacity cursor-pointer"
+                                        />
+                                    </a>
+                                </div>
+                            )}
+
+                            {/* Attached Files */}
+                            {viewTask.custom_fields?.fileUrls && viewTask.custom_fields.fileUrls.length > 0 && (
+                                <div>
+                                    <p className="text-sm font-medium text-indigo-600 mb-1.5">Attached Files</p>
+                                    <div className="space-y-1.5">
+                                        {viewTask.custom_fields.fileUrls.map((url: string, i: number) => (
+                                            <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                                className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-colors">
+                                                <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                                                <span className="truncate">{decodeURIComponent(url.split('/').pop() || url)}</span>
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Reference URLs */}
+                            {viewTask.custom_fields?.referenceUrls && viewTask.custom_fields.referenceUrls.length > 0 && (
+                                <div>
+                                    <p className="text-sm font-medium text-indigo-600 mb-1.5">Reference Links</p>
+                                    <div className="space-y-1.5">
+                                        {viewTask.custom_fields.referenceUrls.map((url: string, i: number) => (
+                                            <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                                className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-600 hover:bg-indigo-100 transition-colors">
+                                                <ExternalLink className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                                                <span className="truncate">{url}</span>
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Reviews */}
+                            {viewTask.reviews && viewTask.reviews.length > 0 && (
+                                <div>
+                                    <p className="text-slate-500 mb-2 font-semibold flex items-center gap-1.5">
+                                        <Star className="w-4 h-4 text-amber-400" /> Reviews
+                                    </p>
+                                    <div className="space-y-2">
+                                        {viewTask.reviews.map(r => (
+                                            <div key={r.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <span className="text-xs font-medium text-indigo-600">
+                                                        {r.reviewer_type === 'requester' ? 'Requester Review' : 'Completer Review'}
+                                                    </span>
+                                                    <span className="text-[11px] text-slate-400">
+                                                        {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-1 mb-1">
+                                                    {[1, 2, 3, 4, 5].map(s => (
+                                                        <span key={s} className={`text-lg ${s <= r.rating ? 'text-amber-400' : 'text-slate-200'}`}>★</span>
+                                                    ))}
+                                                    <span className="text-sm font-semibold text-slate-700 ml-1">{r.rating}/5</span>
+                                                </div>
+                                                {r.comment && <p className="text-sm text-slate-600 mt-1">{r.comment}</p>}
+                                                {r.reviewer_name && <p className="text-xs text-slate-400 mt-1.5">— {r.reviewer_name}</p>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Comments */}
+                            <div>
+                                <p className="text-slate-500 mb-2 font-semibold flex items-center gap-1.5">
+                                    <MessageSquare className="w-4 h-4 text-indigo-500" /> Comments
+                                    {taskComments.length > 0 && <span className="text-xs text-slate-400">({taskComments.length})</span>}
+                                </p>
+                                {taskComments.length > 0 && (
+                                    <div className="space-y-2 mb-3 max-h-60 overflow-y-auto">
+                                        {taskComments.map(c => (
+                                            <div key={c.id} className={`flex gap-2 ${c.is_team ? 'flex-row-reverse' : ''}`}>
+                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                                                    c.is_team ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'
+                                                }`}>{c.author_name?.charAt(0)?.toUpperCase() || '?'}</div>
+                                                <div className={`max-w-[75%] ${c.is_team ? 'text-right' : ''}`}>
+                                                    <div className={`inline-block rounded-2xl px-3 py-2 text-xs ${
+                                                        c.is_team ? 'bg-indigo-50 border border-indigo-200 rounded-tr-sm' : 'bg-slate-50 border border-slate-200 rounded-tl-sm'
+                                                    }`}>{c.message}</div>
+                                                    <p className="text-[10px] text-slate-400 mt-0.5 px-1">
+                                                        {c.is_team ? '🔹 ' + c.author_name : c.author_name} · {new Date(c.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={commentText}
+                                        onChange={e => setCommentText(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSendTaskComment(); } }}
+                                        placeholder="Write a comment..."
+                                        disabled={commentSending}
+                                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                    <button
+                                        onClick={handleSendTaskComment}
+                                        disabled={!commentText.trim() || commentSending}
+                                        className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+                                    >
+                                        <SendIcon className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
 
                             {/* Action Buttons */}
                             {viewTask.status !== 'done' && (
@@ -540,8 +930,200 @@ function MyTasksContent() {
                 </div>
             )}
 
-            {/* Calendar Meeting Section */}
-            <CalendarMeetingSection />
+            {/* ═══ Notes + Calendar Side-by-Side ═══ */}
+            <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+
+            {/* ═══ My Notes (Google Keep Style) ═══ */}
+            <div className="lg:col-span-3 space-y-4">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <StickyNote className="w-6 h-6 text-amber-500" />
+                        My Notes
+                    </h2>
+                    <span className="text-xs text-slate-400">{sortedNotes.length} note{sortedNotes.length !== 1 ? 's' : ''}</span>
+                </div>
+
+                {/* ── Create Note Form (always visible) ── */}
+                <div className="bg-white rounded-2xl shadow-sm border-2 border-indigo-100 overflow-hidden">
+                    <div className="p-4 space-y-2">
+                        <input
+                            type="text"
+                            placeholder="Title"
+                            value={noteTitle}
+                            onChange={e => setNoteTitle(e.target.value)}
+                            className="w-full text-lg font-bold text-indigo-600 placeholder-indigo-300 border-none outline-none bg-transparent"
+                        />
+                        <RichEditor value={noteContent} onChange={setNoteContent} minHeight="80px" />
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
+                        <div className="flex items-center gap-1">
+                            {Object.entries(noteColors).map(([key, val]) => (
+                                <button
+                                    key={key}
+                                    onClick={() => setNoteColor(key)}
+                                    className={`w-9 h-9 rounded-full border-2 transition-all ${val.bg} ${val.border} ${noteColor === key ? 'ring-2 ring-offset-2 ring-indigo-400 scale-110' : 'hover:scale-105'}`}
+                                    title={key}
+                                />
+                            ))}
+                        </div>
+                        <button onClick={handleCreateNote}
+                            disabled={!noteTitle.trim() && !noteContent.trim()}
+                            className="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-30">
+                            Save
+                        </button>
+                    </div>
+                </div>
+
+                {/* ── Notes List (limited to 4, expandable) ── */}
+                {sortedNotes.length > 0 ? (
+                    <div className="space-y-3">
+                        {sortedNotes.slice(0, NOTES_PREVIEW_COUNT).map(note => {
+                            const colors = noteColors[note.color] || noteColors.default;
+                            return (
+                                <div key={note.id} onClick={() => setEditingNote({ ...note })}
+                                    className={`${colors.bg} border-2 ${colors.border} rounded-2xl p-4 cursor-pointer group relative transition-all hover:shadow-lg hover:-translate-y-0.5`}>
+                                    {note.pinned && <Pin className="w-3.5 h-3.5 text-slate-400 absolute top-3 right-3 rotate-45" />}
+                                    {note.title && <h3 className="text-lg font-bold text-slate-900 mb-2 pr-6 line-clamp-2">{note.title}</h3>}
+                                    {note.content && <div className="text-base text-slate-600 line-clamp-8 leading-relaxed [&_b]:font-bold [&_i]:italic [&_u]:underline [&_strike]:line-through [&_a]:text-indigo-600 [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-1 [&_li]:mb-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: note.content }} />}
+                                    {!note.title && !note.content && <p className="text-xs text-slate-300 italic">Empty note</p>}
+                                    <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-200/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={e => { e.stopPropagation(); handlePinNote(note); }}
+                                            className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title={note.pinned ? 'Unpin' : 'Pin'}>
+                                            {note.pinned ? <PinOff className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
+                                        </button>
+                                        <button onClick={e => { e.stopPropagation(); handleDeleteNote(note.id); }}
+                                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete">
+                                            <Trash2 className="w-3 h-3" />
+                                        </button>
+                                        <span className="ml-auto text-[9px] text-slate-300">{new Date(note.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        {/* View all notes — opens modal */}
+                        {sortedNotes.length > NOTES_PREVIEW_COUNT && (
+                            <button
+                                onClick={() => setShowAllNotes(true)}
+                                className="w-full py-2.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors border border-indigo-100"
+                            >
+                                View all {sortedNotes.length} notes
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    <div className="text-center py-6">
+                        <StickyNote className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                        <p className="text-xs text-slate-400">No notes yet</p>
+                    </div>
+                )}
+            </div>
+
+            {/* Edit Note Modal */}
+            {editingNote && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setEditingNote(null)}>
+                    <div onClick={e => e.stopPropagation()}
+                        className={`w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col ${noteColors[editingNote.color]?.bg || 'bg-white'} border-2 ${noteColors[editingNote.color]?.border || 'border-slate-200'} rounded-2xl shadow-2xl transition-colors`}>
+                        <div className="p-6 space-y-3 flex-1 overflow-y-auto">
+                            <input
+                                type="text"
+                                value={editingNote.title || ''}
+                                onChange={e => setEditingNote({ ...editingNote, title: e.target.value })}
+                                placeholder="Title"
+                                className="w-full text-xl font-bold text-slate-900 placeholder-slate-300 border-none outline-none bg-transparent"
+                            />
+                            <RichEditor
+                                value={editingNote.content || ''}
+                                onChange={(html) => setEditingNote({ ...editingNote, content: html })}
+                                placeholder="Write something..."
+                                minHeight="300px"
+                            />
+                        </div>
+                        <div className="px-6 pb-2">
+                            <div className="flex items-center gap-1.5">
+                                <Palette className="w-4 h-4 text-slate-400 mr-1" />
+                                {Object.entries(noteColors).map(([key, val]) => (
+                                    <button key={key} onClick={() => setEditingNote({ ...editingNote, color: key })}
+                                        className={`w-7 h-7 rounded-full border-2 transition-all ${val.bg} ${val.border} ${editingNote.color === key ? 'ring-2 ring-offset-2 ring-indigo-400 scale-110' : 'hover:scale-110'}`}
+                                        title={key} />
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200/50">
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => { handlePinNote(editingNote); setEditingNote(null); }}
+                                    className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title={editingNote.pinned ? 'Unpin' : 'Pin'}>
+                                    {editingNote.pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                                </button>
+                                <button onClick={() => { handleDeleteNote(editingNote.id); setEditingNote(null); }}
+                                    className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete">
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setEditingNote(null)}
+                                    className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
+                                    Close
+                                </button>
+                                <button onClick={() => handleUpdateNote(editingNote)}
+                                    className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* View All Notes Modal */}
+            {showAllNotes && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowAllNotes(false)}>
+                    <div onClick={e => e.stopPropagation()}
+                        className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                                <StickyNote className="w-5 h-5 text-amber-500" />
+                                All Notes ({sortedNotes.length})
+                            </h3>
+                            <button onClick={() => setShowAllNotes(false)} className="p-1 text-slate-400 hover:text-slate-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+                            {sortedNotes.map(note => {
+                                const colors = noteColors[note.color] || noteColors.default;
+                                return (
+                                    <div key={note.id} onClick={() => { setShowAllNotes(false); setEditingNote({ ...note }); }}
+                                        className={`${colors.bg} border-2 ${colors.border} rounded-2xl p-4 cursor-pointer group relative transition-all hover:shadow-lg hover:-translate-y-0.5`}>
+                                        {note.pinned && <Pin className="w-3.5 h-3.5 text-slate-400 absolute top-3 right-3 rotate-45" />}
+                                        {note.title && <h3 className="text-lg font-bold text-slate-900 mb-2 pr-6">{note.title}</h3>}
+                                        {note.content && <div className="text-base text-slate-600 leading-relaxed [&_b]:font-bold [&_i]:italic [&_u]:underline [&_strike]:line-through [&_a]:text-indigo-600 [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-1 [&_li]:mb-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: note.content }} />}
+                                        {!note.title && !note.content && <p className="text-xs text-slate-300 italic">Empty note</p>}
+                                        <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-200/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={e => { e.stopPropagation(); handlePinNote(note); }}
+                                                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title={note.pinned ? 'Unpin' : 'Pin'}>
+                                                {note.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                                            </button>
+                                            <button onClick={e => { e.stopPropagation(); handleDeleteNote(note.id); }}
+                                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete">
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                            <span className="ml-auto text-[10px] text-slate-400">{new Date(note.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Calendar Meeting Section — takes 3 columns */}
+            <div className="lg:col-span-7">
+                <CalendarMeetingSection />
+            </div>
+
+            </div>{/* end grid */}
         </div>
     );
 }
@@ -580,6 +1162,17 @@ function CalendarMeetingSection() {
         return { year: now.getFullYear(), month: now.getMonth() };
     });
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
+    const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
+    const [weekStart, setWeekStart] = useState<Date>(() => {
+        const now = new Date();
+        const day = now.getDay();
+        const diff = day === 0 ? -6 : 1 - day; // Monday
+        const monday = new Date(now);
+        monday.setDate(now.getDate() + diff);
+        monday.setHours(0, 0, 0, 0);
+        return monday;
+    });
+    const [dayViewDate, setDayViewDate] = useState<Date>(() => new Date());
     const [showAddModal, setShowAddModal] = useState(false);
     const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([]);
     const [detailMeeting, setDetailMeeting] = useState<Meeting | null>(null);
@@ -591,6 +1184,8 @@ function CalendarMeetingSection() {
 
     // Google Calendar integration
     const [gcalConnected, setGcalConnected] = useState(false);
+    const [gcalDisconnecting, setGcalDisconnecting] = useState(false);
+    const [showDisconnectModal, setShowDisconnectModal] = useState(false);
     const [gcalEvents, setGcalEvents] = useState<any[]>([]);
     const [gcalLoading, setGcalLoading] = useState(false);
     const [gcalConnecting, setGcalConnecting] = useState(false);
@@ -754,6 +1349,22 @@ function CalendarMeetingSection() {
         }
     };
 
+    const handleDisconnectGoogleCalendar = async () => {
+        setShowDisconnectModal(false);
+        setGcalDisconnecting(true);
+        try {
+            const res = await fetch('/api/auth/google/disconnect', { method: 'POST' });
+            if (res.ok) {
+                setGcalConnected(false);
+                setGcalEvents([]);
+            }
+        } catch (err) {
+            console.error('Error disconnecting Google Calendar:', err);
+        } finally {
+            setGcalDisconnecting(false);
+        }
+    };
+
     const handleDeleteMeeting = async (id: string) => {
         try {
             await fetch(`/api/meetings/${id}`, { method: 'DELETE' });
@@ -894,35 +1505,166 @@ function CalendarMeetingSection() {
         return `${hour % 12 || 12}:${m} ${ampm}`;
     };
 
+    // Color palette for followed users (assigned in order)
+    const userColorPalette = [
+        { bg: 'bg-indigo-500/15', text: 'text-indigo-700', dot: 'bg-indigo-500', name: 'indigo' },
+        { bg: 'bg-purple-500/15', text: 'text-purple-700', dot: 'bg-purple-500', name: 'purple' },
+        { bg: 'bg-teal-500/15', text: 'text-teal-700', dot: 'bg-teal-500', name: 'teal' },
+        { bg: 'bg-pink-500/15', text: 'text-pink-700', dot: 'bg-pink-500', name: 'pink' },
+        { bg: 'bg-rose-500/15', text: 'text-rose-700', dot: 'bg-rose-500', name: 'rose' },
+        { bg: 'bg-emerald-500/15', text: 'text-emerald-700', dot: 'bg-emerald-500', name: 'emerald' },
+        { bg: 'bg-cyan-500/15', text: 'text-cyan-700', dot: 'bg-cyan-500', name: 'cyan' },
+        { bg: 'bg-orange-500/15', text: 'text-orange-700', dot: 'bg-orange-500', name: 'orange' },
+        { bg: 'bg-fuchsia-500/15', text: 'text-fuchsia-700', dot: 'bg-fuchsia-500', name: 'fuchsia' },
+        { bg: 'bg-blue-500/15', text: 'text-blue-700', dot: 'bg-blue-500', name: 'blue' },
+    ];
+
+    // All users displayed in calendar = current user + followed teammates
+    const calendarUserIds = user ? [user.id, ...subscribedUsers] : subscribedUsers;
+    const userColorMap: Record<string, typeof userColorPalette[number]> = {};
+    calendarUserIds.forEach((uid, i) => {
+        userColorMap[uid] = userColorPalette[i % userColorPalette.length];
+    });
+
     const getMeetingTheme = (m: any) => {
-        if (m.status === 'pending') return { bg: 'bg-amber-500/15', text: 'text-amber-700', dot: 'bg-amber-400' };
-        
-        if (m.source === 'partner_relations' && m.description) {
-            const divMatch = m.description.match(/Division:\s*([^\n]+)/);
-            const div = divMatch ? divMatch[1] : '';
-            if (div.includes('Marketplace')) return { bg: 'bg-teal-500/15', text: 'text-teal-700', dot: 'bg-teal-500' };
-            if (div.includes('Branding')) return { bg: 'bg-pink-500/15', text: 'text-pink-700', dot: 'bg-pink-500' };
-            if (div.includes('Business Development')) return { bg: 'bg-rose-500/15', text: 'text-rose-700', dot: 'bg-rose-500' };
-            return { bg: 'bg-purple-500/15', text: 'text-purple-700', dot: 'bg-purple-500' };
+        if (m.status === 'pending') return { bg: 'bg-amber-500/15', text: 'text-amber-700', dot: 'bg-amber-400', name: 'amber' };
+
+        // Color by the meeting owner (creator or assignee), prefer one in followed list
+        const ownerId = (calendarUserIds.includes(m.assigned_to) ? m.assigned_to : null)
+            || (calendarUserIds.includes(m.created_by) ? m.created_by : null)
+            || (calendarUserIds.includes(m.owner_id) ? m.owner_id : null)
+            || m.assigned_to || m.created_by || m.owner_id;
+
+        if (ownerId && userColorMap[ownerId]) return userColorMap[ownerId];
+        return { bg: 'bg-slate-200/60', text: 'text-slate-600', dot: 'bg-slate-400', name: 'slate' };
+    };
+
+    // Build the legend (followed users + current user + pending)
+    const legendUsers = [
+        ...(user ? [{ id: user.id, name: user.name || 'You', isCurrent: true }] : []),
+        ...subscribedUsers.map(uid => {
+            const member = teamMembers.find(m => m.id === uid);
+            return { id: uid, name: member?.name || 'Unknown', isCurrent: false };
+        }),
+    ];
+
+    // Helper: get pastel version of theme color for week/day blocks
+    const getPastelStyle = (m: any): { bg: string; border: string; text: string } => {
+        const theme = getMeetingTheme(m);
+        const pastelMap: Record<string, { bg: string; border: string; text: string }> = {
+            indigo: { bg: 'bg-indigo-100', border: 'border-indigo-300', text: 'text-indigo-800' },
+            purple: { bg: 'bg-purple-100', border: 'border-purple-300', text: 'text-purple-800' },
+            teal: { bg: 'bg-teal-100', border: 'border-teal-300', text: 'text-teal-800' },
+            pink: { bg: 'bg-pink-100', border: 'border-pink-300', text: 'text-pink-800' },
+            rose: { bg: 'bg-rose-100', border: 'border-rose-300', text: 'text-rose-800' },
+            emerald: { bg: 'bg-emerald-100', border: 'border-emerald-300', text: 'text-emerald-800' },
+            cyan: { bg: 'bg-cyan-100', border: 'border-cyan-300', text: 'text-cyan-800' },
+            orange: { bg: 'bg-orange-100', border: 'border-orange-300', text: 'text-orange-800' },
+            fuchsia: { bg: 'bg-fuchsia-100', border: 'border-fuchsia-300', text: 'text-fuchsia-800' },
+            blue: { bg: 'bg-blue-100', border: 'border-blue-300', text: 'text-blue-800' },
+            amber: { bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-800' },
+            slate: { bg: 'bg-slate-100', border: 'border-slate-300', text: 'text-slate-700' },
+        };
+        return pastelMap[theme.name] || pastelMap.slate;
+    };
+
+    // Week view helpers
+    const getWeekDates = (start: Date): Date[] => {
+        return Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(start);
+            d.setDate(start.getDate() + i);
+            return d;
+        });
+    };
+
+    const formatDateStr = (d: Date): string => {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const weekDates = getWeekDates(weekStart);
+    const weekDayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const weekHours = Array.from({ length: 11 }, (_, i) => i + 8); // 8:00 to 18:00
+
+    const dayHours = Array.from({ length: 14 }, (_, i) => i + 7); // 7:00 to 20:00
+
+    const prevWeek = () => {
+        const d = new Date(weekStart);
+        d.setDate(d.getDate() - 7);
+        setWeekStart(d);
+    };
+    const nextWeek = () => {
+        const d = new Date(weekStart);
+        d.setDate(d.getDate() + 7);
+        setWeekStart(d);
+    };
+
+    const prevDay = () => {
+        const d = new Date(dayViewDate);
+        d.setDate(d.getDate() - 1);
+        setDayViewDate(d);
+        setSelectedDate(formatDateStr(d));
+    };
+    const nextDay = () => {
+        const d = new Date(dayViewDate);
+        d.setDate(d.getDate() + 1);
+        setDayViewDate(d);
+        setSelectedDate(formatDateStr(d));
+    };
+
+    const getTimePosition = (timeStr: string, startHour: number): number => {
+        const [h, m] = timeStr.split(':').map(Number);
+        return ((h - startHour) + m / 60) * 60; // 60px per hour
+    };
+
+    const getBlockHeight = (startTime: string, endTime: string): number => {
+        const [sh, sm] = startTime.split(':').map(Number);
+        const [eh, em] = endTime.split(':').map(Number);
+        const duration = (eh * 60 + em) - (sh * 60 + sm);
+        return Math.max((duration / 60) * 60, 20); // min 20px
+    };
+
+    // Navigation label
+    const getNavigationLabel = () => {
+        if (viewMode === 'month') return monthName;
+        if (viewMode === 'week') {
+            const start = weekDates[0];
+            const end = weekDates[6];
+            const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            return `${startStr} - ${endStr}`;
         }
-        
-        return { bg: 'bg-indigo-500/15', text: 'text-indigo-700', dot: 'bg-indigo-500' };
+        return dayViewDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    };
+
+    const handlePrev = () => {
+        if (viewMode === 'month') prevMonth();
+        else if (viewMode === 'week') prevWeek();
+        else prevDay();
+    };
+
+    const handleNext = () => {
+        if (viewMode === 'month') nextMonth();
+        else if (viewMode === 'week') nextWeek();
+        else nextDay();
     };
 
     return (
         <>
             <hr className="border-slate-200" />
             <div>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex justify-center mb-6">
                     <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                         <CalendarIcon className="w-5 h-5 text-indigo-400" />
                         Calendar Meeting
                     </h2>
-                    <div className="flex items-center gap-2">
+                </div>
+                {/* Buttons — hidden here, shown below calendar */}
+                <div className="hidden">
+                    <div className="flex items-center gap-3">
                         <div className="relative">
                             <button
                                 onClick={() => setShowSubscribeDropdown(!showSubscribeDropdown)}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-full border border-slate-300 shadow-sm transition-all"
+                                className="flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-full border border-slate-300 shadow-sm transition-all"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-600"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
                                 Follow Teammates
@@ -932,7 +1674,7 @@ function CalendarMeetingSection() {
                                     </span>
                                 )}
                             </button>
-                            
+
                             {showSubscribeDropdown && (
                                 <>
                                     <div className="fixed inset-0 z-40" onClick={() => setShowSubscribeDropdown(false)}></div>
@@ -944,8 +1686,8 @@ function CalendarMeetingSection() {
                                         <div className="max-h-60 overflow-y-auto p-2">
                                             {teamMembers.filter(m => m.id !== user?.id).map(member => (
                                                 <label key={member.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer rounded-lg transition-colors">
-                                                    <input 
-                                                        type="checkbox" 
+                                                    <input
+                                                        type="checkbox"
                                                         className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-600"
                                                         checked={subscribedUsers.includes(member.id)}
                                                         onChange={(e) => {
@@ -969,15 +1711,21 @@ function CalendarMeetingSection() {
                         </div>
 
                         {gcalConnected ? (
-                            <span className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-50 text-emerald-700 text-sm font-medium rounded-full border border-emerald-200">
-                                <CheckCircle2 className="w-4 h-4" />
-                                Google Calendar Connected
-                            </span>
+                            <button
+                                onClick={() => setShowDisconnectModal(true)}
+                                disabled={gcalDisconnecting}
+                                className="group flex items-center gap-2 px-6 py-2.5 bg-emerald-50 hover:bg-rose-50 text-emerald-700 hover:text-rose-600 text-sm font-semibold rounded-full border border-emerald-200 hover:border-rose-200 transition-all disabled:opacity-50"
+                            >
+                                <CheckCircle2 className="w-4 h-4 group-hover:hidden" />
+                                <X className="w-4 h-4 hidden group-hover:block" />
+                                <span className="group-hover:hidden">{gcalDisconnecting ? 'Disconnecting...' : 'Google Calendar Connected'}</span>
+                                <span className="hidden group-hover:inline">{gcalDisconnecting ? 'Disconnecting...' : 'Disconnect Calendar'}</span>
+                            </button>
                         ) : (
                             <button
                                 onClick={handleConnectGoogleCalendar}
                                 disabled={gcalConnecting}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-full border border-slate-300 shadow-sm transition-all disabled:opacity-50"
+                                className="flex items-center gap-2 px-6 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-full border border-slate-300 shadow-sm transition-all disabled:opacity-50"
                             >
                                 <svg className="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
                                 {gcalConnecting ? 'Connecting...' : 'Connect Google Calendar'}
@@ -985,115 +1733,381 @@ function CalendarMeetingSection() {
                         )}
                         <button
                             onClick={() => { resetForm(); setShowAddModal(true); }}
-                            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full shadow-sm transition-all flex items-center gap-2"
+                            className="px-7 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full shadow-md transition-all flex items-center gap-2 text-sm"
                         >
                             <Plus className="w-5 h-5" /> Add Meeting
                         </button>
                     </div>
                 </div>
 
-                {/* Month Navigation */}
+                {/* Navigation + View Toggle */}
                 <div className="flex items-center justify-between mb-4">
-                    <button onClick={prevMonth} className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
+                    <button onClick={handlePrev} className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
                         <ChevronLeft className="w-5 h-5" />
                     </button>
-                    <h3 className="text-slate-900 font-semibold text-lg">{monthName}</h3>
-                    <button onClick={nextMonth} className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
+                    <div className="flex items-center gap-4">
+                        <h3 className="text-slate-900 font-semibold text-lg">{getNavigationLabel()}</h3>
+                        <div className="flex bg-slate-100 rounded-lg p-0.5">
+                            {(['month', 'week', 'day'] as const).map(mode => (
+                                <button
+                                    key={mode}
+                                    onClick={() => {
+                                        setViewMode(mode);
+                                        if (mode === 'day') {
+                                            const d = selectedDate ? new Date(selectedDate + 'T00:00:00') : new Date();
+                                            setDayViewDate(d);
+                                            setSelectedDate(formatDateStr(d));
+                                        }
+                                        if (mode === 'week') {
+                                            const base = selectedDate ? new Date(selectedDate + 'T00:00:00') : new Date();
+                                            const day = base.getDay();
+                                            const diff = day === 0 ? -6 : 1 - day;
+                                            const monday = new Date(base);
+                                            monday.setDate(base.getDate() + diff);
+                                            monday.setHours(0, 0, 0, 0);
+                                            setWeekStart(monday);
+                                        }
+                                    }}
+                                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all capitalize ${
+                                        viewMode === mode
+                                            ? 'bg-white text-indigo-700 shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-700'
+                                    }`}
+                                >
+                                    {mode}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <button onClick={handleNext} className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
                         <ChevronRight className="w-5 h-5" />
                     </button>
                 </div>
 
                 <div className="flex gap-4">
-                    {/* Calendar Grid */}
-                    <div className="flex-1 bg-white shadow-sm border-slate-200 border border-slate-200 rounded-2xl p-4">
-                        {/* Day headers */}
-                        <div className="grid grid-cols-7 border-b border-slate-300">
-                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                                <div key={d} className="text-center text-xs font-semibold text-slate-500 py-2 uppercase tracking-wider">{d}</div>
-                            ))}
-                        </div>
+                    {/* Calendar Grid - conditionally render based on viewMode */}
+                    <div className="flex-1 bg-white shadow-sm border border-slate-200 rounded-2xl p-4">
 
-                        {/* Calendar cells */}
-                        <div className="grid grid-cols-7">
-                            {/* Empty cells for days before the first */}
-                            {Array.from({ length: firstDayOfWeek }, (_, i) => (
-                                <div key={`empty-${i}`} className="min-h-[100px] border-b border-r border-slate-200/60" />
-                            ))}
+                        {/* ===== MONTH VIEW ===== */}
+                        {viewMode === 'month' && (
+                            <>
+                                {/* Day headers */}
+                                <div className="grid grid-cols-7 border-b border-slate-300">
+                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                                        <div key={d} className="text-center text-xs font-semibold text-slate-500 py-2 uppercase tracking-wider">{d}</div>
+                                    ))}
+                                </div>
 
-                            {/* Day cells */}
-                            {Array.from({ length: daysInMonth }, (_, i) => {
-                                const day = i + 1;
-                                const dateStr = `${currentMonth.year}-${String(currentMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                                const dayMeetings = getMeetingsForDate(dateStr);
-                                const isToday = dateStr === todayStr;
-                                const isSelected = dateStr === selectedDate;
+                                {/* Calendar cells */}
+                                <div className="grid grid-cols-7">
+                                    {/* Empty cells for days before the first */}
+                                    {Array.from({ length: firstDayOfWeek }, (_, i) => (
+                                        <div key={`empty-${i}`} className="min-h-[100px] border-b border-r border-slate-100 rounded-sm" />
+                                    ))}
 
-                                return (
-                                    <button
-                                        key={day}
-                                        onClick={() => setSelectedDate(dateStr === selectedDate ? null : dateStr)}
-                                        className={`min-h-[100px] p-1.5 border-b border-r border-slate-200/60 text-left transition-all flex flex-col ${
-                                            isSelected
-                                                ? 'bg-indigo-500/10'
-                                                : 'hover:bg-slate-100/30'
-                                        }`}
-                                    >
-                                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm mb-1 ${
-                                            isToday
-                                                ? 'bg-indigo-500 text-white font-bold'
-                                                : isSelected
-                                                    ? 'text-indigo-700 font-semibold'
-                                                    : 'text-slate-600'
-                                        }`}>
-                                            {day}
-                                        </span>
-                                        <div className="flex flex-col gap-0.5 w-full overflow-hidden">
-                                            {dayMeetings.slice(0, 2).map((m, idx) => {
-                                                const theme = getMeetingTheme(m);
-                                                return (
-                                                    <div
-                                                        key={idx}
-                                                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] truncate ${theme.bg} ${theme.text}`}
-                                                    >
-                                                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${theme.dot}`} />
-                                                        <span className="truncate">{formatTime(m.start_time).replace(' ', '')} {m.title}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                            {dayMeetings.length > 2 && (
-                                                <span className="text-[10px] text-slate-500 pl-1">+{dayMeetings.length - 2} more</span>
-                                            )}
+                                    {/* Day cells */}
+                                    {Array.from({ length: daysInMonth }, (_, i) => {
+                                        const day = i + 1;
+                                        const dateStr = `${currentMonth.year}-${String(currentMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                        const dayMeetings = getMeetingsForDate(dateStr);
+                                        const isToday = dateStr === todayStr;
+                                        const isSelected = dateStr === selectedDate;
+
+                                        return (
+                                            <button
+                                                key={day}
+                                                onClick={() => setSelectedDate(dateStr === selectedDate ? null : dateStr)}
+                                                className={`min-h-[100px] p-1.5 border-b border-r border-slate-100 text-left transition-all flex flex-col rounded-sm ${
+                                                    isSelected
+                                                        ? 'bg-indigo-50/80'
+                                                        : 'hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm mb-1 ${
+                                                    isToday
+                                                        ? 'bg-indigo-600 text-white font-bold'
+                                                        : isSelected
+                                                            ? 'text-indigo-700 font-semibold'
+                                                            : 'text-slate-600'
+                                                }`}>
+                                                    {day}
+                                                </span>
+                                                <div className="flex flex-col gap-1 w-full overflow-hidden mt-1">
+                                                    {dayMeetings.slice(0, 3).map((m, idx) => {
+                                                        const theme = getMeetingTheme(m);
+                                                        return (
+                                                            <div
+                                                                key={idx}
+                                                                className="flex items-start gap-1.5 text-[11px] leading-tight truncate"
+                                                            >
+                                                                <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-[3px] ${theme.dot}`} />
+                                                                <span className="truncate text-slate-700">
+                                                                    <span className="text-slate-500">{formatTime(m.start_time).replace(' ', '').replace(':00', '').toLowerCase()}</span>
+                                                                    {' '}<span className="font-semibold text-slate-800">{m.title}</span>
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {dayMeetings.length > 3 && (
+                                                        <span className="text-[11px] text-slate-500 font-medium pl-3.5">{dayMeetings.length - 3} more</span>
+                                                    )}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </>
+                        )}
+
+                        {/* ===== WEEK VIEW ===== */}
+                        {viewMode === 'week' && (
+                            <div className="overflow-auto">
+                                {/* Column headers */}
+                                <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-slate-200">
+                                    <div className="py-2" />
+                                    {weekDates.map((d, i) => {
+                                        const dateStr = formatDateStr(d);
+                                        const isToday = dateStr === todayStr;
+                                        return (
+                                            <button
+                                                key={i}
+                                                onClick={() => setSelectedDate(dateStr)}
+                                                className={`py-2 text-center transition-colors rounded-t-lg ${
+                                                    isToday ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <div className={`text-xs font-medium ${isToday ? 'text-indigo-600' : 'text-slate-500'}`}>
+                                                    {weekDayNames[i]}
+                                                </div>
+                                                <div className={`text-lg font-bold mt-0.5 ${
+                                                    isToday
+                                                        ? 'w-8 h-8 mx-auto rounded-full bg-indigo-600 text-white flex items-center justify-center'
+                                                        : 'text-slate-900'
+                                                }`}>
+                                                    {d.getDate()}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Time grid */}
+                                <div className="grid grid-cols-[60px_repeat(7,1fr)] relative" style={{ height: `${weekHours.length * 60}px` }}>
+                                    {/* Hour labels */}
+                                    {weekHours.map((hour) => (
+                                        <div
+                                            key={`label-${hour}`}
+                                            className="absolute left-0 w-[60px] text-right pr-3 text-xs text-slate-400 font-medium"
+                                            style={{ top: `${(hour - 8) * 60}px`, transform: 'translateY(-6px)' }}
+                                        >
+                                            {hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
                                         </div>
-                                    </button>
+                                    ))}
+
+                                    {/* Grid lines */}
+                                    {weekHours.map((hour) => (
+                                        <div
+                                            key={`line-${hour}`}
+                                            className="absolute left-[60px] right-0 border-t border-slate-100"
+                                            style={{ top: `${(hour - 8) * 60}px` }}
+                                        />
+                                    ))}
+
+                                    {/* Day columns with events */}
+                                    {weekDates.map((d, colIndex) => {
+                                        const dateStr = formatDateStr(d);
+                                        const dayMeetings = getMeetingsForDate(dateStr);
+                                        const isToday = dateStr === todayStr;
+
+                                        return (
+                                            <div
+                                                key={colIndex}
+                                                className={`relative border-r border-slate-100 ${isToday ? 'bg-indigo-50/30' : ''}`}
+                                                style={{ gridColumn: colIndex + 2, gridRow: 1 }}
+                                            >
+                                                {dayMeetings.map((m, mIdx) => {
+                                                    const top = getTimePosition(m.start_time, 8);
+                                                    const height = getBlockHeight(m.start_time, m.end_time);
+                                                    const pastel = getPastelStyle(m);
+
+                                                    // Skip if outside visible range
+                                                    if (top < 0 || top > weekHours.length * 60) return null;
+
+                                                    return (
+                                                        <button
+                                                            key={m.id || `wk-${mIdx}`}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedDate(dateStr);
+                                                                openDetail(m);
+                                                            }}
+                                                            className={`absolute left-0.5 right-0.5 ${pastel.bg} ${pastel.text} ${pastel.border} border rounded-lg px-2 py-1 overflow-hidden text-left transition-shadow hover:shadow-md cursor-pointer`}
+                                                            style={{ top: `${Math.max(top, 0)}px`, height: `${height}px`, zIndex: 10 }}
+                                                        >
+                                                            <p className="text-[11px] font-semibold truncate leading-tight">{m.title}</p>
+                                                            {height > 30 && (
+                                                                <p className="text-[10px] opacity-70 truncate">{formatTime(m.start_time)} - {formatTime(m.end_time)}</p>
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ===== DAY VIEW ===== */}
+                        {viewMode === 'day' && (
+                            <div className="overflow-auto">
+                                <div className="relative" style={{ height: `${dayHours.length * 60}px` }}>
+                                    {/* Hour rows */}
+                                    {dayHours.map((hour) => (
+                                        <div
+                                            key={`day-hour-${hour}`}
+                                            className="absolute left-0 right-0 flex border-t border-slate-100"
+                                            style={{ top: `${(hour - 7) * 60}px`, height: '60px' }}
+                                        >
+                                            <div className="w-[60px] text-right pr-3 text-xs text-slate-400 font-medium flex-shrink-0" style={{ transform: 'translateY(-6px)' }}>
+                                                {hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
+                                            </div>
+                                            <div className="flex-1" />
+                                        </div>
+                                    ))}
+
+                                    {/* Events */}
+                                    {(() => {
+                                        const dateStr = formatDateStr(dayViewDate);
+                                        const dayMeetings = getMeetingsForDate(dateStr);
+                                        return dayMeetings.map((m, mIdx) => {
+                                            const top = getTimePosition(m.start_time, 7);
+                                            const height = getBlockHeight(m.start_time, m.end_time);
+                                            const pastel = getPastelStyle(m);
+
+                                            if (top < 0 || top > dayHours.length * 60) return null;
+
+                                            return (
+                                                <button
+                                                    key={m.id || `day-${mIdx}`}
+                                                    onClick={() => openDetail(m)}
+                                                    className={`absolute ${pastel.bg} ${pastel.text} ${pastel.border} border rounded-xl px-3 py-2 overflow-hidden text-left transition-shadow hover:shadow-md cursor-pointer`}
+                                                    style={{
+                                                        top: `${Math.max(top, 0)}px`,
+                                                        height: `${height}px`,
+                                                        left: '70px',
+                                                        right: '8px',
+                                                        zIndex: 10,
+                                                    }}
+                                                >
+                                                    <p className="text-sm font-semibold truncate">{m.title}</p>
+                                                    <p className="text-xs opacity-70 mt-0.5">
+                                                        {formatTime(m.start_time)} - {formatTime(m.end_time)}
+                                                    </p>
+                                                    {height > 60 && m.description && (
+                                                        <p className="text-xs opacity-60 mt-1 truncate">{m.description}</p>
+                                                    )}
+                                                </button>
+                                            );
+                                        });
+                                    })()}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Legend - Followed users (shown in all views) */}
+                        <div className="flex flex-wrap items-center gap-4 mt-4 pt-3 border-t border-slate-200">
+                            {legendUsers.map(lu => {
+                                const color = userColorMap[lu.id];
+                                return (
+                                    <div key={lu.id} className="flex items-center gap-1.5 text-xs text-slate-500">
+                                        <span className={`w-2 h-2 rounded-full ${color?.dot || 'bg-slate-400'}`} />
+                                        {lu.name} {lu.isCurrent && <span className="text-slate-400">(you)</span>}
+                                    </div>
                                 );
                             })}
-                        </div>
-
-                        {/* Legend */}
-                        <div className="flex flex-wrap items-center gap-4 mt-4 pt-3 border-t border-slate-200">
-                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                                <span className="w-2 h-2 rounded-full bg-indigo-500" /> FBI Member
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                                <span className="w-2 h-2 rounded-full bg-purple-500" /> Partner Relationship (PR)
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                                <span className="w-2 h-2 rounded-full bg-teal-500" /> Marketplace (MP)
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                                <span className="w-2 h-2 rounded-full bg-pink-500" /> Branding
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                                <span className="w-2 h-2 rounded-full bg-rose-500" /> Business Development (BD)
-                            </div>
                             <div className="flex items-center gap-1.5 text-xs text-slate-500">
                                 <span className="w-2 h-2 rounded-full bg-amber-400" /> Pending
                             </div>
                         </div>
+
+                        {/* Action Buttons — below calendar */}
+                        <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-slate-200">
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowSubscribeDropdown(!showSubscribeDropdown)}
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-full border border-slate-300 shadow-sm transition-all"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-600"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
+                                    Follow Teammates
+                                    {subscribedUsers.length > 0 && (
+                                        <span className="bg-indigo-100 text-indigo-700 py-0.5 px-2 rounded-full text-xs font-bold">{subscribedUsers.length}</span>
+                                    )}
+                                </button>
+                                {showSubscribeDropdown && (
+                                    <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setShowSubscribeDropdown(false)}></div>
+                                        <div className="absolute bottom-full mb-2 left-0 w-64 bg-white rounded-xl shadow-lg border border-slate-200 z-50 overflow-hidden">
+                                            <div className="p-3 border-b border-slate-100 bg-slate-50">
+                                                <h3 className="text-sm font-semibold text-slate-800">Overlay Calendars</h3>
+                                                <p className="text-xs text-slate-500 mt-0.5">See events and meetings from others</p>
+                                            </div>
+                                            <div className="max-h-60 overflow-y-auto p-2">
+                                                {teamMembers.filter(m => m.id !== user?.id).length > 0 ? teamMembers.filter(m => m.id !== user?.id).map(member => (
+                                                    <label key={member.id} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                            checked={subscribedUsers.includes(member.id)}
+                                                            onChange={() => {
+                                                                if (subscribedUsers.includes(member.id)) {
+                                                                    setSubscribedUsers(subscribedUsers.filter((id: string) => id !== member.id));
+                                                                } else {
+                                                                    setSubscribedUsers([...subscribedUsers, member.id]);
+                                                                }
+                                                            }}
+                                                        />
+                                                        <span className="text-sm text-slate-700">{member.name}</span>
+                                                    </label>
+                                                )) : (
+                                                    <p className="text-sm text-slate-400 p-2">No team members found</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                            {gcalConnected ? (
+                                <button
+                                    onClick={() => setShowDisconnectModal(true)}
+                                    disabled={gcalDisconnecting}
+                                    className="group flex items-center gap-2 px-6 py-2.5 bg-emerald-50 hover:bg-rose-50 text-emerald-700 hover:text-rose-600 text-sm font-semibold rounded-full border border-emerald-200 hover:border-rose-200 transition-all disabled:opacity-50"
+                                >
+                                    <CheckCircle2 className="w-4 h-4 group-hover:hidden" />
+                                    <X className="w-4 h-4 hidden group-hover:block" />
+                                    <span className="group-hover:hidden">{gcalDisconnecting ? 'Disconnecting...' : 'Google Calendar Connected'}</span>
+                                    <span className="hidden group-hover:inline">{gcalDisconnecting ? 'Disconnecting...' : 'Disconnect Calendar'}</span>
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleConnectGoogleCalendar}
+                                    disabled={gcalConnecting}
+                                    className="flex items-center gap-2 px-6 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-full border border-slate-300 shadow-sm transition-all disabled:opacity-50"
+                                >
+                                    Connect Google Calendar
+                                </button>
+                            )}
+                            <button
+                                onClick={() => { resetForm(); setShowAddModal(true); }}
+                                className="px-7 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full shadow-md transition-all flex items-center gap-2 text-sm"
+                            >
+                                <Plus className="w-5 h-5" /> Add Meeting
+                            </button>
+                        </div>
                     </div>
 
                     {/* Day Detail Panel */}
-                    <div className="w-80 bg-white shadow-sm border-slate-200 border border-slate-200 rounded-2xl p-4 flex flex-col">
+                    <div className="w-80 bg-white shadow-sm border border-slate-200 rounded-2xl p-4 flex flex-col">
                         {selectedDate ? (
                             <>
                                 <div className="flex items-center justify-between mb-3">
@@ -1157,6 +2171,41 @@ function CalendarMeetingSection() {
                     </div>
                 </div>
             </div>
+
+            {/* Disconnect Google Calendar Modal */}
+            {showDisconnectModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowDisconnectModal(false)}>
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="p-6">
+                            <div className="flex items-start gap-4">
+                                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                                    <svg className="w-5 h-5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M18 6 6 18M6 6l12 12" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900">Disconnect Google Calendar</h3>
+                                    <p className="text-sm text-slate-500 mt-1">Your calendar events will no longer sync with AHA COMSS. You can reconnect anytime.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-200">
+                            <button
+                                onClick={() => setShowDisconnectModal(false)}
+                                className="px-5 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDisconnectGoogleCalendar}
+                                className="px-5 py-2 text-sm font-semibold text-white bg-rose-500 rounded-xl hover:bg-rose-600 transition-colors"
+                            >
+                                Disconnect
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Add Meeting Modal */}
             {showAddModal && (
@@ -1259,7 +2308,7 @@ function CalendarMeetingSection() {
             {/* Meeting Detail Modal */}
             {detailMeeting && !isEditing && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
+                    <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
                         {/* Header */}
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white">
                             <div className="flex items-center gap-3 min-w-0">

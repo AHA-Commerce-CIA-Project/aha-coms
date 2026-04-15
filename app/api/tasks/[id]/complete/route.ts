@@ -59,6 +59,7 @@ export const PUT = withErrorHandler(async (
             requesterName: task.requesterName || 'Requester',
             completedByName: completedBy || session.user.name || 'A team member',
             resolutionSummary: resolutionSummary || null,
+            requesterEmail: task.requesterEmail || undefined,
         }).catch(() => {});
     }
 

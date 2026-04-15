@@ -38,15 +38,11 @@ export async function GET() {
   return NextResponse.json(result);
 }
 
-// POST /api/channels - Create channel (leader/admin only)
+// POST /api/channels - Create channel (all authenticated users)
 export async function POST(request: Request) {
   const session = await requireAuth();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  if (session.user.role !== 'leader' && session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const { name, description, isPrivate = false, memberIds = [] } = await request.json();

@@ -1,7 +1,8 @@
 'use client';
 
-import { Bell, Search, User, LogOut, Shield, CheckCheck, FileText, UserPlus, CheckCircle2, Check, Trash2, Calendar, Clock } from 'lucide-react';
+import { Bell, Search, User, LogOut, Shield, CheckCheck, FileText, UserPlus, CheckCircle2, Check, Trash2, Calendar, Clock, Sun, Moon } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme } from '@/lib/theme-context';
 import { useAppStore } from '@/lib/store';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -19,6 +20,7 @@ interface NotifItem {
 
 export function Header() {
     const { user, profile, isLeader, signOut } = useAuth();
+    const { theme, toggleTheme } = useTheme();
     const { users } = useAppStore();
     const [showDropdown, setShowDropdown] = useState(false);
     const [showNotifs, setShowNotifs] = useState(false);
@@ -115,9 +117,20 @@ export function Header() {
             if (n.data.meeting_date) params.set('date', n.data.meeting_date);
             params.set('meetingId', n.data.meeting_id);
             router.push(`/tasks?${params.toString()}`);
-        } else if (n.data?.task_id || n.data?.task_token) {
-            // Request/task notification → go to /nexus
-            router.push('/nexus');
+        } else if (n.data?.channel_id && n.data?.message_id) {
+            // Channel message notification → go to channel with highlight
+            router.push(`/channels?channel=${n.data.channel_id}&highlight=${n.data.message_id}`);
+        } else if (n.data?.channel_id) {
+            // Channel notification without specific message
+            router.push(`/channels?channel=${n.data.channel_id}`);
+        } else if (n.type === 'task_comment' && n.data?.task_id) {
+            // Comment notification → go to /nexus, open task, scroll to comments
+            router.push(`/nexus?highlight=${n.data.task_id}&open=true&focus=comments`);
+        } else if (n.data?.task_id) {
+            // Request/task notification → go to /nexus with highlight
+            router.push(`/nexus?highlight=${n.data.task_id}`);
+        } else if (n.data?.task_token) {
+            router.push(`/nexus?highlight_token=${n.data.task_token}`);
         }
     };
 
@@ -152,6 +165,15 @@ export function Header() {
 
             {/* Right Side */}
             <div className="flex items-center gap-4">
+                {/* Theme Toggle */}
+                <button
+                    onClick={toggleTheme}
+                    className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                    {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                </button>
+
                 {/* Notifications */}
                 <div className="relative" ref={notifRef}>
                     <button
@@ -248,7 +270,7 @@ export function Header() {
                             <p className="text-sm font-bold text-slate-800">{displayName}</p>
                             <p className="text-xs text-slate-500 capitalize flex items-center gap-1 justify-end">
                                 {isLeader && <Shield className="w-3 h-3 text-indigo-500" />}
-                                {displayRole}
+                                {displayRole === 'admin' ? 'Master' : displayRole === 'leader' ? 'Leader' : displayRole}
                             </p>
                         </div>
                         <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden">

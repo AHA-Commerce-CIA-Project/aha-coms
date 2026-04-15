@@ -3,8 +3,45 @@ import { Resend } from 'resend';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // On Resend free tier, can only send to verified email.
-// Once domain is verified in Resend, change this to 'tfbi@ahacommerce.net'
 const NOTIFICATION_EMAIL = process.env.RESEND_NOTIFICATION_EMAIL || 'alif.masyhur@ahacommerce.net';
+
+// Google Apps Script email sender - bypasses Resend free tier limitations
+// Can send to any email via Google Workspace
+const APPS_SCRIPT_EMAIL_URL = process.env.APPS_SCRIPT_EMAIL_URL || '';
+const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET || 'aha-fast-email-secret-2026';
+
+export async function sendViaAppsScript(to: string[], subject: string, htmlBody: string, cc?: string): Promise<boolean> {
+  if (!APPS_SCRIPT_EMAIL_URL) {
+    console.warn('APPS_SCRIPT_EMAIL_URL not set, cannot send via Apps Script');
+    return false;
+  }
+
+  try {
+    const response = await fetch(APPS_SCRIPT_EMAIL_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        secret: APPS_SCRIPT_SECRET,
+        to,
+        subject,
+        htmlBody,
+        cc,
+      }),
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      console.log(`Apps Script email sent to: ${to.join(', ')}`);
+      return true;
+    } else {
+      console.error('Apps Script email error:', result.error);
+      return false;
+    }
+  } catch (err) {
+    console.error('Failed to send via Apps Script:', err);
+    return false;
+  }
+}
 
 interface RequestEmailData {
   taskToken: string;
@@ -110,11 +147,25 @@ export async function sendRequestNotificationEmail(data: RequestEmailData) {
     </div>
   `;
 
+  const subject = `[FAST] New Request: ${data.title} (${data.urgency}) - Token: ${data.taskToken}`;
+
+  // Try Apps Script first (can send to any email)
+  const appsScriptSent = await sendViaAppsScript(
+    recipients,
+    subject,
+    htmlBody,
+  );
+  if (appsScriptSent) {
+    console.log(`Request notification sent via Apps Script to: ${recipients.join(', ')}`);
+    return true;
+  }
+
+  // Fallback to Resend (only sends to verified email)
   try {
     const result = await resend.emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
-      to: recipients,
-      subject: `[FAST] New Request: ${data.title} (${data.urgency}) - Token: ${data.taskToken}`,
+      to: [NOTIFICATION_EMAIL],
+      subject,
       html: htmlBody,
     });
     console.log('Resend response:', JSON.stringify(result));
@@ -122,7 +173,7 @@ export async function sendRequestNotificationEmail(data: RequestEmailData) {
       console.error('Resend error:', result.error);
       return false;
     }
-    console.log(`Email notification sent to: ${recipients.join(', ')}`);
+    console.log(`Request notification sent via Resend to: ${NOTIFICATION_EMAIL}`);
     return true;
   } catch (err) {
     console.error('Failed to send email notification:', err);
@@ -140,6 +191,7 @@ interface TaskClaimedEmailData {
   requesterName: string;
   claimedByName: string;
   urgency: string;
+  requesterEmail?: string;
 }
 
 export async function sendTaskClaimedEmail(data: TaskClaimedEmailData) {
@@ -198,15 +250,23 @@ export async function sendTaskClaimedEmail(data: TaskClaimedEmailData) {
     </div>
   `;
 
+  const subject = `[FAST] Request Claimed: ${data.title} - Token: ${data.taskToken}`;
+  const recipients = [NOTIFICATION_EMAIL];
+  if (data.requesterEmail && data.requesterEmail !== NOTIFICATION_EMAIL) {
+    recipients.push(data.requesterEmail);
+  }
+
+  const sent = await sendViaAppsScript(recipients, subject, htmlBody);
+  if (sent) return true;
+
   try {
     const result = await resend.emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
-      to: [NOTIFICATION_EMAIL],
-      subject: `[FAST] Request Claimed: ${data.title} - Token: ${data.taskToken}`,
+      to: recipients,
+      subject,
       html: htmlBody,
     });
     if (result.error) { console.error('Resend error:', result.error); return false; }
-    console.log('Task claimed email sent');
     return true;
   } catch (err) {
     console.error('Failed to send task claimed email:', err);
@@ -224,6 +284,7 @@ interface TaskCompletedEmailData {
   requesterName: string;
   completedByName: string;
   resolutionSummary: string | null;
+  requesterEmail?: string;
 }
 
 export async function sendTaskCompletedEmail(data: TaskCompletedEmailData) {
@@ -284,15 +345,23 @@ export async function sendTaskCompletedEmail(data: TaskCompletedEmailData) {
     </div>
   `;
 
+  const subject = `[FAST] Request Completed: ${data.title} - Token: ${data.taskToken}`;
+  const recipients = [NOTIFICATION_EMAIL];
+  if (data.requesterEmail && data.requesterEmail !== NOTIFICATION_EMAIL) {
+    recipients.push(data.requesterEmail);
+  }
+
+  const sent = await sendViaAppsScript(recipients, subject, htmlBody);
+  if (sent) return true;
+
   try {
     const result = await resend.emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
-      to: [NOTIFICATION_EMAIL],
-      subject: `[FAST] Request Completed: ${data.title} - Token: ${data.taskToken}`,
+      to: recipients,
+      subject,
       html: htmlBody,
     });
     if (result.error) { console.error('Resend error:', result.error); return false; }
-    console.log('Task completed email sent');
     return true;
   } catch (err) {
     console.error('Failed to send task completed email:', err);
@@ -305,8 +374,6 @@ export async function sendTaskCompletedEmail(data: TaskCompletedEmailData) {
 // ==========================================
 
 export async function sendActivationEmail(email: string, name: string, token: string) {
-  if (!process.env.RESEND_API_KEY) return false;
-
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://127.0.0.1:3001';
   const activateUrl = `${appUrl}/activate?token=${token}`;
 
@@ -341,18 +408,94 @@ export async function sendActivationEmail(email: string, name: string, token: st
     </div>
   `;
 
+  // Try Apps Script first (can send to any email)
+  const appsScriptSent = await sendViaAppsScript(
+    [email],
+    '[AHA FAST] Activate Your Account',
+    htmlBody,
+    NOTIFICATION_EMAIL,
+  );
+
+  if (appsScriptSent) {
+    console.log(`Activation email sent via Apps Script to: ${email}`);
+    return true;
+  }
+
+  // Fallback to Resend (only sends to your own email)
+  if (!process.env.RESEND_API_KEY) return false;
   try {
     const result = await resend.emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
-      to: [NOTIFICATION_EMAIL], // On free tier; change to [email] after domain verification
-      subject: '[AHA FAST] Activate Your Account',
+      to: [NOTIFICATION_EMAIL],
+      subject: `[AHA FAST] Activate Account for ${name} (${email}) - Please forward to ${email}`,
       html: htmlBody,
     });
-    if (result.error) { console.error('Resend error:', result.error); return false; }
-    console.log(`Activation email sent for: ${email}`);
+    if (result.error) { console.error('Resend fallback error:', result.error); return false; }
+    console.log(`Activation email sent via Resend fallback for: ${email}`);
     return true;
   } catch (err) {
     console.error('Failed to send activation email:', err);
+    return false;
+  }
+}
+
+// ==========================================
+// Password Reset Email
+// ==========================================
+
+export async function sendPasswordResetEmail(email: string, name: string, code: string) {
+  const htmlBody = `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
+      <div style="background: linear-gradient(135deg, #0F0E7F 0%, #4F46E5 100%); padding: 24px 32px; border-radius: 12px 12px 0 0;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">
+          🔐 AHA COMSS - Password Reset Code
+        </h1>
+      </div>
+      <div style="padding: 32px; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
+        <p style="color: #475569; font-size: 14px; margin: 0 0 16px;">
+          Hi <strong>${name}</strong>,
+        </p>
+        <p style="color: #475569; font-size: 14px; margin: 0 0 24px;">
+          We received a request to reset your password. Use the code below to proceed:
+        </p>
+        <div style="text-align: center; margin: 32px 0;">
+          <div style="display: inline-block; background: #F1F5F9; border: 2px dashed #CBD5E1; border-radius: 12px; padding: 20px 48px;">
+            <p style="color: #94A3B8; font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 1px;">Your Reset Code</p>
+            <p style="color: #0F0E7F; font-size: 36px; font-weight: 800; letter-spacing: 8px; margin: 0; font-family: monospace;">${code}</p>
+          </div>
+        </div>
+        <p style="color: #94A3B8; font-size: 12px; margin: 24px 0 0; text-align: center;">
+          This code expires in 15 minutes. If you didn't request this, please ignore this email.
+        </p>
+        <div style="border-top: 1px solid #F1F5F9; padding-top: 16px; margin-top: 24px;">
+          <p style="color: #94A3B8; font-size: 11px; margin: 0; text-align: center;">
+            AHA COMSS - Company Support Systems
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const appsScriptSent = await sendViaAppsScript(
+    [email],
+    '[AHA COMSS] Reset Your Password',
+    htmlBody,
+    NOTIFICATION_EMAIL,
+  );
+
+  if (appsScriptSent) return true;
+
+  if (!process.env.RESEND_API_KEY) return false;
+  try {
+    const result = await resend.emails.send({
+      from: 'AHA COMSS <onboarding@resend.dev>',
+      to: [NOTIFICATION_EMAIL],
+      subject: `[AHA COMSS] Password Reset for ${name} (${email}) - Please forward to ${email}`,
+      html: htmlBody,
+    });
+    if (result.error) return false;
+    return true;
+  } catch {
     return false;
   }
 }
@@ -362,8 +505,6 @@ export async function sendActivationEmail(email: string, name: string, token: st
 // ==========================================
 
 export async function sendAccountApprovedEmail(email: string, name: string) {
-  if (!process.env.RESEND_API_KEY) return false;
-
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://127.0.0.1:3001';
 
   const htmlBody = `
@@ -390,11 +531,20 @@ export async function sendAccountApprovedEmail(email: string, name: string) {
     </div>
   `;
 
+  const appsScriptSent = await sendViaAppsScript(
+    [email],
+    '[AHA FAST] Your Account Has Been Approved',
+    htmlBody,
+    NOTIFICATION_EMAIL,
+  );
+  if (appsScriptSent) return true;
+
+  if (!process.env.RESEND_API_KEY) return false;
   try {
     const result = await resend.emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
       to: [NOTIFICATION_EMAIL],
-      subject: '[AHA FAST] Your Account Has Been Approved',
+      subject: `[AHA FAST] Account Approved for ${name} (${email})`,
       html: htmlBody,
     });
     if (result.error) { console.error('Resend error:', result.error); return false; }
@@ -406,8 +556,6 @@ export async function sendAccountApprovedEmail(email: string, name: string) {
 }
 
 export async function sendAccountRejectedEmail(email: string, name: string) {
-  if (!process.env.RESEND_API_KEY) return false;
-
   const htmlBody = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
       <div style="background: linear-gradient(135deg, #DC2626 0%, #EF4444 100%); padding: 24px 32px; border-radius: 12px 12px 0 0;">
@@ -425,11 +573,20 @@ export async function sendAccountRejectedEmail(email: string, name: string) {
     </div>
   `;
 
+  const appsScriptSent = await sendViaAppsScript(
+    [email],
+    '[AHA FAST] Account Registration Update',
+    htmlBody,
+    NOTIFICATION_EMAIL,
+  );
+  if (appsScriptSent) return true;
+
+  if (!process.env.RESEND_API_KEY) return false;
   try {
     const result = await resend.emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
       to: [NOTIFICATION_EMAIL],
-      subject: '[AHA FAST] Account Registration Update',
+      subject: `[AHA FAST] Account Rejected for ${name} (${email})`,
       html: htmlBody,
     });
     if (result.error) { console.error('Resend error:', result.error); return false; }

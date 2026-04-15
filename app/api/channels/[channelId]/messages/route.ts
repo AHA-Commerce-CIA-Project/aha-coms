@@ -80,7 +80,7 @@ export async function POST(
     },
     include: {
       sender: { select: { id: true, name: true, image: true } },
-      reactions: [],
+      reactions: true,
       savedBy: { where: { userId: session.user.id }, select: { id: true } },
     },
   });

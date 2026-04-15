@@ -29,7 +29,10 @@ interface ChannelMessageFeedProps {
   onReaction: (messageId: string, emoji: string) => void;
   onSave: (messageId: string) => void;
   onMessageUpdated: () => void;
+  onForward?: (message: Message) => void;
   allUsers?: { id: string; name: string }[];
+  highlightedMessageId?: string | null;
+  scrollTrigger?: number;
 }
 
 function formatDateDivider(dateStr: string) {
@@ -59,7 +62,10 @@ export function ChannelMessageFeed({
   onReaction,
   onSave,
   onMessageUpdated,
+  onForward,
   allUsers,
+  highlightedMessageId,
+  scrollTrigger,
 }: ChannelMessageFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -74,6 +80,13 @@ export function ChannelMessageFeed({
     }
     prevLengthRef.current = messages.length;
   }, [messages.length]);
+
+  // Scroll to bottom when triggered externally (e.g., typing indicator appears)
+  useEffect(() => {
+    if (scrollTrigger && scrollTrigger > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [scrollTrigger]);
 
   // Load more on scroll to top
   const handleScroll = () => {
@@ -156,19 +169,22 @@ export function ChannelMessageFeed({
           );
         }
 
+        const isHighlighted = highlightedMessageId === item.message!.id;
         return (
-          <ChannelMessageItem
-            key={item.message!.id}
-            message={item.message!}
-            currentUserId={currentUserId}
-            channelId={channelId}
-            onOpenThread={onOpenThread}
-            onReaction={onReaction}
-            onSave={onSave}
-            onMessageUpdated={onMessageUpdated}
-            allUsers={allUsers}
-            showAvatar={item.showAvatar}
-          />
+          <div key={item.message!.id} id={`msg-${item.message!.id}`} className={`transition-all duration-1000 rounded-xl ${isHighlighted ? 'bg-indigo-50 ring-2 ring-indigo-300 -mx-2 px-2 py-1' : ''}`}>
+            <ChannelMessageItem
+              message={item.message!}
+              currentUserId={currentUserId}
+              channelId={channelId}
+              onOpenThread={onOpenThread}
+              onReaction={onReaction}
+              onSave={onSave}
+              onMessageUpdated={onMessageUpdated}
+              onForward={onForward}
+              allUsers={allUsers}
+              showAvatar={item.showAvatar}
+            />
+          </div>
         );
       })}
 

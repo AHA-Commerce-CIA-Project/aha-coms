@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
 import { auth } from '@/lib/auth';
+import { logActivity } from '@/lib/activity-log';
 
 async function verifyLeader() {
     const session = await requireAuth();
@@ -13,6 +14,19 @@ async function verifyLeader() {
     });
 
     if (user?.role !== 'leader' && user?.role !== 'admin') return null;
+    return session;
+}
+
+async function verifyAdmin() {
+    const session = await requireAuth();
+    if (!session) return null;
+
+    const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { role: true },
+    });
+
+    if (user?.role !== 'admin') return null;
     return session;
 }
 
@@ -41,16 +55,17 @@ export async function GET() {
         created_at: u.createdAt.toISOString(),
         teams: u.team ? { name: u.team.name } : null,
         email_confirmed_at: u.emailVerified ? u.createdAt.toISOString() : null,
+        accountStatus: u.accountStatus,
     }));
 
     return NextResponse.json(data);
 }
 
-// POST — Create a new user (Leader only)
+// POST — Create a new user (Master/Admin only)
 export async function POST(request: NextRequest) {
-    const session = await verifyLeader();
+    const session = await verifyAdmin();
     if (!session) {
-        return NextResponse.json({ error: 'Unauthorized — Leader access required' }, { status: 403 });
+        return NextResponse.json({ error: 'Unauthorized — Master access required' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -87,6 +102,15 @@ export async function POST(request: NextRequest) {
                 emailVerified: true,
             },
         });
+
+        const roleLabel = (r: string) => r === 'admin' ? 'Master' : r === 'leader' ? 'Leader' : 'Member';
+        logActivity(
+            session.user.id,
+            'user_created',
+            `${session.user.name} created new account: ${name} (${email}) as ${roleLabel(updatedUser.role)}`,
+            'user',
+            updatedUser.id,
+        );
 
         return NextResponse.json({
             id: updatedUser.id,

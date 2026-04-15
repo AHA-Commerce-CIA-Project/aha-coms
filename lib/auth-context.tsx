@@ -12,12 +12,14 @@ interface UserProfile {
     avatar_url: string | null;
     role: string;
     teamId: string | null;
+    teamName: string | null;
 }
 
 interface AuthContextType {
     user: UserProfile | null;
     profile: UserProfile | null;
     isLeader: boolean;
+    isMaster: boolean;
     loading: boolean;
     signOut: () => Promise<void>;
 }
@@ -26,6 +28,7 @@ const AuthContext = createContext<AuthContextType>({
     user: null,
     profile: null,
     isLeader: false,
+    isMaster: false,
     loading: true,
     signOut: async () => { },
 });
@@ -46,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 let role = (session.user as any).role || 'member';
                 let name = session.user.name || 'User';
                 let teamId = (session.user as any).teamId || null;
+                let teamName: string | null = null;
                 let avatarUrl: string | null = session.user.image ?? null;
 
                 // Supplement with profile API for custom fields
@@ -56,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         if (profileData.name) name = profileData.name;
                         if (profileData.role) role = profileData.role;
                         if (profileData.team_id) teamId = profileData.team_id;
+                        if (profileData.team_name) teamName = profileData.team_name;
                         if (profileData.avatar_url) avatarUrl = profileData.avatar_url;
                     }
                 } catch { }
@@ -68,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     avatar_url: avatarUrl,
                     role,
                     teamId,
+                    teamName,
                 };
                 setProfile(userProfile);
             } else {
@@ -93,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 user: profile,
                 profile,
                 isLeader: profile?.role === 'leader' || profile?.role === 'admin',
+                isMaster: profile?.role === 'admin',
                 loading,
                 signOut: handleSignOut,
             }}

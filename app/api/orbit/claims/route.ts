@@ -37,6 +37,16 @@ export async function POST(request: Request) {
 
   const period = getCurrentPeriod(template.frequency);
 
+  // For team-wide tasks, check if THIS user already claimed (not just anyone)
+  if (template.isTeamWide) {
+    const existingClaim = await prisma.routineTaskClaim.findUnique({
+      where: { templateId_period_claimedBy: { templateId, period, claimedBy: session.user.id } },
+    });
+    if (existingClaim) {
+      return NextResponse.json({ error: 'You have already claimed this task for this period' }, { status: 409 });
+    }
+  }
+
   try {
     const claim = await prisma.routineTaskClaim.create({
       data: {
@@ -71,7 +81,7 @@ export async function POST(request: Request) {
     return NextResponse.json(claim, { status: 201 });
   } catch (err: any) {
     if (err.code === 'P2002') {
-      return NextResponse.json({ error: 'This task has already been claimed for this period' }, { status: 409 });
+      return NextResponse.json({ error: template.isTeamWide ? 'You have already claimed this task for this period' : 'This task has already been claimed for this period' }, { status: 409 });
     }
     throw err;
   }

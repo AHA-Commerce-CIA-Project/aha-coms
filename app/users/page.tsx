@@ -20,6 +20,7 @@ interface UserRow {
     created_at: string;
     teams?: { name: string } | null;
     email_confirmed_at: string | null;
+    accountStatus?: string;
 }
 
 interface TeamRow {
@@ -30,7 +31,7 @@ interface TeamRow {
 type ModalMode = 'create' | 'edit' | null;
 
 export default function UserManagementPage() {
-    const { isLeader, loading: authLoading } = useAuth();
+    const { isLeader, isMaster, loading: authLoading } = useAuth();
     const router = useRouter();
 
     const [users, setUsers] = useState<UserRow[]>([]);
@@ -312,21 +313,25 @@ export default function UserManagementPage() {
                     <p className="text-slate-500">Manage registered users, roles, and team assignments.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={handleSyncHR}
-                        disabled={syncing}
-                        className="flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-full transition-all shadow-sm disabled:opacity-60"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-                        {syncing ? 'Syncing...' : 'Sync HR Data'}
-                    </button>
-                    <button
-                        onClick={openCreateModal}
-                        className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full transition-all shadow-sm"
-                    >
-                        <Plus className="w-5 h-5" />
-                        Add User
-                    </button>
+                    {isMaster && (
+                        <button
+                            onClick={handleSyncHR}
+                            disabled={syncing}
+                            className="flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-full transition-all shadow-sm disabled:opacity-60"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                            {syncing ? 'Syncing...' : 'Sync HR Data'}
+                        </button>
+                    )}
+                    {isMaster && (
+                        <button
+                            onClick={openCreateModal}
+                            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full transition-all shadow-sm"
+                        >
+                            <Plus className="w-5 h-5" />
+                            Add User
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -422,21 +427,31 @@ export default function UserManagementPage() {
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
-                                                user.role === 'leader'
+                                                user.role === 'admin'
+                                                    ? 'bg-purple-500/10 border-purple-500/30 text-purple-500'
+                                                    : user.role === 'leader'
                                                     ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
                                                     : 'bg-slate-700/50 border-slate-300 text-slate-700'
                                             }`}>
-                                                {user.role === 'leader' && <Shield className="w-3 h-3" />}
-                                                {user.role === 'leader' ? 'Leader' : 'Member'}
+                                                {(user.role === 'leader' || user.role === 'admin') && <Shield className="w-3 h-3" />}
+                                                {user.role === 'admin' ? 'Master' : user.role === 'leader' ? 'Leader' : 'Member'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className="text-sm text-slate-500">{user.teams?.name || '—'}</span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            {user.email_confirmed_at ? (
+                                            {user.accountStatus === 'active' ? (
                                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                                                    <Check className="w-3 h-3" /> Confirmed
+                                                    <Check className="w-3 h-3" /> Active
+                                                </span>
+                                            ) : user.accountStatus === 'pending_approval' ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-blue-500/10 border border-blue-500/30 text-blue-400">
+                                                    Pending Approval
+                                                </span>
+                                            ) : user.accountStatus === 'rejected' ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-red-500/10 border border-red-500/30 text-red-400">
+                                                    Rejected
                                                 </span>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-amber-500/10 border border-amber-500/30 text-amber-400">
@@ -449,7 +464,7 @@ export default function UserManagementPage() {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
-                                                {!user.email_confirmed_at && (
+                                                {isMaster && !user.email_confirmed_at && (
                                                     <button
                                                         onClick={() => handleConfirmEmail(user)}
                                                         className="p-2 text-amber-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
@@ -458,20 +473,24 @@ export default function UserManagementPage() {
                                                         <MailCheck className="w-4 h-4" />
                                                     </button>
                                                 )}
-                                                <button
-                                                    onClick={() => openEditModal(user)}
-                                                    className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
-                                                    title="Edit user"
-                                                >
-                                                    <Pencil className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => setDeleteUser(user)}
-                                                    className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                                                    title="Delete user"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
+                                                {isMaster && (
+                                                    <button
+                                                        onClick={() => openEditModal(user)}
+                                                        className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
+                                                        title="Edit user"
+                                                    >
+                                                        <Pencil className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                                {isMaster && (
+                                                    <button
+                                                        onClick={() => setDeleteUser(user)}
+                                                        className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                                                        title="Delete user"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

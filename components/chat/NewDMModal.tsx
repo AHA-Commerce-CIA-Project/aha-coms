@@ -126,7 +126,7 @@ export function NewDMModal({ open, onClose, onSelectUser }: NewDMModalProps) {
                                                 ? 'bg-amber-100 text-amber-700'
                                                 : 'bg-slate-100 text-slate-500'
                                         )}>
-                                            {user.role}
+                                            {user.role === 'admin' ? 'master' : user.role}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-1.5 mt-0.5">

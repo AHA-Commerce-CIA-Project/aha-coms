@@ -10,12 +10,19 @@ export async function GET() {
     }
 
     const tasks = await prisma.task.findMany({
+        where: {
+            source: { not: 'direct_request' },
+        },
         include: {
             assignee: {
                 select: { name: true },
             },
             completedByUser: {
                 select: { name: true },
+            },
+            reviews: {
+                select: { id: true, reviewerType: true, rating: true, comment: true, reviewerName: true, createdAt: true },
+                orderBy: { createdAt: 'desc' },
             },
         },
         orderBy: { createdAt: 'desc' },
@@ -33,6 +40,7 @@ export async function GET() {
         feedback_notes: t.feedbackNotes,
         request_type: t.requestType,
         attachment_link: t.attachmentLink,
+        image_url: t.attachmentLink,
         impact_description: t.impactDescription,
         related_project_name: t.relatedProjectName,
         meeting_date_range: t.meetingDateRange,
@@ -46,11 +54,21 @@ export async function GET() {
         due_date: t.dueDate,
         project_id: t.projectId,
         assignee_id: t.assigneeId,
+        source: t.source,
+        direct_assignee_id: t.directAssigneeId,
         is_recurring: t.isRecurring,
         recurrence_type: t.recurrenceType,
         created_at: t.createdAt.toISOString(),
         completed_at: t.completedAt?.toISOString() || null,
         assignee: t.assignee ? { name: t.assignee.name } : null,
+        reviews: t.reviews.map(r => ({
+            id: r.id,
+            reviewer_type: r.reviewerType,
+            rating: r.rating,
+            comment: r.comment,
+            reviewer_name: r.reviewerName,
+            created_at: r.createdAt.toISOString(),
+        })),
     }));
 
     return NextResponse.json(data);

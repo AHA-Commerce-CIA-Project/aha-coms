@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { useAuth } from '@/lib/auth-context';
 import {
-  Activity, Search, Filter, CheckCircle2, MessageSquare, RotateCcw,
-  FileText, User, Clock, ChevronDown,
+  Activity, Search, CheckCircle2, MessageSquare, RotateCcw,
+  FileText, User, Clock, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +20,7 @@ interface LogEntry {
   user: { id: string; name: string; image: string | null; role: string };
 }
 
-import { Lock, UserPlus, UserCheck, UserX, Shield, ImageIcon } from 'lucide-react';
+import { Lock, UserPlus, UserCheck, UserX, Shield, Trash2, Pencil, MailCheck } from 'lucide-react';
 
 const ACTION_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
   task_claimed: { icon: User, color: 'text-indigo-500 bg-indigo-50', label: 'Task Claimed' },
@@ -35,6 +35,13 @@ const ACTION_CONFIG: Record<string, { icon: any; color: string; label: string }>
   user_rejected: { icon: UserX, color: 'text-rose-500 bg-rose-50', label: 'User Rejected' },
   password_changed: { icon: Lock, color: 'text-amber-500 bg-amber-50', label: 'Password Changed' },
   profile_updated: { icon: User, color: 'text-violet-500 bg-violet-50', label: 'Profile Updated' },
+  user_created: { icon: UserPlus, color: 'text-cyan-500 bg-cyan-50', label: 'User Created' },
+  user_updated: { icon: Pencil, color: 'text-orange-500 bg-orange-50', label: 'User Updated' },
+  user_deleted: { icon: Trash2, color: 'text-rose-500 bg-rose-50', label: 'User Deleted' },
+  user_confirmed: { icon: MailCheck, color: 'text-teal-500 bg-teal-50', label: 'Email Confirmed' },
+  direct_request_approved: { icon: CheckCircle2, color: 'text-emerald-500 bg-emerald-50', label: 'Direct Request Approved' },
+  direct_request_declined: { icon: UserX, color: 'text-rose-500 bg-rose-50', label: 'Direct Request Declined' },
+  direct_request_delegated: { icon: RotateCcw, color: 'text-purple-500 bg-purple-50', label: 'Direct Request Delegated' },
 };
 
 const ACTION_FILTERS = [
@@ -51,6 +58,13 @@ const ACTION_FILTERS = [
   { value: 'user_rejected', label: 'User Rejected' },
   { value: 'password_changed', label: 'Password Changed' },
   { value: 'profile_updated', label: 'Profile Updated' },
+  { value: 'user_created', label: 'User Created' },
+  { value: 'user_updated', label: 'User Updated' },
+  { value: 'user_deleted', label: 'User Deleted' },
+  { value: 'user_confirmed', label: 'Email Confirmed' },
+  { value: 'direct_request_approved', label: 'Direct Request Approved' },
+  { value: 'direct_request_declined', label: 'Direct Request Declined' },
+  { value: 'direct_request_delegated', label: 'Direct Request Delegated' },
 ];
 
 function formatTime(dateStr: string) {
@@ -79,6 +93,8 @@ function formatDateDivider(dateStr: string) {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
+const ITEMS_PER_PAGE = 15;
+
 export default function ActivityLogPage() {
   const router = useRouter();
   const { data: session, isPending } = useSession();
@@ -86,8 +102,9 @@ export default function ActivityLogPage() {
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [actionFilter, setActionFilter] = useState('');
 
@@ -96,31 +113,40 @@ export default function ActivityLogPage() {
     if (!isPending && session && !isLeader) router.push('/');
   }, [session, isPending, isLeader, router]);
 
-  const fetchLogs = useCallback(async (cursor?: string, reset = false) => {
-    if (!reset && !cursor) setLoading(true);
+  const fetchLogs = useCallback(async (pageNum: number) => {
+    setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (cursor) params.set('cursor', cursor);
+      params.set('page', String(pageNum));
+      params.set('limit', String(ITEMS_PER_PAGE));
       if (actionFilter) params.set('action', actionFilter);
       if (searchQuery) params.set('search', searchQuery);
 
       const res = await fetch(`/api/activity-log?${params}`);
       if (res.ok) {
         const data = await res.json();
-        if (reset || !cursor) {
-          setLogs(data.logs);
-        } else {
-          setLogs((prev) => [...prev, ...data.logs]);
-        }
-        setNextCursor(data.nextCursor);
-        setHasMore(!!data.nextCursor);
+        setLogs(data.logs);
+        setTotalPages(data.totalPages);
+        setTotal(data.total);
+        setPage(data.page);
       }
     } catch {} finally { setLoading(false); }
   }, [actionFilter, searchQuery]);
 
   useEffect(() => {
-    if (session && isLeader) fetchLogs(undefined, true);
+    if (session && isLeader) fetchLogs(1);
   }, [session, isLeader, fetchLogs]);
+
+  const handleSearch = () => {
+    setPage(1);
+    fetchLogs(1);
+  };
+
+  const goToPage = (p: number) => {
+    if (p < 1 || p > totalPages) return;
+    fetchLogs(p);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Group logs by date
   const groupedLogs: { date: string; entries: LogEntry[] }[] = [];
@@ -133,6 +159,23 @@ export default function ActivityLogPage() {
     }
     groupedLogs[groupedLogs.length - 1].entries.push(log);
   }
+
+  // Generate page numbers to show
+  const getPageNumbers = () => {
+    const pages: (number | '...')[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (page > 3) pages.push('...');
+      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) {
+        pages.push(i);
+      }
+      if (page < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
 
   if (isPending || !session) {
     return (
@@ -151,7 +194,9 @@ export default function ActivityLogPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-800">Activity Log</h1>
-          <p className="text-sm text-slate-400">Chronological history of all team actions</p>
+          <p className="text-sm text-slate-400">
+            {total > 0 ? `${total} total entries` : 'Chronological history of all team actions'}
+          </p>
         </div>
       </div>
 
@@ -163,14 +208,14 @@ export default function ActivityLogPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && fetchLogs(undefined, true)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="Search activity..."
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
           />
         </div>
         <select
           value={actionFilter}
-          onChange={(e) => setActionFilter(e.target.value)}
+          onChange={(e) => { setActionFilter(e.target.value); }}
           className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
         >
           {ACTION_FILTERS.map((f) => (
@@ -187,11 +232,11 @@ export default function ActivityLogPage() {
       ) : logs.length === 0 ? (
         <div className="text-center py-20">
           <Activity className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-lg font-semibold text-slate-600 mb-1">No activity yet</h3>
-          <p className="text-sm text-slate-400">Actions will appear here as team members use the platform.</p>
+          <h3 className="text-lg font-semibold text-slate-600 mb-1">No activity found</h3>
+          <p className="text-sm text-slate-400">Try adjusting your filters or search query.</p>
         </div>
       ) : (
-        <div>
+        <div className={cn(loading && 'opacity-50 pointer-events-none transition-opacity')}>
           {groupedLogs.map((group, gi) => (
             <div key={gi}>
               {/* Date divider */}
@@ -212,12 +257,10 @@ export default function ActivityLogPage() {
                       key={log.id}
                       className="flex items-start gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors"
                     >
-                      {/* Icon */}
                       <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5', config.color)}>
                         <Icon className="w-4 h-4" />
                       </div>
 
-                      {/* Content */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-slate-700">{log.description}</p>
                         <div className="flex items-center gap-2 mt-1">
@@ -231,7 +274,6 @@ export default function ActivityLogPage() {
                         </div>
                       </div>
 
-                      {/* User avatar */}
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[10px] font-bold overflow-hidden">
                           {log.user.image ? (
@@ -248,15 +290,48 @@ export default function ActivityLogPage() {
             </div>
           ))}
 
-          {/* Load more */}
-          {hasMore && (
-            <div className="text-center py-6">
-              <button
-                onClick={() => fetchLogs(nextCursor || undefined)}
-                className="px-6 py-2.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors"
-              >
-                Load More
-              </button>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-200">
+              <p className="text-sm text-slate-400">
+                Page {page} of {totalPages}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => goToPage(page - 1)}
+                  disabled={page <= 1}
+                  className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                {getPageNumbers().map((p, i) =>
+                  p === '...' ? (
+                    <span key={`dots-${i}`} className="px-2 text-slate-400 text-sm">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => goToPage(p)}
+                      className={cn(
+                        'w-9 h-9 rounded-lg text-sm font-medium transition-colors',
+                        p === page
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      )}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+
+                <button
+                  onClick={() => goToPage(page + 1)}
+                  disabled={page >= totalPages}
+                  className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>

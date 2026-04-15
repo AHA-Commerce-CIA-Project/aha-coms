@@ -43,7 +43,7 @@ export function ChannelList({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
         <h2 className="text-lg font-bold text-slate-800">Channels</h2>
-        {isLeader && (
+        {(
           <button
             onClick={onCreateChannel}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"

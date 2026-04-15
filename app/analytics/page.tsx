@@ -18,6 +18,7 @@ interface AnalyticsData {
     periodLabel: string;
     topPerformers: { name: string; count: number }[];
     statusCounts: Record<string, number>;
+    teamRatings?: { name: string; avgRating: number; reviewCount: number }[];
 }
 
 type FilterMode = 'preset' | 'date' | 'month' | 'year';
@@ -181,7 +182,7 @@ export default function AnalyticsPage() {
     const {
         totalTickets, completedTickets, completionRate, avgCompletionHours,
         avgDifficulty, urgencyCounts, divisionCounts, completedInPeriod,
-        periodLabel, topPerformers, statusCounts
+        periodLabel, topPerformers, statusCounts, teamRatings
     } = data;
 
     return (
@@ -512,8 +513,40 @@ export default function AnalyticsPage() {
                 </div>
             </div>
 
-            {/* AHA ORBIT Analytics Section */}
-            <OrbitAnalyticsSection />
+            {/* Team Ratings */}
+            {teamRatings && teamRatings.length > 0 && (
+                <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                        <Star className="w-5 h-5 text-amber-400" />
+                        <h3 className="text-lg font-semibold text-slate-900">Team Ratings</h3>
+                        <span className="text-xs text-slate-400 ml-auto">Based on requester reviews</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {teamRatings.map((member, i) => (
+                            <div key={member.name} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                                    member.avgRating >= 4.5 ? 'bg-amber-100 text-amber-600' :
+                                    member.avgRating >= 3.5 ? 'bg-emerald-100 text-emerald-600' :
+                                    'bg-slate-200 text-slate-600'
+                                }`}>
+                                    {member.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-slate-800 truncate">{member.name}</p>
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                        {[1, 2, 3, 4, 5].map(s => (
+                                            <span key={s} className={`text-sm ${s <= Math.round(member.avgRating) ? 'text-amber-400' : 'text-slate-200'}`}>★</span>
+                                        ))}
+                                        <span className="text-xs font-semibold text-slate-700 ml-1">{member.avgRating}</span>
+                                        <span className="text-xs text-slate-400">({member.reviewCount})</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 }

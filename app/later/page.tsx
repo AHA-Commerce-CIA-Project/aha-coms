@@ -89,8 +89,11 @@ export default function LaterPage() {
     setSaved((prev) => prev.filter((s) => s.id !== item.id));
   };
 
-  const handleNavigate = (channelId: string) => {
-    router.push(`/channels?channel=${channelId}`);
+  const handleNavigate = (channelId: string, messageId?: string) => {
+    const url = messageId
+      ? `/channels?channel=${channelId}&highlight=${messageId}`
+      : `/channels?channel=${channelId}`;
+    router.push(url);
   };
 
   if (isPending) {
@@ -145,12 +148,12 @@ export default function LaterPage() {
               <div
                 key={item.id}
                 className="bg-white border border-slate-200 rounded-xl p-4 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer"
-                onClick={() => handleNavigate(item.message.channel.id)}
+                onClick={() => handleNavigate(item.message.channel.id, item.message.id)}
               >
                 {/* Channel badge */}
                 <div className="flex items-center gap-2 mb-2">
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleNavigate(item.message.channel.id); }}
+                    onClick={(e) => { e.stopPropagation(); handleNavigate(item.message.channel.id, item.message.id); }}
                     className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
                   >
                     <Hash className="w-3 h-3" />
@@ -262,7 +265,7 @@ export default function LaterPage() {
                     Saved {formatRelativeTime(item.createdAt)}
                   </span>
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleNavigate(item.message.channel.id); }}
+                    onClick={(e) => { e.stopPropagation(); handleNavigate(item.message.channel.id, item.message.id); }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />

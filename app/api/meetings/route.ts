@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
         where: { id: userId },
         select: { role: true },
     });
-    const isLeader = profile?.role === 'leader';
+    const isLeader = profile?.role === 'leader' || profile?.role === 'admin';
 
     // Parse optional month filter (YYYY-MM)
     const month = request.nextUrl.searchParams.get('month');
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         where: { id: userId },
         select: { role: true },
     });
-    const isLeader = profile?.role === 'leader';
+    const isLeader = profile?.role === 'leader' || profile?.role === 'admin';
 
     let meetingSource = source || 'member';
     let meetingStatus = 'confirmed';

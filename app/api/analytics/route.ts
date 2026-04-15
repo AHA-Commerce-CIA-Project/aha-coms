@@ -114,6 +114,20 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
     });
 
+    // Team member ratings
+    const teamRatings = await prisma.$queryRaw<{ name: string; avg_rating: number; review_count: number }[]>`
+        SELECT u.name,
+               ROUND(AVG(r.rating)::numeric, 1) as avg_rating,
+               COUNT(r.id)::int as review_count
+        FROM task_reviews r
+        JOIN tasks t ON r.task_id = t.id
+        JOIN "user" u ON t.assignee_id = u.id
+        WHERE r.reviewer_type = 'requester'
+          AND t.status = 'done'
+        GROUP BY u.id, u.name
+        ORDER BY avg_rating DESC, review_count DESC
+    `;
+
     return successResponse({
         totalTickets,
         completedTickets,
@@ -126,5 +140,10 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         periodLabel,
         topPerformers,
         statusCounts,
+        teamRatings: teamRatings.map(r => ({
+            name: r.name,
+            avgRating: Number(r.avg_rating),
+            reviewCount: Number(r.review_count),
+        })),
     });
 });

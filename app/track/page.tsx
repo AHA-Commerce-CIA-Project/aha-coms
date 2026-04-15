@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, ArrowLeft, Clock, CheckCircle2, Loader2, Star, MessageSquare, Send } from 'lucide-react';
+import { Search, ArrowLeft, Clock, CheckCircle2, Loader2, Star, MessageSquare, Send, FileText, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
@@ -32,6 +32,7 @@ interface TaskData {
     resolution_summary: string | null;
     difficulty_score: number | null;
     image_url: string | null;
+    custom_fields?: { fileUrls?: string[]; referenceUrls?: string[] };
     requester_review: ReviewData | null;
     completer_review: ReviewData | null;
 }
@@ -134,6 +135,48 @@ function TrackContent() {
     const [reviewError, setReviewError] = useState<string | null>(null);
     const [reviewSuccess, setReviewSuccess] = useState(false);
 
+    // Comments state
+    const [comments, setComments] = useState<any[]>([]);
+    const [commentText, setCommentText] = useState('');
+    const [commentSubmitting, setCommentSubmitting] = useState(false);
+
+    const fetchComments = async (taskId: string, taskToken: string) => {
+        try {
+            const res = await fetch(`/api/tasks/${taskId}/comments?token=${taskToken}`);
+            if (res.ok) setComments(await res.json());
+        } catch {}
+    };
+
+    const handleSendComment = async () => {
+        if (!commentText.trim() || !task) return;
+        setCommentSubmitting(true);
+        try {
+            const res = await fetch(`/api/tasks/${task.id}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: commentText.trim(),
+                    token: task.task_token,
+                    authorName: task.requester_name || 'Requester',
+                    authorEmail: task.requester_email || undefined,
+                }),
+            });
+            if (res.ok) {
+                setCommentText('');
+                fetchComments(task.id, task.task_token);
+            }
+        } catch {}
+        setCommentSubmitting(false);
+    };
+
+    // Get requester initials
+    const getInitials = (name: string | null) => {
+        if (!name) return 'R';
+        const parts = name.trim().split(/\s+/);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        return parts[0][0].toUpperCase();
+    };
+
     useEffect(() => {
         const t = searchParams.get('token');
         if (t) {
@@ -156,6 +199,10 @@ function TrackContent() {
             const json = await res.json();
             if (json.status !== 'success') throw new Error(json.message || 'Request not found');
             setTask(json.data);
+            // Fetch comments
+            if (json.data?.id && json.data?.task_token) {
+                fetchComments(json.data.id, json.data.task_token);
+            }
         } catch (err: any) {
             setError(err.message || 'Failed to find request');
         } finally {
@@ -219,7 +266,7 @@ function TrackContent() {
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                            <img src="/aha-logo.png" alt="AHA Fast Logo" className="w-full h-full object-contain" />
+                            <img src="/aha-logo.png?v=2" alt="AHA Logo" className="w-full h-full object-contain" />
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold text-slate-900">Check Your Request Status</h1>
@@ -342,6 +389,38 @@ function TrackContent() {
                                         className="w-full max-h-72 object-contain rounded-xl border border-slate-300 bg-slate-50 border-slate-200 hover:opacity-90 transition-opacity cursor-pointer"
                                     />
                                 </a>
+                            </div>
+                        )}
+
+                        {/* Attached Files */}
+                        {task.custom_fields?.fileUrls && task.custom_fields.fileUrls.length > 0 && (
+                            <div className="p-6 border-b border-slate-200">
+                                <h3 className="text-sm font-semibold text-slate-900 mb-2">Attached Files</h3>
+                                <div className="space-y-1.5">
+                                    {task.custom_fields.fileUrls.map((url: string, i: number) => (
+                                        <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                            className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-colors">
+                                            <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                                            <span className="truncate">{decodeURIComponent(url.split('/').pop() || url)}</span>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Reference URLs */}
+                        {task.custom_fields?.referenceUrls && task.custom_fields.referenceUrls.length > 0 && (
+                            <div className="p-6 border-b border-slate-200">
+                                <h3 className="text-sm font-semibold text-slate-900 mb-2">Reference Links</h3>
+                                <div className="space-y-1.5">
+                                    {task.custom_fields.referenceUrls.map((url: string, i: number) => (
+                                        <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                            className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-600 hover:bg-indigo-100 transition-colors">
+                                            <ExternalLink className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                                            <span className="truncate">{url}</span>
+                                        </a>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
@@ -472,6 +551,64 @@ function TrackContent() {
                                 </div>
                             </div>
                         )}
+
+                        {/* Comments Section */}
+                        <div className="p-6 border-b border-slate-200">
+                            <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                                <MessageSquare className="w-4 h-4 text-indigo-500" />
+                                Comments {comments.length > 0 && <span className="text-xs text-slate-400">({comments.length})</span>}
+                            </h3>
+
+                            {/* Comment list */}
+                            {comments.length > 0 && (
+                                <div className="space-y-3 mb-4 max-h-80 overflow-y-auto">
+                                    {comments.map(c => (
+                                        <div key={c.id} className={`flex gap-3 ${c.is_team ? 'flex-row-reverse' : ''}`}>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+                                                c.is_team ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-700'
+                                            }`}>
+                                                {c.is_team ? (c.author_name?.charAt(0)?.toUpperCase() || 'T') : getInitials(task?.requester_name || c.author_name)}
+                                            </div>
+                                            <div className={`flex-1 max-w-[80%] ${c.is_team ? 'text-right' : ''}`}>
+                                                <div className={`inline-block rounded-2xl px-4 py-2.5 text-sm ${
+                                                    c.is_team
+                                                        ? 'bg-indigo-50 border border-indigo-200 text-slate-800 rounded-tr-sm'
+                                                        : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-sm'
+                                                }`}>
+                                                    <p>{c.message}</p>
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 mt-1 px-1">
+                                                    {c.is_team ? `🔹 ${c.author_name}` : (task?.requester_name || 'Requester')} · {new Date(c.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Comment input */}
+                            <p className="text-xs text-slate-400 mb-1.5">
+                                Commenting as <strong className="text-slate-600">{task?.requester_name || 'Requester'}</strong>
+                            </p>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={commentText}
+                                    onChange={e => setCommentText(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
+                                    placeholder="Write a comment..."
+                                    disabled={commentSubmitting}
+                                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                                />
+                                <button
+                                    onClick={handleSendComment}
+                                    disabled={!commentText.trim() || commentSubmitting}
+                                    className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+                                >
+                                    <Send className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
 
                         {/* Footer */}
                         <div className="p-6">

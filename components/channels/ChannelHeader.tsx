@@ -173,11 +173,11 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
                                 {member.name}
                               </span>
                               {member.isCreator && (
-                                <Crown className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" title="Channel creator" />
+                                <span title="Channel creator"><Crown className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" /></span>
                               )}
                               {(member.role === 'leader' || member.role === 'admin') && (
                                 <span className="text-[10px] px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-medium flex-shrink-0">
-                                  {member.role}
+                                  {member.role === 'admin' ? 'master' : member.role}
                                 </span>
                               )}
                             </div>

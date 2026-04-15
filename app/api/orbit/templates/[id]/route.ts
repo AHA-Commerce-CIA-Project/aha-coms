@@ -13,7 +13,7 @@ export async function PUT(
   }
 
   const { id } = await params;
-  const { name, description, frequency, category, deadlineTime, deadlineDay } = await request.json();
+  const { name, description, frequency, category, deadlineTime, deadlineDay, teamId, teamIds, isTeamWide } = await request.json();
 
   const template = await prisma.routineTaskTemplate.update({
     where: { id },
@@ -24,6 +24,12 @@ export async function PUT(
       ...(category !== undefined ? { category: category?.trim() || null } : {}),
       ...(deadlineTime !== undefined ? { deadlineTime: deadlineTime || null } : {}),
       ...(deadlineDay !== undefined ? { deadlineDay: deadlineDay ? parseInt(deadlineDay) : null } : {}),
+      ...(teamIds !== undefined ? { teamIds, teamId: teamIds.length > 0 ? teamIds[0] : null } : teamId !== undefined ? { teamId: teamId || null } : {}),
+      ...(isTeamWide !== undefined ? { isTeamWide: !!isTeamWide } : {}),
+    },
+    include: {
+      creator: { select: { id: true, name: true } },
+      team: { select: { id: true, name: true } },
     },
   });
 

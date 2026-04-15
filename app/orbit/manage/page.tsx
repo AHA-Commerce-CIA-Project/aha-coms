@@ -16,7 +16,13 @@ interface Template {
   category: string | null;
   isActive: boolean;
   creator: { id: string; name: string };
+  team?: { id: string; name: string } | null;
   createdAt: string;
+}
+
+interface TeamOption {
+  id: string;
+  name: string;
 }
 
 const FREQ_COLORS: Record<string, string> = {
@@ -42,6 +48,9 @@ export default function ManageOrbitPage() {
   const [category, setCategory] = useState('');
   const [deadlineTime, setDeadlineTime] = useState('');
   const [deadlineDay, setDeadlineDay] = useState('');
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [teams, setTeams] = useState<TeamOption[]>([]);
+  const [isTeamWide, setIsTeamWide] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -51,7 +60,10 @@ export default function ManageOrbitPage() {
   }, [session, isPending, isLeader, router]);
 
   useEffect(() => {
-    if (session && isLeader) fetchTemplates();
+    if (session && isLeader) {
+      fetchTemplates();
+      fetchTeams();
+    }
   }, [session, isLeader]);
 
   const fetchTemplates = async () => {
@@ -59,6 +71,16 @@ export default function ManageOrbitPage() {
       const res = await fetch('/api/orbit/templates');
       if (res.ok) setTemplates(await res.json());
     } catch {} finally { setLoading(false); }
+  };
+
+  const fetchTeams = async () => {
+    try {
+      const res = await fetch('/api/teams');
+      if (res.ok) {
+        const data = await res.json();
+        setTeams(data.map((t: any) => ({ id: t.id, name: t.name })));
+      }
+    } catch {}
   };
 
   const resetForm = () => {
@@ -69,6 +91,8 @@ export default function ManageOrbitPage() {
     setCategory('');
     setDeadlineTime('');
     setDeadlineDay('');
+    setSelectedTeamIds([]);
+    setIsTeamWide(false);
     setError('');
     setShowForm(false);
   };
@@ -81,6 +105,8 @@ export default function ManageOrbitPage() {
     setCategory(t.category || '');
     setDeadlineTime((t as any).deadlineTime || '');
     setDeadlineDay((t as any).deadlineDay?.toString() || '');
+    setSelectedTeamIds(Array.isArray((t as any).teamIds) && (t as any).teamIds.length > 0 ? (t as any).teamIds : (t.team?.id ? [t.team.id] : []));
+    setIsTeamWide(!!(t as any).isTeamWide);
     setShowForm(true);
   };
 
@@ -95,7 +121,7 @@ export default function ManageOrbitPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, frequency, category, deadlineTime, deadlineDay }),
+        body: JSON.stringify({ name, description, frequency, category, deadlineTime, deadlineDay, teamIds: selectedTeamIds, isTeamWide }),
       });
 
       if (!res.ok) {
@@ -264,6 +290,69 @@ export default function ManageOrbitPage() {
               </div>
             </div>
 
+            {/* Team Selector — Multi-select */}
+            <div>
+              <label className="text-sm font-medium text-slate-600">
+                Visible to Team
+              </label>
+              <div className="mt-1.5 space-y-1.5">
+                {selectedTeamIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {selectedTeamIds.map(id => {
+                      const team = teams.find(t => t.id === id);
+                      return (
+                        <span key={id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200">
+                          {team?.name || id}
+                          <button type="button" onClick={() => setSelectedTeamIds(selectedTeamIds.filter(tid => tid !== id))}
+                            className="text-indigo-400 hover:text-indigo-600 ml-0.5">×</button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value && !selectedTeamIds.includes(e.target.value)) {
+                      setSelectedTeamIds([...selectedTeamIds, e.target.value]);
+                    }
+                  }}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                >
+                  <option value="">+ Add team...</option>
+                  {teams.filter(t => !selectedTeamIds.includes(t.id)).map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {selectedTeamIds.length === 0 ? 'Visible to all teams. Add teams to restrict visibility.' : `Visible to ${selectedTeamIds.length} team${selectedTeamIds.length > 1 ? 's' : ''}.`}
+              </p>
+            </div>
+
+            {/* Team-wide Toggle */}
+            <div
+              className="flex items-start gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer select-none"
+              onClick={() => setIsTeamWide(!isTeamWide)}
+            >
+              <div className={cn(
+                'mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors',
+                isTeamWide ? 'bg-amber-500 border-amber-500' : 'border-slate-300 bg-white'
+              )}>
+                {isTeamWide && (
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-700">Team-wide task</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  When enabled, all members of the selected team(s) must individually complete this routine task. Each member can add comments and proof of work.
+                </p>
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={saving || !name.trim()}
@@ -301,6 +390,36 @@ export default function ManageOrbitPage() {
                       {t.category}
                     </span>
                   )}
+                  {(t as any).isTeamWide && (
+                    <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
+                      Team-wide
+                    </span>
+                  )}
+                  {(() => {
+                    const ids = Array.isArray((t as any).teamIds) ? (t as any).teamIds as string[] : [];
+                    if (ids.length > 0) {
+                      return ids.map((id: string) => {
+                        const team = teams.find(tm => tm.id === id);
+                        return (
+                          <span key={id} className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-medium">
+                            {team?.name || id.slice(0, 8)}
+                          </span>
+                        );
+                      });
+                    }
+                    if (t.team) {
+                      return (
+                        <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-medium">
+                          {t.team.name}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">
+                        All Teams
+                      </span>
+                    );
+                  })()}
                 </div>
                 {t.description && (
                   <p className="text-xs text-slate-400 truncate">{t.description}</p>

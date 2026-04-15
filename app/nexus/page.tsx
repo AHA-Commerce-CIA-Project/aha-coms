@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { CountdownTimer } from '@/components/CountdownTimer';
+import { DueCountdown } from '@/components/DueCountdown';
+import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';
 
 import {
     Inbox, Clock, CheckCircle2, AlertTriangle, Search,
     Eye, CheckSquare, ChevronLeft, ChevronRight, X,
-    Timer, Star, FileText, UserPlus, Archive, Trash2, Edit3
+    Timer, Star, FileText, UserPlus, Archive, Trash2, Edit3, ExternalLink, MessageSquare, Send, Forward
 } from 'lucide-react';
 
 interface TicketRow {
@@ -32,7 +36,9 @@ interface TicketRow {
     time_unit: string | null;
     completed_by: string | null;
     image_url: string | null;
+    custom_fields?: { fileUrls?: string[]; referenceUrls?: string[] };
     assignee?: { name: string } | null;
+    reviews?: { id: string; reviewer_type: string; rating: number; comment: string | null; reviewer_name: string | null; created_at: string }[];
 }
 
 const urgencyConfig: Record<string, { label: string; color: string; bg: string; style?: React.CSSProperties }> = {
@@ -68,10 +74,19 @@ const DIVISIONS = [
 
 const ITEMS_PER_PAGE = 10;
 
-export default function NexusPage() {
-    const { profile, isLeader } = useAuth();
+function NexusContent() {
+    const searchParams = useSearchParams();
+    const { profile, isLeader, isMaster } = useAuth();
     const [tickets, setTickets] = useState<TicketRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<'queue' | 'direct'>('queue');
+    const [directRequests, setDirectRequests] = useState<any[]>([]);
+    const [directLoading, setDirectLoading] = useState(false);
+    const [directPage, setDirectPage] = useState(1);
+    const [viewDirectTicket, setViewDirectTicket] = useState<any | null>(null);
+    const [directPriorityFilter, setDirectPriorityFilter] = useState('all');
+    const [directSearchQuery, setDirectSearchQuery] = useState('');
+    const [directStatusFilter, setDirectStatusFilter] = useState<string>('all');
     const [priorityFilter, setPriorityFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [divisionFilter, setDivisionFilter] = useState('All Divisions');
@@ -83,6 +98,36 @@ export default function NexusPage() {
 
     // View Modal
     const [viewTicket, setViewTicket] = useState<TicketRow | null>(null);
+
+    // Comments
+    const [taskComments, setTaskComments] = useState<any[]>([]);
+    const [commentText, setCommentText] = useState('');
+    const [commentSending, setCommentSending] = useState(false);
+    const [forwardData, setForwardData] = useState<any | null>(null);
+
+    const fetchTaskComments = async (taskId: string) => {
+        try {
+            const res = await fetch(`/api/tasks/${taskId}/comments`);
+            if (res.ok) setTaskComments(await res.json());
+        } catch {}
+    };
+
+    const handleSendComment = async () => {
+        if (!commentText.trim() || !viewTicket) return;
+        setCommentSending(true);
+        try {
+            const res = await fetch(`/api/tasks/${viewTicket.id}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: commentText.trim() }),
+            });
+            if (res.ok) {
+                setCommentText('');
+                fetchTaskComments(viewTicket.id);
+            }
+        } catch {}
+        setCommentSending(false);
+    };
 
     // Leader Edit Mode
     const [isEditingView, setIsEditingView] = useState(false);
@@ -104,10 +149,81 @@ export default function NexusPage() {
     // Team members for "Completed By" dropdown
     const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([]);
 
+    // Highlight from notification
+    const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
+
     useEffect(() => {
         fetchTickets();
         fetchTeamMembers();
-    }, []);
+        if (isLeader) fetchDirectRequests();
+    }, [isLeader]);
+
+    // Handle highlight from notification query param
+    useEffect(() => {
+        const highlightId = searchParams.get('highlight');
+        const highlightToken = searchParams.get('highlight_token');
+        if (!tickets.length) return;
+
+        let taskId = highlightId;
+        if (!taskId && highlightToken) {
+            const found = tickets.find(t => t.task_token === highlightToken);
+            if (found) taskId = found.id;
+        }
+
+        if (taskId) {
+            // Reset filters so the task is visible
+            setStatusFilter('all');
+            setPriorityFilter('all');
+            setSearchQuery('');
+            setDivisionFilter('All Divisions');
+            setDateFrom('');
+            setDateTo('');
+
+            // Find which page the task is on (in default unfiltered list)
+            const nonArchived = tickets.filter(t => t.status !== 'archived');
+            const idx = nonArchived.findIndex(t => t.id === taskId);
+            if (idx >= 0) {
+                setCurrentPage(Math.floor(idx / ITEMS_PER_PAGE) + 1);
+            }
+
+            setHighlightedTaskId(taskId);
+
+            const shouldOpen = searchParams.get('open') === 'true';
+            const focusTarget = searchParams.get('focus');
+
+            if (shouldOpen) {
+                // Open the task detail popup
+                const task = tickets.find(t => t.id === taskId);
+                if (task) {
+                    setViewTicket(task);
+                    setTaskComments([]);
+                    setCommentText('');
+                    fetchTaskComments(task.id);
+
+                    // Scroll to comments section inside the modal
+                    if (focusTarget === 'comments') {
+                        setTimeout(() => {
+                            const commentsEl = document.getElementById('task-comments-section');
+                            if (commentsEl) {
+                                commentsEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                commentsEl.classList.add('ring-2', 'ring-indigo-300', 'rounded-xl');
+                                setTimeout(() => commentsEl.classList.remove('ring-2', 'ring-indigo-300', 'rounded-xl'), 3000);
+                            }
+                        }, 800);
+                    }
+                }
+            } else {
+                // Just highlight the row
+                setTimeout(() => {
+                    const el = document.getElementById(`task-row-${taskId}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        setTimeout(() => setHighlightedTaskId(null), 3000);
+                    }
+                }, 500);
+            }
+        }
+    }, [tickets, searchParams]);
 
     const fetchTickets = async () => {
         setLoading(true);
@@ -130,6 +246,19 @@ export default function NexusPage() {
                 setTeamMembers(data.map((u: any) => ({ id: u.id, name: u.name })));
             }
         } catch { }
+    };
+
+    const fetchDirectRequests = async () => {
+        setDirectLoading(true);
+        try {
+            const res = await fetch('/api/tasks/direct-requests-all');
+            if (res.ok) {
+                setDirectRequests(await res.json());
+            }
+        } catch (err) {
+            console.error('Error fetching direct requests:', err);
+        }
+        setDirectLoading(false);
     };
 
     const handleArchive = async (ticketId: string) => {
@@ -198,7 +327,9 @@ export default function NexusPage() {
     if (dateTo) {
         filtered = filtered.filter(t => new Date(t.created_at) <= new Date(dateTo + 'T23:59:59'));
     }
-    if (statusFilter === 'queue') {
+    if (statusFilter === 'all') {
+        filtered = filtered.filter(t => t.status !== 'done');
+    } else if (statusFilter === 'queue') {
         filtered = filtered.filter(t => t.status === 'todo');
     } else if (statusFilter === 'in-progress') {
         filtered = filtered.filter(t => t.status === 'in-progress');
@@ -293,6 +424,33 @@ export default function NexusPage() {
                 <p className="text-slate-500">All incoming requests and tasks from partner teams.</p>
             </div>
 
+            {/* Tab Toggle (Leader/Admin only) */}
+            {isLeader && (
+                <div className="flex justify-center">
+                    <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex gap-1">
+                        <button
+                            onClick={() => setActiveTab('queue')}
+                            className={`px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${activeTab === 'queue' ? 'bg-white shadow-md text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            FAST Queue
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('direct')}
+                            className={`px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${activeTab === 'direct' ? 'bg-white shadow-md text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            Direct Requests
+                            {directRequests.filter(t => t.status === 'pending_approval').length > 0 && (
+                                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">
+                                    {directRequests.filter(t => t.status === 'pending_approval').length}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'queue' ? (
+            <>
             {/* KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 {[
@@ -403,7 +561,7 @@ export default function NexusPage() {
                                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Title</th>
                                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Requester</th>
                                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Submitted</th>
-                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Due Days</th>
+                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Deadline</th>
                                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Status</th>
                                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Assigned To</th>
                                     <th className="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase">Actions</th>
@@ -417,7 +575,7 @@ export default function NexusPage() {
                                     const isOverdue = daysToDeadline !== null && daysToDeadline < 0 && ticket.status !== 'done';
 
                                     return (
-                                        <tr key={ticket.id} className="hover:bg-slate-100/30 transition-colors">
+                                        <tr key={ticket.id} id={`task-row-${ticket.id}`} className={`transition-all duration-500 ${highlightedTaskId === ticket.id ? 'bg-indigo-50 ring-2 ring-indigo-300 ring-inset' : 'hover:bg-slate-100/30'}`}>
                                             <td className="px-4 py-3">
                                                 <span className="font-mono text-sm text-indigo-400">{ticket.task_token || '—'}</span>
                                             </td>
@@ -441,19 +599,10 @@ export default function NexusPage() {
                                             <td className="px-4 py-3">
                                                 {ticket.status === 'done' ? (
                                                     <span className="text-sm font-medium text-emerald-500">✓</span>
-                                                ) : daysToDeadline === null ? (
+                                                ) : !ticket.due_date ? (
                                                     <span className="text-sm text-slate-400">—</span>
                                                 ) : (
-                                                    <>
-                                                        <span className={`text-sm font-medium ${isOverdue ? 'text-rose-500' : daysToDeadline <= 1 ? 'text-amber-500' : 'text-slate-700'}`}>
-                                                            {daysToDeadline}d
-                                                        </span>
-                                                        {isOverdue && (
-                                                            <span className="ml-1.5 text-xs bg-rose-500/20 text-rose-500 px-1.5 py-0.5 rounded border border-rose-500/30">
-                                                                Overdue
-                                                            </span>
-                                                        )}
-                                                    </>
+                                                    <DueCountdown dueDate={ticket.due_date} />
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
@@ -471,7 +620,7 @@ export default function NexusPage() {
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center justify-end gap-1.5">
                                                     <button
-                                                        onClick={() => setViewTicket(ticket)}
+                                                        onClick={() => { setViewTicket(ticket); setTaskComments([]); setCommentText(''); fetchTaskComments(ticket.id); }}
                                                         className="px-4 py-2 text-xs font-bold text-[#0F0E7F] bg-white border border-slate-200 hover:bg-slate-50 rounded-full shadow-sm transition-all"
                                                     >
                                                         View
@@ -553,11 +702,11 @@ export default function NexusPage() {
             {/* View Detail Modal */}
             {viewTicket && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
+                    <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white">
                             <div>
-                                <span className="font-mono text-sm text-indigo-400">{viewTicket.task_token}</span>
-                                <h2 className="text-lg font-semibold text-slate-900 mt-1">{isEditingView ? 'Edit Task' : viewTicket.title}</h2>
+                                <span className="font-mono text-base text-indigo-400">{viewTicket.task_token}</span>
+                                <h2 className="text-xl font-bold text-slate-900 mt-1">{isEditingView ? 'Edit Task' : viewTicket.title}</h2>
                             </div>
                             <div className="flex items-center gap-2">
                                 {isLeader && !isEditingView && (
@@ -570,7 +719,7 @@ export default function NexusPage() {
                                 </button>
                             </div>
                         </div>
-                        <div className="p-6 space-y-4 text-sm">
+                        <div className="p-6 space-y-5 text-base">
                             {isEditingView ? (
                                 /* Leader Edit Form */
                                 <div className="space-y-4">
@@ -625,21 +774,21 @@ export default function NexusPage() {
                                 /* View Mode */
                                 <>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div><p className="text-slate-500">Requester</p><p className="text-slate-900">{viewTicket.requester_name || '—'}</p></div>
-                                        <div><p className="text-slate-500">Division</p><p className="text-slate-900">{viewTicket.requester_division || '—'}</p></div>
-                                        <div><p className="text-slate-500">Priority</p><p className="text-slate-900">{viewTicket.urgency || '—'}</p></div>
-                                        <div><p className="text-slate-500">Status</p><p className="text-slate-900 capitalize">{statusConfig[viewTicket.status]?.label || viewTicket.status}</p></div>
-                                        <div><p className="text-slate-500">Assigned To</p><p className="text-slate-900">{viewTicket.assignee?.name || 'Unassigned'}</p></div>
-                                        <div><p className="text-slate-500">Submitted</p><p className="text-slate-900">{formatDate(viewTicket.created_at)}</p></div>
-                                        {viewTicket.due_date && <div><p className="text-slate-500">Deadline</p><p className="text-slate-900">{formatDate(viewTicket.due_date)}</p></div>}
-                                        {viewTicket.request_type && <div><p className="text-slate-500">Type</p><p className="text-slate-900 capitalize">{viewTicket.request_type.replace('_', ' ')}</p></div>}
+                                        <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Requester</p><p className="text-base text-slate-900 font-medium">{viewTicket.requester_name || '—'}</p></div>
+                                        <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Division</p><p className="text-base text-slate-900 font-medium">{viewTicket.requester_division || '—'}</p></div>
+                                        <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Priority</p><p className="text-base text-slate-900 font-medium">{viewTicket.urgency || '—'}</p></div>
+                                        <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Status</p><p className="text-base text-slate-900 font-medium capitalize">{statusConfig[viewTicket.status]?.label || viewTicket.status}</p></div>
+                                        <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Assigned To</p><p className="text-base text-slate-900 font-medium">{viewTicket.assignee?.name || 'Unassigned'}</p></div>
+                                        <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Submitted</p><p className="text-base text-slate-900 font-medium">{formatDate(viewTicket.created_at)}</p></div>
+                                        {viewTicket.due_date && <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Deadline</p><p className="text-base text-slate-900 font-medium">{formatDate(viewTicket.due_date)}</p></div>}
+                                        {viewTicket.request_type && <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Type</p><p className="text-base text-slate-900 font-medium capitalize">{viewTicket.request_type.replace('_', ' ')}</p></div>}
                                     </div>
                                     {viewTicket.description && (
-                                        <div><p className="text-slate-500 mb-1">Description</p><p className="text-slate-600 bg-slate-50 rounded-xl p-3">{viewTicket.description}</p></div>
+                                        <div><p className="text-sm font-medium text-indigo-600 mb-1.5">Description</p><p className="text-slate-600 bg-slate-50 rounded-xl p-3">{viewTicket.description}</p></div>
                                     )}
                                     {viewTicket.image_url && (
                                         <div>
-                                            <p className="text-slate-500 mb-1">Attached Image</p>
+                                            <p className="text-sm font-medium text-indigo-600 mb-1.5">Attached Image</p>
                                             <a href={viewTicket.image_url} target="_blank" rel="noopener noreferrer">
                                                 <img
                                                     src={viewTicket.image_url}
@@ -647,6 +796,38 @@ export default function NexusPage() {
                                                     className="w-full max-h-64 object-contain rounded-xl border border-slate-300 bg-slate-50 hover:opacity-90 transition-opacity cursor-pointer"
                                                 />
                                             </a>
+                                        </div>
+                                    )}
+
+                                    {/* Attached Files */}
+                                    {viewTicket.custom_fields?.fileUrls?.length > 0 && (
+                                        <div>
+                                            <p className="text-sm font-medium text-indigo-600 mb-1.5">Attached Files</p>
+                                            <div className="space-y-1.5">
+                                                {viewTicket.custom_fields.fileUrls.map((url: string, i: number) => (
+                                                    <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                                        className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-colors">
+                                                        <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                                                        <span className="truncate">{url.split('/').pop() || url}</span>
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Reference URLs */}
+                                    {viewTicket.custom_fields?.referenceUrls?.length > 0 && (
+                                        <div>
+                                            <p className="text-sm font-medium text-indigo-600 mb-1.5">Reference Links</p>
+                                            <div className="space-y-1.5">
+                                                {viewTicket.custom_fields.referenceUrls.map((url: string, i: number) => (
+                                                    <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                                        className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-600 hover:bg-indigo-100 transition-colors">
+                                                        <ExternalLink className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                                                        <span className="truncate">{url}</span>
+                                                    </a>
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
 
@@ -676,6 +857,82 @@ export default function NexusPage() {
                                         <div><p className="text-slate-500 mb-1">Resolution</p><p className="text-slate-600 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">{viewTicket.resolution_summary}</p></div>
                                     )}
 
+                                    {/* Reviews */}
+                                    {viewTicket.reviews && viewTicket.reviews.length > 0 && (
+                                        <div>
+                                            <p className="text-slate-500 mb-2 font-semibold flex items-center gap-1.5">
+                                                <Star className="w-4 h-4 text-amber-400" /> Reviews
+                                            </p>
+                                            <div className="space-y-2">
+                                                {viewTicket.reviews.map(r => (
+                                                    <div key={r.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                                                        <div className="flex items-center justify-between mb-1.5">
+                                                            <span className="text-xs font-medium text-indigo-600">
+                                                                {r.reviewer_type === 'requester' ? 'Requester Review' : 'Completer Review'}
+                                                            </span>
+                                                            <span className="text-[11px] text-slate-400">
+                                                                {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 mb-1">
+                                                            {[1, 2, 3, 4, 5].map(s => (
+                                                                <span key={s} className={`text-lg ${s <= r.rating ? 'text-amber-400' : 'text-slate-200'}`}>★</span>
+                                                            ))}
+                                                            <span className="text-sm font-semibold text-slate-700 ml-1">{r.rating}/5</span>
+                                                        </div>
+                                                        {r.comment && <p className="text-sm text-slate-600 mt-1">{r.comment}</p>}
+                                                        {r.reviewer_name && <p className="text-xs text-slate-400 mt-1.5">— {r.reviewer_name}</p>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Comments */}
+                                    <div id="task-comments-section" className="transition-all duration-500">
+                                        <p className="text-slate-500 mb-2 font-semibold flex items-center gap-1.5">
+                                            <MessageSquare className="w-4 h-4 text-indigo-500" /> Comments
+                                            {taskComments.length > 0 && <span className="text-xs text-slate-400">({taskComments.length})</span>}
+                                        </p>
+                                        {taskComments.length > 0 && (
+                                            <div className="space-y-2 mb-3 max-h-60 overflow-y-auto">
+                                                {taskComments.map(c => (
+                                                    <div key={c.id} className={`flex gap-2 ${c.is_team ? 'flex-row-reverse' : ''}`}>
+                                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                                                            c.is_team ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'
+                                                        }`}>{c.author_name?.charAt(0)?.toUpperCase() || '?'}</div>
+                                                        <div className={`max-w-[75%] ${c.is_team ? 'text-right' : ''}`}>
+                                                            <div className={`inline-block rounded-2xl px-3 py-2 text-xs ${
+                                                                c.is_team ? 'bg-indigo-50 border border-indigo-200 rounded-tr-sm' : 'bg-slate-50 border border-slate-200 rounded-tl-sm'
+                                                            }`}>{c.message}</div>
+                                                            <p className="text-[10px] text-slate-400 mt-0.5 px-1">
+                                                                {c.is_team ? '🔹 ' + c.author_name : c.author_name} · {new Date(c.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={commentText}
+                                                onChange={e => setCommentText(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSendComment(); } }}
+                                                placeholder="Write a comment..."
+                                                disabled={commentSending}
+                                                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                            />
+                                            <button
+                                                onClick={handleSendComment}
+                                                disabled={!commentText.trim() || commentSending}
+                                                className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+                                            >
+                                                <Send className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     {/* Claim Task Button */}
                                     {viewTicket.status === 'todo' && !viewTicket.assignee_id && (
                                         <button
@@ -690,6 +947,20 @@ export default function NexusPage() {
                                             <p className="text-sm text-indigo-600">Assigned to <span className="font-semibold text-slate-900">{viewTicket.assignee?.name || 'Unknown'}</span></p>
                                         </div>
                                     )}
+
+                                    {/* Forward to Channel */}
+                                    <button
+                                        onClick={() => setForwardData({
+                                            originalAuthor: viewTicket.requester_name || 'Requester',
+                                            originalContent: `📋 Task: ${viewTicket.title}\nToken: ${viewTicket.task_token}\nRequester: ${viewTicket.requester_name || '—'} (${viewTicket.requester_division || '—'})\nPriority: ${viewTicket.urgency || 'P3'} | Status: ${viewTicket.status}${viewTicket.description ? '\n\n' + viewTicket.description : ''}`,
+                                            originalAttachments: [],
+                                            isTaskForward: true,
+                                            taskToken: viewTicket.task_token,
+                                        })}
+                                        className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-600 font-medium rounded-full border border-slate-300 transition-all flex items-center justify-center gap-2 text-sm"
+                                    >
+                                        <Forward className="w-4 h-4" /> Forward to Channel
+                                    </button>
                                 </>
                             )}
                         </div>
@@ -697,10 +968,24 @@ export default function NexusPage() {
                 </div>
             )}
 
+            <ForwardToChannelModal
+                open={!!forwardData}
+                onClose={() => setForwardData(null)}
+                originalAuthor={forwardData?.originalAuthor || ''}
+                originalContent={forwardData?.originalContent || ''}
+                originalAttachments={forwardData?.originalAttachments || []}
+                originalChannelName={forwardData?.originalChannelName}
+                originalChannelId={forwardData?.originalChannelId}
+                originalMessageId={forwardData?.originalMessageId}
+                originalDate={forwardData?.originalDate}
+                isTaskForward={forwardData?.isTaskForward}
+                taskToken={forwardData?.taskToken}
+            />
+
             {/* Complete Task Modal */}
             {completeTicket && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
+                    <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
                         <div className="px-6 py-4 border-b border-slate-200 sticky top-0 bg-white">
                             <div className="flex items-center justify-between">
                                 <h2 className="text-lg font-semibold text-slate-900">Complete This Task</h2>
@@ -828,6 +1113,286 @@ export default function NexusPage() {
                     </div>
                 </div>
             )}
+            </>
+            ) : (
+            /* ─── Direct Requests Tab ──────────────────────────────────────── */
+            <div className="space-y-4">
+                {/* Direct Request KPI */}
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                    {[
+                        { key: 'pending_approval', label: 'Pending Approval', count: directRequests.filter(t => t.status === 'pending_approval').length, color: 'text-amber-500', bg: 'bg-amber-50', ring: 'ring-amber-500/30' },
+                        { key: 'in-progress', label: 'In Progress', count: directRequests.filter(t => t.status === 'in-progress').length, color: 'text-indigo-500', bg: 'bg-indigo-50', ring: 'ring-indigo-500/30' },
+                        { key: 'done', label: 'Completed', count: directRequests.filter(t => t.status === 'done').length, color: 'text-emerald-500', bg: 'bg-emerald-50', ring: 'ring-emerald-500/30' },
+                        { key: 'archived', label: 'Archived', count: directRequests.filter(t => t.status === 'archived').length, color: 'text-slate-500', bg: 'bg-slate-50', ring: 'ring-slate-500/30' },
+                        { key: 'all', label: 'Total', count: directRequests.length, color: 'text-slate-600', bg: 'bg-slate-50', ring: 'ring-slate-500/30' },
+                    ].map(kpi => (
+                        <button
+                            key={kpi.key}
+                            onClick={() => { setDirectStatusFilter(directStatusFilter === kpi.key ? 'all' : kpi.key); setDirectPage(1); }}
+                            className={`${kpi.bg} border border-slate-200 rounded-2xl p-5 text-left transition-all hover:shadow-sm ${
+                                directStatusFilter === kpi.key ? `ring-2 ${kpi.ring}` : ''
+                            }`}
+                        >
+                            <p className={`text-3xl font-bold ${kpi.color}`}>{kpi.count}</p>
+                            <p className="text-sm text-slate-500">{kpi.label}</p>
+                        </button>
+                    ))}
+                </div>
+
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1">
+                        {['all', 'P1', 'P2', 'P3', 'P4', '5-minute'].map(p => (
+                            <button
+                                key={p}
+                                onClick={() => { setDirectPriorityFilter(p); setDirectPage(1); }}
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all ${
+                                    directPriorityFilter === p ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                }`}
+                            >
+                                {p === 'all' ? 'All' : p === '5-minute' ? '5min' : p}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="relative flex-1 max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                            type="text"
+                            value={directSearchQuery}
+                            onChange={e => { setDirectSearchQuery(e.target.value); setDirectPage(1); }}
+                            placeholder="Search direct requests..."
+                            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                        />
+                    </div>
+                </div>
+
+                {/* Direct Requests Table */}
+                {directLoading ? (
+                    <div className="flex items-center justify-center py-16">
+                        <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                ) : (() => {
+                    let filteredDirect = directRequests;
+                    if (directStatusFilter !== 'all') filteredDirect = filteredDirect.filter(t => t.status === directStatusFilter);
+                    if (directPriorityFilter !== 'all') filteredDirect = filteredDirect.filter(t => t.urgency === directPriorityFilter);
+                    if (directSearchQuery) filteredDirect = filteredDirect.filter(t => t.title.toLowerCase().includes(directSearchQuery.toLowerCase()) || (t.requester_name || '').toLowerCase().includes(directSearchQuery.toLowerCase()));
+
+                    return filteredDirect.length === 0 ? (
+                    <div className="text-center py-16 text-slate-400 bg-white border border-slate-200 rounded-2xl">
+                        <Inbox className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+                        <p className="text-lg font-medium">{directRequests.length === 0 ? 'No direct requests yet' : 'No matching requests'}</p>
+                        <p className="text-sm mt-1">{directRequests.length === 0 ? 'Direct requests from other teams will appear here.' : 'Try adjusting your filters.'}</p>
+                    </div>
+                ) : (
+                    <>
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100 bg-slate-50/50">
+                                    <th className="px-5 py-3">Token</th>
+                                    <th className="px-5 py-3">Priority</th>
+                                    <th className="px-5 py-3">Title</th>
+                                    <th className="px-5 py-3">Requester</th>
+                                    <th className="px-5 py-3">Assigned To</th>
+                                    <th className="px-5 py-3">Submitted</th>
+                                    <th className="px-5 py-3">Deadline</th>
+                                    <th className="px-5 py-3">Status</th>
+                                    <th className="px-5 py-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {filteredDirect
+                                    .slice((directPage - 1) * ITEMS_PER_PAGE, directPage * ITEMS_PER_PAGE)
+                                    .map(task => {
+                                    const urgConfig: Record<string, { label: string; bg: string; text: string }> = {
+                                        'P1': { label: 'P1', bg: 'bg-rose-500', text: 'text-white' },
+                                        'P2': { label: 'P2', bg: 'bg-orange-500', text: 'text-white' },
+                                        'P3': { label: 'P3', bg: 'bg-amber-500', text: 'text-white' },
+                                        'P4': { label: 'P4', bg: 'bg-emerald-500', text: 'text-white' },
+                                        '5-minute': { label: '5min', bg: 'bg-sky-400', text: 'text-white' },
+                                    };
+                                    const urg = urgConfig[task.urgency || ''] || { label: task.urgency || '—', bg: 'bg-slate-200', text: 'text-slate-600' };
+                                    const statusConfig: Record<string, { label: string; color: string }> = {
+                                        'pending_approval': { label: 'Pending Approval', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+                                        'in-progress': { label: 'In Progress', color: 'text-indigo-600 bg-indigo-50 border-indigo-200' },
+                                        'todo': { label: 'Queue', color: 'text-slate-600 bg-slate-50 border-slate-200' },
+                                        'done': { label: 'Done', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+                                        'review': { label: 'Review', color: 'text-purple-600 bg-purple-50 border-purple-200' },
+                                    };
+                                    const st = statusConfig[task.status] || { label: task.status, color: 'text-slate-600 bg-slate-50 border-slate-200' };
+
+                                    return (
+                                        <tr key={task.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-5 py-3 font-mono text-xs text-indigo-600">{task.task_token?.slice(0, 8) || '—'}</td>
+                                            <td className="px-5 py-3">
+                                                <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${urg.bg} ${urg.text}`}>{urg.label}</span>
+                                            </td>
+                                            <td className="px-5 py-3 font-medium text-slate-800 max-w-[180px] truncate">{task.title}</td>
+                                            <td className="px-5 py-3 text-slate-600 text-xs">
+                                                {task.requester_name || '—'}
+                                                {task.requester_division && <span className="block text-slate-400">{task.requester_division}</span>}
+                                            </td>
+                                            <td className="px-5 py-3 text-slate-600 text-xs">
+                                                {task.status === 'pending_approval'
+                                                    ? <span className="text-amber-600 font-medium">{task.direct_assignee_name || '—'} <span className="text-slate-400">(pending)</span></span>
+                                                    : task.assignee_name || task.direct_assignee_name || '—'
+                                                }
+                                                {task.delegations.length > 0 && (
+                                                    <span className="block text-[10px] text-purple-500 mt-0.5">
+                                                        Delegated {task.delegations.length}x
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-5 py-3 text-slate-500 text-xs">
+                                                {new Date(task.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                            </td>
+                                            <td className="px-5 py-3 text-xs">
+                                                {task.response_deadline && task.status === 'pending_approval'
+                                                    ? <CountdownTimer deadline={task.response_deadline} compact />
+                                                    : task.response_deadline
+                                                    ? <span className="text-slate-400">{new Date(task.response_deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                    : <span className="text-slate-400">—</span>
+                                                }
+                                            </td>
+                                            <td className="px-5 py-3">
+                                                <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border ${st.color}`}>{st.label}</span>
+                                            </td>
+                                            <td className="px-5 py-3">
+                                                <button
+                                                    onClick={() => setViewDirectTicket(task)}
+                                                    className="px-3 py-1.5 text-xs font-medium border border-indigo-200 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                >
+                                                    View
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Pagination */}
+                    {filteredDirect.length > ITEMS_PER_PAGE && (
+                        <div className="flex items-center justify-center gap-2 mt-4">
+                            {Array.from({ length: Math.ceil(filteredDirect.length / ITEMS_PER_PAGE) }, (_, i) => i + 1).map(p => (
+                                <button
+                                    key={p}
+                                    onClick={() => setDirectPage(p)}
+                                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${p === directPage ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                >
+                                    {p}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    </>
+                );
+                })()}
+
+                {/* View Direct Request Modal */}
+                {viewDirectTicket && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setViewDirectTicket(null)}>
+                        <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white">
+                                <div>
+                                    <p className="text-xs text-indigo-500 font-mono font-bold">{viewDirectTicket.task_token || ''}</p>
+                                    <h3 className="text-lg font-semibold text-slate-900">{viewDirectTicket.title}</h3>
+                                </div>
+                                <button onClick={() => setViewDirectTicket(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="px-6 py-5 space-y-4">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div><p className="text-slate-400 text-xs mb-0.5">Requester</p><p className="text-slate-800 font-medium">{viewDirectTicket.requester_name || '—'}</p></div>
+                                    <div><p className="text-slate-400 text-xs mb-0.5">Division</p><p className="text-slate-800">{viewDirectTicket.requester_division || '—'}</p></div>
+                                    <div><p className="text-slate-400 text-xs mb-0.5">Priority</p><p className="text-slate-800 font-semibold">{viewDirectTicket.urgency || '—'}</p></div>
+                                    <div><p className="text-slate-400 text-xs mb-0.5">Status</p><p className="text-slate-800 capitalize">{viewDirectTicket.status?.replace('_', ' ')}</p></div>
+                                    <div><p className="text-slate-400 text-xs mb-0.5">Assigned To</p><p className="text-slate-800">{viewDirectTicket.assignee_name || viewDirectTicket.direct_assignee_name || '—'}</p></div>
+                                    <div><p className="text-slate-400 text-xs mb-0.5">Submitted</p><p className="text-slate-800">{new Date(viewDirectTicket.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>
+                                    {viewDirectTicket.completed_by && <div><p className="text-slate-400 text-xs mb-0.5">Completed By</p><p className="text-slate-800">{viewDirectTicket.completed_by}</p></div>}
+                                    {viewDirectTicket.completed_at && <div><p className="text-slate-400 text-xs mb-0.5">Completed At</p><p className="text-slate-800">{new Date(viewDirectTicket.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p></div>}
+                                </div>
+                                {viewDirectTicket.description && (
+                                    <div>
+                                        <p className="text-slate-400 text-xs mb-1">Description</p>
+                                        <p className="text-slate-600 text-sm bg-slate-50 rounded-xl p-3 whitespace-pre-wrap">{viewDirectTicket.description}</p>
+                                    </div>
+                                )}
+                                {viewDirectTicket.attachment_link && (
+                                    <div>
+                                        <p className="text-slate-400 text-xs mb-1">Attachment</p>
+                                        <a href={viewDirectTicket.attachment_link} target="_blank" rel="noopener noreferrer">
+                                            <img src={viewDirectTicket.attachment_link} alt="Attachment" className="w-full max-h-48 object-contain rounded-xl border border-slate-200 bg-slate-50 hover:opacity-90 cursor-pointer" />
+                                        </a>
+                                    </div>
+                                )}
+                                {viewDirectTicket.delegations.length > 0 && (
+                                    <div>
+                                        <p className="text-slate-400 text-xs mb-2">Delegation History</p>
+                                        <div className="space-y-2">
+                                            {viewDirectTicket.delegations.map((d: any, i: number) => (
+                                                <div key={i} className="flex items-start gap-2 text-xs bg-purple-50 rounded-lg p-2.5 border border-purple-100">
+                                                    <span className="text-purple-600 font-medium">{d.from}</span>
+                                                    <span className="text-slate-400">→</span>
+                                                    <span className="text-purple-600 font-medium">{d.to}</span>
+                                                    {d.reason && <span className="text-slate-500 ml-1">"{d.reason}"</span>}
+                                                    <span className="text-slate-400 ml-auto">{new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            {/* Archive & Delete Buttons */}
+                            <div className="flex items-center gap-2 px-6 py-4 border-t border-slate-200">
+                                {viewDirectTicket.status !== 'archived' && (
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm('Archive this direct request?')) return;
+                                            try {
+                                                await fetch(`/api/tasks/${viewDirectTicket.id}/archive`, { method: 'PUT' });
+                                                setViewDirectTicket(null);
+                                                fetchDirectRequests();
+                                            } catch {}
+                                        }}
+                                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                                    >
+                                        <Archive className="w-3.5 h-3.5" />
+                                        Archive
+                                    </button>
+                                )}
+                                {isMaster && (
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm('Delete this direct request permanently?')) return;
+                                            try {
+                                                await fetch(`/api/tasks/${viewDirectTicket.id}`, { method: 'DELETE' });
+                                                setViewDirectTicket(null);
+                                                fetchDirectRequests();
+                                            } catch {}
+                                        }}
+                                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        Delete
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+            )}
         </div>
+    );
+}
+
+export default function NexusPage() {
+    return (
+        <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>}>
+            <NexusContent />
+        </Suspense>
     );
 }

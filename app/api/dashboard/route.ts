@@ -101,6 +101,31 @@ export async function GET(request: NextRequest) {
         todo: periodTasks.filter(t => t.status === 'todo').length,
     };
 
+    // Pending direct requests for current user
+    const pendingDirectRequests = await prisma.task.findMany({
+        where: {
+            directAssigneeId: session.user.id,
+            status: 'pending_approval',
+        },
+        select: {
+            id: true,
+            title: true,
+            description: true,
+            urgency: true,
+            status: true,
+            requesterName: true,
+            requesterEmail: true,
+            requesterDivision: true,
+            requestType: true,
+            dueDate: true,
+            attachmentLink: true,
+            createdAt: true,
+            taskToken: true,
+            responseDeadline: true,
+        },
+        orderBy: { createdAt: 'desc' },
+    });
+
     return NextResponse.json({
         completedTasks,
         activeTasks,
@@ -111,5 +136,6 @@ export async function GET(request: NextRequest) {
         avgDifficulty,
         periodLabel,
         progressStats,
+        pendingDirectRequests,
     });
 }

@@ -5,10 +5,23 @@ WORKDIR /app
 
 # Install dependencies
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --force
 
 # Copy source code
 COPY . .
+
+# Build-time env vars needed for Next.js static page generation
+ARG DATABASE_URL
+ARG BETTER_AUTH_SECRET
+ARG BETTER_AUTH_URL
+ARG NEXT_PUBLIC_APP_URL
+ARG RESEND_API_KEY
+
+ENV DATABASE_URL=$DATABASE_URL
+ENV BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET
+ENV BETTER_AUTH_URL=$BETTER_AUTH_URL
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV RESEND_API_KEY=$RESEND_API_KEY
 
 # Generate Prisma Client
 RUN npx prisma generate

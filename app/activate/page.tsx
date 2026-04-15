@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Zap, Lock, Eye, EyeOff, CheckCircle2, AlertCircle, Users } from 'lucide-react';
 import Link from 'next/link';
@@ -10,7 +10,7 @@ interface Team {
   name: string;
 }
 
-export default function ActivatePage() {
+function ActivatePageContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
@@ -230,5 +230,13 @@ export default function ActivatePage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function ActivatePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>}>
+      <ActivatePageContent />
+    </Suspense>
   );
 }

@@ -23,14 +23,18 @@ export async function POST(
   }
 
   let completionNote: string | null = null;
+  let attachments: string[] = [];
   try {
     const body = await request.json();
     completionNote = body?.note?.trim() || null;
+    if (Array.isArray(body?.attachments)) {
+      attachments = body.attachments.filter((a: any) => typeof a === 'string');
+    }
   } catch {}
 
   const updated = await prisma.routineTaskClaim.update({
     where: { id },
-    data: { status: 'completed', completedAt: new Date(), completionNote },
+    data: { status: 'completed', completedAt: new Date(), completionNote, attachments },
     include: {
       template: { select: { id: true, name: true, frequency: true } },
       claimer: { select: { id: true, name: true, image: true } },

@@ -5,7 +5,7 @@ import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { Sidebar, Header } from '@/components/layout';
 
-const PUBLIC_ROUTES = ['/login', '/register', '/request', '/track'];
+const PUBLIC_ROUTES = ['/login', '/register', '/request', '/track', '/activate', '/complete', '/forgot-password', '/reset-password'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
     const { sidebarOpen } = useAppStore();

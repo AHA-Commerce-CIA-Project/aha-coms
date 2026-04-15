@@ -1,0 +1,31 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    secretEnv: ['DATABASE_URL', 'BETTER_AUTH_SECRET', 'RESEND_API_KEY']
+    args:
+      - '-c'
+      - |
+        docker build \
+          --build-arg DATABASE_URL="$$DATABASE_URL" \
+          --build-arg BETTER_AUTH_SECRET="$$BETTER_AUTH_SECRET" \
+          --build-arg BETTER_AUTH_URL="${_BETTER_AUTH_URL}" \
+          --build-arg NEXT_PUBLIC_APP_URL="${_NEXT_PUBLIC_APP_URL}" \
+          --build-arg RESEND_API_KEY="$$RESEND_API_KEY" \
+          -t gcr.io/fbi-dev-484410/aha-fast-app:latest .
+
+substitutions:
+  _BETTER_AUTH_URL: 'https://aha-fast-app-908739514002.asia-southeast2.run.app'
+  _NEXT_PUBLIC_APP_URL: 'https://aha-fast-app-908739514002.asia-southeast2.run.app'
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/fbi-dev-484410/secrets/DATABASE_URL/versions/latest
+      env: 'DATABASE_URL'
+    - versionName: projects/fbi-dev-484410/secrets/BETTER_AUTH_SECRET/versions/latest
+      env: 'BETTER_AUTH_SECRET'
+    - versionName: projects/fbi-dev-484410/secrets/RESEND_API_KEY/versions/latest
+      env: 'RESEND_API_KEY'
+
+images:
+  - 'gcr.io/fbi-dev-484410/aha-fast-app:latest'
+timeout: '1200s'

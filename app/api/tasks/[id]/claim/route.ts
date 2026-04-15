@@ -54,7 +54,7 @@ export async function POST(
         // Log activity
         logActivity(targetUserId, 'task_claimed', `${profile?.name || 'A member'} claimed task "${task.title}"`, 'task', id);
 
-        // Send email notification
+        // Send email notification to requester and admin
         if (task.taskToken) {
             sendTaskClaimedEmail({
                 taskToken: task.taskToken,
@@ -62,6 +62,7 @@ export async function POST(
                 requesterName: task.requesterName || 'Requester',
                 claimedByName: profile?.name || 'A team member',
                 urgency: task.urgency || 'P3',
+                requesterEmail: task.requesterEmail || undefined,
             }).catch(() => {});
         }
 

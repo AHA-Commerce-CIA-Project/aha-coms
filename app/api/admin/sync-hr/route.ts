@@ -44,8 +44,8 @@ export async function POST() {
         select: { role: true },
     });
 
-    if (user?.role !== 'leader' && user?.role !== 'admin') {
-        return NextResponse.json({ error: 'Unauthorized — Leader access required' }, { status: 403 });
+    if (user?.role !== 'admin') {
+        return NextResponse.json({ error: 'Unauthorized — Master access required' }, { status: 403 });
     }
 
     try {

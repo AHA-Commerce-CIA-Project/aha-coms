@@ -18,7 +18,7 @@ export async function PUT(
         select: { role: true },
     });
 
-    if (user?.role !== 'leader') {
+    if (user?.role !== 'leader' && user?.role !== 'admin') {
         return NextResponse.json({ error: 'Leader access required' }, { status: 403 });
     }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageSquare, Smile, Bookmark, BookmarkCheck, Download, Pencil, Trash2, X, Check } from 'lucide-react';
+import { MessageSquare, Smile, Bookmark, BookmarkCheck, Download, Pencil, Trash2, X, Check, Forward } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { ReactionDisplay } from './ReactionDisplay';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,7 @@ interface ChannelMessageItemProps {
   onReaction: (messageId: string, emoji: string) => void;
   onSave: (messageId: string) => void;
   onMessageUpdated: () => void;
+  onForward?: (message: Message) => void;
   allUsers?: { id: string; name: string }[];
   showAvatar?: boolean;
 }
@@ -59,6 +60,24 @@ function formatFileSize(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+function isHtmlContent(content: string): boolean {
+  return /<[a-z][\s\S]*>/i.test(content);
+}
+
+function processHtmlContent(html: string): string {
+  // Linkify URLs that aren't already inside <a> tags
+  let result = html.replace(
+    /(?<!href=["'])(?<!<a[^>]*>)(https?:\/\/[^\s<]+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:text-indigo-700 underline break-all">$1</a>'
+  );
+  // Style @mentions
+  result = result.replace(
+    /(@\w[\w.]*)/g,
+    '<span class="text-indigo-600 font-semibold bg-indigo-50 px-1 rounded">$1</span>'
+  );
+  return result;
+}
+
 function renderContent(
   content: string,
   allUsers?: { id: string; name: string }[],
@@ -66,7 +85,17 @@ function renderContent(
 ) {
   if (!content) return null;
 
-  // Split by @mentions and URLs
+  // If content contains HTML tags, render as rich text
+  if (isHtmlContent(content)) {
+    return (
+      <span
+        className="[&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
+        dangerouslySetInnerHTML={{ __html: processHtmlContent(content) }}
+      />
+    );
+  }
+
+  // Plain text: split by @mentions and URLs
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const mentionRegex = /(@\w[\w.]*)/g;
   const combinedRegex = /(https?:\/\/[^\s]+|@\w[\w.]*)/g;
@@ -124,6 +153,7 @@ export function ChannelMessageItem({
   onReaction,
   onSave,
   onMessageUpdated,
+  onForward,
   allUsers,
   showAvatar = true,
 }: ChannelMessageItemProps) {
@@ -185,15 +215,22 @@ export function ChannelMessageItem({
           setShowEmojiPicker(false);
         }}
       >
+        {/* Saved for later indicator */}
+        {isSaved && (
+          <div className="flex items-center gap-1.5 mb-1 ml-12">
+            <Bookmark className="w-3 h-3 text-amber-500 fill-amber-500" />
+            <span className="text-xs font-semibold text-amber-600">Saved for later</span>
+          </div>
+        )}
         <div className="flex gap-3">
           {/* Avatar */}
           {showAvatar ? (
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-sm font-bold">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-sm font-bold">
               {message.sender.image ? (
                 <img
                   src={message.sender.image}
                   alt={message.sender.name}
-                  className="w-9 h-9 rounded-full object-cover"
+                  className="w-10 h-10 rounded-full object-cover"
                 />
               ) : (
                 message.sender.name.charAt(0).toUpperCase()
@@ -207,10 +244,10 @@ export function ChannelMessageItem({
             {/* Name + time */}
             {showAvatar && (
               <div className="flex items-baseline gap-2 mb-0.5">
-                <span className="font-bold text-sm text-slate-800">
+                <span className="font-bold text-base text-slate-800">
                   {message.sender.name}
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-xs text-slate-400">
                   {formatTime(message.createdAt)}
                 </span>
               </div>
@@ -249,13 +286,78 @@ export function ChannelMessageItem({
                 </div>
               </div>
             ) : message.content ? (
-              <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
-                {renderContent(message.content, allUsers, handleMentionClick)}
-                {message.updatedAt && message.createdAt !== message.updatedAt &&
-                  new Date(message.updatedAt).getTime() - new Date(message.createdAt).getTime() > 1000 && (
-                  <span className="text-[11px] text-slate-400 ml-1 italic">(edited)</span>
-                )}
-              </p>
+              (() => {
+                // Check for forwarded message
+                const forwardMatch = message.content.match(/<!--forward:(.*?)-->/s);
+                if (forwardMatch) {
+                  try {
+                    const fwd = JSON.parse(forwardMatch[1]);
+                    const userMsg = message.content.replace(/<!--forward:.*?-->/s, '').trim();
+                    const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
+                    return (
+                      <div>
+                        {userMsg && (
+                          <p className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed mb-2">
+                            {renderContent(userMsg, allUsers, handleMentionClick)}
+                          </p>
+                        )}
+                        {/* Quoted forward card */}
+                        <div className="border-l-4 border-indigo-400 bg-slate-50 rounded-r-xl p-3 mt-1">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold">
+                              {fwd.author?.charAt(0)?.toUpperCase() || '?'}
+                            </div>
+                            <span className="text-sm font-bold text-slate-900">{fwd.author}</span>
+                          </div>
+                          <p className="text-[14px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed">{fwd.content}</p>
+                        </div>
+                        {/* Source footer — outside the card, like Slack */}
+                        <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 mt-2 text-xs">
+                          {fwd.channelName && (
+                            <>
+                              <span className="text-slate-400">Posted in</span>
+                              <a href={`/channels?channel=${fwd.channelId}`} className="font-semibold text-slate-600 hover:text-indigo-600 hover:underline">
+                                # {fwd.channelName}
+                              </a>
+                            </>
+                          )}
+                          {fwd.isTask && fwd.taskToken && (
+                            <>
+                              <span className="text-slate-400">Forwarded from</span>
+                              <span className="font-semibold text-slate-600">Task {fwd.taskToken}</span>
+                            </>
+                          )}
+                          {fwd.date && (
+                            <span className="text-slate-400">{new Date(fwd.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                          )}
+                          <span className="text-slate-300">|</span>
+                          {fwd.channelId && fwd.messageId ? (
+                            <a href={`/channels?channel=${fwd.channelId}&highlight=${fwd.messageId}`}
+                              className="text-indigo-500 hover:text-indigo-700 font-semibold hover:underline">
+                              View message
+                            </a>
+                          ) : fwd.isTask && fwd.taskToken ? (
+                            <a href={`/nexus?highlight_token=${fwd.taskToken}&open=true`}
+                              className="text-indigo-500 hover:text-indigo-700 font-semibold hover:underline">
+                              View task
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  } catch {}
+                }
+                // Normal message
+                return (
+                  <p className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+                    {renderContent(message.content, allUsers, handleMentionClick)}
+                    {message.updatedAt && message.createdAt !== message.updatedAt &&
+                      new Date(message.updatedAt).getTime() - new Date(message.createdAt).getTime() > 1000 && (
+                      <span className="text-xs text-slate-400 ml-1 italic">(edited)</span>
+                    )}
+                  </p>
+                );
+              })()
             ) : null}
 
             {/* Image attachments */}
@@ -333,12 +435,12 @@ export function ChannelMessageItem({
                       ))}
                   </div>
                 )}
-                <span className="text-xs text-indigo-600 font-semibold group-hover/thread:underline">
+                <span className="text-sm text-indigo-600 font-semibold group-hover/thread:underline">
                   {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
                 </span>
                 {message.replies && message.replies[0] && (
-                  <span className="text-[11px] text-slate-400">
-                    Last reply {new Date(message.replies[0].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <span className="text-xs text-slate-400">
+                    Last reply {new Date(message.replies[0].createdAt).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} {new Date(message.replies[0].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 )}
               </button>
@@ -404,6 +506,15 @@ export function ChannelMessageItem({
                 <Bookmark className="w-4 h-4" />
               )}
             </button>
+            {onForward && (
+              <button
+                onClick={() => onForward(message)}
+                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
+                title="Forward to channel"
+              >
+                <Forward className="w-4 h-4" />
+              </button>
+            )}
             {isOwner && (
               <>
                 <div className="w-px h-5 bg-slate-200" />

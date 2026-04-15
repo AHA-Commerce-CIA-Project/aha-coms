@@ -17,7 +17,20 @@ export const requestSchema = z.object({
     urgency: urgencyEnum.optional().default('P3'),
     description: z.string().min(1, 'Description is required').max(5000),
     dueDate: z.string().optional(),
-    imageUrl: z.string().url().optional().nullable(),
+    imageUrl: z.string().optional().nullable(),
+    requesterEmail: z.string().email().optional().or(z.literal('')).transform(v => v || undefined),
+    isDirectRequest: z.boolean().optional().default(false),
+    directAssigneeId: z.string().optional().nullable(),
+    fileUrls: z.array(z.string()).optional().default([]),
+    referenceUrls: z.array(z.string()).optional().default([]),
+});
+
+// ─── Direct Request Action ───────────────────────────────────────────────────
+
+export const directRequestActionSchema = z.object({
+    action: z.enum(['approve', 'decline', 'delegate']),
+    delegateToUserId: z.string().optional(),
+    delegateReason: z.string().optional(),
 });
 
 // ─── Complete Task ────────────────────────────────────────────────────────────

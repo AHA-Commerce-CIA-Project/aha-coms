@@ -103,6 +103,7 @@ export function StatsCard({
     icon: Icon,
     trend,
     color = 'indigo',
+    onClick,
 }: {
     title: string;
     value: string | number;
@@ -110,6 +111,7 @@ export function StatsCard({
     icon: React.ElementType;
     trend?: { value: number; positive: boolean };
     color?: 'indigo' | 'emerald' | 'amber' | 'rose';
+    onClick?: () => void;
 }) {
     const colorClasses = {
         indigo: 'from-indigo-500 to-purple-600 shadow-indigo-500/25',
@@ -118,8 +120,16 @@ export function StatsCard({
         rose: 'from-rose-500 to-pink-600 shadow-rose-500/25',
     };
 
+    const Component = onClick ? 'button' : 'div';
+
     return (
-        <div className="p-5 rounded-2xl bg-white shadow-sm border border-slate-200 hover:border-slate-300 transition-all">
+        <Component
+            onClick={onClick}
+            className={cn(
+                'p-5 rounded-2xl bg-white shadow-sm border border-slate-200 transition-all text-left w-full',
+                onClick && 'hover:border-indigo-300 hover:shadow-md cursor-pointer'
+            )}
+        >
             <div className="flex items-start justify-between mb-4">
                 <div
                     className={cn(
@@ -146,6 +156,6 @@ export function StatsCard({
             <h3 className="text-2xl font-bold text-slate-900 mb-1">{value}</h3>
             <p className="text-sm text-slate-500">{title}</p>
             {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
-        </div>
+        </Component>
     );
 }

@@ -19,8 +19,8 @@ export const DELETE = withErrorHandler(async (
         select: { role: true },
     });
 
-    if (user?.role !== 'leader') {
-        return errorResponse('Leader access required', 403);
+    if (user?.role !== 'admin') {
+        return errorResponse('Master access required', 403);
     }
 
     const { id } = await params;
@@ -57,7 +57,7 @@ export const PUT = withErrorHandler(async (
         select: { role: true },
     });
 
-    if (user?.role !== 'leader') {
+    if (user?.role !== 'leader' && user?.role !== 'admin') {
         return errorResponse('Leader access required', 403);
     }
 

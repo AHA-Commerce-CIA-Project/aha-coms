@@ -26,6 +26,7 @@ model User {
   // Custom AHA Smart Tracker Fields
   role          String    @default("member") // 'leader' or 'member'
   status        String    @default("active") @db.VarChar(20) // 'active', 'away', 'busy', 'offline'
+  lastSeenAt    DateTime? @map("last_seen_at") @db.Timestamptz(6)
   accountStatus String    @default("active") @map("account_status") @db.VarChar(30) // 'pending_activation', 'pending_setup', 'pending_approval', 'active', 'rejected'
   teamId        String?
   team          Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
@@ -60,6 +61,15 @@ model User {
   delegationsFrom       RoutineTaskDelegation[] @relation("DelegationFrom")
   delegationsTo         RoutineTaskDelegation[] @relation("DelegationTo")
   activityLogs          ActivityLog[]
+  taskComments          TaskComment[]
+
+  // Notes
+  notes                 Note[]                 @relation("UserNotes")
+
+  // Direct Request Relations
+  directAssigneeTasks   Task[]                 @relation("DirectAssigneeTasks")
+  taskDelegationsFrom   TaskDelegation[]       @relation("TaskDelegationFrom")
+  taskDelegationsTo     TaskDelegation[]       @relation("TaskDelegationTo")
 
   @@map("user")
 }
@@ -118,6 +128,7 @@ model Team {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   users     User[]
   projects  Project[]
+  routineTemplates RoutineTaskTemplate[] @relation("TeamRoutineTemplates")
 
   @@map("teams")
 }
@@ -185,7 +196,15 @@ model Task {
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   completedAt           DateTime? @map("completed_at") @db.Timestamptz(6)
 
+  // Direct Request Fields
+  source                String    @default("queue") @db.VarChar(30) // 'queue' or 'direct_request'
+  directAssigneeId      String?   @map("direct_assignee_id")
+  directAssignee        User?     @relation("DirectAssigneeTasks", fields: [directAssigneeId], references: [id], onDelete: SetNull)
+  responseDeadline      DateTime? @map("response_deadline") @db.Timestamptz(6)
+
   reviews               TaskReview[]
+  comments              TaskComment[]
+  delegations           TaskDelegation[]
 
   @@map("tasks")
 }
@@ -267,6 +286,39 @@ model TaskReview {
 
   @@unique([taskId, reviewerType])
   @@map("task_reviews")
+}
+
+model TaskComment {
+  id           String   @id @default(uuid())
+  taskId       String   @map("task_id")
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorUserId String?  @map("author_user_id")
+  authorUser   User?    @relation(fields: [authorUserId], references: [id])
+  authorName   String   @map("author_name") @db.VarChar(255)
+  authorEmail  String?  @map("author_email") @db.VarChar(255)
+  message      String
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([taskId, createdAt])
+  @@map("task_comments")
+}
+
+// ==========================================
+// TASK DELEGATIONS (Direct Request)
+// ==========================================
+
+model TaskDelegation {
+  id             String   @id @default(uuid())
+  taskId         String   @map("task_id")
+  task           Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromUserId     String   @map("from_user_id")
+  fromUser       User     @relation("TaskDelegationFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId       String   @map("to_user_id")
+  toUser         User     @relation("TaskDelegationTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  reason         String?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("task_delegations")
 }
 
 // ==========================================
@@ -428,6 +480,25 @@ model ChannelReadStatus {
 }
 
 // ==========================================
+// NOTES (Google Keep-style)
+// ==========================================
+
+model Note {
+  id        String    @id @default(uuid())
+  title     String    @default("") @db.VarChar(500)
+  content   String    @default("")
+  color     String    @default("default") @db.VarChar(20) // 'default','yellow','green','blue','purple','pink','red','orange'
+  pinned    Boolean   @default(false)
+  archived  Boolean   @default(false)
+  userId    String    @map("user_id")
+  user      User      @relation("UserNotes", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("notes")
+}
+
+// ==========================================
 // AHA ORBIT - ROUTINE TASK MANAGEMENT
 // ==========================================
 
@@ -439,6 +510,10 @@ model RoutineTaskTemplate {
   category    String?  @db.VarChar(100)
   deadlineTime String? @map("deadline_time") @db.VarChar(5) // HH:MM format, e.g. "17:00"
   deadlineDay  Int?    @map("deadline_day") // For weekly: 1=Mon..7=Sun, for monthly: 1-31
+  teamId      String?  @map("team_id")
+  team        Team?    @relation("TeamRoutineTemplates", fields: [teamId], references: [id], onDelete: SetNull)
+  teamIds     Json     @default("[]") @map("team_ids") // Array of team IDs for multi-team visibility
+  isTeamWide  Boolean  @default(false) @map("is_team_wide") // All team members must individually complete
   isActive    Boolean  @default(true) @map("is_active")
   createdBy   String   @map("created_by")
   creator     User     @relation("RoutineTemplateCreator", fields: [createdBy], references: [id], onDelete: Cascade)
@@ -460,11 +535,12 @@ model RoutineTaskClaim {
   status         String    @default("claimed") @db.VarChar(20)
   completedAt    DateTime? @map("completed_at") @db.Timestamptz(6)
   completionNote String?   @map("completion_note")
+  attachments    Json      @default("[]") // Image URLs / file attachments for proof of work
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   delegations RoutineTaskDelegation[]
 
-  @@unique([templateId, period])
+  @@unique([templateId, period, claimedBy])
   @@map("routine_task_claims")
 }
 
@@ -496,6 +572,17 @@ model ActivationToken {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("activation_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("password_reset_tokens")
 }
 
 // ==========================================

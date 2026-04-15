@@ -164,7 +164,11 @@ export function ThreadPanel({
               <span className="font-bold text-sm text-slate-800">{message.sender.name}</span>
               <span className="text-[11px] text-slate-400">{formatTime(message.createdAt)}</span>
             </div>
-            <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{message.content}</p>
+            {/<[a-z][\s\S]*>/i.test(message.content) ? (
+              <div className="text-sm text-slate-700 break-words [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: message.content }} />
+            ) : (
+              <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{message.content}</p>
+            )}
           </div>
         </div>
         <div className="mt-2 text-xs text-slate-400">
@@ -317,14 +321,22 @@ function ThreadReplyItem({
                 </button>
               </div>
             </div>
-          ) : (
-            <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
-              {reply.content}
-              {reply.updatedAt && reply.createdAt !== reply.updatedAt &&
-                new Date(reply.updatedAt).getTime() - new Date(reply.createdAt).getTime() > 1000 && (
-                <span className="text-[11px] text-slate-400 ml-1 italic">(edited)</span>
-              )}
-            </p>
+          ) : /<[a-z][\s\S]*>/i.test(reply.content) ? (
+              <div className="text-sm text-slate-700 break-words [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">
+                <span dangerouslySetInnerHTML={{ __html: reply.content }} />
+                {reply.updatedAt && reply.createdAt !== reply.updatedAt &&
+                  new Date(reply.updatedAt).getTime() - new Date(reply.createdAt).getTime() > 1000 && (
+                  <span className="text-[11px] text-slate-400 ml-1 italic">(edited)</span>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
+                {reply.content}
+                {reply.updatedAt && reply.createdAt !== reply.updatedAt &&
+                  new Date(reply.updatedAt).getTime() - new Date(reply.createdAt).getTime() > 1000 && (
+                  <span className="text-[11px] text-slate-400 ml-1 italic">(edited)</span>
+                )}
+              </p>
           )}
 
           {images.length > 0 && (

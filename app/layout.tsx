@@ -10,8 +10,25 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "AHA FAST",
-  description: "Team project tracking for operational efficiency",
+  title: "AHA COMSS",
+  description: "Company Support Systems",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "AHA COMSS",
+  },
+  icons: {
+    icon: "/aha-logo.png",
+    apple: "/icon-192.png",
+  },
+};
+
+export const viewport = {
+  themeColor: "#0F0E7F",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({

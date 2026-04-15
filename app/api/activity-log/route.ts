@@ -12,8 +12,8 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const cursor = searchParams.get('cursor');
-  const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
+  const page = Math.max(parseInt(searchParams.get('page') || '1'), 1);
+  const limit = Math.min(parseInt(searchParams.get('limit') || '15'), 100);
   const userId = searchParams.get('userId');
   const action = searchParams.get('action');
   const search = searchParams.get('search');
@@ -23,21 +23,23 @@ export async function GET(request: Request) {
   if (action) where.action = action;
   if (search) where.description = { contains: search, mode: 'insensitive' };
 
-  const logs = await prisma.activityLog.findMany({
-    where,
-    take: limit + 1,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    orderBy: { createdAt: 'desc' },
-    include: {
-      user: { select: { id: true, name: true, image: true, role: true } },
-    },
-  });
-
-  const hasMore = logs.length > limit;
-  if (hasMore) logs.pop();
+  const [logs, total] = await Promise.all([
+    prisma.activityLog.findMany({
+      where,
+      take: limit,
+      skip: (page - 1) * limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { id: true, name: true, image: true, role: true } },
+      },
+    }),
+    prisma.activityLog.count({ where }),
+  ]);
 
   return NextResponse.json({
     logs,
-    nextCursor: hasMore ? logs[logs.length - 1].id : null,
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
   });
 }

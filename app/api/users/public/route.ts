@@ -7,6 +7,7 @@ export async function GET() {
         select: {
             id: true,
             name: true,
+            email: true,
             team: { select: { name: true } },
         },
         orderBy: { name: 'asc' },
@@ -16,6 +17,7 @@ export async function GET() {
     const data = users.map(u => ({
         id: u.id,
         name: u.name,
+        email: u.email,
         teams: u.team ? { name: u.team.name } : null,
     }));
 

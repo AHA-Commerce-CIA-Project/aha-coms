@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { getCurrentPeriod, getPeriodLabel } from '@/lib/orbit-utils';
 import {
   RotateCcw, CheckCircle2, Clock, User, Users, ArrowRight,
-  Check, X, Send, Calendar, AlertCircle,
+  Check, X, Send, Calendar, AlertCircle, Upload, Image,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +19,9 @@ interface Template {
   category: string | null;
   deadlineTime: string | null;
   deadlineDay: number | null;
+  isTeamWide?: boolean;
+  teamId?: string | null;
+  teamIds?: string[];
   creator: { id: string; name: string };
 }
 
@@ -81,6 +84,11 @@ export default function OrbitPage() {
   const [completeClaimId, setCompleteClaimId] = useState<string | null>(null);
   const [completionNote, setCompletionNote] = useState('');
 
+  // Team-wide task state
+  const [teamWideMembers, setTeamWideMembers] = useState<Record<string, TeamMember[]>>({});
+  const [teamWideDetail, setTeamWideDetail] = useState<string | null>(null);
+  const [teamWideNote, setTeamWideNote] = useState('');
+
   useEffect(() => {
     if (!isPending && !session) router.push('/login');
   }, [session, isPending, router]);
@@ -126,6 +134,44 @@ export default function OrbitPage() {
       .catch(() => {});
   }, [delegateClaimId]);
 
+  // Fetch team members for team-wide templates
+  useEffect(() => {
+    const teamWideTemplates = templates.filter((t) => t.isTeamWide);
+    if (teamWideTemplates.length === 0) return;
+
+    fetch('/api/teams?include=members')
+      .then((r) => r.ok ? r.json() : [])
+      .then((teamsData: any[]) => {
+        const membersByTemplate: Record<string, TeamMember[]> = {};
+        teamWideTemplates.forEach((t) => {
+          const tIds = Array.isArray(t.teamIds) && t.teamIds.length > 0
+            ? t.teamIds
+            : t.teamId ? [t.teamId] : [];
+
+          // If no team IDs at all, this template is visible to all — use all teams' members
+          const relevantTeams = tIds.length > 0
+            ? teamsData.filter((team: any) => tIds.includes(team.id))
+            : teamsData;
+
+          const members: TeamMember[] = [];
+          const seen = new Set<string>();
+          relevantTeams.forEach((team: any) => {
+            if (Array.isArray(team.members)) {
+              team.members.forEach((m: any) => {
+                if (!seen.has(m.id)) {
+                  seen.add(m.id);
+                  members.push({ id: m.id, name: m.name, email: m.email || '', image: m.image || null });
+                }
+              });
+            }
+          });
+          membersByTemplate[t.id] = members;
+        });
+        setTeamWideMembers(membersByTemplate);
+      })
+      .catch(() => {});
+  }, [templates]);
+
   const handleClaim = async (templateId: string) => {
     setActionLoading(templateId);
     try {
@@ -154,6 +200,41 @@ export default function OrbitPage() {
       if (res.ok) {
         setCompleteClaimId(null);
         setCompletionNote('');
+        fetchData();
+      }
+    } catch {} finally { setActionLoading(null); }
+  };
+
+  // Handle team-wide task: claim only (status: 'claimed')
+  const handleTeamWideClaim = async (templateId: string) => {
+    setActionLoading(templateId);
+    try {
+      const res = await fetch('/api/orbit/claims', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId }),
+      });
+      if (res.ok) {
+        fetchData();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to claim');
+      }
+    } catch {} finally { setActionLoading(null); }
+  };
+
+  // Handle team-wide task: mark a claimed task as complete
+  const handleTeamWideMarkComplete = async (claimId: string) => {
+    setActionLoading(claimId);
+    try {
+      const res = await fetch(`/api/orbit/claims/${claimId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: teamWideNote }),
+      });
+      if (res.ok) {
+        setTeamWideNote('');
+        setTeamWideDetail(null);
         fetchData();
       }
     } catch {} finally { setActionLoading(null); }
@@ -300,6 +381,153 @@ export default function OrbitPage() {
       ) : (
         <div className="space-y-3">
           {filteredTemplates.map((template) => {
+            // Team-wide task rendering
+            if (template.isTeamWide) {
+              const members = teamWideMembers[template.id] || [];
+              const templateClaims = claims.filter((c) => c.templateId === template.id);
+              const completedClaims = templateClaims.filter((c) => c.status === 'completed');
+              const completedCount = completedClaims.length;
+              const totalMembers = members.length;
+              const myClaim = templateClaims.find((c) => c.claimedBy === session.user.id);
+              const myClaimCompleted = myClaim?.status === 'completed';
+              const myClaimPending = myClaim && myClaim.status !== 'completed';
+              const allDone = totalMembers > 0 && completedCount >= totalMembers;
+
+              // Claimers for avatar stack
+              const claimersWithAvatars = templateClaims.map((c) => c.claimer).filter(Boolean);
+              const visibleAvatars = claimersWithAvatars.slice(0, 5);
+              const extraCount = claimersWithAvatars.length - 5;
+
+              return (
+                <div
+                  key={template.id}
+                  onClick={() => setTeamWideDetail(template.id)}
+                  className={cn(
+                    'bg-white border rounded-xl p-5 transition-all cursor-pointer hover:shadow-md',
+                    allDone ? 'border-emerald-200 bg-emerald-50/30' : 'border-amber-200'
+                  )}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-sm font-bold text-slate-800">{template.name}</h3>
+                        <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium capitalize', FREQ_COLORS[template.frequency] || 'bg-slate-100 text-slate-500')}>
+                          {template.frequency}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
+                          Team-wide
+                        </span>
+                        {template.category && (
+                          <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">
+                            {template.category}
+                          </span>
+                        )}
+                      </div>
+                      {template.description && (
+                        <p className="text-sm text-slate-500 mb-1">{template.description}</p>
+                      )}
+                      {(template.deadlineTime || template.deadlineDay) && (
+                        <p className="text-xs text-indigo-400 mb-2 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Due: {template.deadlineDay && template.frequency === 'weekly'
+                            ? ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][template.deadlineDay] + ' '
+                            : template.deadlineDay && template.frequency === 'monthly'
+                              ? `Day ${template.deadlineDay} `
+                              : ''
+                          }{template.deadlineTime ? `at ${template.deadlineTime}` : ''}
+                        </p>
+                      )}
+
+                      {/* Progress bar */}
+                      <div className="mt-3 mb-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-slate-600">
+                            {completedCount}/{totalMembers} members completed
+                          </span>
+                          {allDone && (
+                            <span className="text-xs font-medium text-emerald-600">All done!</span>
+                          )}
+                        </div>
+                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              'h-full rounded-full transition-all',
+                              allDone ? 'bg-emerald-500' : 'bg-amber-400'
+                            )}
+                            style={{ width: totalMembers > 0 ? `${(completedCount / totalMembers) * 100}%` : '0%' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Action button */}
+                      <div className="mt-3">
+                        {myClaimCompleted ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                            <CheckCircle2 className="w-4 h-4" />
+                            You completed this
+                          </span>
+                        ) : myClaimPending ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setTeamWideDetail(template.id); }}
+                            className="px-4 py-2 bg-emerald-500 text-white text-xs font-semibold rounded-lg hover:bg-emerald-600 transition-colors"
+                          >
+                            Mark Complete
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleTeamWideClaim(template.id); }}
+                            disabled={actionLoading === template.id}
+                            className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                          >
+                            {actionLoading === template.id ? 'Claiming...' : 'Claim'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right side: Avatar stack of claimers */}
+                    <div className="flex items-center flex-shrink-0 ml-4">
+                      {claimersWithAvatars.length > 0 ? (
+                        <div className="flex items-center">
+                          <div className="flex -space-x-2">
+                            {visibleAvatars.map((claimer, i) => (
+                              claimer.image ? (
+                                <img
+                                  key={claimer.id}
+                                  src={claimer.image}
+                                  alt={claimer.name}
+                                  title={claimer.name}
+                                  className="w-7 h-7 rounded-full border-2 border-white object-cover"
+                                  style={{ zIndex: 5 - i }}
+                                />
+                              ) : (
+                                <div
+                                  key={claimer.id}
+                                  title={claimer.name}
+                                  className="w-7 h-7 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600"
+                                  style={{ zIndex: 5 - i }}
+                                >
+                                  {claimer.name?.charAt(0)?.toUpperCase() || '?'}
+                                </div>
+                              )
+                            ))}
+                          </div>
+                          {extraCount > 0 && (
+                            <span className="ml-1 text-[10px] font-medium text-slate-500">+{extraCount}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                          <Users className="w-4 h-4 text-slate-400" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            // Regular (non-team-wide) task rendering
             const claim = claims.find((c) => c.templateId === template.id);
             const isOwner = claim?.claimedBy === session.user.id;
             const isClaimed = !!claim;
@@ -351,7 +579,7 @@ export default function OrbitPage() {
                             Completed by {claim!.claimer.name}
                             {claim!.completedAt && (
                               <span className="text-slate-400 font-normal ml-1">
-                                at {new Date(claim!.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                at {new Date(claim!.completedAt).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} {new Date(claim!.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             )}
                           </span>
@@ -486,6 +714,220 @@ export default function OrbitPage() {
           </div>
         </div>
       )}
+
+      {/* Team-Wide Detail Modal */}
+      {teamWideDetail && (() => {
+        const template = templates.find((t) => t.id === teamWideDetail);
+        if (!template) return null;
+        const members = teamWideMembers[template.id] || [];
+        const templateClaims = claims.filter((c) => c.templateId === template.id);
+        const completedClaims = templateClaims.filter((c) => c.status === 'completed');
+        const completedCount = completedClaims.length;
+        const totalMembers = members.length;
+        const myClaim = templateClaims.find((c) => c.claimedBy === session.user.id);
+        const myClaimCompleted = myClaim?.status === 'completed';
+        const myClaimPending = myClaim && myClaim.status !== 'completed';
+        const progressPct = totalMembers > 0 ? (completedCount / totalMembers) * 100 : 0;
+        const allDone = totalMembers > 0 && completedCount >= totalMembers;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setTeamWideDetail(null); setTeamWideNote(''); }} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6 max-h-[85vh] overflow-y-auto">
+              {/* Header */}
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 mb-1">{template.name}</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium capitalize', FREQ_COLORS[template.frequency] || 'bg-slate-100 text-slate-500')}>
+                      {template.frequency}
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
+                      Team-wide
+                    </span>
+                    {template.category && (
+                      <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">
+                        {template.category}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setTeamWideDetail(null); setTeamWideNote(''); }}
+                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {template.description && (
+                <p className="text-sm text-slate-500 mb-3">{template.description}</p>
+              )}
+
+              {(template.deadlineTime || template.deadlineDay) && (
+                <p className="text-xs text-indigo-400 mb-3 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Due: {template.deadlineDay && template.frequency === 'weekly'
+                    ? ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][template.deadlineDay] + ' '
+                    : template.deadlineDay && template.frequency === 'monthly'
+                      ? `Day ${template.deadlineDay} `
+                      : ''
+                  }{template.deadlineTime ? `at ${template.deadlineTime}` : ''}
+                </p>
+              )}
+
+              {/* Progress */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-slate-600">
+                    {completedCount}/{totalMembers} members completed
+                  </span>
+                  {allDone && (
+                    <span className="text-xs font-medium text-emerald-600">All done!</span>
+                  )}
+                </div>
+                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all',
+                      allDone ? 'bg-emerald-500' : 'bg-amber-400'
+                    )}
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Member list */}
+              <div className="space-y-2 mb-4">
+                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Team Members</h4>
+                {members.map((member) => {
+                  const memberClaim = templateClaims.find((c) => c.claimedBy === member.id);
+                  const isCompleted = memberClaim?.status === 'completed';
+                  const isClaimed = memberClaim && memberClaim.status !== 'completed';
+
+                  return (
+                    <div key={member.id} className="flex items-start gap-3 py-2 border-b border-slate-100 last:border-0">
+                      <div className="flex-shrink-0">
+                        {member.image ? (
+                          <img src={member.image} alt="" className="w-8 h-8 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500">
+                            {member.name?.charAt(0)?.toUpperCase() || '?'}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-700 truncate">
+                            {member.name}{member.id === session.user.id ? ' (You)' : ''}
+                          </span>
+                          {isCompleted ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 flex-shrink-0">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Completed
+                            </span>
+                          ) : isClaimed ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 flex-shrink-0">
+                              <Clock className="w-3.5 h-3.5" />
+                              In Progress
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 flex-shrink-0">
+                              <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 inline-block" />
+                              Not started
+                            </span>
+                          )}
+                        </div>
+                        {isCompleted && memberClaim?.completionNote && (
+                          <p className="text-xs text-slate-400 italic mt-0.5">&quot;{memberClaim.completionNote}&quot;</p>
+                        )}
+                        {isCompleted && memberClaim?.completedAt && (
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {new Date(memberClaim.completedAt).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} {new Date(memberClaim.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Show claimers not in the member list (edge case) */}
+                {templateClaims
+                  .filter((c) => !members.find((m) => m.id === c.claimedBy))
+                  .map((c) => (
+                    <div key={c.id} className="flex items-start gap-3 py-2 border-b border-slate-100 last:border-0">
+                      <div className="flex-shrink-0">
+                        {c.claimer.image ? (
+                          <img src={c.claimer.image} alt="" className="w-8 h-8 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500">
+                            {c.claimer.name?.charAt(0)?.toUpperCase() || '?'}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-700 truncate">
+                            {c.claimer.name}{c.claimedBy === session.user.id ? ' (You)' : ''}
+                          </span>
+                          {c.status === 'completed' ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 flex-shrink-0">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Completed
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 flex-shrink-0">
+                              <Clock className="w-3.5 h-3.5" />
+                              In Progress
+                            </span>
+                          )}
+                        </div>
+                        {c.status === 'completed' && c.completionNote && (
+                          <p className="text-xs text-slate-400 italic mt-0.5">&quot;{c.completionNote}&quot;</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Current user action */}
+              <div className="border-t border-slate-200 pt-4">
+                {myClaimCompleted ? (
+                  <div className="flex items-center gap-2 text-emerald-600">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span className="text-sm font-medium">You have completed this task</span>
+                  </div>
+                ) : myClaimPending ? (
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-slate-700">Mark as complete</p>
+                    <textarea
+                      value={teamWideNote}
+                      onChange={(e) => setTeamWideNote(e.target.value)}
+                      placeholder="Add a comment about your completion..."
+                      rows={2}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors resize-none"
+                    />
+                    <button
+                      onClick={() => handleTeamWideMarkComplete(myClaim!.id)}
+                      disabled={actionLoading === myClaim!.id}
+                      className="w-full py-2.5 bg-emerald-500 text-white font-semibold rounded-xl hover:bg-emerald-600 disabled:opacity-50 transition-colors text-sm"
+                    >
+                      {actionLoading === myClaim!.id ? 'Completing...' : 'Mark Complete'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleTeamWideClaim(template.id)}
+                    disabled={actionLoading === template.id}
+                    className="w-full py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors text-sm"
+                  >
+                    {actionLoading === template.id ? 'Claiming...' : 'Claim This Task'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

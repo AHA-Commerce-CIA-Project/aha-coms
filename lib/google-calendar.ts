@@ -102,12 +102,14 @@ export async function getCalendarEvents(userId: string, year: number, month: num
             owner_id: userId,
             title: event.summary || 'Untitled',
             description: event.description || null,
-            meeting_date: event.start?.date || event.start?.dateTime?.split('T')[0] || '',
+            meeting_date: event.start?.date || (event.start?.dateTime
+                ? new Date(event.start.dateTime).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+                : ''),
             start_time: event.start?.dateTime
-                ? new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+                ? new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
                 : '00:00',
             end_time: event.end?.dateTime
-                ? new Date(event.end.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+                ? new Date(event.end.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
                 : '23:59',
             location: event.location || null,
             source: 'google_calendar',

@@ -291,7 +291,7 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
                             </span>
                             {(user.role === 'leader' || user.role === 'admin') && (
                               <span className="text-[10px] px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-medium">
-                                {user.role}
+                                {user.role === 'admin' ? 'master' : user.role}
                               </span>
                             )}
                           </div>

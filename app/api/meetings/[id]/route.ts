@@ -21,7 +21,7 @@ export const PUT = withErrorHandler(async (
         where: { id: userId },
         select: { role: true },
     });
-    const isLeader = profile?.role === 'leader';
+    const isLeader = profile?.role === 'leader' || profile?.role === 'admin';
 
     // Build update object
     const updates: Record<string, any> = {};
@@ -112,7 +112,7 @@ export const DELETE = withErrorHandler(async (
         where: { id: userId },
         select: { role: true },
     });
-    const isLeader = profile?.role === 'leader';
+    const isLeader = profile?.role === 'leader' || profile?.role === 'admin';
 
     // Check for Google Calendar event to delete
     const meeting = await prisma.meeting.findUnique({

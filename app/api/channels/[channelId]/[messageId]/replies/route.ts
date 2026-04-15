@@ -56,7 +56,7 @@ export async function POST(
       },
       include: {
         sender: { select: { id: true, name: true, image: true } },
-        reactions: [],
+        reactions: true,
       },
     }),
     prisma.channelMessage.update({
