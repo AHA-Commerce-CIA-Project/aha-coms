@@ -12,6 +12,10 @@
     "test": "bun run --filter @coms-portal/api test",
     "db:generate": "bun run --filter @coms-portal/api db:generate",
     "db:migrate": "bun run --filter @coms-portal/api db:migrate",
-    "db:studio": "bun run --filter @coms-portal/api db:studio"
+    "db:studio": "bun run --filter @coms-portal/api db:studio",
+    "test:e2e": "playwright test --config tests/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50"
   }
 }
