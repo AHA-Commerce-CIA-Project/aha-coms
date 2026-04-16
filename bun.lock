@@ -29,6 +29,7 @@
       "name": "@coms-portal/shared",
       "version": "0.1.0",
       "dependencies": {
+        "@coms-portal/api": "workspace:*",
         "drizzle-typebox": "^0.2",
         "drizzle-zod": "^0.7",
         "zod": "^3",

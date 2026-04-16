@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./src/db/schema/identity-users": "./src/db/schema/identity-users.ts",
+    "./src/db/schema/teams": "./src/db/schema/teams.ts",
+    "./src/db/schema/apps": "./src/db/schema/apps.ts",
+    "./src/*": "./src/*"
+  },
   "scripts": {
     "dev": "bun --watch server.ts",
     "build": "bun build server.ts --outdir dist --target bun",
