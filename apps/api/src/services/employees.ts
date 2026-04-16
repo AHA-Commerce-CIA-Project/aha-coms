@@ -1,6 +1,6 @@
 import { db } from '~/db'
 import { identityUsers, teamMembers } from '~/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { resolveAndSyncClaims } from './claims'
 import type { NewIdentityUser } from '~/db/schema'
 import { createGipUser, setGipUserDisabled, generatePasswordResetLink } from '../gip-admin'
@@ -60,4 +60,32 @@ export async function deactivateEmployee(userId: string): Promise<void> {
   if (user.gipUid) {
     await setGipUserDisabled(user.gipUid, true)
   }
+}
+
+export async function batchUpdateEmployees(
+  ids: string[],
+  field: 'portalRole',
+  value: string,
+): Promise<number> {
+  if (ids.length === 0) return 0
+
+  await db
+    .update(identityUsers)
+    .set({ [field]: value, updatedAt: new Date() })
+    .where(inArray(identityUsers.id, ids))
+
+  if (field === 'portalRole') {
+    const users = await db
+      .select({ id: identityUsers.id, gipUid: identityUsers.gipUid })
+      .from(identityUsers)
+      .where(inArray(identityUsers.id, ids))
+
+    await Promise.all(
+      users
+        .filter((u) => u.gipUid)
+        .map((u) => resolveAndSyncClaims(u.gipUid!, u.id)),
+    )
+  }
+
+  return ids.length
 }
