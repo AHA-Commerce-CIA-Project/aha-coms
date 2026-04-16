@@ -8,10 +8,12 @@ import { processEmployeeProvisioning } from './employee-provisioning'
 
 export async function createEmployee(data: {
   email: string
+  personalEmail?: string
   name: string
   phone?: string
   department?: string
   position?: string
+  branch?: string
   portalRole?: string
   teamId?: string
   hasGoogleWorkspace?: boolean
@@ -21,10 +23,12 @@ export async function createEmployee(data: {
       .insert(identityUsers)
       .values({
         email: data.email,
+        personalEmail: data.personalEmail,
         name: data.name,
         phone: data.phone,
         department: data.department,
         position: data.position,
+        branch: data.branch,
         portalRole: data.portalRole ?? 'employee',
         hasGoogleWorkspace: data.hasGoogleWorkspace ?? false,
         provisioningStatus: 'pending',

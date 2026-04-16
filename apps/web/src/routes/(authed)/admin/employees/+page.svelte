@@ -19,7 +19,6 @@
       options: [
         { value: 'employee', label: 'Employee' },
         { value: 'admin', label: 'Admin' },
-        { value: 'super_admin', label: 'Super Admin' },
       ],
     },
   ]
@@ -273,6 +272,7 @@
           </th>
           <th class="pb-2 font-medium">Name</th>
           <th class="pb-2 font-medium">Email</th>
+          <th class="pb-2 font-medium">Personal Email</th>
           <th class="pb-2 font-medium">Role</th>
           <th class="pb-2 font-medium">Status</th>
           <th class="pb-2 font-medium">Provisioning</th>
@@ -286,6 +286,7 @@
             </td>
             <td class="py-2"><a href="/admin/employees/{employee.id}" class="text-indigo-400 hover:text-indigo-300">{employee.name}</a></td>
             <td class="py-2 text-neutral-400">{employee.email}</td>
+            <td class="py-2 text-neutral-400">{employee.personalEmail ?? '—'}</td>
             <td class="py-2"><span class="rounded-full bg-neutral-800 px-2 py-0.5 text-xs">{employee.portalRole}</span></td>
             <td class="py-2"><span class="text-xs" class:text-green-400={employee.status === 'active'} class:text-red-400={employee.status !== 'active'}>{employee.status}</span></td>
             <td class="py-2">

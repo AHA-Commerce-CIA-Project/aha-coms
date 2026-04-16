@@ -20,7 +20,7 @@ const appBody = t.Object({
 })
 
 export const appRoutes = new Elysia({ prefix: '/apps' })
-  .use(requireRole('super_admin'))
+  .use(requireRole('admin'))
 
   .get('/', async () => {
     return db.select().from(appRegistry)

@@ -12,19 +12,20 @@ import { logAudit } from '../services/audit'
 
 const employeeBody = t.Object({
   email: t.String({ format: 'email' }),
+  personalEmail: t.Optional(t.String({ format: 'email' })),
   name: t.String({ minLength: 1 }),
   phone: t.Optional(t.String()),
   department: t.Optional(t.String()),
   position: t.Optional(t.String()),
+  branch: t.Optional(t.Union([t.Literal('indonesia'), t.Literal('thailand')])),
   portalRole: t.Optional(
-    t.Union([t.Literal('employee'), t.Literal('admin'), t.Literal('super_admin')]),
+    t.Union([t.Literal('employee'), t.Literal('admin')]),
   ),
   teamId: t.Optional(t.String()),
-  hasGoogleWorkspace: t.Optional(t.Boolean()),
 })
 
 export const employeeRoutes = new Elysia({ prefix: '/employees' })
-  .use(requireRole('admin', 'super_admin'))
+  .use(requireRole('admin'))
 
   .get(
     '/',
@@ -39,12 +40,13 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
           .select({
             id: identityUsers.id,
             email: identityUsers.email,
+            personalEmail: identityUsers.personalEmail,
             name: identityUsers.name,
             phone: identityUsers.phone,
             department: identityUsers.department,
             position: identityUsers.position,
+            branch: identityUsers.branch,
             portalRole: identityUsers.portalRole,
-            hasGoogleWorkspace: identityUsers.hasGoogleWorkspace,
             status: identityUsers.status,
             provisioningStatus: identityUsers.provisioningStatus,
             createdAt: identityUsers.createdAt,
@@ -152,12 +154,13 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       .select({
         id: identityUsers.id,
         email: identityUsers.email,
+        personalEmail: identityUsers.personalEmail,
         name: identityUsers.name,
         phone: identityUsers.phone,
         department: identityUsers.department,
         position: identityUsers.position,
+        branch: identityUsers.branch,
         portalRole: identityUsers.portalRole,
-        hasGoogleWorkspace: identityUsers.hasGoogleWorkspace,
         status: identityUsers.status,
         provisioningStatus: identityUsers.provisioningStatus,
         provisioningError: identityUsers.provisioningError,

@@ -7,7 +7,7 @@ import { addTeamMember, removeTeamMember, deleteTeam } from '../services/teams'
 import { logAudit } from '../services/audit'
 
 export const teamRoutes = new Elysia({ prefix: '/teams' })
-  .use(requireRole('admin', 'super_admin'))
+  .use(requireRole('admin'))
 
   .get('/', async () => {
     return db

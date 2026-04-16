@@ -12,6 +12,7 @@ export const identityUsers = pgTable('identity_users', {
   phone: varchar('phone', { length: 20 }),
   department: varchar('department', { length: 100 }),
   position: varchar('position', { length: 100 }),
+  branch: varchar('branch', { length: 50 }),
   portalRole: varchar('portal_role', { length: 20 }).notNull().default('employee'),
   personalEmail: varchar('personal_email', { length: 255 }),
   hasGoogleWorkspace: boolean('has_google_workspace').notNull().default(false),
