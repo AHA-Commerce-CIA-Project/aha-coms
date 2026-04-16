@@ -245,6 +245,21 @@ export const adminApi = {
       body: JSON.stringify(body),
     })
   },
+  registerApp(body: {
+    slug: string
+    name: string
+    description?: string
+    url: string
+    basePath: string
+    iconUrl?: string
+    cloudRunService?: string
+    status?: 'active' | 'maintenance' | 'deprecated'
+  }) {
+    return requestJson<{ id: string }>(`/api/v1/apps`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
   deleteApp(id: string) {
     return requestJson<{ ok: true }>(`/api/v1/apps/${id}`, {
       method: 'DELETE',
