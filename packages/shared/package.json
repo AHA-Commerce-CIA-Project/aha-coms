@@ -1,0 +1,23 @@
+{
+  "name": "@coms-portal/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./constants/*": "./src/constants/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "drizzle-typebox": "^0.2",
+    "drizzle-zod": "^0.7",
+    "zod": "^3"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "^0.45",
+    "@sinclair/typebox": ">=0.32"
+  }
+}
