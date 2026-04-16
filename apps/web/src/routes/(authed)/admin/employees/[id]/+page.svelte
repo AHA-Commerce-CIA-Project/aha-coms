@@ -4,7 +4,7 @@
   import { adminApi } from '$lib/admin-api'
   import { useQueryClient } from '@tanstack/svelte-query'
 
-  const ROLES = ['employee', 'admin', 'super_admin'] as const
+  const ROLES = ['employee', 'admin'] as const
 
   const id = $derived($page.params.id!)
   const query = $derived(employeeQuery(id))
@@ -231,10 +231,6 @@
             </button>
           {/if}
         </div>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-xs text-neutral-400">Workspace</span>
-        <span class="text-sm">{emp.hasGoogleWorkspace ? 'Yes' : 'No'}</span>
       </div>
     </div>
   {:else}

@@ -1,12 +1,13 @@
 export interface EmployeeRecord {
   id: string
   email: string
+  personalEmail: string | null
   name: string
   phone: string | null
   department: string | null
   position: string | null
-  portalRole: 'employee' | 'admin' | 'super_admin'
-  hasGoogleWorkspace: boolean
+  branch: string | null
+  portalRole: 'employee' | 'admin'
   status: string
   provisioningStatus: 'ready' | 'pending' | 'processing' | 'failed'
   provisioningError: string | null
@@ -127,12 +128,14 @@ export const adminApi = {
   },
   createEmployee(body: {
     email: string
+    personalEmail?: string
     name: string
     phone?: string
     department?: string
     position?: string
-    portalRole?: 'employee' | 'admin' | 'super_admin'
-    hasGoogleWorkspace?: boolean
+    branch?: 'indonesia' | 'thailand'
+    portalRole?: 'employee' | 'admin'
+    teamId?: string
   }) {
     return requestJson<CreateEmployeeResult>(`/api/v1/employees`, {
       method: 'POST',

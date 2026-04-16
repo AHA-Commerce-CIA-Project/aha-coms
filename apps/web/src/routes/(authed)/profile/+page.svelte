@@ -8,7 +8,6 @@
   const roleLabels: Record<string, string> = {
     employee: 'Employee',
     admin: 'Admin',
-    super_admin: 'Super Admin',
   }
 </script>
 

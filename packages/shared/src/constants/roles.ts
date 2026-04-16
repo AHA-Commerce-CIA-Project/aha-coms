@@ -1,4 +1,4 @@
-export const PORTAL_ROLES = ['super_admin', 'admin', 'employee'] as const
+export const PORTAL_ROLES = ['admin', 'employee'] as const
 
 export type PortalRole = (typeof PORTAL_ROLES)[number]
 

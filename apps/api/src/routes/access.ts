@@ -23,7 +23,7 @@ async function refreshTeamMemberClaims(teamId: string): Promise<void> {
 }
 
 export const accessRoutes = new Elysia()
-  .use(requireRole('admin', 'super_admin'))
+  .use(requireRole('admin'))
 
   .post(
     '/teams/:id/apps',

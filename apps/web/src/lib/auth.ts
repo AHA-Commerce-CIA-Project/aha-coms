@@ -4,7 +4,7 @@ export interface SessionUser {
   id: string
   email: string
   name: string
-  portalRole: 'employee' | 'admin' | 'super_admin'
+  portalRole: 'employee' | 'admin'
   apps: string[]
 }
 

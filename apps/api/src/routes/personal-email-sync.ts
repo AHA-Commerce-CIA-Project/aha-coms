@@ -4,7 +4,7 @@ import { syncPersonalEmails } from '../services/personal-email-sync'
 import { logAudit } from '../services/audit'
 
 export const personalEmailSyncRoutes = new Elysia({ prefix: '/personal-email-sync' })
-  .use(requireRole('admin', 'super_admin'))
+  .use(requireRole('admin'))
 
   // POST /personal-email-sync/trigger
   .post('/trigger', async (ctx) => {

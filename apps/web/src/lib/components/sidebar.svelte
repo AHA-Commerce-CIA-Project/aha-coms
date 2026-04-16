@@ -19,12 +19,7 @@
     { href: '/admin/audit', label: 'Audit Log' },
   ]
 
-  const SUPER_NAV = [
-    { href: '/admin/apps', label: 'App Registry' },
-  ]
-
-  const isAdmin = $derived(user.portalRole === 'admin' || user.portalRole === 'super_admin')
-  const isSuperAdmin = $derived(user.portalRole === 'super_admin')
+  const isAdmin = $derived(user.portalRole === 'admin')
 
   async function handleSignOut() {
     await api.api.auth.logout.post({})
@@ -69,20 +64,15 @@
           {label}
         </a>
       {/each}
-    {/if}
-
-    {#if isSuperAdmin}
-      {#each SUPER_NAV as { href, label }}
-        <a
-          {href}
-          class="block rounded-lg px-2 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900 hover:text-white"
-          class:bg-neutral-900={isActive(href)}
-          class:text-white={isActive(href)}
-          class:font-medium={isActive(href)}
-        >
-          {label}
-        </a>
-      {/each}
+      <a
+        href="/admin/apps"
+        class="block rounded-lg px-2 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900 hover:text-white"
+        class:bg-neutral-900={isActive('/admin/apps')}
+        class:text-white={isActive('/admin/apps')}
+        class:font-medium={isActive('/admin/apps')}
+      >
+        App Registry
+      </a>
     {/if}
   </nav>
 

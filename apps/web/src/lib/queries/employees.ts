@@ -20,12 +20,14 @@ export function createEmployeeMutation() {
   return createMutation({
     mutationFn: (body: {
       email: string
+      personalEmail?: string
       name: string
       phone?: string
       department?: string
       position?: string
-      portalRole?: 'employee' | 'admin' | 'super_admin'
-      hasGoogleWorkspace?: boolean
+      branch?: 'indonesia' | 'thailand'
+      portalRole?: 'employee' | 'admin'
+      teamId?: string
     }) => adminApi.createEmployee(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })

@@ -7,7 +7,7 @@ import { authPlugin } from './auth'
  * Must be used after authPlugin (which populates authUser).
  *
  * Usage:
- *   app.use(requireRole('admin', 'super_admin'))
+ *   app.use(requireRole('admin'))
  */
 export function requireRole(...roles: PortalRole[]) {
   return new Elysia({ name: `rbac-${roles.join('-')}` })
