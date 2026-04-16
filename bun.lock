@@ -43,6 +43,7 @@
         "@sveltejs/kit": "^2",
         "@sveltejs/vite-plugin-svelte": "^5",
         "@tailwindcss/vite": "^4.2.2",
+        "elysia": "^1.3",
         "svelte": "^5",
         "svelte-check": "^4",
         "tailwindcss": "^4",
