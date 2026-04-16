@@ -8,6 +8,7 @@ dist/
 build/
 .output/
 .vinxi/
+.svelte-kit/
 
 # Environment files
 .env
@@ -40,7 +41,6 @@ docs/
 
 # Type cache
 *.tsbuildinfo
-.gitnexus
 
 # OpenTofu / Terraform
 infra/.terraform/
@@ -61,3 +61,7 @@ app.config.timestamp_*.js
 
 # TanStack generated route tree
 src/routeTree.gen.ts
+# Added by code-review-graph
+.code-review-graph/
+AGENTS.md
+.mcp.json

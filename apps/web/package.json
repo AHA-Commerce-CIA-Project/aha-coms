@@ -1,0 +1,30 @@
+{
+  "name": "@coms-portal/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@coms-portal/shared": "workspace:*",
+    "@elysiajs/eden": "^1.3",
+    "@tanstack/svelte-query": "^5",
+    "firebase": "^11",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3",
+    "@sveltejs/kit": "^2",
+    "@sveltejs/vite-plugin-svelte": "^5",
+    "@tailwindcss/vite": "^4.2.2",
+    "svelte": "^5",
+    "svelte-check": "^4",
+    "tailwindcss": "^4",
+    "typescript": "^5.8",
+    "vite": "^6"
+  }
+}
