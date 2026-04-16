@@ -10,11 +10,13 @@
     actions,
     onApply,
     isPending = false,
+    entityLabel = 'item',
   }: {
     selectedCount: number
     actions: BatchAction[]
     onApply: (action: string, value: string) => void
     isPending?: boolean
+    entityLabel?: string
   } = $props()
 
   let activeAction = $state<string | null>(null)
@@ -92,7 +94,7 @@
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div class="w-full max-w-sm rounded-xl border border-neutral-700 bg-neutral-900 p-6">
         <p class="mb-4 text-sm">
-          {currentAction?.label} to <strong>{currentAction?.options.find((o) => o.value === activeValue)?.label}</strong> for <strong>{selectedCount}</strong> employee{selectedCount > 1 ? 's' : ''}?
+          {currentAction?.label} to <strong>{currentAction?.options.find((o) => o.value === activeValue)?.label}</strong> for <strong>{selectedCount}</strong> {entityLabel}{selectedCount > 1 ? 's' : ''}?
         </p>
         <div class="flex justify-end gap-2">
           <button onclick={handleCancel} class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800">Cancel</button>

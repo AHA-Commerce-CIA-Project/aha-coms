@@ -61,3 +61,17 @@ export function updateEmployeeMutation() {
     },
   })
 }
+
+export function batchUpdateEmployeesMutation() {
+  const queryClient = useQueryClient()
+  return createMutation({
+    mutationFn: async (body: { ids: string[]; field: string; value: string }) => {
+      const { data, error } = await (api.api.v1.employees as any)['batch-update'].post(body)
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+    },
+  })
+}

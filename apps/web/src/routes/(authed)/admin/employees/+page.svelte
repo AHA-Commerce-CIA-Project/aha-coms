@@ -1,10 +1,48 @@
 <script lang="ts">
-  import { employeesQuery } from '$lib/queries/employees'
+  import { employeesQuery, batchUpdateEmployeesMutation } from '$lib/queries/employees'
+  import BatchToolbar from '$lib/components/batch-toolbar.svelte'
 
   let page = $state(1)
   let search = $state('')
+  let selected = $state<Set<string>>(new Set())
 
   const query = $derived(employeesQuery(page, 20, search))
+  const mutation = batchUpdateEmployeesMutation()
+
+  const BATCH_ACTIONS = [
+    {
+      key: 'portalRole',
+      label: 'Change Role',
+      options: [
+        { value: 'employee', label: 'Employee' },
+        { value: 'admin', label: 'Admin' },
+        { value: 'super_admin', label: 'Super Admin' },
+      ],
+    },
+  ]
+
+  const allIds = $derived(($query.data?.data ?? []).map((e: any) => e.id))
+  const allSelected = $derived(allIds.length > 0 && allIds.every((id: string) => selected.has(id)))
+
+  function toggleAll() {
+    if (allSelected) {
+      selected = new Set()
+    } else {
+      selected = new Set(allIds)
+    }
+  }
+
+  function toggleOne(id: string) {
+    const next = new Set(selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    selected = next
+  }
+
+  async function handleBatchApply(action: string, value: string) {
+    await $mutation.mutateAsync({ ids: [...selected], field: action, value })
+    selected = new Set()
+  }
 </script>
 
 <div class="p-8">
@@ -14,6 +52,16 @@
   </div>
 
   <input type="text" placeholder="Search by email..." bind:value={search} class="mb-4 w-full max-w-sm rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+
+  <div class="mb-3">
+    <BatchToolbar
+      selectedCount={selected.size}
+      actions={BATCH_ACTIONS}
+      onApply={handleBatchApply}
+      isPending={$mutation.isPending}
+      entityLabel="employee"
+    />
+  </div>
 
   {#if $query.isLoading}
     <div class="animate-pulse space-y-2">
@@ -25,6 +73,9 @@
     <table class="w-full text-sm">
       <thead>
         <tr class="border-b border-neutral-800 text-left text-xs text-neutral-400">
+          <th class="pb-2 w-8">
+            <input type="checkbox" checked={allSelected} onchange={toggleAll} class="rounded border-neutral-700" />
+          </th>
           <th class="pb-2 font-medium">Name</th>
           <th class="pb-2 font-medium">Email</th>
           <th class="pb-2 font-medium">Role</th>
@@ -34,6 +85,9 @@
       <tbody>
         {#each $query.data.data as employee}
           <tr class="border-b border-neutral-800/50 hover:bg-neutral-900">
+            <td class="py-2">
+              <input type="checkbox" checked={selected.has(employee.id)} onchange={() => toggleOne(employee.id)} class="rounded border-neutral-700" />
+            </td>
             <td class="py-2"><a href="/admin/employees/{employee.id}" class="text-indigo-400 hover:text-indigo-300">{employee.name}</a></td>
             <td class="py-2 text-neutral-400">{employee.email}</td>
             <td class="py-2"><span class="rounded-full bg-neutral-800 px-2 py-0.5 text-xs">{employee.portalRole}</span></td>
