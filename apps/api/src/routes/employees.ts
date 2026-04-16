@@ -4,7 +4,8 @@ import { identityUsers } from '~/db/schema'
 import { eq, ilike, sql } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { generatePasswordResetLink } from '../gip-admin'
-import { createEmployee, deactivateEmployee } from '../services/employees'
+import { createEmployee, deactivateEmployee, batchUpdateEmployees } from '../services/employees'
+import { resolveAndSyncClaims } from '../services/claims'
 import { logAudit } from '../services/audit'
 
 const employeeBody = t.Object({
@@ -63,6 +64,32 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
     { body: employeeBody },
   )
 
+  .post(
+    '/batch-update',
+    async ({ body, authUser }) => {
+      const count = await batchUpdateEmployees(body.ids, body.field, body.value)
+
+      for (const id of body.ids) {
+        await logAudit({
+          actorId: authUser.gipUid,
+          action: 'batch_update_employee',
+          targetType: 'user',
+          targetId: id,
+          details: { field: body.field, value: body.value },
+        })
+      }
+
+      return { ok: true, count }
+    },
+    {
+      body: t.Object({
+        ids: t.Array(t.String(), { minItems: 1 }),
+        field: t.Union([t.Literal('portalRole')]),
+        value: t.String({ minLength: 1 }),
+      }),
+    },
+  )
+
   .get('/:id', async ({ params, set }) => {
     const user = await db.query.identityUsers.findFirst({
       where: eq(identityUsers.id, params.id),
@@ -81,11 +108,22 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         .update(identityUsers)
         .set({ ...body, updatedAt: new Date() })
         .where(eq(identityUsers.id, params.id))
+
+      if (body.portalRole) {
+        const user = await db.query.identityUsers.findFirst({
+          where: eq(identityUsers.id, params.id),
+        })
+        if (user?.gipUid) {
+          await resolveAndSyncClaims(user.gipUid, params.id)
+        }
+      }
+
       await logAudit({
         actorId: authUser.gipUid,
         action: 'update_employee',
         targetType: 'user',
         targetId: params.id,
+        details: body.portalRole ? { portalRole: body.portalRole } : undefined,
       })
       return { ok: true }
     },
