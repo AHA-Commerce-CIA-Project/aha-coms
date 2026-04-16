@@ -56,7 +56,7 @@ export async function createSessionCookie(
   expiresInMs: number,
 ): Promise<string> {
   const accessToken = await getAccessToken()
-  const validDuration = `${Math.floor(expiresInMs / 1000)}s`
+  const validDuration = Math.floor(expiresInMs / 1000)
 
   const res = await fetch(
     `${GIP_BASE}/projects/${PROJECT_ID}:createSessionCookie`,
