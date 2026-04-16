@@ -1,1 +1,0 @@
-ALTER TABLE "identity_users" ADD COLUMN "personal_email" varchar(255);
