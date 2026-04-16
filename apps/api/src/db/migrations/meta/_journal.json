@@ -29,6 +29,13 @@
       "when": 1776330672455,
       "tag": "0003_lame_sally_floyd",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776334545256,
+      "tag": "0004_handy_magma",
+      "breakpoints": true
     }
   ]
 }
