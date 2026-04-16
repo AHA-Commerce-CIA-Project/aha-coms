@@ -75,7 +75,7 @@ jobs:
           sleep 3
 
           DATABASE_URL="postgresql://coms_portal_app:${{ secrets.DB_PASSWORD }}@localhost:5432/coms_portal" \
-            bunx drizzle-kit migrate --config apps/api/drizzle.config.ts
+            bun run --cwd apps/api db:migrate
 
           kill $PROXY_PID
 
