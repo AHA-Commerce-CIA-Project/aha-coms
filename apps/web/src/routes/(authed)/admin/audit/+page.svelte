@@ -10,7 +10,7 @@
       queryKey: ['audit', page],
       queryFn: async () => {
         const { data, error } = await api.api.v1.access.audit.get({
-          query: { page, limit },
+          query: { page: String(page), limit: String(limit) },
         })
         if (error) throw error
         return data

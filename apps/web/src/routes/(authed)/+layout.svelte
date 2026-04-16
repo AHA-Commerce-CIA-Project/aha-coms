@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, setContext } from 'svelte'
   import { goto } from '$app/navigation'
   import { page } from '$app/stores'
   import { fetchMe, type SessionUser } from '$lib/auth'
@@ -9,6 +9,8 @@
   let checking = $state(true)
 
   let { children } = $props()
+
+  setContext('user', () => user)
 
   onMount(async () => {
     user = await fetchMe()

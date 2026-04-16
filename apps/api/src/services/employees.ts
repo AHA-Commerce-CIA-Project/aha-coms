@@ -13,6 +13,7 @@ export async function createEmployee(data: {
   position?: string
   portalRole?: string
   teamId?: string
+  hasGoogleWorkspace?: boolean
 }): Promise<{ id: string }> {
   const [user] = await db
     .insert(identityUsers)
@@ -23,6 +24,7 @@ export async function createEmployee(data: {
       department: data.department,
       position: data.position,
       portalRole: data.portalRole ?? 'employee',
+      hasGoogleWorkspace: data.hasGoogleWorkspace ?? false,
     } satisfies Omit<NewIdentityUser, 'id' | 'createdAt' | 'updatedAt'>)
     .returning({ id: identityUsers.id })
 

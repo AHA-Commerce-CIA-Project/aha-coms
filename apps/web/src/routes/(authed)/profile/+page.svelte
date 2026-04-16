@@ -1,14 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { fetchMe, type SessionUser } from '$lib/auth'
+  import { getContext } from 'svelte'
+  import type { SessionUser } from '$lib/auth'
 
-  let user = $state<SessionUser | null>(null)
-  let loading = $state(true)
-
-  onMount(async () => {
-    user = await fetchMe()
-    loading = false
-  })
+  const getUser = getContext<() => SessionUser | null>('user')
+  const user = $derived(getUser())
 
   const roleLabels: Record<string, string> = {
     employee: 'Employee',
@@ -23,12 +18,7 @@
     <p class="mt-1 text-sm text-neutral-400">Your account information</p>
   </div>
 
-  {#if loading}
-    <div class="animate-pulse space-y-4">
-      <div class="h-8 w-48 rounded bg-neutral-800"></div>
-      <div class="h-48 rounded-xl bg-neutral-800"></div>
-    </div>
-  {:else if user}
+  {#if user}
     <div class="max-w-lg space-y-3 rounded-xl border border-neutral-800 bg-neutral-900 p-6">
       <div class="mb-4 flex items-center gap-4">
         <div class="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-700 text-lg font-semibold">
