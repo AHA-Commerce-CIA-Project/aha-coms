@@ -51,13 +51,13 @@
             <td class="py-2 text-neutral-400">{entry.targetType ?? '-'}</td>
             <td class="py-2 font-mono text-xs text-neutral-500">{entry.targetId ?? '-'}</td>
             <td class="py-2">
-              <p class="text-sm">{entry.actorName ?? entry.actorId ?? '-'}</p>
-              {#if entry.actorEmail}
-                <p class="text-xs text-neutral-500">{entry.actorEmail}</p>
+              <p class="text-sm">{entry.actor?.name ?? '-'}</p>
+              {#if entry.actor?.email}
+                <p class="text-xs text-neutral-500">{entry.actor.email}</p>
               {/if}
             </td>
             <td class="py-2 text-xs text-neutral-400">
-              {new Date(entry.createdAt ?? entry.timestamp).toLocaleString()}
+              {new Date(entry.createdAt).toLocaleString()}
             </td>
           </tr>
         {/each}
