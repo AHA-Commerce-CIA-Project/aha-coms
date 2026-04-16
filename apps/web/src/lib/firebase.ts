@@ -3,10 +3,7 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_GIP_API_KEY,
-  authDomain:
-    typeof window !== 'undefined'
-      ? window.location.host
-      : (import.meta.env.VITE_GIP_AUTH_DOMAIN ?? ''),
+  authDomain: import.meta.env.VITE_GIP_AUTH_DOMAIN ?? '',
   projectId: import.meta.env.VITE_GIP_PROJECT_ID,
 }
 
