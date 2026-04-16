@@ -2,18 +2,14 @@
   import { page } from '$app/stores'
   import { goto } from '$app/navigation'
   import { createQuery, useQueryClient } from '@tanstack/svelte-query'
-  import { api } from '$lib/api'
+  import { adminApi } from '$lib/admin-api'
 
   const id = $derived($page.params.id!)
 
   const query = $derived(
     createQuery({
       queryKey: ['apps', id],
-      queryFn: async () => {
-        const { data, error } = await (api.api.v1.apps as any)[id].get()
-        if (error) throw error
-        return data
-      },
+      queryFn: () => adminApi.getApp(id),
     })
   )
 
@@ -26,6 +22,9 @@
   let editStatus = $state('active')
   let editError = $state<string | null>(null)
   let editPending = $state(false)
+  let deleteError = $state<string | null>(null)
+  let deletePending = $state(false)
+  let confirmingDelete = $state(false)
 
   function startEdit() {
     const app = $query.data
@@ -43,13 +42,12 @@
     editError = null
     editPending = true
     try {
-      const { error } = await (api.api.v1.apps as any)[id].patch({
+      await adminApi.updateApp(id, {
         name: editName,
         url: editUrl,
         basePath: editBasePath || undefined,
-        status: editStatus,
+        status: editStatus as 'active' | 'maintenance' | 'deprecated',
       })
-      if (error) throw error
       queryClient.invalidateQueries({ queryKey: ['apps', id] })
       queryClient.invalidateQueries({ queryKey: ['apps'] })
       editing = false
@@ -61,11 +59,18 @@
   }
 
   async function handleDelete() {
-    if (!confirm('Delete this app? This cannot be undone.')) return
-    const { error } = await (api.api.v1.apps as any)[id].delete()
-    if (error) { alert('Failed to delete app'); return }
-    queryClient.invalidateQueries({ queryKey: ['apps'] })
-    await goto('/admin/apps')
+    deleteError = null
+    deletePending = true
+
+    try {
+      await adminApi.deleteApp(id)
+      await queryClient.invalidateQueries({ queryKey: ['apps'] })
+      await goto('/admin/apps')
+    } catch (error) {
+      deleteError = error instanceof Error ? error.message : 'Failed to delete app'
+    } finally {
+      deletePending = false
+    }
   }
 </script>
 
@@ -120,7 +125,8 @@
                 class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
               >
                 <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="deprecated">Deprecated</option>
               </select>
             </div>
             {#if editError}
@@ -139,10 +145,41 @@
       {#if !editing}
         <div class="flex gap-2">
           <button onclick={startEdit} class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800">Edit</button>
-          <button onclick={handleDelete} class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950">Delete</button>
+          {#if confirmingDelete}
+            <button
+              onclick={handleDelete}
+              disabled={deletePending}
+              class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950 disabled:opacity-50"
+            >
+              {deletePending ? 'Deleting…' : 'Confirm Delete'}
+            </button>
+            <button
+              onclick={() => {
+                confirmingDelete = false
+                deleteError = null
+              }}
+              class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800"
+            >
+              Cancel
+            </button>
+          {:else}
+            <button
+              onclick={() => {
+                confirmingDelete = true
+                deleteError = null
+              }}
+              class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950"
+            >
+              Delete
+            </button>
+          {/if}
         </div>
       {/if}
     </div>
+
+    {#if deleteError}
+      <p class="mb-4 text-sm text-red-400">{deleteError}</p>
+    {/if}
 
     {#if !editing}
       <div class="max-w-lg space-y-3 rounded-xl border border-neutral-800 bg-neutral-900 p-6">

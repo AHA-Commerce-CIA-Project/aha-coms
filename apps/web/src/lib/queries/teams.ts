@@ -1,36 +1,24 @@
 import { createQuery, createMutation, useQueryClient } from '@tanstack/svelte-query'
-import { api } from '$lib/api'
+import { adminApi } from '$lib/admin-api'
 
 export function teamsQuery() {
   return createQuery({
     queryKey: ['teams'],
-    queryFn: async () => {
-      const { data, error } = await api.api.v1.teams.get()
-      if (error) throw error
-      return data
-    },
+    queryFn: () => adminApi.getTeams(),
   })
 }
 
 export function teamQuery(id: string) {
   return createQuery({
     queryKey: ['teams', id],
-    queryFn: async () => {
-      const { data, error } = await (api.api.v1.teams as any)[id].get()
-      if (error) throw error
-      return data
-    },
+    queryFn: () => adminApi.getTeam(id),
   })
 }
 
 export function createTeamMutation() {
   const queryClient = useQueryClient()
   return createMutation({
-    mutationFn: async (body: { name: string; description?: string }) => {
-      const { data, error } = await api.api.v1.teams.post(body)
-      if (error) throw error
-      return data
-    },
+    mutationFn: (body: { name: string; description?: string }) => adminApi.createTeam(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teams'] })
     },

@@ -21,7 +21,6 @@
 
   const SUPER_NAV = [
     { href: '/admin/apps', label: 'App Registry' },
-    { href: '/admin/workspace-sync', label: 'Workspace Sync' },
   ]
 
   const isAdmin = $derived(user.portalRole === 'admin' || user.portalRole === 'super_admin')

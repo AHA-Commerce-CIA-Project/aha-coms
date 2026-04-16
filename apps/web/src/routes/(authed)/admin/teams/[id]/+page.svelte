@@ -2,7 +2,7 @@
   import { page } from '$app/stores'
   import { goto } from '$app/navigation'
   import { teamQuery } from '$lib/queries/teams'
-  import { api } from '$lib/api'
+  import { adminApi } from '$lib/admin-api'
   import { useQueryClient } from '@tanstack/svelte-query'
 
   const id = $derived($page.params.id!)
@@ -26,6 +26,13 @@
   let grantAppId = $state('')
   let grantAppError = $state<string | null>(null)
   let grantAppPending = $state(false)
+  let actionError = $state<string | null>(null)
+  let pendingMemberRemovalId = $state<string | null>(null)
+  let confirmingMemberRemovalId = $state<string | null>(null)
+  let pendingRevokeAppId = $state<string | null>(null)
+  let confirmingRevokeAppId = $state<string | null>(null)
+  let deletePending = $state(false)
+  let confirmingDelete = $state(false)
 
   function startEdit() {
     const team = $query.data
@@ -41,11 +48,10 @@
     editError = null
     editPending = true
     try {
-      const { error } = await (api.api.v1.teams as any)[id].patch({
+      await adminApi.updateTeam(id, {
         name: editName,
         description: editDescription || undefined,
       })
-      if (error) throw error
       queryClient.invalidateQueries({ queryKey: ['teams', id] })
       editing = false
     } catch (e) {
@@ -60,11 +66,10 @@
     addMemberError = null
     addMemberPending = true
     try {
-      const { error } = await (api.api.v1.teams as any)[id].members.post({
+      await adminApi.addTeamMember(id, {
         userId: addMemberUserId,
         roleInTeam: addMemberRole,
       })
-      if (error) throw error
       addMemberUserId = ''
       addMemberRole = 'member'
       queryClient.invalidateQueries({ queryKey: ['teams', id] })
@@ -76,10 +81,17 @@
   }
 
   async function handleRemoveMember(userId: string) {
-    if (!confirm('Remove this member from the team?')) return
-    const { error } = await (api.api.v1.teams as any)[id].members[userId].delete()
-    if (error) { alert('Failed to remove member'); return }
-    queryClient.invalidateQueries({ queryKey: ['teams', id] })
+    actionError = null
+    pendingMemberRemovalId = userId
+    try {
+      await adminApi.removeTeamMember(id, userId)
+      confirmingMemberRemovalId = null
+      queryClient.invalidateQueries({ queryKey: ['teams', id] })
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : 'Failed to remove member'
+    } finally {
+      pendingMemberRemovalId = null
+    }
   }
 
   async function handleGrantApp(e: SubmitEvent) {
@@ -87,8 +99,7 @@
     grantAppError = null
     grantAppPending = true
     try {
-      const { error } = await (api.api.v1.teams as any)[id].apps.post({ appId: grantAppId })
-      if (error) throw error
+      await adminApi.grantTeamApp(id, { appId: grantAppId })
       grantAppId = ''
       queryClient.invalidateQueries({ queryKey: ['teams', id] })
     } catch (e) {
@@ -99,18 +110,31 @@
   }
 
   async function handleRevokeApp(appId: string) {
-    if (!confirm('Revoke access to this app?')) return
-    const { error } = await (api.api.v1.teams as any)[id].apps[appId].delete()
-    if (error) { alert('Failed to revoke app'); return }
-    queryClient.invalidateQueries({ queryKey: ['teams', id] })
+    actionError = null
+    pendingRevokeAppId = appId
+    try {
+      await adminApi.revokeTeamApp(id, appId)
+      confirmingRevokeAppId = null
+      queryClient.invalidateQueries({ queryKey: ['teams', id] })
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : 'Failed to revoke app'
+    } finally {
+      pendingRevokeAppId = null
+    }
   }
 
   async function handleDeleteTeam() {
-    if (!confirm('Delete this team? This cannot be undone.')) return
-    const { error } = await (api.api.v1.teams as any)[id].delete()
-    if (error) { alert('Failed to delete team'); return }
-    queryClient.invalidateQueries({ queryKey: ['teams'] })
-    await goto('/admin/teams')
+    actionError = null
+    deletePending = true
+    try {
+      await adminApi.deleteTeam(id)
+      await queryClient.invalidateQueries({ queryKey: ['teams'] })
+      await goto('/admin/teams')
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : 'Failed to delete team'
+    } finally {
+      deletePending = false
+    }
   }
 </script>
 
@@ -163,9 +187,40 @@
         {#if !editing}
           <button onclick={startEdit} class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800">Edit</button>
         {/if}
-        <button onclick={handleDeleteTeam} class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950">Delete</button>
+        {#if confirmingDelete}
+          <button
+            onclick={handleDeleteTeam}
+            disabled={deletePending}
+            class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950 disabled:opacity-50"
+          >
+            {deletePending ? 'Deleting…' : 'Confirm Delete'}
+          </button>
+          <button
+            onclick={() => {
+              confirmingDelete = false
+              actionError = null
+            }}
+            class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800"
+          >
+            Cancel
+          </button>
+        {:else}
+          <button
+            onclick={() => {
+              confirmingDelete = true
+              actionError = null
+            }}
+            class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950"
+          >
+            Delete
+          </button>
+        {/if}
       </div>
     </div>
+
+    {#if actionError}
+      <p class="mb-4 text-sm text-red-400">{actionError}</p>
+    {/if}
 
     <div class="grid gap-6 lg:grid-cols-2">
       <!-- Members -->
@@ -181,10 +236,24 @@
                   <p class="text-xs text-neutral-500">{member.email ?? ''} &middot; {member.roleInTeam}</p>
                 </div>
                 <button
-                  onclick={() => handleRemoveMember(member.userId)}
+                  onclick={() => {
+                    if (confirmingMemberRemovalId === member.userId) {
+                      handleRemoveMember(member.userId)
+                    } else {
+                      confirmingMemberRemovalId = member.userId
+                      actionError = null
+                    }
+                  }}
+                  disabled={pendingMemberRemovalId === member.userId}
                   class="rounded px-2 py-0.5 text-xs text-red-400 hover:bg-red-950"
                 >
-                  Remove
+                  {#if pendingMemberRemovalId === member.userId}
+                    Removing…
+                  {:else if confirmingMemberRemovalId === member.userId}
+                    Confirm Remove
+                  {:else}
+                    Remove
+                  {/if}
                 </button>
               </div>
             {/each}
@@ -236,10 +305,24 @@
                   <p class="text-xs text-neutral-500">{app.slug ?? ''}</p>
                 </div>
                 <button
-                  onclick={() => handleRevokeApp(app.appId)}
+                  onclick={() => {
+                    if (confirmingRevokeAppId === app.appId) {
+                      handleRevokeApp(app.appId)
+                    } else {
+                      confirmingRevokeAppId = app.appId
+                      actionError = null
+                    }
+                  }}
+                  disabled={pendingRevokeAppId === app.appId}
                   class="rounded px-2 py-0.5 text-xs text-red-400 hover:bg-red-950"
                 >
-                  Revoke
+                  {#if pendingRevokeAppId === app.appId}
+                    Revoking…
+                  {:else if confirmingRevokeAppId === app.appId}
+                    Confirm Revoke
+                  {:else}
+                    Revoke
+                  {/if}
                 </button>
               </div>
             {/each}

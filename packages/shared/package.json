@@ -11,14 +11,7 @@
     "typecheck": "tsc --noEmit --declaration false --declarationMap false",
     "build": "tsc"
   },
-  "dependencies": {
-    "@coms-portal/api": "workspace:*",
-    "drizzle-typebox": "^0.2"
-  },
-  "peerDependencies": {
-    "drizzle-orm": "^0.45",
-    "@sinclair/typebox": ">=0.32"
-  },
+  "dependencies": {},
   "devDependencies": {
     "typescript": "^5.8"
   }

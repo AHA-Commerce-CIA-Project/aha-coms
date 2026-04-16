@@ -15,6 +15,20 @@
       "when": 1776219919246,
       "tag": "0001_nervous_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776329163908,
+      "tag": "0002_material_gamma_corps",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776330672455,
+      "tag": "0003_lame_sally_floyd",
+      "breakpoints": true
     }
   ]
 }
