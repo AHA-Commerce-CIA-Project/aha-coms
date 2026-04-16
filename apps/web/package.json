@@ -13,6 +13,7 @@
     "@coms-portal/api": "workspace:*",
     "@coms-portal/shared": "workspace:*",
     "@elysiajs/eden": "^1.3",
+    "@sentry/sveltekit": "^9",
     "@tanstack/svelte-query": "^5",
     "firebase": "^11",
     "zod": "^3"
