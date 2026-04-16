@@ -58,6 +58,9 @@
         "@coms-portal/api": "workspace:*",
         "drizzle-typebox": "^0.2",
       },
+      "devDependencies": {
+        "typescript": "^5.8",
+      },
       "peerDependencies": {
         "@sinclair/typebox": ">=0.32",
         "drizzle-orm": "^0.45",

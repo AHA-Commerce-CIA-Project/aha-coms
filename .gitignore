@@ -62,3 +62,5 @@ apps/web/build/
 .code-review-graph/
 AGENTS.md
 .mcp.json
+.omx
+.omx/

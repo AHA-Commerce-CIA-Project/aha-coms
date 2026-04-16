@@ -18,5 +18,8 @@
   "peerDependencies": {
     "drizzle-orm": "^0.45",
     "@sinclair/typebox": ">=0.32"
+  },
+  "devDependencies": {
+    "typescript": "^5.8"
   }
 }
