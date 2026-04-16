@@ -1,12 +1,30 @@
 <script lang="ts">
   import { page } from '$app/stores'
-  import { employeeQuery } from '$lib/queries/employees'
+  import { employeeQuery, updateEmployeeMutation } from '$lib/queries/employees'
   import { api } from '$lib/api'
   import { useQueryClient } from '@tanstack/svelte-query'
 
+  const ROLES = ['employee', 'admin', 'super_admin'] as const
+
   const id = $derived($page.params.id!)
   const query = $derived(employeeQuery(id))
+  const mutation = updateEmployeeMutation()
   const queryClient = useQueryClient()
+
+  let selectedRole = $state<string | null>(null)
+  const dirty = $derived(selectedRole !== null && $query.data && selectedRole !== $query.data.portalRole)
+
+  // Sync selectedRole when data loads or changes
+  $effect(() => {
+    if ($query.data && selectedRole === null) {
+      selectedRole = $query.data.portalRole
+    }
+  })
+
+  async function handleSaveRole() {
+    if (!dirty || !selectedRole) return
+    await $mutation.mutateAsync({ id, data: { portalRole: selectedRole } })
+  }
 
   async function handleDeactivate() {
     if (!confirm('Deactivate this employee?')) return
@@ -41,9 +59,27 @@
     </div>
 
     <div class="max-w-lg space-y-3 rounded-xl border border-neutral-800 bg-neutral-900 p-6">
-      <div class="flex justify-between border-b border-neutral-800 pb-2">
+      <div class="flex items-center justify-between border-b border-neutral-800 pb-2">
         <span class="text-xs text-neutral-400">Role</span>
-        <span class="text-sm">{emp.portalRole}</span>
+        <div class="flex items-center gap-2">
+          <select
+            bind:value={selectedRole}
+            class="rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+          >
+            {#each ROLES as role}
+              <option value={role}>{role.replace('_', ' ')}</option>
+            {/each}
+          </select>
+          {#if dirty}
+            <button
+              onclick={handleSaveRole}
+              disabled={$mutation.isPending}
+              class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {$mutation.isPending ? 'Saving...' : 'Save'}
+            </button>
+          {/if}
+        </div>
       </div>
       <div class="flex justify-between border-b border-neutral-800 pb-2">
         <span class="text-xs text-neutral-400">Department</span>

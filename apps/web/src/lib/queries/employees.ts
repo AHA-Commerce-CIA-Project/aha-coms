@@ -46,3 +46,18 @@ export function createEmployeeMutation() {
     },
   })
 }
+
+export function updateEmployeeMutation() {
+  const queryClient = useQueryClient()
+  return createMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { portalRole?: string } }) => {
+      const { data: result, error } = await (api.api.v1.employees as any)[id].patch(data)
+      if (error) throw error
+      return result
+    },
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['employees', id] })
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+    },
+  })
+}
