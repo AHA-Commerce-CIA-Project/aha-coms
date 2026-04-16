@@ -10,6 +10,7 @@
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
+    "@coms-portal/api": "workspace:*",
     "@coms-portal/shared": "workspace:*",
     "@elysiajs/eden": "^1.3",
     "@tanstack/svelte-query": "^5",
