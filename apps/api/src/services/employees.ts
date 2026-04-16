@@ -1,10 +1,9 @@
-// TODO: Task 4 — replace with GIP REST API
-// import { getAuth } from 'firebase-admin/auth'
 import { db } from '~/db'
 import { identityUsers, teamMembers } from '~/db/schema'
 import { eq } from 'drizzle-orm'
 import { resolveAndSyncClaims } from './claims'
 import type { NewIdentityUser } from '~/db/schema'
+import { createGipUser, setGipUserDisabled, generatePasswordResetLink } from '../gip-admin'
 
 export async function createEmployee(data: {
   email: string
@@ -27,11 +26,15 @@ export async function createEmployee(data: {
     } satisfies Omit<NewIdentityUser, 'id' | 'createdAt' | 'updatedAt'>)
     .returning({ id: identityUsers.id })
 
-  // TODO: Task 4 — provision GIP user via REST API and sync claims
-  // const gipUser = await getAuth().createUser({ email: data.email, displayName: data.name, emailVerified: false })
-  // await db.update(identityUsers).set({ gipUid: gipUser.uid, updatedAt: new Date() }).where(eq(identityUsers.id, user.id))
-  // await resolveAndSyncClaims(gipUser.uid, user.id)
-  // await getAuth().generatePasswordResetLink(data.email)
+  // Provision a GIP user account and sync claims
+  const tempPassword = crypto.randomUUID()
+  const gipUid = await createGipUser(data.email, tempPassword)
+  await db
+    .update(identityUsers)
+    .set({ gipUid, updatedAt: new Date() })
+    .where(eq(identityUsers.id, user.id))
+  await resolveAndSyncClaims(gipUid, user.id)
+  await generatePasswordResetLink(data.email)
 
   if (data.teamId) {
     await db.insert(teamMembers).values({ teamId: data.teamId, userId: user.id })
@@ -52,6 +55,7 @@ export async function deactivateEmployee(userId: string): Promise<void> {
     .set({ status: 'inactive', updatedAt: new Date() })
     .where(eq(identityUsers.id, userId))
 
-  // TODO: Task 4 — disable GIP user via REST API
-  // if (user.gipUid) { await getAuth().updateUser(user.gipUid, { disabled: true }) }
+  if (user.gipUid) {
+    await setGipUserDisabled(user.gipUid, true)
+  }
 }

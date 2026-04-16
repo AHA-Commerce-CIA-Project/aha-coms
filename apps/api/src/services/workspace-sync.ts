@@ -1,8 +1,7 @@
 import { db } from '~/db'
 import { identityUsers, workspaceSyncLog } from '~/db/schema'
 import { eq } from 'drizzle-orm'
-// TODO: Task 4 — replace firebase-admin/auth calls with GIP REST API
-// import { getAuth } from 'firebase-admin/auth'
+import { setGipUserDisabled, createGipUser } from '../gip-admin'
 import { listAllWorkspaceUsers } from './workspace-client'
 
 export interface SyncResult {
@@ -94,7 +93,7 @@ export async function runWorkspaceSync(triggeredBy: string, options?: { dryRun?:
             .where(eq(identityUsers.id, portalUser.id))
 
           if (!dryRun && portalUser.gipUid) {
-            // TODO: Task 4 — await getAuth().updateUser(portalUser.gipUid, { disabled: true })
+            await setGipUserDisabled(portalUser.gipUid, true)
           }
 
           deactivated++
@@ -113,7 +112,7 @@ export async function runWorkspaceSync(triggeredBy: string, options?: { dryRun?:
             .where(eq(identityUsers.id, portalUser.id))
 
           if (!dryRun && portalUser.gipUid) {
-            // TODO: Task 4 — await getAuth().updateUser(portalUser.gipUid, { disabled: false })
+            await setGipUserDisabled(portalUser.gipUid, false)
           }
 
           updated++
@@ -158,9 +157,12 @@ export async function runWorkspaceSync(triggeredBy: string, options?: { dryRun?:
           .returning()
 
         if (!dryRun) {
-          // TODO: Task 4 — provision GIP user via REST API
-          // (getAuth().getUserByEmail / getAuth().createUser replaced with GIP REST calls)
-          // await db.update(identityUsers).set({ gipUid, updatedAt: new Date() }).where(eq(identityUsers.id, newUser.id))
+          const tempPassword = crypto.randomUUID()
+          const gipUid = await createGipUser(email, tempPassword)
+          await db
+            .update(identityUsers)
+            .set({ gipUid, updatedAt: new Date() })
+            .where(eq(identityUsers.id, newUser.id))
         }
 
         created++
@@ -183,7 +185,7 @@ export async function runWorkspaceSync(triggeredBy: string, options?: { dryRun?:
         .where(eq(identityUsers.id, portalUser.id))
 
       if (!dryRun && portalUser.gipUid) {
-        // TODO: Task 4 — await getAuth().updateUser(portalUser.gipUid, { disabled: true })
+        await setGipUserDisabled(portalUser.gipUid, true)
       }
 
       deactivated++

@@ -1,10 +1,8 @@
-// TODO: Task 4 — firebase-admin removed; GIP auth is now handled via REST API in gip-admin.ts
-// import { initializeApp, getApps, applicationDefault } from 'firebase-admin/app'
-
 /**
- * No-op: Firebase Admin SDK initialization is no longer required.
- * Auth operations use the GIP REST API directly (see gip-admin.ts).
+ * GIP initialization placeholder.
+ * Firebase Admin SDK has been removed — all auth operations use
+ * the GIP REST API in gip-admin.ts via google-auth-library.
  */
 export function initGip() {
-  // no-op
+  // No-op: GIP REST API requires no initialization.
 }

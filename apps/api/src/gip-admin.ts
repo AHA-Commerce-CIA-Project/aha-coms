@@ -187,3 +187,70 @@ export async function setCustomUserClaims(
     throw new Error(`setCustomUserClaims failed (${res.status}): ${body}`)
   }
 }
+
+/** Send a password reset email via the Identity Toolkit REST API. */
+export async function generatePasswordResetLink(email: string): Promise<string> {
+  const accessToken = await getAccessToken()
+
+  const res = await fetch(`${GIP_BASE}/accounts:sendOobCode`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      requestType: 'PASSWORD_RESET',
+      email,
+    }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`generatePasswordResetLink failed (${res.status}): ${body}`)
+  }
+
+  const data = (await res.json()) as { oobLink: string }
+  return data.oobLink
+}
+
+/** Create a new GIP user via REST API. */
+export async function createGipUser(email: string, password: string): Promise<string> {
+  const accessToken = await getAccessToken()
+  const res = await fetch(`${GIP_BASE}/accounts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ email, password, returnSecureToken: false }),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`createGipUser failed (${res.status}): ${body}`)
+  }
+  const data = (await res.json()) as { localId: string }
+  return data.localId
+}
+
+/** Disable or enable a GIP user account. */
+export async function setGipUserDisabled(uid: string, disabled: boolean): Promise<void> {
+  const accessToken = await getAccessToken()
+  const res = await fetch(
+    `${GIP_BASE}/projects/${PROJECT_ID}/accounts:update`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        localId: uid,
+        disableUser: disabled,
+      }),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`setGipUserDisabled failed (${res.status}): ${body}`)
+  }
+}

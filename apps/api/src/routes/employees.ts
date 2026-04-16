@@ -1,10 +1,9 @@
-// TODO: Task 4 — replace with GIP REST API
-// import { getAuth } from 'firebase-admin/auth'
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
 import { identityUsers } from '~/db/schema'
 import { eq, ilike, sql } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
+import { generatePasswordResetLink } from '../gip-admin'
 import { createEmployee, deactivateEmployee } from '../services/employees'
 import { logAudit } from '../services/audit'
 
@@ -104,15 +103,14 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
     return { ok: true }
   })
 
-// TODO: Task 4 — replace with GIP REST API (remove firebase-admin dependency)
-// .post('/:id/reset-password', async ({ params, set }) => {
-//   const employee = await db.query.identityUsers.findFirst({
-//     where: eq(identityUsers.id, params.id),
-//   })
-//   if (!employee) {
-//     set.status = 404
-//     return { message: 'Not found' }
-//   }
-//   await getAuth().generatePasswordResetLink(employee.email)
-//   return { ok: true, email: employee.email }
-// })
+  .post('/:id/reset-password', async ({ params, set }) => {
+    const employee = await db.query.identityUsers.findFirst({
+      where: eq(identityUsers.id, params.id),
+    })
+    if (!employee) {
+      set.status = 404
+      return { message: 'Not found' }
+    }
+    await generatePasswordResetLink(employee.email)
+    return { ok: true, email: employee.email }
+  })
