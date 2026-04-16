@@ -25,7 +25,7 @@ export interface MatchResult {
  * - strip periods (middle initials like "A." become "A")
  * - collapse whitespace
  */
-function normalizeName(name: string): string {
+export function normalizeName(name: string): string {
   return name
     .toLowerCase()
     .replace(/\./g, '')
@@ -38,7 +38,7 @@ function normalizeName(name: string): string {
  * "Adiella Aisy Oktaviani" → { first: "adiella", last: "oktaviani" }
  * "Adiella A. Oktaviani"   → { first: "adiella", last: "oktaviani" }
  */
-function nameTokens(name: string): { first: string; last: string; full: string } {
+export function nameTokens(name: string): { first: string; last: string; full: string } {
   const normalized = normalizeName(name)
   const parts = normalized.split(' ')
   return {
@@ -52,7 +52,7 @@ function nameTokens(name: string): { first: string; last: string; full: string }
  * Match a sheet name against a DB name using first+last name strategy.
  * Returns a confidence score: 0 = no match, 1 = first+last match, 2 = full match
  */
-function matchScore(sheetName: string, dbName: string): number {
+export function matchScore(sheetName: string, dbName: string): number {
   const sheet = nameTokens(sheetName)
   const dbTokens = nameTokens(dbName)
 
