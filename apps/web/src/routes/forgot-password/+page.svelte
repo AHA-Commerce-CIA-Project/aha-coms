@@ -36,8 +36,9 @@
     {:else}
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>
-          <label class="mb-1 block text-xs text-neutral-400">Email</label>
+          <label for="forgot-password-email" class="mb-1 block text-xs text-neutral-400">Email</label>
           <input
+            id="forgot-password-email"
             type="email"
             bind:value={email}
             required

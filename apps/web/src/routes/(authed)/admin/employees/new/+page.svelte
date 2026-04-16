@@ -41,30 +41,30 @@
 
   <form onsubmit={handleSubmit} class="max-w-lg space-y-4">
     <div>
-      <label class="mb-1 block text-xs text-neutral-400">Email</label>
-      <input type="email" bind:value={form.email} required class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+      <label for="employee-email" class="mb-1 block text-xs text-neutral-400">Email</label>
+      <input id="employee-email" type="email" bind:value={form.email} required class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
     </div>
     <div>
-      <label class="mb-1 block text-xs text-neutral-400">Name</label>
-      <input type="text" bind:value={form.name} required class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+      <label for="employee-name" class="mb-1 block text-xs text-neutral-400">Name</label>
+      <input id="employee-name" type="text" bind:value={form.name} required class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
     </div>
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="mb-1 block text-xs text-neutral-400">Phone</label>
-        <input type="text" bind:value={form.phone} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+        <label for="employee-phone" class="mb-1 block text-xs text-neutral-400">Phone</label>
+        <input id="employee-phone" type="text" bind:value={form.phone} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
       </div>
       <div>
-        <label class="mb-1 block text-xs text-neutral-400">Department</label>
-        <input type="text" bind:value={form.department} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+        <label for="employee-department" class="mb-1 block text-xs text-neutral-400">Department</label>
+        <input id="employee-department" type="text" bind:value={form.department} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
       </div>
     </div>
     <div>
-      <label class="mb-1 block text-xs text-neutral-400">Position</label>
-      <input type="text" bind:value={form.position} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+      <label for="employee-position" class="mb-1 block text-xs text-neutral-400">Position</label>
+      <input id="employee-position" type="text" bind:value={form.position} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
     </div>
     <div>
-      <label class="mb-1 block text-xs text-neutral-400">Portal Role</label>
-      <select bind:value={form.portalRole} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+      <label for="employee-portal-role" class="mb-1 block text-xs text-neutral-400">Portal Role</label>
+      <select id="employee-portal-role" bind:value={form.portalRole} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
         <option value="employee">Employee</option>
         <option value="admin">Admin</option>
         <option value="super_admin">Super Admin</option>

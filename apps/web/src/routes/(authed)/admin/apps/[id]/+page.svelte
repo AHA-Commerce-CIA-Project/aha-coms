@@ -83,8 +83,9 @@
         {#if editing}
           <form onsubmit={handleSaveEdit} class="space-y-3">
             <div>
-              <label class="mb-1 block text-xs text-neutral-400">Name</label>
+              <label for="app-name" class="mb-1 block text-xs text-neutral-400">Name</label>
               <input
+                id="app-name"
                 type="text"
                 bind:value={editName}
                 required
@@ -92,8 +93,9 @@
               />
             </div>
             <div>
-              <label class="mb-1 block text-xs text-neutral-400">URL</label>
+              <label for="app-url" class="mb-1 block text-xs text-neutral-400">URL</label>
               <input
+                id="app-url"
                 type="url"
                 bind:value={editUrl}
                 required
@@ -101,8 +103,9 @@
               />
             </div>
             <div>
-              <label class="mb-1 block text-xs text-neutral-400">Base Path</label>
+              <label for="app-base-path" class="mb-1 block text-xs text-neutral-400">Base Path</label>
               <input
+                id="app-base-path"
                 type="text"
                 bind:value={editBasePath}
                 placeholder="e.g. /app"
@@ -110,8 +113,9 @@
               />
             </div>
             <div>
-              <label class="mb-1 block text-xs text-neutral-400">Status</label>
+              <label for="app-status" class="mb-1 block text-xs text-neutral-400">Status</label>
               <select
+                id="app-status"
                 bind:value={editStatus}
                 class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
               >

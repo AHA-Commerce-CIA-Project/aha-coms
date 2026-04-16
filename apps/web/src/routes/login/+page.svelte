@@ -86,8 +86,9 @@
 
     <form onsubmit={handleEmail} class="space-y-4">
       <div>
-        <label class="mb-1 block text-xs text-neutral-400">Email</label>
+        <label for="login-email" class="mb-1 block text-xs text-neutral-400">Email</label>
         <input
+          id="login-email"
           type="email"
           bind:value={email}
           required
@@ -95,8 +96,9 @@
         />
       </div>
       <div>
-        <label class="mb-1 block text-xs text-neutral-400">Password</label>
+        <label for="login-password" class="mb-1 block text-xs text-neutral-400">Password</label>
         <input
+          id="login-password"
           type="password"
           bind:value={password}
           required

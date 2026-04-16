@@ -27,8 +27,9 @@
 
   <form onsubmit={handleSubmit} class="max-w-lg space-y-4">
     <div>
-      <label class="mb-1 block text-xs text-neutral-400">Name <span class="text-red-400">*</span></label>
+      <label for="team-name" class="mb-1 block text-xs text-neutral-400">Name <span class="text-red-400">*</span></label>
       <input
+        id="team-name"
         type="text"
         bind:value={form.name}
         required
@@ -36,8 +37,9 @@
       />
     </div>
     <div>
-      <label class="mb-1 block text-xs text-neutral-400">Description</label>
+      <label for="team-description" class="mb-1 block text-xs text-neutral-400">Description</label>
       <textarea
+        id="team-description"
         bind:value={form.description}
         rows="3"
         class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
