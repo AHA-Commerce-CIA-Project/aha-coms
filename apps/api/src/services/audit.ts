@@ -4,6 +4,7 @@ import { accessAuditLog } from '~/db/schema'
 export type AuditAction =
   | 'create_employee'
   | 'update_employee'
+  | 'batch_update_employee'
   | 'deactivate_employee'
   | 'create_team'
   | 'update_team'
