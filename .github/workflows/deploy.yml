@@ -14,8 +14,19 @@ env:
   CLOUD_SQL_CONNECTION: fbi-dev-484410:asia-southeast2:coms-aha-heroes-db
 
 jobs:
+  test:
+    name: Typecheck & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test
+
   deploy:
-    name: Typecheck, Build, Migrate & Deploy
+    name: Build, Migrate & Deploy
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,20 +36,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Typecheck ─────────────────────────────────────────────
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Generate route tree
-        run: bun run build
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      # ── Auth ──────────────────────────────────────────────────
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -48,7 +51,6 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
 
-      # ── Build & Push ──────────────────────────────────────────
       - name: Build and push image
         run: |
           docker build \
@@ -61,7 +63,6 @@ jobs:
           docker push ${{ env.IMAGE }}:${{ github.sha }}
           docker push ${{ env.IMAGE }}:latest
 
-      # ── DB Migration ──────────────────────────────────────────
       - name: Install Cloud SQL Auth Proxy
         run: |
           curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.15.2/cloud-sql-proxy.linux.amd64
@@ -74,11 +75,10 @@ jobs:
           sleep 3
 
           DATABASE_URL="postgresql://coms_portal_app:${{ secrets.DB_PASSWORD }}@localhost:5432/coms_portal" \
-            bunx drizzle-kit migrate
+            bunx drizzle-kit migrate --config apps/api/drizzle.config.ts
 
           kill $PROXY_PID
 
-      # ── Deploy ────────────────────────────────────────────────
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
