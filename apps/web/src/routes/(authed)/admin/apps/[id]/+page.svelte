@@ -4,7 +4,7 @@
   import { createQuery, useQueryClient } from '@tanstack/svelte-query'
   import { api } from '$lib/api'
 
-  const id = $derived($page.params.id)
+  const id = $derived($page.params.id!)
 
   const query = $derived(
     createQuery({
