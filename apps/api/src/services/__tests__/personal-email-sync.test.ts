@@ -3,8 +3,22 @@ import { describe, test, expect, mock } from 'bun:test'
 // Stub DB and sheets-client before importing the service so module-level
 // side-effects (postgres connection, env reads) don't run during unit tests.
 mock.module('~/db', () => ({ db: {} }))
-mock.module('~/db/schema', () => ({ identityUsers: {} }))
-mock.module('drizzle-orm', () => ({ eq: () => {} }))
+mock.module('~/db/schema', () => {
+  return {
+    identityUsers: {},
+    teamMembers: {},
+    appRegistry: {},
+    teams: {},
+    teamAppAccess: {},
+    accessAuditLog: {},
+  }
+})
+mock.module('drizzle-orm', () => {
+  return {
+    eq: () => {},
+    inArray: () => {},
+  }
+})
 mock.module('../sheets-client', () => ({
   readPersonalEmailSheet: async () => [],
 }))

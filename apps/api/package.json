@@ -23,7 +23,6 @@
   "dependencies": {
     "@coms-portal/shared": "workspace:*",
     "@elysiajs/static": "^1.2",
-    "@googleapis/admin": "^30.3.0",
     "@googleapis/sheets": "^13.0.1",
     "drizzle-orm": "^0.45.0",
     "elysia": "^1.3",

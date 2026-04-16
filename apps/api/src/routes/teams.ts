@@ -28,7 +28,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
     async ({ body, authUser }) => {
       const [team] = await db.insert(teams).values(body).returning({ id: teams.id })
       await logAudit({
-        actorId: authUser.gipUid,
+        actorId: authUser.id,
         action: 'create_team',
         targetType: 'team',
         targetId: team.id,
@@ -52,7 +52,18 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
       .from(teamAppAccess)
       .innerJoin(appRegistry, eq(appRegistry.id, teamAppAccess.appId))
       .where(eq(teamAppAccess.teamId, params.id))
-    return { ...team, appAccess }
+
+    return {
+      ...team,
+      members: team.members.map((member) => ({
+        id: member.id,
+        userId: member.userId,
+        roleInTeam: member.roleInTeam,
+        name: member.user?.name ?? null,
+        email: member.user?.email ?? null,
+      })),
+      apps: appAccess,
+    }
   })
 
   .patch(
@@ -63,7 +74,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
         .set({ ...body, updatedAt: new Date() })
         .where(eq(teams.id, params.id))
       await logAudit({
-        actorId: authUser.gipUid,
+        actorId: authUser.id,
         action: 'update_team',
         targetType: 'team',
         targetId: params.id,
@@ -76,7 +87,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
   .delete('/:id', async ({ params, authUser }) => {
     await deleteTeam(params.id)
     await logAudit({
-      actorId: authUser.gipUid,
+      actorId: authUser.id,
       action: 'delete_team',
       targetType: 'team',
       targetId: params.id,
@@ -89,7 +100,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
     async ({ params, body, authUser }) => {
       await addTeamMember(params.id, body.userId, body.roleInTeam)
       await logAudit({
-        actorId: authUser.gipUid,
+        actorId: authUser.id,
         action: 'add_team_member',
         targetType: 'team',
         targetId: params.id,
@@ -103,7 +114,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
   .delete('/:id/members/:userId', async ({ params, authUser }) => {
     await removeTeamMember(params.id, params.userId)
     await logAudit({
-      actorId: authUser.gipUid,
+      actorId: authUser.id,
       action: 'remove_team_member',
       targetType: 'team',
       targetId: params.id,

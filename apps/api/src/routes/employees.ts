@@ -5,6 +5,8 @@ import { eq, ilike, sql } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { generatePasswordResetLink } from '../gip-admin'
 import { createEmployee, deactivateEmployee, batchUpdateEmployees } from '../services/employees'
+import { importEmployeesFromGoogleAdminCsv } from '../services/employee-import'
+import { processEmployeeProvisioning } from '../services/employee-provisioning'
 import { resolveAndSyncClaims } from '../services/claims'
 import { logAudit } from '../services/audit'
 
@@ -33,7 +35,25 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       const where = query.search ? ilike(identityUsers.email, `%${query.search}%`) : undefined
 
       const [rows, [{ count }]] = await Promise.all([
-        db.select().from(identityUsers).where(where).limit(limit).offset(offset),
+        db
+          .select({
+            id: identityUsers.id,
+            email: identityUsers.email,
+            name: identityUsers.name,
+            phone: identityUsers.phone,
+            department: identityUsers.department,
+            position: identityUsers.position,
+            portalRole: identityUsers.portalRole,
+            hasGoogleWorkspace: identityUsers.hasGoogleWorkspace,
+            status: identityUsers.status,
+            provisioningStatus: identityUsers.provisioningStatus,
+            createdAt: identityUsers.createdAt,
+            updatedAt: identityUsers.updatedAt,
+          })
+          .from(identityUsers)
+          .where(where)
+          .limit(limit)
+          .offset(offset),
         db.select({ count: sql<number>`count(*)` }).from(identityUsers).where(where),
       ])
 
@@ -53,13 +73,17 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
     async ({ body, authUser }) => {
       const result = await createEmployee(body)
       await logAudit({
-        actorId: authUser.gipUid,
+        actorId: authUser.id,
         action: 'create_employee',
         targetType: 'user',
         targetId: result.id,
-        details: { email: body.email },
+        details: {
+          email: body.email,
+          provisioningStatus: result.provisioningStatus,
+          ...(result.provisioningError ? { provisioningError: result.provisioningError } : {}),
+        },
       })
-      return { id: result.id }
+      return result
     },
     { body: employeeBody },
   )
@@ -71,7 +95,7 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
 
       for (const id of body.ids) {
         await logAudit({
-          actorId: authUser.gipUid,
+          actorId: authUser.id,
           action: 'batch_update_employee',
           targetType: 'user',
           targetId: id,
@@ -90,10 +114,59 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
     },
   )
 
+  .post(
+    '/import-csv',
+    async ({ body, authUser }) => {
+      const result = await importEmployeesFromGoogleAdminCsv(body.csv, {
+        preview: body.preview,
+      })
+
+      if (!body.preview) {
+        for (const createdEmployee of result.created) {
+          await logAudit({
+            actorId: authUser.id,
+            action: 'import_employee_csv',
+            targetType: 'user',
+            targetId: createdEmployee.id,
+            details: {
+              email: createdEmployee.email,
+              rowNumber: createdEmployee.rowNumber,
+              source: 'google_admin_csv',
+            },
+          })
+        }
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        csv: t.String({ minLength: 1 }),
+        preview: t.Optional(t.Boolean()),
+      }),
+    },
+  )
+
   .get('/:id', async ({ params, set }) => {
-    const user = await db.query.identityUsers.findFirst({
-      where: eq(identityUsers.id, params.id),
-    })
+    const [user] = await db
+      .select({
+        id: identityUsers.id,
+        email: identityUsers.email,
+        name: identityUsers.name,
+        phone: identityUsers.phone,
+        department: identityUsers.department,
+        position: identityUsers.position,
+        portalRole: identityUsers.portalRole,
+        hasGoogleWorkspace: identityUsers.hasGoogleWorkspace,
+        status: identityUsers.status,
+        provisioningStatus: identityUsers.provisioningStatus,
+        provisioningError: identityUsers.provisioningError,
+        createdAt: identityUsers.createdAt,
+        updatedAt: identityUsers.updatedAt,
+      })
+      .from(identityUsers)
+      .where(eq(identityUsers.id, params.id))
+      .limit(1)
     if (!user) {
       set.status = 404
       return { message: 'Not found' }
@@ -119,7 +192,7 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       }
 
       await logAudit({
-        actorId: authUser.gipUid,
+        actorId: authUser.id,
         action: 'update_employee',
         targetType: 'user',
         targetId: params.id,
@@ -133,12 +206,29 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
   .delete('/:id', async ({ params, authUser }) => {
     await deactivateEmployee(params.id)
     await logAudit({
-      actorId: authUser.gipUid,
+      actorId: authUser.id,
       action: 'deactivate_employee',
       targetType: 'user',
       targetId: params.id,
     })
     return { ok: true }
+  })
+
+  .post('/:id/retry-provisioning', async ({ params, authUser }) => {
+    const result = await processEmployeeProvisioning(params.id)
+
+    await logAudit({
+      actorId: authUser.id,
+      action: 'retry_employee_provisioning',
+      targetType: 'user',
+      targetId: params.id,
+      details: {
+        provisioningStatus: result.status,
+        ...(result.error ? { provisioningError: result.error } : {}),
+      },
+    })
+
+    return result
   })
 
   .post('/:id/reset-password', async ({ params, set }) => {
@@ -148,6 +238,10 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
     if (!employee) {
       set.status = 404
       return { message: 'Not found' }
+    }
+    if (!employee.gipUid) {
+      set.status = 400
+      return { message: 'Employee has not been provisioned yet' }
     }
     await generatePasswordResetLink(employee.email)
     return { ok: true, email: employee.email }

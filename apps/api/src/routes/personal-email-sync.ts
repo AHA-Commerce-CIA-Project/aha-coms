@@ -8,12 +8,12 @@ export const personalEmailSyncRoutes = new Elysia({ prefix: '/personal-email-syn
 
   // POST /personal-email-sync/trigger
   .post('/trigger', async (ctx) => {
-    const { authUser } = ctx as unknown as { authUser: { gipUid: string } }
+    const { authUser } = ctx as unknown as { authUser: { id: string; gipUid: string } }
 
     const result = await syncPersonalEmails()
 
     await logAudit({
-      actorId: authUser.gipUid,
+      actorId: authUser.id,
       action: 'personal_email_sync_triggered',
       targetType: 'personal_email_sync',
       targetId: 'sheet',

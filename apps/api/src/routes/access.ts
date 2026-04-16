@@ -41,7 +41,7 @@ export const accessRoutes = new Elysia()
       await refreshTeamMemberClaims(params.id)
 
       await logAudit({
-        actorId: authUser.gipUid,
+        actorId: authUser.id,
         action: 'grant_app_access',
         targetType: 'team',
         targetId: params.id,
@@ -100,7 +100,7 @@ export const accessRoutes = new Elysia()
     await refreshTeamMemberClaims(params.id)
 
     await logAudit({
-      actorId: authUser.gipUid,
+      actorId: authUser.id,
       action: 'revoke_app_access',
       targetType: 'team',
       targetId: params.id,

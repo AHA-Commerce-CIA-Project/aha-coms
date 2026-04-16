@@ -1,34 +1,24 @@
 import { createQuery, createMutation, useQueryClient } from '@tanstack/svelte-query'
-import { api } from '$lib/api'
+import { adminApi } from '$lib/admin-api'
 
 export function employeesQuery(page = 1, limit = 20, search = '') {
   return createQuery({
     queryKey: ['employees', { page, limit, search }],
-    queryFn: async () => {
-      const { data, error } = await api.api.v1.employees.get({
-        query: { page: String(page), limit: String(limit), search },
-      })
-      if (error) throw error
-      return data
-    },
+    queryFn: () => adminApi.getEmployees({ page, limit, search }),
   })
 }
 
 export function employeeQuery(id: string) {
   return createQuery({
     queryKey: ['employees', id],
-    queryFn: async () => {
-      const { data, error } = await (api.api.v1.employees as any)[id].get()
-      if (error) throw error
-      return data
-    },
+    queryFn: () => adminApi.getEmployee(id),
   })
 }
 
 export function createEmployeeMutation() {
   const queryClient = useQueryClient()
   return createMutation({
-    mutationFn: async (body: {
+    mutationFn: (body: {
       email: string
       name: string
       phone?: string
@@ -36,11 +26,7 @@ export function createEmployeeMutation() {
       position?: string
       portalRole?: 'employee' | 'admin' | 'super_admin'
       hasGoogleWorkspace?: boolean
-    }) => {
-      const { data, error } = await api.api.v1.employees.post(body)
-      if (error) throw error
-      return data
-    },
+    }) => adminApi.createEmployee(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
     },
@@ -51,9 +37,7 @@ export function updateEmployeeMutation() {
   const queryClient = useQueryClient()
   return createMutation({
     mutationFn: async ({ id, data }: { id: string; data: { portalRole?: string } }) => {
-      const { data: result, error } = await (api.api.v1.employees as any)[id].patch(data)
-      if (error) throw error
-      return result
+      return adminApi.updateEmployee(id, data)
     },
     onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['employees', id] })
@@ -65,13 +49,21 @@ export function updateEmployeeMutation() {
 export function batchUpdateEmployeesMutation() {
   const queryClient = useQueryClient()
   return createMutation({
-    mutationFn: async (body: { ids: string[]; field: string; value: string }) => {
-      const { data, error } = await (api.api.v1.employees as any)['batch-update'].post(body)
-      if (error) throw error
-      return data
-    },
+    mutationFn: (body: { ids: string[]; field: string; value: string }) => adminApi.batchUpdateEmployees(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
+    },
+  })
+}
+
+export function importEmployeesCsvMutation() {
+  const queryClient = useQueryClient()
+  return createMutation({
+    mutationFn: (body: { csv: string; preview?: boolean }) => adminApi.importEmployeesCsv(body),
+    onSuccess: (result) => {
+      if (result.mode === 'commit') {
+        queryClient.invalidateQueries({ queryKey: ['employees'] })
+      }
     },
   })
 }

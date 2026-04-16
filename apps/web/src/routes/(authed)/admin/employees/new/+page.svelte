@@ -20,7 +20,7 @@
     e.preventDefault()
     error = null
     try {
-      await $mutation.mutateAsync({
+      const result = await $mutation.mutateAsync({
         email: form.email,
         name: form.name,
         phone: form.phone || undefined,
@@ -29,6 +29,11 @@
         portalRole: form.portalRole,
         hasGoogleWorkspace: form.hasGoogleWorkspace,
       })
+      if (result.provisioningStatus === 'failed') {
+        await goto(`/admin/employees/${result.id}?provisioning=failed`)
+        return
+      }
+
       await goto('/admin/employees')
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to create employee'

@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
-import { appRegistry } from '~/db/schema'
+import { appRegistry, teamAppAccess, teams } from '~/db/schema'
+import { eq } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { registerApp, updateApp, deregisterApp } from '../services/apps'
 import { logAudit } from '../services/audit'
@@ -25,12 +26,34 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
     return db.select().from(appRegistry)
   })
 
+  .get('/:id', async ({ params, set }) => {
+    const app = await db.query.appRegistry.findFirst({
+      where: eq(appRegistry.id, params.id),
+    })
+
+    if (!app) {
+      set.status = 404
+      return { message: 'Not found' }
+    }
+
+    const teamGrants = await db
+      .select({
+        teamId: teamAppAccess.teamId,
+        teamName: teams.name,
+      })
+      .from(teamAppAccess)
+      .innerJoin(teams, eq(teams.id, teamAppAccess.teamId))
+      .where(eq(teamAppAccess.appId, params.id))
+
+    return { ...app, teamGrants }
+  })
+
   .post(
     '/',
     async ({ body, authUser }) => {
       const result = await registerApp(body)
       await logAudit({
-        actorId: authUser.gipUid,
+        actorId: authUser.id,
         action: 'register_app',
         targetType: 'app',
         targetId: result.id,
@@ -46,7 +69,7 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
     async ({ params, body, authUser }) => {
       await updateApp(params.id, body)
       await logAudit({
-        actorId: authUser.gipUid,
+        actorId: authUser.id,
         action: 'update_app',
         targetType: 'app',
         targetId: params.id,
@@ -59,7 +82,7 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
   .delete('/:id', async ({ params, authUser }) => {
     await deregisterApp(params.id)
     await logAudit({
-      actorId: authUser.gipUid,
+      actorId: authUser.id,
       action: 'deregister_app',
       targetType: 'app',
       targetId: params.id,

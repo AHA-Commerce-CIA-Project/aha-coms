@@ -10,6 +10,7 @@ import { identityUsers } from '~/db/schema'
 import { eq } from 'drizzle-orm'
 import { SESSION_COOKIE_OPTIONS } from '@coms-portal/shared/constants/roles'
 import { resolveAndSyncClaims } from '../services/claims'
+import { getSessionCookieValue } from '../middleware/session-cookie'
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
   /**
@@ -78,8 +79,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
    */
   .post('/logout', async ({ request, cookie }) => {
     const cookieHeader = request.headers.get('cookie') ?? ''
-    const match = cookieHeader.match(/__session=([^;]+)/)
-    const sessionCookie = match?.[1]
+    const sessionCookie = getSessionCookieValue(cookieHeader)
 
     if (sessionCookie) {
       try {
@@ -105,8 +105,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
    */
   .get('/me', async ({ request, set }) => {
     const cookieHeader = request.headers.get('cookie') ?? ''
-    const match = cookieHeader.match(/__session=([^;]+)/)
-    const sessionCookie = match?.[1]
+    const sessionCookie = getSessionCookieValue(cookieHeader)
 
     if (!sessionCookie) {
       set.status = 401

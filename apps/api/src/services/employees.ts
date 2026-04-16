@@ -3,7 +3,8 @@ import { identityUsers, teamMembers } from '~/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { resolveAndSyncClaims } from './claims'
 import type { NewIdentityUser } from '~/db/schema'
-import { createGipUser, setGipUserDisabled, generatePasswordResetLink } from '../gip-admin'
+import { setGipUserDisabled } from '../gip-admin'
+import { processEmployeeProvisioning } from './employee-provisioning'
 
 export async function createEmployee(data: {
   email: string
@@ -14,35 +15,39 @@ export async function createEmployee(data: {
   portalRole?: string
   teamId?: string
   hasGoogleWorkspace?: boolean
-}): Promise<{ id: string }> {
-  const [user] = await db
-    .insert(identityUsers)
-    .values({
-      email: data.email,
-      name: data.name,
-      phone: data.phone,
-      department: data.department,
-      position: data.position,
-      portalRole: data.portalRole ?? 'employee',
-      hasGoogleWorkspace: data.hasGoogleWorkspace ?? false,
-    } satisfies Omit<NewIdentityUser, 'id' | 'createdAt' | 'updatedAt'>)
-    .returning({ id: identityUsers.id })
+}): Promise<{ id: string; provisioningStatus: string; provisioningError?: string }> {
+  const [user] = await db.transaction(async (tx) => {
+    const insertedUsers = await tx
+      .insert(identityUsers)
+      .values({
+        email: data.email,
+        name: data.name,
+        phone: data.phone,
+        department: data.department,
+        position: data.position,
+        portalRole: data.portalRole ?? 'employee',
+        hasGoogleWorkspace: data.hasGoogleWorkspace ?? false,
+        provisioningStatus: 'pending',
+        provisioningError: null,
+      } satisfies Omit<NewIdentityUser, 'id' | 'createdAt' | 'updatedAt'>)
+      .returning({ id: identityUsers.id })
 
-  // Provision a GIP user account and sync claims
-  const tempPassword = crypto.randomUUID()
-  const gipUid = await createGipUser(data.email, tempPassword)
-  await db
-    .update(identityUsers)
-    .set({ gipUid, updatedAt: new Date() })
-    .where(eq(identityUsers.id, user.id))
-  await resolveAndSyncClaims(gipUid, user.id)
-  await generatePasswordResetLink(data.email)
+    const [insertedUser] = insertedUsers
 
-  if (data.teamId) {
-    await db.insert(teamMembers).values({ teamId: data.teamId, userId: user.id })
+    if (data.teamId) {
+      await tx.insert(teamMembers).values({ teamId: data.teamId, userId: insertedUser.id })
+    }
+
+    return insertedUsers
+  })
+
+  const provisioning = await processEmployeeProvisioning(user.id)
+
+  return {
+    id: user.id,
+    provisioningStatus: provisioning.status,
+    ...(provisioning.error ? { provisioningError: provisioning.error } : {}),
   }
-
-  return { id: user.id }
 }
 
 export async function deactivateEmployee(userId: string): Promise<void> {
@@ -83,7 +88,7 @@ export async function batchUpdateEmployees(
     await Promise.all(
       users
         .filter((u) => u.gipUid)
-        .map((u) => resolveAndSyncClaims(u.gipUid!, u.id)),
+        .map((u) => resolveAndSyncClaims(u.gipUid as string, u.id)),
     )
   }
 
