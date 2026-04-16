@@ -1,0 +1,1 @@
+ALTER TABLE "identity_users" ADD COLUMN "branch" varchar(50);
