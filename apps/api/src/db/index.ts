@@ -4,13 +4,17 @@ import * as schema from './schema'
 
 function createClient() {
   const raw = process.env.DATABASE_URL!
-  // Cloud SQL socket URLs (e.g. postgresql://user:pass@/db?host=/cloudsql/...)
-  // have no hostname, which breaks the postgres.js URL parser.
-  // Insert a dummy hostname so the URL is parseable; the ?host= param still wins.
-  const url = raw.includes('@/')
-    ? raw.replace('@/', '@localhost/')
-    : raw
-  return postgres(url, { max: 3 })
+  const url = new URL(raw.includes('@/') ? raw.replace('@/', '@localhost/') : raw)
+  const socketPath = url.searchParams.get('host')
+
+  if (socketPath) {
+    // Cloud SQL unix socket: pass host directly via config so postgres.js
+    // actually uses the socket instead of connecting to the dummy hostname.
+    url.searchParams.delete('host')
+    return postgres(url.toString(), { host: socketPath, max: 3 })
+  }
+
+  return postgres(raw, { max: 3 })
 }
 
 const client = createClient()
