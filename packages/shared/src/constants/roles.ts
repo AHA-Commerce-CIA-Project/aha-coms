@@ -17,5 +17,5 @@ export const SESSION_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: true,
   sameSite: 'lax' as const,
-  maxAge: Number(process.env.SESSION_COOKIE_MAX_AGE ?? 60 * 60 * 24 * 14),
+  maxAge: 60 * 60 * 24 * 14, // 14 days
 }
