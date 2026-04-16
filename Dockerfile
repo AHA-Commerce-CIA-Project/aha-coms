@@ -31,7 +31,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules/ node_modules/
 COPY apps/api/ apps/api/
 COPY packages/shared/ packages/shared/
-COPY --from=web-build /app/apps/web/build/ apps/api/public/
+COPY --from=web-build /app/apps/web/build/ public/
 COPY package.json ./
 EXPOSE 3000
 USER bun
