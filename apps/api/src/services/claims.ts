@@ -2,7 +2,7 @@ import { setCustomUserClaims } from '../gip-admin'
 import { db } from '~/db'
 import { identityUsers, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
 import { eq, inArray } from 'drizzle-orm'
-import type { PortalClaims } from '@coms-portal/shared/constants/roles'
+import { PORTAL_CLAIMS_VERSION, type PortalClaims } from '@coms-portal/shared'
 
 /**
  * Resolve a user's current team memberships and accessible app slugs,
@@ -45,6 +45,7 @@ export async function resolveAndSyncClaims(gipUid: string, userId: string): Prom
   }
 
   const claims: PortalClaims = {
+    claimsVersion: PORTAL_CLAIMS_VERSION,
     portalRole: user.portalRole as PortalClaims['portalRole'],
     teamIds,
     apps: appSlugs,

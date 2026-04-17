@@ -3,8 +3,14 @@ import { db } from '~/db'
 import { appRegistry, teamAppAccess, teams } from '~/db/schema'
 import { eq } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
-import { registerApp, updateApp, deregisterApp } from '../services/apps'
+import {
+  AppIntegrationValidationError,
+  deregisterApp,
+  registerApp,
+  updateApp,
+} from '../services/apps'
 import { logAudit } from '../services/audit'
+import { PLATFORM_AUTH_CONTRACT_VERSION } from '@coms-portal/shared/contracts/auth'
 
 const appBody = t.Object({
   slug: t.String({ minLength: 1 }),
@@ -14,6 +20,32 @@ const appBody = t.Object({
   basePath: t.String({ minLength: 1 }),
   iconUrl: t.Optional(t.String()),
   cloudRunService: t.Optional(t.String()),
+  adapterType: t.Optional(
+    t.Union([
+      t.Literal('server_middleware'),
+      t.Literal('edge_proxy'),
+      t.Literal('gateway_bridge'),
+      t.Literal('frontend_shell'),
+    ]),
+  ),
+  transportMode: t.Optional(t.Union([t.Literal('same_host_cookie'), t.Literal('portable_token')])),
+  handoffMode: t.Optional(
+    t.Union([t.Literal('none'), t.Literal('one_time_code'), t.Literal('token_exchange')]),
+  ),
+  brokerOrigin: t.Optional(t.String()),
+  contractVersion: t.Optional(t.Integer({ minimum: 1 })),
+  complianceStatus: t.Optional(
+    t.Union([
+      t.Literal('draft'),
+      t.Literal('planned'),
+      t.Literal('dual_run'),
+      t.Literal('compliant'),
+      t.Literal('exception'),
+      t.Literal('deprecated'),
+    ]),
+  ),
+  manifestPath: t.Optional(t.String()),
+  lastVerifiedAt: t.Optional(t.String({ format: 'date-time' })),
   status: t.Optional(
     t.Union([t.Literal('active'), t.Literal('maintenance'), t.Literal('deprecated')]),
   ),
@@ -50,14 +82,32 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
 
   .post(
     '/',
-    async ({ body, authUser }) => {
-      const result = await registerApp(body)
+    async ({ body, authUser, set }) => {
+      let result: { id: string }
+      try {
+        result = await registerApp({
+          ...body,
+          contractVersion: body.contractVersion ?? PLATFORM_AUTH_CONTRACT_VERSION,
+          lastVerifiedAt: body.lastVerifiedAt ? new Date(body.lastVerifiedAt) : undefined,
+        })
+      } catch (error) {
+        if (error instanceof AppIntegrationValidationError) {
+          set.status = 400
+          return { message: error.message, errors: error.errors }
+        }
+        throw error
+      }
       await logAudit({
         actorId: authUser.id,
         action: 'register_app',
         targetType: 'app',
         targetId: result.id,
-        details: { slug: body.slug },
+        details: {
+          slug: body.slug,
+          adapterType: body.adapterType,
+          transportMode: body.transportMode,
+          complianceStatus: body.complianceStatus,
+        },
       })
       return { id: result.id }
     },
@@ -66,13 +116,29 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
 
   .patch(
     '/:id',
-    async ({ params, body, authUser }) => {
-      await updateApp(params.id, body)
+    async ({ params, body, authUser, set }) => {
+      try {
+        await updateApp(params.id, {
+          ...body,
+          lastVerifiedAt: body.lastVerifiedAt ? new Date(body.lastVerifiedAt) : undefined,
+        })
+      } catch (error) {
+        if (error instanceof AppIntegrationValidationError) {
+          set.status = 400
+          return { message: error.message, errors: error.errors }
+        }
+        throw error
+      }
       await logAudit({
         actorId: authUser.id,
         action: 'update_app',
         targetType: 'app',
         targetId: params.id,
+        details: {
+          adapterType: body.adapterType,
+          transportMode: body.transportMode,
+          complianceStatus: body.complianceStatus,
+        },
       })
       return { ok: true }
     },

@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia'
 import { verifySessionCookie } from '../gip-admin'
-import type { PortalClaims } from '@coms-portal/shared/constants/roles'
+import type { PortalClaims } from '@coms-portal/shared'
 import { db } from '~/db'
 import { identityUsers } from '~/db/schema'
 import { eq } from 'drizzle-orm'
