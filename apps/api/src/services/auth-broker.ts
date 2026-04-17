@@ -13,8 +13,8 @@ import type {
 
 const PORTAL_BROKER_ISSUER = 'coms-portal-broker'
 const PORTAL_BROKER_AUDIENCE = 'coms-service-app'
-const BROKER_CODE_TTL_SECONDS = 120
-const BROKER_TOKEN_TTL_SECONDS = 120
+const BROKER_CODE_TTL_SECONDS = 300
+const BROKER_TOKEN_TTL_SECONDS = 300
 
 export class BrokerAuthorizationError extends Error {}
 export class BrokerValidationError extends Error {}
