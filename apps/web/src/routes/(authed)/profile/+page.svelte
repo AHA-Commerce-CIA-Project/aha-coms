@@ -1,14 +1,10 @@
-<script lang="ts">
-  import { getContext } from 'svelte'
-  import type { SessionUser } from '$lib/auth'
+  <script lang="ts">
+    import { getContext } from 'svelte'
+    import type { SessionUser } from '$lib/auth'
+    import { PORTAL_ROLE_LABELS } from '@coms-portal/shared'
 
   const getUser = getContext<() => SessionUser | null>('user')
   const user = $derived(getUser())
-
-  const roleLabels: Record<string, string> = {
-    employee: 'Employee',
-    admin: 'Admin',
-  }
 </script>
 
 <div class="p-8">
@@ -39,7 +35,7 @@
       </div>
       <div class="flex justify-between border-b border-neutral-800 pb-2">
         <span class="text-xs text-neutral-400">Role</span>
-        <span class="rounded-full bg-neutral-800 px-2 py-0.5 text-xs">{roleLabels[user.portalRole] ?? user.portalRole}</span>
+        <span class="rounded-full bg-neutral-800 px-2 py-0.5 text-xs">{PORTAL_ROLE_LABELS[user.portalRole] ?? user.portalRole}</span>
       </div>
       <div class="flex justify-between">
         <span class="text-xs text-neutral-400">App Access</span>

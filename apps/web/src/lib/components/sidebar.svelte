@@ -5,6 +5,7 @@
   import { clientAuth } from '$lib/firebase'
   import { api } from '$lib/api'
   import type { SessionUser } from '$lib/auth'
+  import { hasPortalRole } from '@coms-portal/shared'
 
   let { user }: { user: SessionUser } = $props()
 
@@ -19,7 +20,7 @@
     { href: '/admin/audit', label: 'Audit Log' },
   ]
 
-  const isAdmin = $derived(user.portalRole === 'admin')
+  const isAdmin = $derived(hasPortalRole(user.portalRole, ['admin']))
 
   async function handleSignOut() {
     await api.api.auth.logout.post({})

@@ -1,6 +1,7 @@
-<script lang="ts">
+  <script lang="ts">
   import { employeesQuery, batchUpdateEmployeesMutation, importEmployeesCsvMutation } from '$lib/queries/employees'
   import BatchToolbar from '$lib/components/batch-toolbar.svelte'
+  import { PORTAL_ROLE_LABELS, PORTAL_ROLES } from '@coms-portal/shared'
 
   const MAX_EMPLOYEE_IMPORT_CSV_BYTES = 2 * 1024 * 1024
 
@@ -16,10 +17,7 @@
     {
       key: 'portalRole',
       label: 'Change Role',
-      options: [
-        { value: 'employee', label: 'Employee' },
-        { value: 'admin', label: 'Admin' },
-      ],
+      options: PORTAL_ROLES.map((role) => ({ value: role, label: PORTAL_ROLE_LABELS[role] })),
     },
   ]
 

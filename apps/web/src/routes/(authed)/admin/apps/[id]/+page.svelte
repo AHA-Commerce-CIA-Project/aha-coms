@@ -3,6 +3,14 @@
   import { goto } from '$app/navigation'
   import { createQuery, useQueryClient } from '@tanstack/svelte-query'
   import { adminApi } from '$lib/admin-api'
+  import {
+    PORTAL_ADAPTER_TYPES,
+    PORTAL_COMPLIANCE_STATUSES,
+    PORTAL_HANDOFF_MODES,
+    type PortalAdapterType,
+    type PortalComplianceStatus,
+    type PortalHandoffMode,
+  } from '@coms-portal/shared'
 
   const id = $derived($page.params.id!)
 
@@ -19,6 +27,13 @@
   let editName = $state('')
   let editUrl = $state('')
   let editBasePath = $state('')
+  let editAdapterType = $state<PortalAdapterType>('server_middleware')
+  let editTransportMode = $state<'same_host_cookie' | 'portable_token'>('portable_token')
+  let editHandoffMode = $state<PortalHandoffMode>('one_time_code')
+  let editBrokerOrigin = $state('')
+  let editContractVersion = $state(1)
+  let editComplianceStatus = $state<PortalComplianceStatus>('draft')
+  let editManifestPath = $state('')
   let editStatus = $state('active')
   let editError = $state<string | null>(null)
   let editPending = $state(false)
@@ -32,6 +47,13 @@
     editName = app.name
     editUrl = app.url
     editBasePath = app.basePath ?? ''
+    editAdapterType = app.adapterType
+    editTransportMode = app.transportMode
+    editHandoffMode = app.handoffMode
+    editBrokerOrigin = app.brokerOrigin ?? ''
+    editContractVersion = app.contractVersion
+    editComplianceStatus = app.complianceStatus
+    editManifestPath = app.manifestPath ?? ''
     editStatus = app.status
     editError = null
     editing = true
@@ -46,6 +68,13 @@
         name: editName,
         url: editUrl,
         basePath: editBasePath || undefined,
+        adapterType: editAdapterType,
+        transportMode: editTransportMode,
+        handoffMode: editHandoffMode,
+        brokerOrigin: editTransportMode === 'portable_token' ? editBrokerOrigin || undefined : undefined,
+        contractVersion: editContractVersion,
+        complianceStatus: editComplianceStatus,
+        manifestPath: editManifestPath || undefined,
         status: editStatus as 'active' | 'maintenance' | 'deprecated',
       })
       queryClient.invalidateQueries({ queryKey: ['apps', id] })
@@ -129,6 +158,78 @@
                 <option value="deprecated">Deprecated</option>
               </select>
             </div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label for="app-adapter-type" class="mb-1 block text-xs text-neutral-400">Adapter Type</label>
+                <select
+                  id="app-adapter-type"
+                  bind:value={editAdapterType}
+                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                >
+                  {#each PORTAL_ADAPTER_TYPES as adapterType}
+                    <option value={adapterType}>{adapterType}</option>
+                  {/each}
+                </select>
+              </div>
+              <div>
+                <label for="app-transport-mode" class="mb-1 block text-xs text-neutral-400">Transport</label>
+                <select
+                  id="app-transport-mode"
+                  bind:value={editTransportMode}
+                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                >
+                  <option value="portable_token">portal-brokered token</option>
+                  <option value="same_host_cookie">same-host cookie</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label for="app-handoff-mode" class="mb-1 block text-xs text-neutral-400">Handoff Mode</label>
+                <select
+                  id="app-handoff-mode"
+                  bind:value={editHandoffMode}
+                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                >
+                  {#each PORTAL_HANDOFF_MODES as handoffMode}
+                    <option value={handoffMode}>{handoffMode}</option>
+                  {/each}
+                </select>
+              </div>
+              <div>
+                <label for="app-compliance-status" class="mb-1 block text-xs text-neutral-400">Compliance</label>
+                <select
+                  id="app-compliance-status"
+                  bind:value={editComplianceStatus}
+                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                >
+                  {#each PORTAL_COMPLIANCE_STATUSES as complianceStatus}
+                    <option value={complianceStatus}>{complianceStatus}</option>
+                  {/each}
+                </select>
+              </div>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label for="app-broker-origin" class="mb-1 block text-xs text-neutral-400">Broker Origin</label>
+                <input
+                  id="app-broker-origin"
+                  type="url"
+                  bind:value={editBrokerOrigin}
+                  disabled={editTransportMode !== 'portable_token'}
+                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label for="app-manifest-path" class="mb-1 block text-xs text-neutral-400">Manifest Path</label>
+                <input
+                  id="app-manifest-path"
+                  type="text"
+                  bind:value={editManifestPath}
+                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
             {#if editError}
               <p class="text-xs text-red-400">{editError}</p>
             {/if}
@@ -194,6 +295,38 @@
         <div class="flex justify-between border-b border-neutral-800 pb-2">
           <span class="text-xs text-neutral-400">Base Path</span>
           <span class="text-sm">{app.basePath ?? '-'}</span>
+        </div>
+        <div class="flex justify-between border-b border-neutral-800 pb-2">
+          <span class="text-xs text-neutral-400">Adapter Type</span>
+          <span class="text-sm">{app.adapterType}</span>
+        </div>
+        <div class="flex justify-between border-b border-neutral-800 pb-2">
+          <span class="text-xs text-neutral-400">Transport</span>
+          <span class="text-sm">{app.transportMode}</span>
+        </div>
+        <div class="flex justify-between border-b border-neutral-800 pb-2">
+          <span class="text-xs text-neutral-400">Handoff</span>
+          <span class="text-sm">{app.handoffMode}</span>
+        </div>
+        <div class="flex justify-between border-b border-neutral-800 pb-2">
+          <span class="text-xs text-neutral-400">Broker Origin</span>
+          <span class="text-sm">{app.brokerOrigin ?? '-'}</span>
+        </div>
+        <div class="flex justify-between border-b border-neutral-800 pb-2">
+          <span class="text-xs text-neutral-400">Contract Version</span>
+          <span class="text-sm">{app.contractVersion}</span>
+        </div>
+        <div class="flex justify-between border-b border-neutral-800 pb-2">
+          <span class="text-xs text-neutral-400">Compliance</span>
+          <span class="text-sm">{app.complianceStatus}</span>
+        </div>
+        <div class="flex justify-between border-b border-neutral-800 pb-2">
+          <span class="text-xs text-neutral-400">Manifest Path</span>
+          <span class="text-sm">{app.manifestPath ?? '-'}</span>
+        </div>
+        <div class="flex justify-between border-b border-neutral-800 pb-2">
+          <span class="text-xs text-neutral-400">Last Verified</span>
+          <span class="text-sm">{app.lastVerifiedAt ?? '-'}</span>
         </div>
         <div class="flex justify-between">
           <span class="text-xs text-neutral-400">Status</span>

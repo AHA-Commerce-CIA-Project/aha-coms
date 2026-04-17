@@ -3,8 +3,9 @@
   import { employeeQuery, updateEmployeeMutation } from '$lib/queries/employees'
   import { adminApi } from '$lib/admin-api'
   import { useQueryClient } from '@tanstack/svelte-query'
+  import { PORTAL_ROLES, PORTAL_ROLE_LABELS, type PortalRole } from '@coms-portal/shared'
 
-  const ROLES = ['employee', 'admin'] as const
+  const ROLES = PORTAL_ROLES
 
   const id = $derived($page.params.id!)
   const query = $derived(employeeQuery(id))
@@ -12,7 +13,7 @@
   const queryClient = useQueryClient()
   const provisioningFailedFromCreate = $derived($page.url.searchParams.get('provisioning') === 'failed')
 
-  let selectedRole = $state<string | null>(null)
+  let selectedRole = $state<PortalRole | null>(null)
   const dirty = $derived(selectedRole !== null && $query.data && selectedRole !== $query.data.portalRole)
   let resetMessage = $state<string | null>(null)
   let resetError = $state<string | null>(null)
@@ -177,7 +178,7 @@
             class="rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
           >
             {#each ROLES as role}
-              <option value={role}>{role.replace('_', ' ')}</option>
+              <option value={role}>{PORTAL_ROLE_LABELS[role]}</option>
             {/each}
           </select>
           {#if dirty}

@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation'
   import { createEmployeeMutation } from '$lib/queries/employees'
   import { teamsQuery } from '$lib/queries/teams'
+  import { PORTAL_ROLES, PORTAL_ROLE_LABELS, type PortalRole } from '@coms-portal/shared'
 
   const mutation = createEmployeeMutation()
   const teams = teamsQuery()
@@ -13,7 +14,7 @@
     phone: '',
     position: '',
     branch: '' as '' | 'indonesia' | 'thailand',
-    portalRole: 'employee' as 'employee' | 'admin',
+    portalRole: 'employee' as PortalRole,
     teamId: '',
   })
 
@@ -83,8 +84,9 @@
       <div>
         <label for="employee-portal-role" class="mb-1 block text-xs text-neutral-400">Portal Role</label>
         <select id="employee-portal-role" bind:value={form.portalRole} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
-          <option value="employee">Employee</option>
-          <option value="admin">Admin</option>
+          {#each PORTAL_ROLES as role}
+            <option value={role}>{PORTAL_ROLE_LABELS[role]}</option>
+          {/each}
         </select>
       </div>
       <div>

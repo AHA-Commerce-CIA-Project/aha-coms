@@ -1,10 +1,11 @@
 import { api } from '$lib/api'
+import type { PortalRole } from '@coms-portal/shared'
 
 export interface SessionUser {
   id: string
   email: string
   name: string
-  portalRole: 'employee' | 'admin'
+  portalRole: PortalRole
   apps: string[]
 }
 
