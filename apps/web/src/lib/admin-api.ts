@@ -1,3 +1,11 @@
+import type {
+  AuthTransportMode,
+  PortalAdapterType,
+  PortalComplianceStatus,
+  PortalHandoffMode,
+  PortalRole,
+} from '@coms-portal/shared'
+
 export interface EmployeeRecord {
   id: string
   email: string
@@ -7,7 +15,7 @@ export interface EmployeeRecord {
   department: string | null
   position: string | null
   branch: string | null
-  portalRole: 'employee' | 'admin'
+  portalRole: PortalRole
   status: string
   provisioningStatus: 'ready' | 'pending' | 'processing' | 'failed'
   provisioningError: string | null
@@ -77,6 +85,14 @@ export interface AppRecord {
   basePath: string
   iconUrl: string | null
   cloudRunService: string | null
+  adapterType: PortalAdapterType
+  transportMode: AuthTransportMode
+  handoffMode: PortalHandoffMode
+  brokerOrigin: string | null
+  contractVersion: number
+  complianceStatus: PortalComplianceStatus
+  manifestPath: string | null
+  lastVerifiedAt: string | null
   status: 'active' | 'maintenance' | 'deprecated'
   createdAt: string
   updatedAt: string
@@ -134,7 +150,7 @@ export const adminApi = {
     department?: string
     position?: string
     branch?: 'indonesia' | 'thailand'
-    portalRole?: 'employee' | 'admin'
+    portalRole?: PortalRole
     teamId?: string
   }) {
     return requestJson<CreateEmployeeResult>(`/api/v1/employees`, {
@@ -237,12 +253,20 @@ export const adminApi = {
       name?: string
       url?: string
       basePath?: string
+      adapterType?: PortalAdapterType
+      transportMode?: AuthTransportMode
+      handoffMode?: PortalHandoffMode
+      brokerOrigin?: string
+      contractVersion?: number
+      complianceStatus?: PortalComplianceStatus
+      manifestPath?: string
+      lastVerifiedAt?: string
       status?: 'active' | 'maintenance' | 'deprecated'
     },
   ) {
     return requestJson<{ ok: true }>(`/api/v1/apps/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify(body),
+    body: JSON.stringify(body),
     })
   },
   registerApp(body: {
@@ -253,6 +277,14 @@ export const adminApi = {
     basePath: string
     iconUrl?: string
     cloudRunService?: string
+    adapterType?: PortalAdapterType
+    transportMode?: AuthTransportMode
+    handoffMode?: PortalHandoffMode
+    brokerOrigin?: string
+    contractVersion?: number
+    complianceStatus?: PortalComplianceStatus
+    manifestPath?: string
+    lastVerifiedAt?: string
     status?: 'active' | 'maintenance' | 'deprecated'
   }) {
     return requestJson<{ id: string }>(`/api/v1/apps`, {

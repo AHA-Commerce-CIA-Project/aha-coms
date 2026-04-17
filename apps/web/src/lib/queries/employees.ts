@@ -1,5 +1,6 @@
 import { createQuery, createMutation, useQueryClient } from '@tanstack/svelte-query'
 import { adminApi } from '$lib/admin-api'
+import type { PortalRole } from '@coms-portal/shared'
 
 export function employeesQuery(page = 1, limit = 20, search = '') {
   return createQuery({
@@ -26,7 +27,7 @@ export function createEmployeeMutation() {
       department?: string
       position?: string
       branch?: 'indonesia' | 'thailand'
-      portalRole?: 'employee' | 'admin'
+      portalRole?: PortalRole
       teamId?: string
     }) => adminApi.createEmployee(body),
     onSuccess: () => {

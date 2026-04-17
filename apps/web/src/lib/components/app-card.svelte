@@ -3,9 +3,7 @@
 </script>
 
 <a
-  href={app.url}
-  target="_blank"
-  rel="noopener noreferrer"
+  href={`/api/auth/broker/launch/${app.slug}`}
   class="group flex flex-col gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4 transition-colors hover:border-indigo-700 hover:bg-neutral-800"
 >
   <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-neutral-800 group-hover:bg-neutral-700">
