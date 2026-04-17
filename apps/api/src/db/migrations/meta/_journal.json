@@ -36,6 +36,20 @@
       "when": 1776334545256,
       "tag": "0004_handy_magma",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776395334424,
+      "tag": "0005_black_black_bolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776406194499,
+      "tag": "0006_tricky_chamber",
+      "breakpoints": true
     }
   ]
 }

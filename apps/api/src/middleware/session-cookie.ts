@@ -1,4 +1,4 @@
-import { SESSION_COOKIE_NAME } from '@coms-portal/shared/constants/roles'
+import { SESSION_COOKIE_NAME } from '@coms-portal/shared'
 
 export function getSessionCookieValue(cookieHeader: string): string | undefined {
   const cookies = cookieHeader.split(';')

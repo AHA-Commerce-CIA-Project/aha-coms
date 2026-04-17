@@ -8,9 +8,33 @@ import {
 import { db } from '~/db'
 import { identityUsers } from '~/db/schema'
 import { eq } from 'drizzle-orm'
-import { SESSION_COOKIE_OPTIONS } from '@coms-portal/shared/constants/roles'
+import {
+  type PortalBrokerExchangePayload,
+  type PortalSessionUser,
+  SESSION_COOKIE_OPTIONS,
+} from '@coms-portal/shared'
 import { resolveAndSyncClaims } from '../services/claims'
 import { getSessionCookieValue } from '../middleware/session-cookie'
+import { resolveAuthUser } from '../middleware/auth'
+import {
+  BrokerAuthorizationError,
+  BrokerValidationError,
+  createBrokerHandoff,
+  exchangeBrokerHandoff,
+  findBrokerAppBySlug,
+} from '../services/auth-broker'
+
+async function resolveSessionUser(request: Request): Promise<PortalSessionUser> {
+  const cookieHeader = request.headers.get('cookie') ?? ''
+  const sessionCookie = getSessionCookieValue(cookieHeader)
+
+  if (!sessionCookie) {
+    throw new BrokerValidationError('Not authenticated')
+  }
+
+  const decoded = await verifySessionCookie(sessionCookie)
+  return resolveAuthUser(decoded)
+}
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
   /**
@@ -99,37 +123,112 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     return { ok: true }
   })
 
+  .post(
+    '/broker/handoff',
+    async ({ request, body, set }) => {
+      try {
+        const authUser = await resolveSessionUser(request)
+        const app = await findBrokerAppBySlug(body.appSlug)
+
+        if (!app) {
+          set.status = 404
+          return { message: 'App not found' }
+        }
+
+        return createBrokerHandoff(app, authUser, body.redirectTo)
+      } catch (error) {
+        if (error instanceof BrokerAuthorizationError) {
+          set.status = 403
+          return { message: error.message }
+        }
+        if (error instanceof BrokerValidationError) {
+          set.status = 401
+          return { message: error.message }
+        }
+        throw error
+      }
+    },
+    {
+      body: t.Object({
+        appSlug: t.String({ minLength: 1 }),
+        redirectTo: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  .get(
+    '/broker/launch/:appSlug',
+    async ({ request, params, query, set }) => {
+      try {
+        const authUser = await resolveSessionUser(request)
+        const app = await findBrokerAppBySlug(params.appSlug)
+
+        if (!app) {
+          set.status = 404
+          return { message: 'App not found' }
+        }
+
+        const handoff = await createBrokerHandoff(app, authUser, query.redirectTo)
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: handoff.redirectUrl,
+          },
+        })
+      } catch (error) {
+        if (error instanceof BrokerAuthorizationError) {
+          set.status = 403
+          return { message: error.message }
+        }
+        if (error instanceof BrokerValidationError) {
+          set.status = 401
+          return { message: error.message }
+        }
+        throw error
+      }
+    },
+    {
+      query: t.Object({
+        redirectTo: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  .post(
+    '/broker/exchange',
+    async ({ body, set }) => {
+      try {
+        return (await exchangeBrokerHandoff(body)) satisfies PortalBrokerExchangePayload
+      } catch (error) {
+        if (error instanceof BrokerValidationError) {
+          set.status = 400
+          return { message: error.message }
+        }
+        throw error
+      }
+    },
+    {
+      body: t.Object({
+        appSlug: t.String({ minLength: 1 }),
+        code: t.Optional(t.String()),
+        token: t.Optional(t.String()),
+      }),
+    },
+  )
+
   /**
    * GET /api/auth/me
    * Return current authenticated user plus accessible apps.
    */
   .get('/me', async ({ request, set }) => {
-    const cookieHeader = request.headers.get('cookie') ?? ''
-    const sessionCookie = getSessionCookieValue(cookieHeader)
-
-    if (!sessionCookie) {
-      set.status = 401
-      return { message: 'Not authenticated' }
-    }
-
     try {
-      const decoded = await verifySessionCookie(sessionCookie)
-
-      const user = await db.query.identityUsers.findFirst({
-        where: eq(identityUsers.gipUid, decoded.uid),
-      })
-
-      if (!user) {
-        set.status = 401
-        return { message: 'User not found' }
-      }
-
+      const user = await resolveSessionUser(request)
       return {
         id: user.id,
         email: user.email,
         name: user.name,
         portalRole: user.portalRole,
-        apps: (decoded['apps'] as string[]) ?? [],
+        apps: user.apps,
       }
     } catch {
       set.status = 401

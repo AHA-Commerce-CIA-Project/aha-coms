@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia'
-import type { PortalRole } from '@coms-portal/shared/constants/roles'
+import { hasPortalRole, type PortalRole } from '@coms-portal/shared'
 import { authPlugin } from './auth'
 
 /**
@@ -16,7 +16,7 @@ export function requireRole(...roles: PortalRole[]) {
       if (!authUser) {
         throw status(401, { message: 'Unauthorized' })
       }
-      if (!roles.includes(authUser.portalRole)) {
+      if (!hasPortalRole(authUser.portalRole, roles)) {
         throw status(403, { message: 'Insufficient portal role' })
       }
       return { authUser }

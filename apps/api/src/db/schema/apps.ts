@@ -1,7 +1,11 @@
-import { pgTable, uuid, varchar, text, timestamp, unique } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, timestamp, unique, integer } from 'drizzle-orm/pg-core'
 import { sql, relations } from 'drizzle-orm'
 import { teams } from './teams'
 import { identityUsers } from './identity-users'
+import {
+  DEFAULT_AUTH_TRANSPORT_MODE,
+  PLATFORM_AUTH_CONTRACT_VERSION,
+} from '@coms-portal/shared/contracts/auth'
 
 export const appRegistry = pgTable('app_registry', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
@@ -12,6 +16,16 @@ export const appRegistry = pgTable('app_registry', {
   basePath: varchar('base_path', { length: 100 }).notNull(),
   iconUrl: text('icon_url'),
   cloudRunService: varchar('cloud_run_service', { length: 100 }),
+  adapterType: varchar('adapter_type', { length: 40 }).notNull().default('server_middleware'),
+  transportMode: varchar('transport_mode', { length: 40 })
+    .notNull()
+    .default(DEFAULT_AUTH_TRANSPORT_MODE),
+  handoffMode: varchar('handoff_mode', { length: 40 }).notNull().default('one_time_code'),
+  brokerOrigin: text('broker_origin'),
+  contractVersion: integer('contract_version').notNull().default(PLATFORM_AUTH_CONTRACT_VERSION),
+  complianceStatus: varchar('compliance_status', { length: 20 }).notNull().default('draft'),
+  manifestPath: text('manifest_path'),
+  lastVerifiedAt: timestamp('last_verified_at', { withTimezone: true }),
   status: varchar('status', { length: 20 }).notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
