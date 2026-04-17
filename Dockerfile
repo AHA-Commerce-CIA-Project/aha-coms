@@ -17,6 +17,7 @@ ARG VITE_GIP_PROJECT_ID
 ENV VITE_GIP_API_KEY=$VITE_GIP_API_KEY
 ENV VITE_GIP_AUTH_DOMAIN=$VITE_GIP_AUTH_DOMAIN
 ENV VITE_GIP_PROJECT_ID=$VITE_GIP_PROJECT_ID
+COPY tsconfig.base.json ./
 COPY packages/shared/ packages/shared/
 COPY apps/api/src/ apps/api/src/
 COPY apps/api/package.json apps/api/
