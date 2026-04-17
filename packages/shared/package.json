@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./constants/*": "./src/constants/*.ts"
+    "./constants/*": "./src/constants/*.ts",
+    "./contracts/*": "./src/contracts/*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit --declaration false --declarationMap false",
