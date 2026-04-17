@@ -58,9 +58,9 @@ scripts/
 
 # SvelteKit build output
 apps/web/build/
-# Added by code-review-graph
-.code-review-graph/
 AGENTS.md
 .mcp.json
-.omx
 .omx/
+.omc/
+graphify-out/
+.codex/
