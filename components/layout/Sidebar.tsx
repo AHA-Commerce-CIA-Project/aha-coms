@@ -63,6 +63,7 @@ const sectionConfigs: Record<string, NavSection> = {
         items: [
             { href: '/fast', icon: LayoutDashboard, label: 'Dashboard' },
             { href: '/tasks', icon: CheckSquare, label: 'Tasks', hasBadge: true, badgeKey: 'tasks' },
+            { href: '/channels', icon: MessageCircle, label: 'Chat', hasBadge: true, badgeKey: 'chat' },
             { href: '/analytics', icon: BarChart3, label: 'Analytics', requireLeader: true },
             { href: '/activity-log', icon: Activity, label: 'Activity Log', requireLeader: true },
             { href: '/later', icon: Bookmark, label: 'Later' },
