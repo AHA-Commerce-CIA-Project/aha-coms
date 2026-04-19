@@ -5,6 +5,7 @@ import { Paperclip, Image as ImageIcon, Send, X, Bold, Italic, Underline, Strike
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { MentionAutocomplete } from './MentionAutocomplete';
 import { Smile } from 'lucide-react';
+import { ImageLightbox } from '@/components/ImageLightbox';
 
 interface Attachment {
   url: string;
@@ -47,6 +48,7 @@ export function ChannelMessageComposer({
 }: ChannelMessageComposerProps) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
   const [showMention, setShowMention] = useState(false);
@@ -146,15 +148,25 @@ export function ChannelMessageComposer({
     const mentionIds: string[] = [];
     const mentionPattern = /@(\S+)/g;
     let match;
+    let mentionsEveryone = false;
     while ((match = mentionPattern.exec(textContent)) !== null) {
-      const mentionName = match[1];
+      const mentionName = match[1].toLowerCase();
+      if (mentionName === 'all' || mentionName === 'everyone' || mentionName === 'channel') {
+        mentionsEveryone = true;
+        continue;
+      }
       const user = users.find(
         (u) =>
-          u.name.toLowerCase().replace(/\s+/g, '.') === mentionName.toLowerCase() ||
-          u.name.toLowerCase() === mentionName.toLowerCase()
+          u.name.toLowerCase().replace(/\s+/g, '.') === mentionName ||
+          u.name.toLowerCase() === mentionName
       );
       if (user && !mentionIds.includes(user.id)) {
         mentionIds.push(user.id);
+      }
+    }
+    if (mentionsEveryone) {
+      for (const u of users) {
+        if (!mentionIds.includes(u.id)) mentionIds.push(u.id);
       }
     }
 
@@ -191,32 +203,60 @@ export function ChannelMessageComposer({
     }
   };
 
-  const handleMentionSelect = (user: MentionUser) => {
+  const handleMentionSelect = (user: MentionUser | 'all') => {
     const editor = editorRef.current;
     if (!editor) return;
 
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return;
 
-    // Find the @ symbol and replace with the mention
     const range = sel.getRangeAt(0);
     const textNode = range.startContainer;
-    if (textNode.nodeType === Node.TEXT_NODE) {
-      const text = textNode.textContent || '';
-      const beforeCursor = text.substring(0, range.startOffset);
-      const atIdx = beforeCursor.lastIndexOf('@');
-      if (atIdx >= 0) {
-        const mentionText = '@' + user.name.replace(/\s+/g, '.') + ' ';
-        const newText = text.substring(0, atIdx) + mentionText + text.substring(range.startOffset);
-        textNode.textContent = newText;
-        // Set cursor after mention
-        const newRange = document.createRange();
-        newRange.setStart(textNode, atIdx + mentionText.length);
-        newRange.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(newRange);
-      }
+    if (textNode.nodeType !== Node.TEXT_NODE) {
+      setShowMention(false);
+      return;
     }
+
+    const text = textNode.textContent || '';
+    const beforeCursor = text.substring(0, range.startOffset);
+    const atIdx = beforeCursor.lastIndexOf('@');
+    if (atIdx < 0) {
+      setShowMention(false);
+      return;
+    }
+
+    const mentionLabel = user === 'all' ? '@all' : '@' + user.name.replace(/\s+/g, '.');
+
+    // Split the text node: before @, then chip, then space + rest
+    const before = text.substring(0, atIdx);
+    const after = text.substring(range.startOffset);
+
+    const parent = textNode.parentNode;
+    if (!parent) return;
+
+    const beforeNode = document.createTextNode(before);
+    const chip = document.createElement('span');
+    chip.className = 'mention-chip text-indigo-600 font-semibold bg-indigo-50 px-1 rounded';
+    chip.setAttribute('contenteditable', 'false');
+    if (user !== 'all') {
+        chip.setAttribute('data-user-id', user.id);
+    } else {
+        chip.setAttribute('data-mention', 'all');
+    }
+    chip.textContent = mentionLabel;
+    const spaceNode = document.createTextNode('\u00A0' + after);
+
+    parent.insertBefore(beforeNode, textNode);
+    parent.insertBefore(chip, textNode);
+    parent.insertBefore(spaceNode, textNode);
+    parent.removeChild(textNode);
+
+    // Position cursor right after the inserted non-breaking space
+    const newRange = document.createRange();
+    newRange.setStart(spaceNode, 1);
+    newRange.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
 
     setShowMention(false);
     editor.focus();
@@ -343,12 +383,20 @@ export function ChannelMessageComposer({
               className="relative group flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
             >
               {att.isImage ? (
-                <img src={att.url} alt={att.name} className="w-10 h-10 rounded object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setLightboxUrl(att.url)}
+                  className="rounded overflow-hidden hover:ring-2 hover:ring-indigo-300 transition-shadow"
+                  title="Click to preview"
+                >
+                  <img src={att.url} alt={att.name} className="w-10 h-10 rounded object-cover cursor-zoom-in" />
+                </button>
               ) : (
                 <Paperclip className="w-3.5 h-3.5 text-slate-400" />
               )}
               <span className="text-slate-600 max-w-[120px] truncate">{att.name}</span>
               <button
+                type="button"
                 onClick={() => removeAttachment(idx)}
                 className="ml-1 p-0.5 text-slate-400 hover:text-rose-500 transition-colors"
               >
@@ -436,14 +484,16 @@ export function ChannelMessageComposer({
               onChange={(e) => handleUpload(e.target.files)}
             />
 
-            <button
-              type="button"
-              onClick={insertAtMention}
-              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors"
-              title="Mention someone"
-            >
-              <span className="text-sm font-bold leading-none">@</span>
-            </button>
+            {users.length > 0 && (
+              <button
+                type="button"
+                onClick={insertAtMention}
+                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors"
+                title="Mention someone"
+              >
+                <span className="text-sm font-bold leading-none">@</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => imageInputRef.current?.click()}
@@ -499,6 +549,8 @@ export function ChannelMessageComposer({
       {uploading && (
         <p className="text-xs text-indigo-500 mt-1 font-medium">Uploading...</p>
       )}
+
+      <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </div>
   );
 }

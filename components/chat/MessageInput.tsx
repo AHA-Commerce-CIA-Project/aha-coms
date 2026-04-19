@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Smile, Paperclip, Image as ImageIcon, X, FileText, Loader2 } from 'lucide-react';
 import { EmojiPicker } from './EmojiPicker';
+import { ImageLightbox } from '@/components/ImageLightbox';
 
 interface Attachment {
     url: string;
@@ -29,6 +30,7 @@ export function MessageInput({ otherUserName, onSend, disabled }: MessageInputPr
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
@@ -133,12 +135,20 @@ export function MessageInput({ otherUserName, onSend, disabled }: MessageInputPr
                         >
                             {att.isImage ? (
                                 <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200">
-                                    <img
-                                        src={att.url}
-                                        alt={att.name}
-                                        className="w-full h-full object-cover"
-                                    />
                                     <button
+                                        type="button"
+                                        onClick={() => setLightboxUrl(att.url)}
+                                        className="block w-full h-full"
+                                        title="Click to preview"
+                                    >
+                                        <img
+                                            src={att.url}
+                                            alt={att.name}
+                                            className="w-full h-full object-cover cursor-zoom-in"
+                                        />
+                                    </button>
+                                    <button
+                                        type="button"
                                         onClick={() => removeAttachment(idx)}
                                         className="absolute top-1 right-1 p-0.5 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                                     >
@@ -252,6 +262,8 @@ export function MessageInput({ otherUserName, onSend, disabled }: MessageInputPr
                     <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono border border-slate-200">Enter</kbd> to send · <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-mono border border-slate-200">Shift+Enter</kbd> new line
                 </span>
             </div>
+
+            <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
         </div>
     );
 }

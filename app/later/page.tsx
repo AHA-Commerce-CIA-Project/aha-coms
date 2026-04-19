@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { Bookmark, Hash, MessageSquare, Download, Trash2, ExternalLink } from 'lucide-react';
+import { ImageLightbox } from '@/components/ImageLightbox';
 
 interface SavedItem {
   id: string;
@@ -52,6 +53,7 @@ export default function LaterPage() {
   const { data: session, isPending } = useSession();
   const [saved, setSaved] = useState<SavedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -208,13 +210,23 @@ export default function LaterPage() {
                     {images.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
                         {images.map((img: any, idx: number) => (
-                          <img
+                          <button
                             key={idx}
-                            src={img.url}
-                            alt={img.name}
-                            className="max-w-[200px] max-h-[140px] rounded-lg border border-slate-200 object-cover"
-                            loading="lazy"
-                          />
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLightboxUrl(img.url);
+                            }}
+                            className="rounded-lg overflow-hidden border border-slate-200 hover:border-indigo-300 transition-colors"
+                            title="Click to preview"
+                          >
+                            <img
+                              src={img.url}
+                              alt={img.name}
+                              className="max-w-[200px] max-h-[140px] object-cover cursor-zoom-in"
+                              loading="lazy"
+                            />
+                          </button>
                         ))}
                       </div>
                     )}
@@ -277,6 +289,8 @@ export default function LaterPage() {
           })}
         </div>
       )}
+
+      <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </div>
   );
 }
