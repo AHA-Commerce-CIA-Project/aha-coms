@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, PenSquare, X, Send, Paperclip, Image as ImageIcon, Smile, ChevronLeft, Plus, ClipboardList, Clock, CheckCircle2, Pencil, Trash2, Bookmark } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { PageTabs } from '@/components/PageTabs';
@@ -193,6 +193,7 @@ export default function MessagesPageWrapper() {
 function MessagesPage() {
     const { user } = useAuth();
     const searchParams = useSearchParams();
+    const router = useRouter();
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
     const [selected, setSelected] = useState<ConversationItem | null>(null);
     const [messages, setMessages] = useState<DmMessage[]>([]);
@@ -212,6 +213,7 @@ function MessagesPage() {
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [mobileShowThread, setMobileShowThread] = useState(false);
     const [showCreateTask, setShowCreateTask] = useState(false);
+    const [showTaskPicker, setShowTaskPicker] = useState(false);
     const [taskForm, setTaskForm] = useState({ title: '', description: '', urgency: 'P3', dueDate: '', dueDateTime: '' });
     const [taskSubmitting, setTaskSubmitting] = useState(false);
     const msgEndRef = useRef<HTMLDivElement>(null);
@@ -529,10 +531,9 @@ function MessagesPage() {
                 {/* Create Task — pinned to bottom of DM list */}
                 <div className="border-t border-slate-200 px-3 py-2">
                     <button
-                        onClick={() => setShowCreateTask(true)}
-                        disabled={!selected}
-                        title={selected ? `Create task for ${selected.otherUser?.name || ''}` : 'Select a conversation first'}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        onClick={() => selected ? setShowCreateTask(true) : setShowTaskPicker(true)}
+                        title={selected ? `Create task for ${selected.otherUser?.name || ''}` : 'Create task (team or direct)'}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                     >
                         <ClipboardList className="w-4 h-4" /> Create Task
                     </button>
@@ -772,6 +773,47 @@ function MessagesPage() {
                                     </span>
                                 </button>
                             ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Task Picker — shown when no DM is selected */}
+            {showTaskPicker && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setShowTaskPicker(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900">Create Task</h3>
+                                <p className="text-xs text-slate-400">Who's this task for?</p>
+                            </div>
+                            <button onClick={() => setShowTaskPicker(false)} className="p-1 text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <button
+                                onClick={() => { setShowTaskPicker(false); router.push('/request'); }}
+                                className="flex flex-col items-start gap-2 p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 text-left transition-colors"
+                            >
+                                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                                    <ClipboardList className="w-5 h-5 text-indigo-600" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-slate-900">Team / Division</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">Route to a team for triage</p>
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => { setShowTaskPicker(false); router.push('/request?direct=1'); }}
+                                className="flex flex-col items-start gap-2 p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 text-left transition-colors"
+                            >
+                                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                                    <PenSquare className="w-5 h-5 text-indigo-600" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-slate-900">Direct Request</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">Assign to a specific person</p>
+                                </div>
+                            </button>
                         </div>
                     </div>
                 </div>

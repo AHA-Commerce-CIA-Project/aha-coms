@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Send, Zap, Copy, Check, ExternalLink, ImagePlus, X, Loader2, Calendar, Users, FileText, ChevronDown, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { RichTextEditor } from '@/components/RichTextEditor';
 
 const DIVISIONS = [
     'Partner Relationship (PR)',
@@ -57,6 +58,7 @@ export default function RequestPage() {
         urgency: 'P3',
         description: '',
         dueDate: '',
+        dueDateTime: '' as string, // captured at pick time: "HH:MM:SS"
         isDirectRequest: false,
         directAssigneeId: '' as string | null,
         brandCode: '',
@@ -72,6 +74,15 @@ export default function RequestPage() {
     const [showPriorityInfo, setShowPriorityInfo] = useState(false);
     useEffect(() => {
         fetch('/api/brand-codes').then(r => r.ok ? r.json() : []).then(setBrandCodes).catch(() => {});
+    }, []);
+
+    // Honor ?direct=1 to open in Direct Request mode (used by Messages → Create Task)
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('direct') === '1') {
+            setFormData(prev => ({ ...prev, isDirectRequest: true }));
+        }
     }, []);
 
     // FBI members state for direct request
@@ -170,7 +181,9 @@ export default function RequestPage() {
             if (formData.requestType === 'fix_request' && !formData.brandCode) errors.push('Please select a brand code.');
             if (formData.isDirectRequest && !formData.directAssigneeId) errors.push('Please select an FBI member.');
         } else if (step === 3) {
-            if (!formData.description.trim()) errors.push('Please enter a request description.');
+            // Strip HTML tags to check for real content
+            const textContent = formData.description.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            if (!textContent) errors.push('Please enter a request description.');
         }
         setStepErrors(errors);
         return errors.length === 0;
@@ -600,7 +613,13 @@ export default function RequestPage() {
 
                     {/* Step errors moved to above Next button */}
 
-                    <div className="space-y-5" onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
+                    <div className="space-y-5" onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return;
+                        // Allow Enter inside rich text editors and textareas (for newlines)
+                        const target = e.target as HTMLElement;
+                        if (target.isContentEditable || target.tagName === 'TEXTAREA') return;
+                        e.preventDefault();
+                    }}>
 
                         {/* ===== STEP 1: Your Information ===== */}
                         {currentStep === 1 && (
@@ -918,12 +937,12 @@ export default function RequestPage() {
                                 {/* Description */}
                                 <div className="space-y-1.5">
                                     <label className="text-sm text-slate-500 font-medium">Request Description <span className="text-rose-500">*</span></label>
-                                    <textarea
-                                        name="description"
-                                        value={formData.description} onChange={handleChange}
-                                        rows={4}
-                                        className="w-full bg-slate-50 border-slate-200 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors resize-none text-sm"
+                                    <RichTextEditor
+                                        value={formData.description}
+                                        onChange={(html) => setFormData(f => ({ ...f, description: html }))}
                                         placeholder="Describe what you need in detail..."
+                                        minHeight="120px"
+                                        maxHeight="320px"
                                     />
                                 </div>
 
@@ -1165,7 +1184,10 @@ export default function RequestPage() {
                                                 })()}
                                             </div>
                                             <div className="text-slate-500">Description</div>
-                                            <div className="text-slate-900 font-medium col-span-2 mt-1 whitespace-pre-wrap bg-white rounded-lg border border-slate-200 p-3 text-sm">{formData.description || '-'}</div>
+                                            <div
+                                                className="text-slate-900 font-medium col-span-2 mt-1 bg-white rounded-lg border border-slate-200 p-3 text-sm [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded"
+                                                dangerouslySetInnerHTML={{ __html: formData.description || '-' }}
+                                            />
                                             {imagePreview && (
                                                 <>
                                                     <div className="text-slate-500">Image</div>
@@ -1209,7 +1231,19 @@ export default function RequestPage() {
                                     <label className="text-sm text-slate-500 font-medium">Preferred Deadline</label>
                                     <input
                                         type="date" name="dueDate"
-                                        value={formData.dueDate} onChange={handleChange}
+                                        value={formData.dueDate}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val) {
+                                                const now = new Date();
+                                                const hh = String(now.getHours()).padStart(2, '0');
+                                                const mm = String(now.getMinutes()).padStart(2, '0');
+                                                const ss = String(now.getSeconds()).padStart(2, '0');
+                                                setFormData(f => ({ ...f, dueDate: val, dueDateTime: `${hh}:${mm}:${ss}` }));
+                                            } else {
+                                                setFormData(f => ({ ...f, dueDate: '', dueDateTime: '' }));
+                                            }
+                                        }}
                                         min={(() => {
                                             const d = new Date();
                                             if (formData.urgency === '5-minute') {
@@ -1224,6 +1258,14 @@ export default function RequestPage() {
                                     <p className="text-xs text-slate-400">
                                         {formData.urgency === '5-minute' ? 'Quick tasks can be set for today' : 'Minimum deadline is tomorrow (H+1)'}
                                     </p>
+                                    {formData.dueDate && formData.dueDateTime && (
+                                        <p className="text-xs text-indigo-600 font-medium">
+                                            Deadline: {(() => {
+                                                const [y, m, d] = formData.dueDate.split('-');
+                                                return `${d}/${m}/${y} ${formData.dueDateTime} WIB`;
+                                            })()}
+                                        </p>
+                                    )}
                                 </div>
                             </>
                         )}
