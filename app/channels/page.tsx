@@ -12,6 +12,7 @@ import { ThreadPanel } from '@/components/channels/ThreadPanel';
 import { CreateChannelModal } from '@/components/channels/CreateChannelModal';
 import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';
 import { Hash, MessageSquare } from 'lucide-react';
+import { PageTabs } from '@/components/PageTabs';
 
 interface Attachment {
   url: string;
@@ -25,6 +26,7 @@ interface Channel {
   id: string;
   name: string;
   description: string | null;
+  createdBy: string;
   creator: { id: string; name: string };
   _count: { messages: number };
   updatedAt: string;
@@ -120,7 +122,8 @@ function ChannelsPageContent() {
   useEffect(() => {
     if (!session) return;
     fetchChannels();
-    const interval = setInterval(fetchChannels, 5000);
+    // Channel list refresh — SSE handles real-time updates, this is a fallback
+    const interval = setInterval(fetchChannels, 30000);
     return () => clearInterval(interval);
   }, [session, fetchChannels]);
 
@@ -202,12 +205,40 @@ function ChannelsPageContent() {
     }
   }, []);
 
-  // Poll messages
+  // SSE: real-time messages + unread (replaces polling)
   useEffect(() => {
     if (!selectedChannel) return;
     fetchMessages(selectedChannel.id);
-    const interval = setInterval(() => fetchMessages(selectedChannel.id, undefined, true), 3000);
-    return () => clearInterval(interval);
+
+    const es = new EventSource(`/api/channels/stream?channelId=${selectedChannel.id}`);
+
+    es.addEventListener('messages', (e) => {
+      try {
+        const newMsgs: Message[] = JSON.parse(e.data);
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const unique = newMsgs.filter((m) => !existingIds.has(m.id));
+          return unique.length > 0 ? [...prev, ...unique] : prev;
+        });
+      } catch {}
+    });
+
+    es.addEventListener('unread', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        // Update channel list with new-message indicators
+        setChannels((prev) => prev.map((ch) => {
+          const update = data.channels?.find((u: any) => u.id === ch.id);
+          return update ? { ...ch, hasNew: update.hasNew } : ch;
+        }));
+      } catch {}
+    });
+
+    es.onerror = () => {
+      // EventSource auto-reconnects; no action needed
+    };
+
+    return () => es.close();
   }, [selectedChannel, fetchMessages]);
 
   // Search messages
@@ -300,6 +331,28 @@ function ChannelsPageContent() {
     );
   };
 
+  const handleDeleteChannel = async () => {
+    if (!selectedChannel) return;
+    const confirmed = window.confirm(
+      `Delete #${selectedChannel.name}? This permanently removes the channel and all its messages. This cannot be undone.`
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/channels/${selectedChannel.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to delete channel');
+        return;
+      }
+      setSelectedChannel(null);
+      setMessages([]);
+      setThreadMessage(null);
+      fetchChannels();
+    } catch {
+      alert('Failed to delete channel');
+    }
+  };
+
   if (isPending) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -311,7 +364,14 @@ function ChannelsPageContent() {
   if (!session) return null;
 
   return (
-    <div className="flex h-[calc(100vh-120px)] bg-white -mx-6 -mt-6">
+    <div className="-mx-6 -mt-6">
+      <div className="px-6 pt-4 pb-2">
+        <PageTabs tabs={[
+          { href: '/channels', label: 'Channels' },
+          { href: '/messages', label: 'Messages' },
+        ]} />
+      </div>
+    <div className="flex" style={{ height: 'calc(100vh - 168px)' }}>
       {/* Channel list */}
       <div className="w-[280px] border-r border-slate-200 flex-shrink-0">
         <ChannelList
@@ -340,6 +400,8 @@ function ChannelsPageContent() {
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               searching={searching}
+              isCreator={selectedChannel.createdBy === session.user.id}
+              onDelete={handleDeleteChannel}
             />
             {searchResults ? (
               <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -527,6 +589,7 @@ function ChannelsPageContent() {
         isTaskForward={forwardMessage?.isTaskForward}
         taskToken={forwardMessage?.taskToken}
       />
+    </div>
     </div>
   );
 }

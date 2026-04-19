@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Hash, Search, X, Lock, Users, Crown } from 'lucide-react';
+import { Hash, Search, X, Lock, Users, Crown, MoreVertical, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Member {
@@ -22,15 +22,19 @@ interface ChannelHeaderProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   searching: boolean;
+  isCreator?: boolean;
+  onDelete?: () => void;
 }
 
-export function ChannelHeader({ name, description, isPrivate, memberCount, channelId, searchQuery, onSearchChange, searching }: ChannelHeaderProps) {
+export function ChannelHeader({ name, description, isPrivate, memberCount, channelId, searchQuery, onSearchChange, searching, isCreator, onDelete }: ChannelHeaderProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const membersRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (showSearch) {
@@ -49,6 +53,18 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showMembers]);
+
+  // Close kebab menu on click outside
+  useEffect(() => {
+    if (!showMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showMenu]);
 
   const handleToggleMembers = async () => {
     if (showMembers) {
@@ -199,6 +215,38 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
           >
             <Search className="w-5 h-5" />
           </button>
+
+          {/* Kebab menu — creator-only actions */}
+          {isCreator && onDelete && (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setShowMenu((v) => !v)}
+                className={cn(
+                  'p-2 rounded-lg transition-colors',
+                  showMenu
+                    ? 'text-indigo-600 bg-indigo-50'
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                )}
+                title="More actions"
+              >
+                <MoreVertical className="w-5 h-5" />
+              </button>
+              {showMenu && (
+                <div className="absolute right-0 top-full mt-2 w-[200px] bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50">
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      onDelete();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm text-rose-600 hover:bg-rose-50 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="font-medium">Delete channel</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
