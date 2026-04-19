@@ -23,6 +23,8 @@ import {
     Home,
     ArrowLeft,
     MessageCircle,
+    Sparkles,
+    Mail,
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/lib/auth-context';
@@ -51,6 +53,7 @@ const sectionConfigs: Record<string, NavSection> = {
         label: 'AHA COMSS',
         items: [
             { href: '/', icon: LayoutDashboard, label: 'Home' },
+            { href: '/changelog', icon: Sparkles, label: "What's New", hasBadge: true, badgeKey: 'changelog' },
         ],
     },
     fast: {
@@ -58,13 +61,18 @@ const sectionConfigs: Record<string, NavSection> = {
         backToHome: true,
         items: [
             { href: '/fast', icon: LayoutDashboard, label: 'Dashboard' },
-            { href: '/tasks', icon: CheckSquare, label: 'My Tasks' },
-            { href: '/nexus', icon: Inbox, label: 'List Task Queue' },
-            { href: '/channels', icon: Hash, label: 'Channels', hasBadge: true },
-            { href: '/chat', icon: MessageCircle, label: 'Google Chat', requireLeader: true },
+            { href: '/tasks', icon: CheckSquare, label: 'Tasks', hasBadge: true, badgeKey: 'tasks' },
             { href: '/analytics', icon: BarChart3, label: 'Analytics', requireLeader: true },
             { href: '/activity-log', icon: Activity, label: 'Activity Log', requireLeader: true },
             { href: '/later', icon: Bookmark, label: 'Later' },
+        ],
+    },
+    chat: {
+        label: 'Chat',
+        backToHome: true,
+        items: [
+            { href: '/channels', icon: Hash, label: 'Channels', hasBadge: true, badgeKey: 'chat' },
+            { href: '/messages', icon: MessageCircle, label: 'Direct Messages', hasBadge: true, badgeKey: 'dm' },
         ],
     },
     orbit: {
@@ -95,8 +103,8 @@ const sectionConfigs: Record<string, NavSection> = {
 // Determine which section the current pathname belongs to
 function getCurrentSection(pathname: string): keyof typeof sectionConfigs {
     if (pathname === '/') return 'comss';
+    if (pathname.startsWith('/channels') || pathname.startsWith('/messages') || pathname.startsWith('/chat')) return 'chat';
     if (pathname.startsWith('/fast') || pathname.startsWith('/tasks') || pathname.startsWith('/nexus')
-        || pathname.startsWith('/channels') || pathname.startsWith('/chat')
         || pathname.startsWith('/analytics')
         || pathname.startsWith('/activity-log') || pathname.startsWith('/later')) return 'fast';
     if (pathname.startsWith('/orbit')) return 'orbit';
@@ -111,6 +119,8 @@ export function Sidebar() {
     const { isLeader, isMaster, user } = useAuth();
     const [unreadCount, setUnreadCount] = useState(0);
     const [orbitUnclaimedCount, setOrbitUnclaimedCount] = useState(0);
+    const [changelogUnseenCount, setChangelogUnseenCount] = useState(0);
+    const [dmUnreadCount, setDmUnreadCount] = useState(0);
     const [storageInfo, setStorageInfo] = useState<{ usedGB: number; totalGB: number; availableGB: number; usagePercent: number } | null>(null);
 
     // Poll badge counts
@@ -119,9 +129,11 @@ export function Sidebar() {
 
         const fetchBadges = async () => {
             try {
-                const [channelRes, orbitRes] = await Promise.all([
+                const [channelRes, orbitRes, changelogRes, dmRes] = await Promise.all([
                     fetch('/api/channels/unread'),
                     fetch('/api/orbit/unclaimed'),
+                    fetch('/api/changelog'),
+                    fetch('/api/chat/unread'),
                 ]);
                 if (channelRes.ok) {
                     const data = await channelRes.json();
@@ -130,6 +142,14 @@ export function Sidebar() {
                 if (orbitRes.ok) {
                     const data = await orbitRes.json();
                     setOrbitUnclaimedCount(data.unclaimedCount || 0);
+                }
+                if (changelogRes.ok) {
+                    const data = await changelogRes.json();
+                    setChangelogUnseenCount(data.unseenCount || 0);
+                }
+                if (dmRes.ok) {
+                    const data = await dmRes.json();
+                    setDmUnreadCount(data.unreadCount || 0);
                 }
             } catch { }
         };
@@ -214,11 +234,22 @@ export function Sidebar() {
                             {visibleSection.items.map((item) => {
                                 const isActive = pathname === item.href
                                     || (item.href === '/channels' && pathname.startsWith('/channels'))
+                                    || (item.href === '/tasks' && (pathname === '/tasks' || pathname === '/nexus'))
                                     || (item.href === '/orbit' && pathname === '/orbit')
                                     || (item.href === '/orbit/manage' && pathname.startsWith('/orbit/manage'))
                                     || (item.href === '/fast' && pathname === '/fast');
                                 const badgeKey = item.badgeKey;
-                                const badgeCount = badgeKey === 'orbit' ? orbitUnclaimedCount : unreadCount;
+                                const badgeCount = badgeKey === 'orbit'
+                                    ? orbitUnclaimedCount
+                                    : badgeKey === 'changelog'
+                                        ? changelogUnseenCount
+                                        : badgeKey === 'chat'
+                                            ? unreadCount + dmUnreadCount
+                                            : badgeKey === 'dm'
+                                                ? dmUnreadCount
+                                                : badgeKey === 'tasks'
+                                                    ? 0 // tasks badge reserved for future use
+                                                    : unreadCount;
                                 const showBadge = item.hasBadge && badgeCount > 0;
 
                                 if (item.disabled) {
@@ -254,7 +285,10 @@ export function Sidebar() {
                                             {showBadge && !sidebarOpen && (
                                                 <span className={cn(
                                                     "absolute -top-2 -right-2 min-w-[16px] h-4 flex items-center justify-center px-1 text-[9px] font-bold text-white rounded-full",
-                                                    badgeKey === 'orbit' ? 'bg-amber-500' : 'bg-rose-500'
+                                                    badgeKey === 'orbit' ? 'bg-amber-500'
+                                                        : badgeKey === 'changelog' ? 'bg-indigo-500'
+                                                            : badgeKey === 'chat' ? 'bg-rose-500'
+                                                                : 'bg-rose-500'
                                                 )}>
                                                     {badgeCount > 9 ? '9+' : badgeCount}
                                                 </span>
@@ -271,7 +305,9 @@ export function Sidebar() {
                                                 'min-w-[20px] h-5 flex items-center justify-center px-1.5 text-[10px] font-bold rounded-full',
                                                 isActive
                                                     ? 'bg-white/20 text-white'
-                                                    : badgeKey === 'orbit' ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white'
+                                                    : badgeKey === 'orbit' ? 'bg-amber-500 text-white'
+                                                        : badgeKey === 'changelog' ? 'bg-indigo-500 text-white'
+                                                            : 'bg-rose-500 text-white'
                                             )}>
                                                 {badgeCount > 99 ? '99+' : badgeCount}
                                             </span>

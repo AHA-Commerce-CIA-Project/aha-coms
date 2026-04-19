@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { Zap, RotateCcw, FileText, ArrowRight, Users } from 'lucide-react';
+import { Zap, RotateCcw, FileText, ArrowRight, Users, MessageCircle } from 'lucide-react';
 
 export default function ComssLandingPage() {
     const { profile, isLeader, isMaster } = useAuth();
@@ -53,6 +53,17 @@ export default function ComssLandingPage() {
             iconBg: 'bg-amber-50',
             iconColor: 'text-amber-600',
             border: 'hover:border-amber-300',
+        }] : []),
+        ...(isFbiTeam || isLeader ? [{
+            href: '/channels',
+            icon: MessageCircle,
+            title: 'Chat',
+            subtitle: 'Channels & Direct Messages',
+            description: 'Collaborate in team channels, send direct messages, and assign tasks in context.',
+            color: 'from-sky-500 to-cyan-600',
+            iconBg: 'bg-sky-50',
+            iconColor: 'text-sky-600',
+            border: 'hover:border-sky-300',
         }] : []),
     ];
 
