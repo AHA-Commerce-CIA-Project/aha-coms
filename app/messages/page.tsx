@@ -525,6 +525,18 @@ function MessagesPage() {
                         </button>
                     ))}
                 </div>
+
+                {/* Create Task — pinned to bottom of DM list */}
+                <div className="border-t border-slate-200 px-3 py-2">
+                    <button
+                        onClick={() => setShowCreateTask(true)}
+                        disabled={!selected}
+                        title={selected ? `Create task for ${selected.otherUser?.name || ''}` : 'Select a conversation first'}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                    >
+                        <ClipboardList className="w-4 h-4" /> Create Task
+                    </button>
+                </div>
             </div>
 
             {/* Right: Message thread */}
@@ -706,11 +718,6 @@ function MessagesPage() {
                                 }}
                                 placeholder={`Message ${selected.otherUser?.name || ''}...`}
                             />
-                            <div className="flex items-center gap-1 px-3 pb-2">
-                                <button onClick={() => setShowCreateTask(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Create task for this person">
-                                    <ClipboardList className="w-3.5 h-3.5" /> Create Task
-                                </button>
-                            </div>
                         </div>
                     </>
                 ) : (
