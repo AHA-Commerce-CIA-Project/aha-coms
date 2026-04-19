@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Hash, Lock, Search, Check } from 'lucide-react';
+import { X, Hash, Lock, Search, Check, Users as UsersIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
 
 interface User {
   id: string;
@@ -13,6 +14,11 @@ interface User {
   teamName: string | null;
 }
 
+interface Team {
+  id: string;
+  name: string;
+}
+
 interface CreateChannelModalProps {
   open: boolean;
   onClose: () => void;
@@ -20,12 +26,15 @@ interface CreateChannelModalProps {
 }
 
 export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelModalProps) {
+  const { profile } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [userSearch, setUserSearch] = useState('');
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +44,18 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
       .then((res) => (res.ok ? res.json() : []))
       .then(setUsers)
       .catch(() => {});
-  }, [open]);
+    fetch('/api/teams')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: Team[]) => {
+        setTeams(data);
+        // Default: preselect the creator's team if they have one
+        const myTeamId = profile?.teamId;
+        if (myTeamId && data.some((t) => t.id === myTeamId)) {
+          setSelectedTeamIds([myTeamId]);
+        }
+      })
+      .catch(() => {});
+  }, [open, profile]);
 
   if (!open) return null;
 
@@ -48,6 +68,12 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
   const toggleMember = (userId: string) => {
     setSelectedMembers((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const toggleTeam = (teamId: string) => {
+    setSelectedTeamIds((prev) =>
+      prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId]
     );
   };
 
@@ -65,6 +91,7 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
           description,
           isPrivate,
           memberIds: isPrivate ? selectedMembers : [],
+          allowedTeamIds: selectedTeamIds,
         }),
       });
 
@@ -77,6 +104,7 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
       setDescription('');
       setIsPrivate(false);
       setSelectedMembers([]);
+      setSelectedTeamIds([]);
       setUserSearch('');
       onCreated();
       onClose();
@@ -167,6 +195,54 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
                   )}
                 />
               </button>
+            </div>
+
+            {/* Team visibility */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <UsersIcon className="w-4 h-4 text-slate-500" />
+                <label className="text-sm font-medium text-slate-700">
+                  Visible to teams
+                  {selectedTeamIds.length > 0 && (
+                    <span className="ml-2 text-xs text-indigo-600 font-normal">
+                      {selectedTeamIds.length} selected
+                    </span>
+                  )}
+                </label>
+              </div>
+              <p className="text-xs text-slate-400 mb-2">
+                Pick one or more teams that can see this channel. Members of other teams won&rsquo;t see it in their Channels list.
+              </p>
+              {teams.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Loading teams…</p>
+              ) : (
+                <div className="max-h-[140px] overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+                  {teams.map((t) => {
+                    const isSelected = selectedTeamIds.includes(t.id);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => toggleTeam(t.id)}
+                        className={cn(
+                          'w-full flex items-center gap-3 px-3 py-2 text-left transition-colors',
+                          isSelected ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            'w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors',
+                            isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+                          )}
+                        >
+                          {isSelected && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                        <span className="text-sm text-slate-700">{t.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

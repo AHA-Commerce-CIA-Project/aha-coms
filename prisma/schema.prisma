@@ -27,6 +27,10 @@ model User {
   role          String    @default("member") // 'leader' or 'member'
   status        String    @default("active") @db.VarChar(20) // 'active', 'away', 'busy', 'offline'
   lastSeenAt    DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  activeSecondsToday Int  @default(0) @map("active_seconds_today")
+  activeDate    DateTime? @map("active_date") @db.Date
+  totalActiveSeconds Int  @default(0) @map("total_active_seconds")
+  lastChangelogSeenAt DateTime? @map("last_changelog_seen_at") @db.Timestamptz(6)
   accountStatus String    @default("active") @map("account_status") @db.VarChar(30) // 'pending_activation', 'pending_setup', 'pending_approval', 'active', 'rejected'
   teamId        String?
   team          Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
@@ -42,9 +46,10 @@ model User {
   meetingGuests    MeetingGuest[]
   googleToken      GoogleToken?
 
-  // Chat / DM Relations (legacy)
+  // Chat / DM Relations
   conversationParticipants ConversationParticipant[]
   sentMessages             DirectMessage[]
+  dmReactions              DmReaction[]
 
   // Channel Relations
   createdChannels      Channel[]          @relation("ChannelCreator")
@@ -185,7 +190,7 @@ model Task {
   timeUnit              String?   @map("time_unit")
   resolutionSummary     String?   @map("resolution_summary")
 
-  dueDate               DateTime? @map("due_date") @db.Date
+  dueDate               DateTime? @map("due_date") @db.Timestamptz(6)
   projectId             String?   @map("project_id")
   project               Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   assigneeId            String?   @map("assignee_id")
@@ -196,8 +201,11 @@ model Task {
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   completedAt           DateTime? @map("completed_at") @db.Timestamptz(6)
 
+  // Conversation link (for DM-created tasks)
+  conversationId        String?   @map("conversation_id")
+
   // Direct Request Fields
-  source                String    @default("queue") @db.VarChar(30) // 'queue' or 'direct_request'
+  source                String    @default("queue") @db.VarChar(30) // 'queue' or 'direct_request' or 'dm' or 'leader_created'
   directAssigneeId      String?   @map("direct_assignee_id")
   directAssignee        User?     @relation("DirectAssigneeTasks", fields: [directAssigneeId], references: [id], onDelete: SetNull)
   responseDeadline      DateTime? @map("response_deadline") @db.Timestamptz(6)
@@ -357,10 +365,29 @@ model DirectMessage {
   sender          User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
   content         String
   attachments     Json         @default("[]")
+  type            String       @default("text") @db.VarChar(30) // 'text' | 'task_card' | 'status_update'
+  taskId          String?      @map("task_id")
+  taskSnapshot    Json?        @map("task_snapshot")
+  isEdited        Boolean      @default(false) @map("is_edited")
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  reactions       DmReaction[]
 
   @@index([conversationId, createdAt])
   @@map("direct_messages")
+}
+
+model DmReaction {
+  id        String         @id @default(uuid())
+  emoji     String         @db.VarChar(32)
+  userId    String         @map("user_id")
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId String         @map("message_id")
+  message   DirectMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, emoji, messageId])
+  @@map("dm_reactions")
 }
 
 // ==========================================
@@ -368,15 +395,16 @@ model DirectMessage {
 // ==========================================
 
 model Channel {
-  id          String   @id @default(uuid())
-  name        String   @db.VarChar(100)
-  description String?
-  createdBy   String   @map("created_by")
-  creator     User     @relation("ChannelCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  isPrivate   Boolean  @default(false) @map("is_private")
-  isArchived  Boolean  @default(false) @map("is_archived")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String   @id @default(uuid())
+  name            String   @db.VarChar(100)
+  description     String?
+  createdBy       String   @map("created_by")
+  creator         User     @relation("ChannelCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  isPrivate       Boolean  @default(false) @map("is_private")
+  isArchived      Boolean  @default(false) @map("is_archived")
+  allowedTeamIds  String[] @default([]) @map("allowed_team_ids")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   messages     ChannelMessage[]
   readStatuses ChannelReadStatus[]
@@ -603,4 +631,20 @@ model ActivityLog {
   @@index([createdAt])
   @@index([userId])
   @@map("activity_logs")
+}
+
+model ChangelogEntry {
+  id          String   @id @default(uuid())
+  version     String?
+  title       String
+  summary     String   @db.Text
+  category    String   @default("feature") @db.VarChar(20) // 'feature' | 'improvement' | 'fix' | 'breaking'
+  pinned      Boolean  @default(false)
+  publishedAt DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+  createdBy   String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([publishedAt])
+  @@map("changelog_entries")
 }
