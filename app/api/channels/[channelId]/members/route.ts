@@ -16,47 +16,58 @@ export async function GET(
 
   const channel = await prisma.channel.findUnique({
     where: { id: channelId },
-    select: { isPrivate: true, createdBy: true },
+    select: { isPrivate: true, createdBy: true, allowedTeamIds: true },
   });
 
   if (!channel) {
     return NextResponse.json({ error: 'Channel not found' }, { status: 404 });
   }
 
-  if (channel.isPrivate) {
-    // Return creator + explicit members
-    const members = await prisma.channelMember.findMany({
-      where: { channelId },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, image: true, role: true },
-        },
-      },
-    });
+  const userSelect = {
+    id: true,
+    name: true,
+    email: true,
+    image: true,
+    role: true,
+  } as const;
 
-    const creator = await prisma.user.findUnique({
-      where: { id: channel.createdBy },
-      select: { id: true, name: true, email: true, image: true, role: true },
-    });
+  // Explicit ChannelMember rows (used for private, and as a union for public)
+  const explicitMembers = await prisma.channelMember.findMany({
+    where: { channelId },
+    include: { user: { select: userSelect } },
+  });
 
-    const memberList = members.map((m) => ({ ...m.user, isCreator: false }));
-    if (creator && !memberList.some((m) => m.id === creator.id)) {
-      memberList.unshift({ ...creator, isCreator: true });
-    } else if (creator) {
-      const idx = memberList.findIndex((m) => m.id === creator.id);
-      if (idx >= 0) memberList[idx].isCreator = true;
-    }
+  const creator = await prisma.user.findUnique({
+    where: { id: channel.createdBy },
+    select: userSelect,
+  });
 
-    return NextResponse.json(memberList);
-  } else {
-    // Public channel: return all users
-    const users = await prisma.user.findMany({
-      select: { id: true, name: true, email: true, image: true, role: true },
-      orderBy: { name: 'asc' },
-    });
+  // Build the set of users that can see this channel, matching the
+  // visibility rules used by GET /api/channels.
+  const byId = new Map<string, any>();
 
-    return NextResponse.json(
-      users.map((u) => ({ ...u, isCreator: u.id === channel.createdBy }))
-    );
+  if (creator) byId.set(creator.id, { ...creator, isCreator: true });
+  for (const m of explicitMembers) {
+    if (!byId.has(m.user.id)) byId.set(m.user.id, { ...m.user, isCreator: false });
   }
+
+  // For public channels with team scoping, also include users whose team
+  // is in allowedTeamIds.
+  if (!channel.isPrivate && channel.allowedTeamIds.length > 0) {
+    const teamUsers = await prisma.user.findMany({
+      where: { teamId: { in: channel.allowedTeamIds } },
+      select: userSelect,
+    });
+    for (const u of teamUsers) {
+      if (!byId.has(u.id)) byId.set(u.id, { ...u, isCreator: false });
+    }
+  }
+
+  const memberList = Array.from(byId.values()).sort((a, b) => {
+    if (a.isCreator) return -1;
+    if (b.isCreator) return 1;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  return NextResponse.json(memberList);
 }
