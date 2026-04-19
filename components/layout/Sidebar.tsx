@@ -53,6 +53,7 @@ const sectionConfigs: Record<string, NavSection> = {
         label: 'AHA COMSS',
         items: [
             { href: '/', icon: LayoutDashboard, label: 'Home' },
+            { href: '/channels', icon: MessageCircle, label: 'Chat', hasBadge: true, badgeKey: 'chat' },
             { href: '/changelog', icon: Sparkles, label: "What's New", hasBadge: true, badgeKey: 'changelog' },
         ],
     },
