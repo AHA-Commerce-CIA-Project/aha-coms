@@ -60,6 +60,18 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
       .catch(() => {});
   }, [open, profile]);
 
+  // Close team dropdown on outside click
+  useEffect(() => {
+    if (!teamDropdownOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (teamDropdownRef.current && !teamDropdownRef.current.contains(e.target as Node)) {
+        setTeamDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [teamDropdownOpen]);
+
   if (!open) return null;
 
   const filteredUsers = users.filter(
@@ -79,18 +91,6 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
       prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId]
     );
   };
-
-  // Close team dropdown on outside click
-  useEffect(() => {
-    if (!teamDropdownOpen) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (teamDropdownRef.current && !teamDropdownRef.current.contains(e.target as Node)) {
-        setTeamDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [teamDropdownOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
