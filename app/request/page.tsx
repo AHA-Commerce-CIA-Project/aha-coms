@@ -76,15 +76,6 @@ export default function RequestPage() {
         fetch('/api/brand-codes').then(r => r.ok ? r.json() : []).then(setBrandCodes).catch(() => {});
     }, []);
 
-    // Honor ?direct=1 to open in Direct Request mode (used by Messages → Create Task)
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('direct') === '1') {
-            setFormData(prev => ({ ...prev, isDirectRequest: true }));
-        }
-    }, []);
-
     // FBI members state for direct request
     const [fbiMembers, setFbiMembers] = useState<{ id: string; name: string; role: string; team: string }[]>([]);
     const [loadingFbi, setLoadingFbi] = useState(false);
