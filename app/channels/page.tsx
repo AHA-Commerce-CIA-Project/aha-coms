@@ -10,6 +10,7 @@ import { ChannelMessageFeed } from '@/components/channels/ChannelMessageFeed';
 import { ChannelMessageComposer } from '@/components/channels/ChannelMessageComposer';
 import { ThreadPanel } from '@/components/channels/ThreadPanel';
 import { CreateChannelModal } from '@/components/channels/CreateChannelModal';
+import { EditChannelModal } from '@/components/channels/EditChannelModal';
 import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';
 import { Hash, MessageSquare, AlertTriangle, Trash2 } from 'lucide-react';
 import { PageTabs } from '@/components/PageTabs';
@@ -78,6 +79,7 @@ function ChannelsPageContent() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const messageIdsRef = useRef<Set<string>>(new Set());
 
@@ -412,6 +414,7 @@ function ChannelsPageContent() {
               searching={searching}
               isCreator={selectedChannel.createdBy === session.user.id}
               onDelete={openDeleteConfirm}
+              onEdit={() => setEditModalOpen(true)}
             />
             {searchResults ? (
               <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -585,6 +588,17 @@ function ChannelsPageContent() {
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreated={fetchChannels}
+      />
+
+      {/* Edit channel modal */}
+      <EditChannelModal
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        channel={selectedChannel as any}
+        onUpdated={(updated) => {
+          setSelectedChannel((prev) => (prev ? { ...prev, ...updated } : prev));
+          fetchChannels();
+        }}
       />
       {/* Delete channel confirmation modal */}
       {deleteConfirmOpen && selectedChannel && (

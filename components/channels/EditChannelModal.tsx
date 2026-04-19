@@ -1,0 +1,293 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { X, Hash, Lock, Search, Check, Users as UsersIcon, ChevronDown, Pencil } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface Team {
+  id: string;
+  name: string;
+}
+
+interface EditChannelModalProps {
+  open: boolean;
+  onClose: () => void;
+  onUpdated: (updated: any) => void;
+  channel: {
+    id: string;
+    name: string;
+    description: string | null;
+    isPrivate?: boolean;
+    allowedTeamIds?: string[];
+  } | null;
+}
+
+export function EditChannelModal({ open, onClose, onUpdated, channel }: EditChannelModalProps) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
+  const [teamSearch, setTeamSearch] = useState('');
+  const teamDropdownRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Populate form when modal opens with a channel
+  useEffect(() => {
+    if (!open || !channel) return;
+    setName(channel.name);
+    setDescription(channel.description || '');
+    setIsPrivate(!!channel.isPrivate);
+    setSelectedTeamIds(channel.allowedTeamIds || []);
+    setError(null);
+    setTeamSearch('');
+    setTeamDropdownOpen(false);
+  }, [open, channel]);
+
+  // Fetch teams list
+  useEffect(() => {
+    if (!open) return;
+    fetch('/api/teams')
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setTeams)
+      .catch(() => {});
+  }, [open]);
+
+  // Close team dropdown on outside click
+  useEffect(() => {
+    if (!teamDropdownOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (teamDropdownRef.current && !teamDropdownRef.current.contains(e.target as Node)) {
+        setTeamDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [teamDropdownOpen]);
+
+  if (!open || !channel) return null;
+
+  const toggleTeam = (teamId: string) => {
+    setSelectedTeamIds((prev) =>
+      prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId]
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/channels/${channel.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          description,
+          isPrivate,
+          allowedTeamIds: selectedTeamIds,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to update channel');
+      }
+
+      const updated = await res.json();
+      onUpdated(updated);
+      onClose();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-6 pb-4">
+          <div className="flex items-center gap-2">
+            <Pencil className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-lg font-bold text-slate-800">Edit Channel</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-y-auto px-6 pb-6">
+          {error && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 text-sm mb-4">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Channel Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. general, announcements"
+                required
+                maxLength={100}
+                className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700">Description (optional)</label>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What's this channel about?"
+                className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+              />
+            </div>
+
+            {/* Private toggle */}
+            <div className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-2.5">
+                {isPrivate ? (
+                  <Lock className="w-4 h-4 text-slate-500" />
+                ) : (
+                  <Hash className="w-4 h-4 text-slate-500" />
+                )}
+                <div>
+                  <p className="text-sm font-medium text-slate-700">Private Channel</p>
+                  <p className="text-xs text-slate-400">Only explicit members can access</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPrivate(!isPrivate)}
+                className={cn(
+                  'relative w-11 h-6 rounded-full transition-colors flex-shrink-0',
+                  isPrivate ? 'bg-indigo-600' : 'bg-slate-200'
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200',
+                    isPrivate ? 'translate-x-5' : 'translate-x-0'
+                  )}
+                />
+              </button>
+            </div>
+
+            {/* Team visibility — only for public channels */}
+            {!isPrivate && (
+              <div ref={teamDropdownRef} className="relative">
+                <div className="flex items-center gap-2 mb-2">
+                  <UsersIcon className="w-4 h-4 text-slate-500" />
+                  <label className="text-sm font-medium text-slate-700">
+                    Visible to teams
+                    {selectedTeamIds.length > 0 && (
+                      <span className="ml-2 text-xs text-indigo-600 font-normal">
+                        {selectedTeamIds.length} selected
+                      </span>
+                    )}
+                  </label>
+                </div>
+                <p className="text-xs text-slate-400 mb-2">
+                  Pick one or more teams that can see this channel. Members of other teams won&rsquo;t see it in their Channels list.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setTeamDropdownOpen((v) => !v)}
+                  className="w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 hover:border-indigo-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                >
+                  <span className="truncate text-left">
+                    {selectedTeamIds.length === 0
+                      ? <span className="text-slate-400">Select teams…</span>
+                      : selectedTeamIds
+                          .map((id) => teams.find((t) => t.id === id)?.name)
+                          .filter(Boolean)
+                          .join(', ')}
+                  </span>
+                  <ChevronDown className={cn('w-4 h-4 text-slate-400 transition-transform', teamDropdownOpen && 'rotate-180')} />
+                </button>
+
+                {teamDropdownOpen && (
+                  <div className="absolute left-0 right-0 mt-1 z-20 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                    <div className="p-2 border-b border-slate-100">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                          type="text"
+                          value={teamSearch}
+                          onChange={(e) => setTeamSearch(e.target.value)}
+                          placeholder="Search teams…"
+                          autoFocus
+                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-[220px] overflow-y-auto">
+                      {teams.length === 0 ? (
+                        <p className="text-center py-4 text-sm text-slate-400 italic">Loading teams…</p>
+                      ) : (
+                        (() => {
+                          const filtered = teams.filter((t) =>
+                            t.name.toLowerCase().includes(teamSearch.toLowerCase())
+                          );
+                          if (filtered.length === 0) {
+                            return <p className="text-center py-4 text-sm text-slate-400">No teams match &ldquo;{teamSearch}&rdquo;</p>;
+                          }
+                          return filtered.map((t) => {
+                            const isSelected = selectedTeamIds.includes(t.id);
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => toggleTeam(t.id)}
+                                className={cn(
+                                  'w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-slate-50 last:border-b-0',
+                                  isSelected ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                                )}
+                              >
+                                <div
+                                  className={cn(
+                                    'w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors',
+                                    isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+                                  )}
+                                >
+                                  {isSelected && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                                <span className="text-sm text-slate-700">{t.name}</span>
+                              </button>
+                            );
+                          });
+                        })()
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading || !name.trim()}
+            className="w-full mt-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+          >
+            {loading ? 'Saving…' : 'Save changes'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

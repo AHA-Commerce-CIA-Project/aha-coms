@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Hash, Search, X, Lock, Users, Crown, MoreVertical, Trash2 } from 'lucide-react';
+import { Hash, Search, X, Lock, Users, Crown, MoreVertical, Trash2, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Member {
@@ -24,9 +24,10 @@ interface ChannelHeaderProps {
   searching: boolean;
   isCreator?: boolean;
   onDelete?: () => void;
+  onEdit?: () => void;
 }
 
-export function ChannelHeader({ name, description, isPrivate, memberCount, channelId, searchQuery, onSearchChange, searching, isCreator, onDelete }: ChannelHeaderProps) {
+export function ChannelHeader({ name, description, isPrivate, memberCount, channelId, searchQuery, onSearchChange, searching, isCreator, onDelete, onEdit }: ChannelHeaderProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -217,7 +218,7 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
           </button>
 
           {/* Kebab menu — creator-only actions */}
-          {isCreator && onDelete && (
+          {isCreator && (onEdit || onDelete) && (
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowMenu((v) => !v)}
@@ -233,16 +234,30 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
               </button>
               {showMenu && (
                 <div className="absolute right-0 top-full mt-2 w-[200px] bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50">
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onDelete();
-                    }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm text-rose-600 hover:bg-rose-50 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span className="font-medium">Delete channel</span>
-                  </button>
+                  {onEdit && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onEdit();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors border-b border-slate-100"
+                    >
+                      <Pencil className="w-4 h-4 text-slate-500" />
+                      <span className="font-medium">Edit channel</span>
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onDelete();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm text-rose-600 hover:bg-rose-50 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span className="font-medium">Delete channel</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
