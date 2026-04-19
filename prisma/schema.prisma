@@ -403,6 +403,7 @@ model Channel {
   isPrivate       Boolean  @default(false) @map("is_private")
   isArchived      Boolean  @default(false) @map("is_archived")
   allowedTeamIds  String[] @default([]) @map("allowed_team_ids")
+  visibleToAllTeams Boolean @default(false) @map("visible_to_all_teams")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 

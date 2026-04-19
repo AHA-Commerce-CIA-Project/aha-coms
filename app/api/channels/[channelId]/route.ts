@@ -64,13 +64,14 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { name, description, isPrivate, allowedTeamIds } = body;
+  const { name, description, isPrivate, allowedTeamIds, visibleToAllTeams } = body;
 
   const data: {
     name?: string;
     description?: string | null;
     isPrivate?: boolean;
     allowedTeamIds?: string[];
+    visibleToAllTeams?: boolean;
   } = {};
 
   if (typeof name === 'string') {
@@ -95,6 +96,15 @@ export async function PATCH(
         allowedTeamIds.filter((t: unknown) => typeof t === 'string' && t.length > 0)
       ),
     ] as string[];
+  }
+
+  if (typeof visibleToAllTeams === 'boolean') {
+    data.visibleToAllTeams = visibleToAllTeams;
+    // If switching to "all teams", drop the per-team allowlist to keep state
+    // coherent.
+    if (visibleToAllTeams) {
+      data.allowedTeamIds = [];
+    }
   }
 
   const updated = await prisma.channel.update({

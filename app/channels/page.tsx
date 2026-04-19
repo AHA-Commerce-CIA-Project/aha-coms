@@ -28,6 +28,9 @@ interface Channel {
   name: string;
   description: string | null;
   createdBy: string;
+  isPrivate?: boolean;
+  allowedTeamIds?: string[];
+  visibleToAllTeams?: boolean;
   creator: { id: string; name: string };
   _count: { messages: number };
   updatedAt: string;

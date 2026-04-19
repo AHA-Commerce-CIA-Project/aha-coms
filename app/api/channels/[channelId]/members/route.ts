@@ -16,7 +16,7 @@ export async function GET(
 
   const channel = await prisma.channel.findUnique({
     where: { id: channelId },
-    select: { isPrivate: true, createdBy: true, allowedTeamIds: true },
+    select: { isPrivate: true, createdBy: true, allowedTeamIds: true, visibleToAllTeams: true },
   });
 
   if (!channel) {
@@ -51,9 +51,15 @@ export async function GET(
     if (!byId.has(m.user.id)) byId.set(m.user.id, { ...m.user, isCreator: false });
   }
 
-  // For public channels with team scoping, also include users whose team
-  // is in allowedTeamIds.
-  if (!channel.isPrivate && channel.allowedTeamIds.length > 0) {
+  // For public channels visible to all teams, include every user.
+  if (!channel.isPrivate && channel.visibleToAllTeams) {
+    const allUsers = await prisma.user.findMany({ select: userSelect });
+    for (const u of allUsers) {
+      if (!byId.has(u.id)) byId.set(u.id, { ...u, isCreator: false });
+    }
+  } else if (!channel.isPrivate && channel.allowedTeamIds.length > 0) {
+    // For public channels with team scoping, include users whose team
+    // is in allowedTeamIds.
     const teamUsers = await prisma.user.findMany({
       where: { teamId: { in: channel.allowedTeamIds } },
       select: userSelect,

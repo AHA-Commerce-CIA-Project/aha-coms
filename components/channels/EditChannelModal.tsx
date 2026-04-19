@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Hash, Lock, Search, Check, Users as UsersIcon, ChevronDown, Pencil } from 'lucide-react';
+import { X, Hash, Lock, Search, Check, Users as UsersIcon, ChevronDown, Pencil, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Team {
@@ -19,6 +19,7 @@ interface EditChannelModalProps {
     description: string | null;
     isPrivate?: boolean;
     allowedTeamIds?: string[];
+    visibleToAllTeams?: boolean;
   } | null;
 }
 
@@ -28,6 +29,7 @@ export function EditChannelModal({ open, onClose, onUpdated, channel }: EditChan
   const [isPrivate, setIsPrivate] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [visibleToAllTeams, setVisibleToAllTeams] = useState(false);
   const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
   const [teamSearch, setTeamSearch] = useState('');
   const teamDropdownRef = useRef<HTMLDivElement>(null);
@@ -41,6 +43,7 @@ export function EditChannelModal({ open, onClose, onUpdated, channel }: EditChan
     setDescription(channel.description || '');
     setIsPrivate(!!channel.isPrivate);
     setSelectedTeamIds(channel.allowedTeamIds || []);
+    setVisibleToAllTeams(!!channel.visibleToAllTeams);
     setError(null);
     setTeamSearch('');
     setTeamDropdownOpen(false);
@@ -88,7 +91,8 @@ export function EditChannelModal({ open, onClose, onUpdated, channel }: EditChan
           name,
           description,
           isPrivate,
-          allowedTeamIds: selectedTeamIds,
+          allowedTeamIds: visibleToAllTeams ? [] : selectedTeamIds,
+          visibleToAllTeams: !isPrivate && visibleToAllTeams,
         }),
       });
 
@@ -189,9 +193,53 @@ export function EditChannelModal({ open, onClose, onUpdated, channel }: EditChan
 
             {/* Team visibility — only for public channels */}
             {!isPrivate && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <UsersIcon className="w-4 h-4 text-slate-500" />
+                  <label className="text-sm font-medium text-slate-700">Channel visibility</label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleToAllTeams(true)}
+                    className={cn(
+                      'flex items-start gap-2.5 p-3 rounded-xl border-2 text-left transition-colors',
+                      visibleToAllTeams
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    )}
+                  >
+                    <Globe className={cn('w-4 h-4 mt-0.5 flex-shrink-0', visibleToAllTeams ? 'text-indigo-600' : 'text-slate-400')} />
+                    <div>
+                      <p className={cn('text-sm font-medium', visibleToAllTeams ? 'text-indigo-700' : 'text-slate-700')}>All teams</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Everyone in the org can see this channel</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVisibleToAllTeams(false)}
+                    className={cn(
+                      'flex items-start gap-2.5 p-3 rounded-xl border-2 text-left transition-colors',
+                      !visibleToAllTeams
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    )}
+                  >
+                    <UsersIcon className={cn('w-4 h-4 mt-0.5 flex-shrink-0', !visibleToAllTeams ? 'text-indigo-600' : 'text-slate-400')} />
+                    <div>
+                      <p className={cn('text-sm font-medium', !visibleToAllTeams ? 'text-indigo-700' : 'text-slate-700')}>Selected teams</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Only picked teams can see this channel</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Team picker — only when "Selected teams" is chosen */}
+            {!isPrivate && !visibleToAllTeams && (
               <div ref={teamDropdownRef} className="relative">
                 <div className="flex items-center gap-2 mb-2">
-                  <UsersIcon className="w-4 h-4 text-slate-500" />
                   <label className="text-sm font-medium text-slate-700">
                     Visible to teams
                     {selectedTeamIds.length > 0 && (
