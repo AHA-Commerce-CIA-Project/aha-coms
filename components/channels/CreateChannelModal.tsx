@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Hash, Lock, Search, Check, Users as UsersIcon } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Hash, Lock, Search, Check, Users as UsersIcon, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 
@@ -35,6 +35,9 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
   const [userSearch, setUserSearch] = useState('');
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
+  const [teamSearch, setTeamSearch] = useState('');
+  const teamDropdownRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +80,18 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
     );
   };
 
+  // Close team dropdown on outside click
+  useEffect(() => {
+    if (!teamDropdownOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (teamDropdownRef.current && !teamDropdownRef.current.contains(e.target as Node)) {
+        setTeamDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [teamDropdownOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -118,7 +133,7 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[85vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between p-6 pb-4">
           <div className="flex items-center gap-2">
             {isPrivate ? (
@@ -197,53 +212,99 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
               </button>
             </div>
 
-            {/* Team visibility */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <UsersIcon className="w-4 h-4 text-slate-500" />
-                <label className="text-sm font-medium text-slate-700">
-                  Visible to teams
-                  {selectedTeamIds.length > 0 && (
-                    <span className="ml-2 text-xs text-indigo-600 font-normal">
-                      {selectedTeamIds.length} selected
-                    </span>
-                  )}
-                </label>
-              </div>
-              <p className="text-xs text-slate-400 mb-2">
-                Pick one or more teams that can see this channel. Members of other teams won&rsquo;t see it in their Channels list.
-              </p>
-              {teams.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">Loading teams…</p>
-              ) : (
-                <div className="max-h-[140px] overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
-                  {teams.map((t) => {
-                    const isSelected = selectedTeamIds.includes(t.id);
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => toggleTeam(t.id)}
-                        className={cn(
-                          'w-full flex items-center gap-3 px-3 py-2 text-left transition-colors',
-                          isSelected ? 'bg-indigo-50' : 'hover:bg-slate-50'
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            'w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors',
-                            isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
-                          )}
-                        >
-                          {isSelected && <Check className="w-3 h-3 text-white" />}
-                        </div>
-                        <span className="text-sm text-slate-700">{t.name}</span>
-                      </button>
-                    );
-                  })}
+            {/* Team visibility — only for public channels */}
+            {!isPrivate && (
+              <div ref={teamDropdownRef} className="relative">
+                <div className="flex items-center gap-2 mb-2">
+                  <UsersIcon className="w-4 h-4 text-slate-500" />
+                  <label className="text-sm font-medium text-slate-700">
+                    Visible to teams
+                    {selectedTeamIds.length > 0 && (
+                      <span className="ml-2 text-xs text-indigo-600 font-normal">
+                        {selectedTeamIds.length} selected
+                      </span>
+                    )}
+                  </label>
                 </div>
-              )}
-            </div>
+                <p className="text-xs text-slate-400 mb-2">
+                  Pick one or more teams that can see this channel. Members of other teams won&rsquo;t see it in their Channels list.
+                </p>
+
+                {/* Collapsed button */}
+                <button
+                  type="button"
+                  onClick={() => setTeamDropdownOpen((v) => !v)}
+                  className="w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 hover:border-indigo-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                >
+                  <span className="truncate text-left">
+                    {selectedTeamIds.length === 0
+                      ? <span className="text-slate-400">Select teams…</span>
+                      : selectedTeamIds
+                          .map((id) => teams.find((t) => t.id === id)?.name)
+                          .filter(Boolean)
+                          .join(', ')}
+                  </span>
+                  <ChevronDown className={cn('w-4 h-4 text-slate-400 transition-transform', teamDropdownOpen && 'rotate-180')} />
+                </button>
+
+                {/* Expanded dropdown */}
+                {teamDropdownOpen && (
+                  <div className="absolute left-0 right-0 mt-1 z-20 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                    <div className="p-2 border-b border-slate-100">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                          type="text"
+                          value={teamSearch}
+                          onChange={(e) => setTeamSearch(e.target.value)}
+                          placeholder="Search teams…"
+                          autoFocus
+                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-[220px] overflow-y-auto">
+                      {teams.length === 0 ? (
+                        <p className="text-center py-4 text-sm text-slate-400 italic">Loading teams…</p>
+                      ) : (
+                        (() => {
+                          const filtered = teams.filter((t) =>
+                            t.name.toLowerCase().includes(teamSearch.toLowerCase())
+                          );
+                          if (filtered.length === 0) {
+                            return <p className="text-center py-4 text-sm text-slate-400">No teams match &ldquo;{teamSearch}&rdquo;</p>;
+                          }
+                          return filtered.map((t) => {
+                            const isSelected = selectedTeamIds.includes(t.id);
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => toggleTeam(t.id)}
+                                className={cn(
+                                  'w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-slate-50 last:border-b-0',
+                                  isSelected ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                                )}
+                              >
+                                <div
+                                  className={cn(
+                                    'w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors',
+                                    isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+                                  )}
+                                >
+                                  {isSelected && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                                <span className="text-sm text-slate-700">{t.name}</span>
+                              </button>
+                            );
+                          });
+                        })()
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Member picker (only when private) */}
