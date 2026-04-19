@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { CountdownTimer } from '@/components/CountdownTimer';
@@ -10,8 +10,10 @@ import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelMod
 import {
     Inbox, Clock, CheckCircle2, AlertTriangle, Search,
     Eye, CheckSquare, ChevronLeft, ChevronRight, X,
-    Timer, Star, FileText, UserPlus, Archive, Trash2, Edit3, ExternalLink, MessageSquare, Send, Forward
+    Timer, Star, FileText, UserPlus, Archive, Trash2, Edit3, ExternalLink, MessageSquare, Send, Forward, Plus,
 } from 'lucide-react';
+import { RichTextEditor } from '@/components/RichTextEditor';
+import { PageTabs } from '@/components/PageTabs';
 
 interface TicketRow {
     id: string;
@@ -98,6 +100,28 @@ function NexusContent() {
 
     // View Modal
     const [viewTicket, setViewTicket] = useState<TicketRow | null>(null);
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+    const [assignPickerOpen, setAssignPickerOpen] = useState(false);
+    const [copiedToken, setCopiedToken] = useState<string | null>(null);
+    const [createTaskOpen, setCreateTaskOpen] = useState(false);
+    const [createTaskForm, setCreateTaskForm] = useState({
+        title: '',
+        description: '',
+        urgency: 'P3',
+        assigneeId: '',
+        dueDate: '',
+        dueDateTime: '',
+        requestType: 'internal',
+        imageUrl: '' as string,
+        fileUrls: [] as string[],
+        referenceUrls: [] as string[],
+    });
+    const [createTaskSubmitting, setCreateTaskSubmitting] = useState(false);
+    const [createTaskError, setCreateTaskError] = useState('');
+    const [createTaskUrlInput, setCreateTaskUrlInput] = useState('');
+    const [createTaskUploading, setCreateTaskUploading] = useState(false);
+    const createTaskFileRef = useRef<HTMLInputElement>(null);
+    const createTaskImageRef = useRef<HTMLInputElement>(null);
 
     // Comments
     const [taskComments, setTaskComments] = useState<any[]>([]);
@@ -140,7 +164,7 @@ function NexusContent() {
         completedAt: new Date().toISOString().slice(0, 16),
         completedBy: '',
         difficultyScore: 3,
-        actualTimeSpent: 0,
+        actualTimeSpent: '' as number | '',
         timeUnit: 'minutes',
         resolutionSummary: '',
     });
@@ -301,6 +325,87 @@ function NexusContent() {
         }
     };
 
+    const handleAssign = async (ticket: TicketRow, userId: string) => {
+        try {
+            const res = await fetch(`/api/tasks/${ticket.id}/claim`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reassignTo: userId }),
+            });
+            if (res.ok) {
+                await fetchTickets();
+                setAssignPickerOpen(false);
+                setViewTicket(null);
+            } else {
+                const data = await res.json().catch(() => ({}));
+                alert(data.error || 'Failed to assign task');
+            }
+        } catch (err) {
+            console.error('Error assigning task:', err);
+        }
+    };
+
+    const handleCreateTask = async () => {
+        setCreateTaskError('');
+        if (!createTaskForm.title.trim()) { setCreateTaskError('Title is required'); return; }
+        if (!createTaskForm.assigneeId) { setCreateTaskError('Please select an assignee'); return; }
+        setCreateTaskSubmitting(true);
+        try {
+            const res = await fetch('/api/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(createTaskForm),
+            });
+            if (res.ok) {
+                await fetchTickets();
+                setCreateTaskOpen(false);
+                setCreateTaskForm({ title: '', description: '', urgency: 'P3', assigneeId: '', dueDate: '', dueDateTime: '', requestType: 'internal', imageUrl: '', fileUrls: [], referenceUrls: [] });
+                setCreateTaskUrlInput('');
+            } else {
+                const data = await res.json().catch(() => ({}));
+                setCreateTaskError(data.error || 'Failed to create task');
+            }
+        } catch (err: any) {
+            setCreateTaskError(err.message || 'Failed to create task');
+        } finally {
+            setCreateTaskSubmitting(false);
+        }
+    };
+
+    const uploadForCreateTask = async (file: File, kind: 'image' | 'file') => {
+        setCreateTaskUploading(true);
+        setCreateTaskError('');
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await fetch('/api/upload', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Upload failed');
+            if (kind === 'image') {
+                setCreateTaskForm(f => ({ ...f, imageUrl: data.url }));
+            } else {
+                setCreateTaskForm(f => ({ ...f, fileUrls: [...f.fileUrls, data.url] }));
+            }
+        } catch (err: any) {
+            setCreateTaskError(err.message || 'Upload failed');
+        } finally {
+            setCreateTaskUploading(false);
+        }
+    };
+
+    const handleCreateTaskPaste = (e: React.ClipboardEvent) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of Array.from(items)) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const file = item.getAsFile();
+                if (file) uploadForCreateTask(file, 'image');
+                return;
+            }
+        }
+    };
+
     // Filters
     // Default: hide archived unless explicitly filtering for them
     let filtered = statusFilter === 'archived'
@@ -404,7 +509,10 @@ function NexusContent() {
             const res = await fetch(`/api/tasks/${completeTicket.id}/complete`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(completeForm),
+                body: JSON.stringify({
+                    ...completeForm,
+                    actualTimeSpent: Number(completeForm.actualTimeSpent) || 0,
+                }),
             });
             if (res.ok) {
                 await fetchTickets();
@@ -418,10 +526,19 @@ function NexusContent() {
 
     return (
         <div className="space-y-6">
-            {/* Page Header */}
-            <div>
-                <h1 className="text-3xl font-bold text-slate-900 mb-2">Fast</h1>
-                <p className="text-slate-500">All incoming requests and tasks from partner teams.</p>
+            <div className="flex items-start justify-between gap-4">
+                <PageTabs tabs={[
+                    { href: '/tasks', label: 'My Tasks' },
+                    { href: '/nexus', label: 'Task Queue' },
+                ]} />
+                {isLeader && (
+                    <button
+                        onClick={() => setCreateTaskOpen(true)}
+                        className="flex-shrink-0 inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-full shadow-sm transition-colors text-sm"
+                    >
+                        <Plus className="w-4 h-4" /> Create Task
+                    </button>
+                )}
             </div>
 
             {/* Tab Toggle (Leader/Admin only) */}
@@ -705,7 +822,29 @@ function NexusContent() {
                     <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white">
                             <div>
-                                <span className="font-mono text-base text-indigo-400">{viewTicket.task_token}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-mono text-base text-indigo-400">{viewTicket.task_token}</span>
+                                    {viewTicket.task_token && (
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                try {
+                                                    await navigator.clipboard.writeText(viewTicket.task_token || '');
+                                                    setCopiedToken(viewTicket.task_token);
+                                                    setTimeout(() => setCopiedToken(null), 1500);
+                                                } catch {}
+                                            }}
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                                            title="Copy token"
+                                        >
+                                            {copiedToken === viewTicket.task_token ? (
+                                                <><CheckCircle2 className="w-3 h-3 text-emerald-500" /> Copied</>
+                                            ) : (
+                                                <><FileText className="w-3 h-3" /> Copy</>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
                                 <h2 className="text-xl font-bold text-slate-900 mt-1">{isEditingView ? 'Edit Task' : viewTicket.title}</h2>
                             </div>
                             <div className="flex items-center gap-2">
@@ -784,18 +923,28 @@ function NexusContent() {
                                         {viewTicket.request_type && <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Type</p><p className="text-base text-slate-900 font-medium capitalize">{viewTicket.request_type.replace('_', ' ')}</p></div>}
                                     </div>
                                     {viewTicket.description && (
-                                        <div><p className="text-sm font-medium text-indigo-600 mb-1.5">Description</p><p className="text-slate-600 bg-slate-50 rounded-xl p-3">{viewTicket.description}</p></div>
+                                        <div>
+                                            <p className="text-sm font-medium text-indigo-600 mb-1.5">Description</p>
+                                            <div
+                                                className="text-slate-600 bg-slate-50 rounded-xl p-3 whitespace-pre-wrap [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded"
+                                                dangerouslySetInnerHTML={{ __html: viewTicket.description }}
+                                            />
+                                        </div>
                                     )}
                                     {viewTicket.image_url && (
                                         <div>
                                             <p className="text-sm font-medium text-indigo-600 mb-1.5">Attached Image</p>
-                                            <a href={viewTicket.image_url} target="_blank" rel="noopener noreferrer">
+                                            <button
+                                                type="button"
+                                                onClick={() => setLightboxUrl(viewTicket.image_url)}
+                                                className="block w-full"
+                                            >
                                                 <img
                                                     src={viewTicket.image_url}
                                                     alt="Request attachment"
-                                                    className="w-full max-h-64 object-contain rounded-xl border border-slate-300 bg-slate-50 hover:opacity-90 transition-opacity cursor-pointer"
+                                                    className="w-full max-h-64 object-contain rounded-xl border border-slate-300 bg-slate-50 hover:opacity-90 transition-opacity cursor-zoom-in"
                                                 />
-                                            </a>
+                                            </button>
                                         </div>
                                     )}
 
@@ -933,14 +1082,44 @@ function NexusContent() {
                                         </div>
                                     </div>
 
-                                    {/* Claim Task Button */}
+                                    {/* Claim / Assign Task Buttons */}
                                     {viewTicket.status === 'todo' && !viewTicket.assignee_id && (
-                                        <button
-                                            onClick={() => handleClaim(viewTicket)}
-                                            className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full transition-all flex items-center justify-center gap-2 shadow-sm"
-                                        >
-                                            <UserPlus className="w-5 h-5" /> Claim This Task
-                                        </button>
+                                        <div className="space-y-2">
+                                            <button
+                                                onClick={() => handleClaim(viewTicket)}
+                                                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full transition-all flex items-center justify-center gap-2 shadow-sm"
+                                            >
+                                                <UserPlus className="w-5 h-5" /> Claim This Task
+                                            </button>
+                                            {isLeader && (
+                                                <div className="relative">
+                                                    <button
+                                                        onClick={() => setAssignPickerOpen(v => !v)}
+                                                        className="w-full py-2.5 bg-white hover:bg-slate-50 text-indigo-700 font-semibold rounded-full border border-indigo-300 transition-all flex items-center justify-center gap-2 text-sm"
+                                                    >
+                                                        <UserPlus className="w-4 h-4" /> Assign to Member
+                                                    </button>
+                                                    {assignPickerOpen && (
+                                                        <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                                                            {teamMembers.length === 0 ? (
+                                                                <p className="p-3 text-sm text-slate-500">No members</p>
+                                                            ) : teamMembers.map(m => (
+                                                                <button
+                                                                    key={m.id}
+                                                                    onClick={() => handleAssign(viewTicket, m.id)}
+                                                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-indigo-50 transition-colors"
+                                                                >
+                                                                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 text-white text-xs font-bold flex items-center justify-center">
+                                                                        {m.name.charAt(0).toUpperCase()}
+                                                                    </div>
+                                                                    <span className="text-sm text-slate-700">{m.name}</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
                                     {viewTicket.assignee_id && viewTicket.status !== 'done' && (
                                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-center">
@@ -1063,8 +1242,15 @@ function NexusContent() {
                                     <input
                                         type="number"
                                         min="0"
+                                        placeholder="0"
                                         value={completeForm.actualTimeSpent}
-                                        onChange={(e) => setCompleteForm({ ...completeForm, actualTimeSpent: parseInt(e.target.value) || 0 })}
+                                        onChange={(e) => {
+                                            const v = e.target.value;
+                                            setCompleteForm({
+                                                ...completeForm,
+                                                actualTimeSpent: v === '' ? '' : Number(v),
+                                            });
+                                        }}
                                         className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:border-indigo-500"
                                     />
                                     <div className="flex items-center gap-2 text-sm">
@@ -1317,15 +1503,22 @@ function NexusContent() {
                                 {viewDirectTicket.description && (
                                     <div>
                                         <p className="text-slate-400 text-xs mb-1">Description</p>
-                                        <p className="text-slate-600 text-sm bg-slate-50 rounded-xl p-3 whitespace-pre-wrap">{viewDirectTicket.description}</p>
+                                        <div
+                                            className="text-slate-600 text-sm bg-slate-50 rounded-xl p-3 whitespace-pre-wrap [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded"
+                                            dangerouslySetInnerHTML={{ __html: viewDirectTicket.description }}
+                                        />
                                     </div>
                                 )}
                                 {viewDirectTicket.attachment_link && (
                                     <div>
                                         <p className="text-slate-400 text-xs mb-1">Attachment</p>
-                                        <a href={viewDirectTicket.attachment_link} target="_blank" rel="noopener noreferrer">
-                                            <img src={viewDirectTicket.attachment_link} alt="Attachment" className="w-full max-h-48 object-contain rounded-xl border border-slate-200 bg-slate-50 hover:opacity-90 cursor-pointer" />
-                                        </a>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLightboxUrl(viewDirectTicket.attachment_link)}
+                                            className="block w-full"
+                                        >
+                                            <img src={viewDirectTicket.attachment_link} alt="Attachment" className="w-full max-h-48 object-contain rounded-xl border border-slate-200 bg-slate-50 hover:opacity-90 cursor-zoom-in" />
+                                        </button>
                                     </div>
                                 )}
                                 {viewDirectTicket.delegations.length > 0 && (
@@ -1384,6 +1577,293 @@ function NexusContent() {
                     </div>
                 )}
             </div>
+            )}
+
+            {/* Create Task Modal (Leader only) */}
+            {createTaskOpen && isLeader && (
+                <div
+                    className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+                    onClick={() => !createTaskSubmitting && setCreateTaskOpen(false)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                            <h2 className="text-lg font-bold text-slate-900">Create Task</h2>
+                            <button
+                                onClick={() => setCreateTaskOpen(false)}
+                                disabled={createTaskSubmitting}
+                                className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-40"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-slate-600">Title <span className="text-rose-500">*</span></label>
+                                <input
+                                    type="text"
+                                    value={createTaskForm.title}
+                                    onChange={(e) => setCreateTaskForm(f => ({ ...f, title: e.target.value }))}
+                                    placeholder="What needs to be done?"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-500"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-slate-600">Description</label>
+                                <RichTextEditor
+                                    value={createTaskForm.description}
+                                    onChange={(html) => setCreateTaskForm(f => ({ ...f, description: html }))}
+                                    placeholder="Add details, context, links..."
+                                    minHeight="100px"
+                                    maxHeight="240px"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <label className="text-sm font-medium text-slate-600">Priority</label>
+                                    <select
+                                        value={createTaskForm.urgency}
+                                        onChange={(e) => setCreateTaskForm(f => ({ ...f, urgency: e.target.value }))}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-500"
+                                    >
+                                        <option value="P1">P1 — Urgent</option>
+                                        <option value="P2">P2 — High</option>
+                                        <option value="P3">P3 — Normal</option>
+                                        <option value="P4">P4 — Low</option>
+                                        <option value="5-minute">5 Min — Quick</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-sm font-medium text-slate-600">Assignee <span className="text-rose-500">*</span></label>
+                                    <select
+                                        value={createTaskForm.assigneeId}
+                                        onChange={(e) => setCreateTaskForm(f => ({ ...f, assigneeId: e.target.value }))}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-500"
+                                    >
+                                        <option value="">Select member...</option>
+                                        {teamMembers.map(m => (
+                                            <option key={m.id} value={m.id}>{m.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-slate-600">Due Date</label>
+                                <input
+                                    type="date"
+                                    value={createTaskForm.dueDate}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val) {
+                                            const now = new Date();
+                                            const hh = String(now.getHours()).padStart(2, '0');
+                                            const mm = String(now.getMinutes()).padStart(2, '0');
+                                            const ss = String(now.getSeconds()).padStart(2, '0');
+                                            setCreateTaskForm(f => ({ ...f, dueDate: val, dueDateTime: `${hh}:${mm}:${ss}` }));
+                                        } else {
+                                            setCreateTaskForm(f => ({ ...f, dueDate: '', dueDateTime: '' }));
+                                        }
+                                    }}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-500"
+                                />
+                                {createTaskForm.dueDate && createTaskForm.dueDateTime && (
+                                    <p className="text-xs text-indigo-600 font-medium">
+                                        Deadline: {(() => {
+                                            const [y, m, d] = createTaskForm.dueDate.split('-');
+                                            return `${d}/${m}/${y} ${createTaskForm.dueDateTime} WIB`;
+                                        })()}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Image */}
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-slate-600">Image <span className="text-slate-400 text-xs">(Optional)</span></label>
+                                <input
+                                    ref={createTaskImageRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) uploadForCreateTask(file, 'image');
+                                        if (createTaskImageRef.current) createTaskImageRef.current.value = '';
+                                    }}
+                                />
+                                {createTaskForm.imageUrl ? (
+                                    <div className="relative inline-block">
+                                        <img src={createTaskForm.imageUrl} alt="Preview" className="max-h-40 rounded-xl border border-slate-200" />
+                                        <button
+                                            type="button"
+                                            onClick={() => setCreateTaskForm(f => ({ ...f, imageUrl: '' }))}
+                                            className="absolute -top-2 -right-2 p-1 bg-rose-500 text-white rounded-full shadow-md hover:bg-rose-600"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div
+                                        onPaste={handleCreateTaskPaste}
+                                        onDrop={(e) => {
+                                            e.preventDefault();
+                                            const file = e.dataTransfer?.files?.[0];
+                                            if (file && file.type.startsWith('image/')) uploadForCreateTask(file, 'image');
+                                        }}
+                                        onDragOver={(e) => e.preventDefault()}
+                                        onClick={() => createTaskImageRef.current?.click()}
+                                        tabIndex={0}
+                                        className="border-2 border-dashed border-slate-200 rounded-xl px-4 py-5 text-center text-sm text-slate-500 hover:border-indigo-300 hover:bg-indigo-50/30 cursor-pointer transition-colors"
+                                    >
+                                        <span className="font-semibold text-indigo-600">Paste (Ctrl+V)</span> or click to upload
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Files */}
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-slate-600">Files <span className="text-slate-400 text-xs">(Optional)</span></label>
+                                {createTaskForm.fileUrls.length > 0 && (
+                                    <div className="space-y-1.5">
+                                        {createTaskForm.fileUrls.map((url, i) => (
+                                            <div key={i} className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                                                <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                                                <span className="truncate flex-1 text-slate-700">{url.split('/').pop() || url}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCreateTaskForm(f => ({ ...f, fileUrls: f.fileUrls.filter((_, idx) => idx !== i) }))}
+                                                    className="text-rose-400 hover:text-rose-600"
+                                                >
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <input
+                                    ref={createTaskFileRef}
+                                    type="file"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) uploadForCreateTask(file, 'file');
+                                        if (createTaskFileRef.current) createTaskFileRef.current.value = '';
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => createTaskFileRef.current?.click()}
+                                    className="w-full px-4 py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-sm text-slate-500 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/30 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <FileText className="w-4 h-4" /> Upload file (PDF, DOC, XLS, etc.)
+                                </button>
+                            </div>
+
+                            {/* URLs */}
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-slate-600">URLs / Links <span className="text-slate-400 text-xs">(Optional)</span></label>
+                                {createTaskForm.referenceUrls.length > 0 && (
+                                    <div className="space-y-1.5">
+                                        {createTaskForm.referenceUrls.map((url, i) => (
+                                            <div key={i} className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs">
+                                                <ExternalLink className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                                                <a href={url} target="_blank" rel="noopener noreferrer" className="truncate flex-1 text-indigo-600 hover:underline">{url}</a>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCreateTaskForm(f => ({ ...f, referenceUrls: f.referenceUrls.filter((_, idx) => idx !== i) }))}
+                                                    className="text-rose-400 hover:text-rose-600"
+                                                >
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="flex gap-2">
+                                    <input
+                                        type="url"
+                                        value={createTaskUrlInput}
+                                        onChange={(e) => setCreateTaskUrlInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && createTaskUrlInput.trim()) {
+                                                e.preventDefault();
+                                                setCreateTaskForm(f => ({ ...f, referenceUrls: [...f.referenceUrls, createTaskUrlInput.trim()] }));
+                                                setCreateTaskUrlInput('');
+                                            }
+                                        }}
+                                        placeholder="https://example.com/reference"
+                                        className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (createTaskUrlInput.trim()) {
+                                                setCreateTaskForm(f => ({ ...f, referenceUrls: [...f.referenceUrls, createTaskUrlInput.trim()] }));
+                                                setCreateTaskUrlInput('');
+                                            }
+                                        }}
+                                        className="px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 flex-shrink-0"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            {createTaskUploading && (
+                                <p className="text-xs text-indigo-600 font-medium">Uploading...</p>
+                            )}
+                            {createTaskError && (
+                                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm">
+                                    {createTaskError}
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl">
+                            <button
+                                onClick={() => setCreateTaskOpen(false)}
+                                disabled={createTaskSubmitting}
+                                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 rounded-full disabled:opacity-40"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleCreateTask}
+                                disabled={createTaskSubmitting}
+                                className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-sm disabled:opacity-40 transition-colors"
+                            >
+                                {createTaskSubmitting ? 'Creating...' : 'Create & Assign'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Image lightbox */}
+            {lightboxUrl && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
+                    onClick={() => setLightboxUrl(null)}
+                    onKeyDown={(e) => e.key === 'Escape' && setLightboxUrl(null)}
+                >
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setLightboxUrl(null); }}
+                        className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                        aria-label="Close"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                    <img
+                        src={lightboxUrl}
+                        alt="Preview"
+                        className="max-w-[95vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
             )}
         </div>
     );

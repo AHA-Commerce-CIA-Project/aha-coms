@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { PageTabs } from '@/components/PageTabs';
 import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/lib/auth-context';
 import { RichEditor } from '@/components/RichEditor';
@@ -88,7 +89,7 @@ function MyTasksContent() {
         completedAt: new Date().toISOString().slice(0, 16),
         completedBy: '',
         difficultyScore: 3,
-        actualTimeSpent: 0,
+        actualTimeSpent: '' as number | '',
         timeUnit: 'minutes',
         resolutionSummary: '',
     });
@@ -173,7 +174,7 @@ function MyTasksContent() {
             completedAt: new Date().toISOString().slice(0, 16),
             completedBy: profile?.name || user?.name || '',
             difficultyScore: 3,
-            actualTimeSpent: 0,
+            actualTimeSpent: '',
             timeUnit: 'minutes',
             resolutionSummary: '',
         });
@@ -188,7 +189,10 @@ function MyTasksContent() {
             const res = await fetch(`/api/tasks/${viewTask.id}/complete`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(completeForm),
+                body: JSON.stringify({
+                    ...completeForm,
+                    actualTimeSpent: Number(completeForm.actualTimeSpent) || 0,
+                }),
             });
             if (res.ok) {
                 await fetchClaimedTasks();
@@ -374,11 +378,10 @@ function MyTasksContent() {
                 </div>
             )}
 
-            {/* Page Header */}
-            <div>
-                <h1 className="text-3xl font-bold text-slate-900 mb-2">My Tasks</h1>
-                <p className="text-slate-500">View and manage your assigned tasks.</p>
-            </div>
+            <PageTabs tabs={[
+                { href: '/tasks', label: 'My Tasks' },
+                { href: '/nexus', label: 'Task Queue' },
+            ]} />
 
             {/* Claimed Tasks Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -641,7 +644,10 @@ function MyTasksContent() {
                             {viewTask.description && (
                                 <div>
                                     <p className="text-sm font-medium text-indigo-600 mb-1.5">Description</p>
-                                    <p className="text-slate-600 bg-slate-50 rounded-xl p-3">{viewTask.description}</p>
+                                    <div
+                                        className="text-slate-600 bg-slate-50 rounded-xl p-3 whitespace-pre-wrap [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded"
+                                        dangerouslySetInnerHTML={{ __html: viewTask.description }}
+                                    />
                                 </div>
                             )}
 
@@ -831,8 +837,15 @@ function MyTasksContent() {
                                                     <input
                                                         type="number"
                                                         min="0"
+                                                        placeholder="0"
                                                         value={completeForm.actualTimeSpent}
-                                                        onChange={(e) => setCompleteForm({ ...completeForm, actualTimeSpent: parseInt(e.target.value) || 0 })}
+                                                        onChange={(e) => {
+                                                            const v = e.target.value;
+                                                            setCompleteForm({
+                                                                ...completeForm,
+                                                                actualTimeSpent: v === '' ? '' : Number(v),
+                                                            });
+                                                        }}
                                                         className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-indigo-500"
                                                     />
                                                     <div className="flex gap-1 text-xs">
@@ -862,7 +875,7 @@ function MyTasksContent() {
                                                 >Cancel</button>
                                                 <button
                                                     onClick={handleCompleteSubmit}
-                                                    disabled={actionLoading || completeForm.actualTimeSpent <= 0 || !completeForm.resolutionSummary.trim()}
+                                                    disabled={actionLoading || !completeForm.actualTimeSpent || Number(completeForm.actualTimeSpent) <= 0 || !completeForm.resolutionSummary.trim()}
                                                     className="flex-1 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 disabled:opacity-50 transition-colors text-sm font-medium flex items-center justify-center gap-1"
                                                 >
                                                     <CheckCircle2 className="w-3.5 h-3.5" />
