@@ -133,8 +133,8 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between p-6 pb-4">
+      <form onSubmit={handleSubmit} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
             {isPrivate ? (
               <Lock className="w-5 h-5 text-indigo-600" />
@@ -144,6 +144,7 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
             <h2 className="text-lg font-bold text-slate-800">Create Channel</h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
           >
@@ -151,7 +152,7 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-y-auto px-6 pb-6">
+        <div className="flex-1 overflow-y-auto px-6 py-5">
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 text-sm mb-4">
               {error}
@@ -452,15 +453,33 @@ export function CreateChannelModal({ open, onClose, onCreated }: CreateChannelMo
             </div>
           )}
 
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 bg-slate-50 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-white rounded-lg transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
           <button
             type="submit"
             disabled={loading || !name.trim() || (isPrivate && selectedMembers.length === 0)}
-            className="w-full mt-4 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? 'Creating...' : `Create ${isPrivate ? 'Private ' : ''}Channel`}
+            {loading ? (
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Creating…
+              </>
+            ) : (
+              `Create ${isPrivate ? 'Private ' : ''}Channel`
+            )}
           </button>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
 }
