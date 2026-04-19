@@ -69,14 +69,6 @@ const sectionConfigs: Record<string, NavSection> = {
             { href: '/later', icon: Bookmark, label: 'Later' },
         ],
     },
-    chat: {
-        label: 'Chat',
-        backToHome: true,
-        items: [
-            { href: '/channels', icon: Hash, label: 'Channels', hasBadge: true, badgeKey: 'chat' },
-            { href: '/messages', icon: MessageCircle, label: 'Direct Messages', hasBadge: true, badgeKey: 'dm' },
-        ],
-    },
     orbit: {
         label: 'AHA Orbit',
         backToHome: true,
@@ -105,10 +97,10 @@ const sectionConfigs: Record<string, NavSection> = {
 // Determine which section the current pathname belongs to
 function getCurrentSection(pathname: string): keyof typeof sectionConfigs {
     if (pathname === '/') return 'comss';
-    if (pathname.startsWith('/channels') || pathname.startsWith('/messages') || pathname.startsWith('/chat')) return 'chat';
     if (pathname.startsWith('/fast') || pathname.startsWith('/tasks') || pathname.startsWith('/nexus')
         || pathname.startsWith('/analytics')
-        || pathname.startsWith('/activity-log') || pathname.startsWith('/later')) return 'fast';
+        || pathname.startsWith('/activity-log') || pathname.startsWith('/later')
+        || pathname.startsWith('/channels') || pathname.startsWith('/messages') || pathname.startsWith('/chat')) return 'fast';
     if (pathname.startsWith('/orbit')) return 'orbit';
     if (pathname.startsWith('/request')) return 'request';
     if (pathname.startsWith('/users')) return 'users';
@@ -235,7 +227,7 @@ export function Sidebar() {
                         <div className="space-y-1">
                             {visibleSection.items.map((item) => {
                                 const isActive = pathname === item.href
-                                    || (item.href === '/channels' && pathname.startsWith('/channels'))
+                                    || (item.href === '/channels' && (pathname.startsWith('/channels') || pathname.startsWith('/messages')))
                                     || (item.href === '/tasks' && (pathname === '/tasks' || pathname === '/nexus'))
                                     || (item.href === '/orbit' && pathname === '/orbit')
                                     || (item.href === '/orbit/manage' && pathname.startsWith('/orbit/manage'))
