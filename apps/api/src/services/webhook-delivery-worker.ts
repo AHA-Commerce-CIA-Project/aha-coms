@@ -131,9 +131,9 @@ export async function tick(opts: TickOptions): Promise<void> {
       SET status = 'pending',
           locked_by = NULL,
           locked_at = NULL,
-          updated_at = ${currentTime}
+          updated_at = ${currentTime.toISOString()}
       WHERE status = 'running'
-        AND locked_at < ${new Date(currentTime.getTime() - staleLockTimeoutMs)}
+        AND locked_at < ${new Date(currentTime.getTime() - staleLockTimeoutMs).toISOString()}
     `,
   )
 
@@ -162,12 +162,12 @@ export async function tick(opts: TickOptions): Promise<void> {
       UPDATE webhook_delivery_jobs
       SET status = 'running',
           locked_by = ${workerId},
-          locked_at = ${currentTime},
-          updated_at = ${currentTime}
+          locked_at = ${currentTime.toISOString()},
+          updated_at = ${currentTime.toISOString()}
       WHERE id IN (
         SELECT id FROM webhook_delivery_jobs
         WHERE status = 'pending'
-          AND next_attempt_at <= ${currentTime}
+          AND next_attempt_at <= ${currentTime.toISOString()}
         ORDER BY next_attempt_at ASC
         LIMIT ${batchSize}
         FOR UPDATE SKIP LOCKED
