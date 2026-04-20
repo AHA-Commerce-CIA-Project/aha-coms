@@ -3,11 +3,6 @@ output "cloud_run_url" {
   value       = google_cloud_run_v2_service.coms_portal.uri
 }
 
-output "lb_ip" {
-  description = "Load balancer IP — point DNS here"
-  value       = google_compute_global_address.coms_portal.address
-}
-
 output "wif_provider" {
   description = "WIF provider resource name — set as GitHub repo secret WIF_PROVIDER"
   value       = google_iam_workload_identity_pool_provider.github.name
@@ -26,5 +21,17 @@ output "artifact_registry" {
 output "db_password" {
   description = "Database password for CI migration — set as GitHub secret DB_PASSWORD"
   value       = random_password.db_password.result
+  sensitive   = true
+}
+
+output "portal_introspect_secret" {
+  description = "Shared secret for relying-party apps to call POST /api/auth/broker/introspect"
+  value       = random_password.portal_introspect_secret.result
+  sensitive   = true
+}
+
+output "portal_broker_signing_secret" {
+  description = "HS256 shared secret for broker token_exchange JWS verification"
+  value       = random_password.portal_broker_signing_secret.result
   sensitive   = true
 }
