@@ -2,7 +2,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { db } from '~/db'
 import { identityUsers, sessionRevocations, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
 import { revokeRefreshTokens } from '../gip-admin'
-import { dispatchPortalWebhook } from './webhook-dispatcher'
+import { dispatchPortalWebhook } from './portal-webhook-fanout'
 import type { SessionRevokedPayload } from '@coms-portal/shared'
 
 export type RevocationReason = SessionRevokedPayload['reason']

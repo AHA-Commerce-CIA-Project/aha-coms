@@ -84,10 +84,15 @@ mock.module('drizzle-orm', () => ({
 const revokeRefreshTokens = mock(async (_uid: string) => undefined)
 mock.module('../../gip-admin', () => ({ revokeRefreshTokens }))
 
-// Mock the webhook dispatcher
-// Path is relative to the TEST FILE: '../webhook-dispatcher' resolves to src/services/webhook-dispatcher.ts
+// Mock the webhook dispatcher via the dedicated re-export shim.
+// We must NOT mock '../webhook-dispatcher' directly: Bun's `mock.module` is
+// process-global and registered at file load, so a partial replacement of the
+// dispatcher leaks into webhook-dispatcher.test.ts and worker tests, causing
+// `signWebhookBody`/`verifyWebhookSignature`/`deliverWebhook` to come back as
+// undefined for those suites. Mocking the thin re-export keeps the dispatcher
+// untouched everywhere else.
 const dispatchPortalWebhook = mock(async () => undefined)
-mock.module('../webhook-dispatcher', () => ({ dispatchPortalWebhook }))
+mock.module('../portal-webhook-fanout', () => ({ dispatchPortalWebhook }))
 
 const { revokePortalSession } = await import('../session-revocation')
 

@@ -11,7 +11,7 @@
 import { eq, inArray } from 'drizzle-orm'
 import { db } from '~/db'
 import { identityUsers, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
-import { dispatchPortalWebhook } from './webhook-dispatcher'
+import { dispatchPortalWebhook } from './portal-webhook-fanout'
 import type {
   UserProvisionedPayload,
   UserUpdatedPayload,
