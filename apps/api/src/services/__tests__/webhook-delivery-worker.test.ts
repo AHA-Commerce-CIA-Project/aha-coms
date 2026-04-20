@@ -39,6 +39,9 @@ mock.module('~/db/schema/webhook-delivery-jobs', () => ({
 mock.module('~/db/schema/app-webhook-endpoints', () => ({
   appWebhookEndpoints: appWebhookEndpointsSchema,
 }))
+mock.module('~/db/schema/apps', () => ({
+  appRegistry: { id: 'app_registry.id', slug: 'app_registry.slug' },
+}))
 mock.module('~/db', () => ({ db: {} })) // placeholder; tests inject db via TickOptions
 mock.module('drizzle-orm', () => ({
   eq: (left: unknown, right: unknown) => ({ type: 'eq', left, right }),
