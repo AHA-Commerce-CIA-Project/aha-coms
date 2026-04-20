@@ -23,7 +23,7 @@ mock.module('drizzle-orm', () => ({
   and: (...conditions: unknown[]) => ({ conditions }),
 }))
 
-const { brokerAudienceFor, BrokerValidationError } = await import('../auth-broker')
+const { brokerAudienceFor, BrokerValidationError, sanitizeRedirectTo } = await import('../auth-broker')
 
 // jose is used for JWT operations; import it directly (no mock needed — we
 // test real signing/verification to exercise the audience binding).
@@ -87,5 +87,91 @@ describe('audience binding in JWT verification', () => {
     })
 
     expect((payload as Record<string, unknown>).appSlug).toBe('orbit')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// sanitizeRedirectTo
+// ---------------------------------------------------------------------------
+
+describe('sanitizeRedirectTo', () => {
+  const APP_URL = 'https://heroes.example.com'
+
+  // --- empty / absent inputs ---
+
+  test('undefined input returns undefined (no warn)', () => {
+    expect(sanitizeRedirectTo(undefined, APP_URL)).toBeUndefined()
+  })
+
+  test('null input returns undefined', () => {
+    expect(sanitizeRedirectTo(null, APP_URL)).toBeUndefined()
+  })
+
+  test('empty string returns undefined', () => {
+    expect(sanitizeRedirectTo('', APP_URL)).toBeUndefined()
+  })
+
+  // --- relative paths ---
+
+  test('relative path is accepted as-is', () => {
+    expect(sanitizeRedirectTo('/deep/path', APP_URL)).toBe('/deep/path')
+  })
+
+  test('root slash is accepted', () => {
+    expect(sanitizeRedirectTo('/', APP_URL)).toBe('/')
+  })
+
+  // --- protocol-relative rejection ---
+
+  test('protocol-relative URL is rejected', () => {
+    expect(sanitizeRedirectTo('//evil.com/x', APP_URL)).toBeUndefined()
+  })
+
+  // --- dangerous schemes ---
+
+  test('javascript: scheme is rejected', () => {
+    expect(sanitizeRedirectTo('javascript:alert(1)', APP_URL)).toBeUndefined()
+  })
+
+  test('data: scheme is rejected', () => {
+    expect(sanitizeRedirectTo('data:text/html,<h1>x</h1>', APP_URL)).toBeUndefined()
+  })
+
+  // --- host matching ---
+
+  test('absolute URL matching registered host is accepted', () => {
+    expect(sanitizeRedirectTo('https://heroes.example.com/foo', APP_URL)).toBe(
+      'https://heroes.example.com/foo',
+    )
+  })
+
+  test('absolute URL with a different host is rejected', () => {
+    expect(sanitizeRedirectTo('https://evil.com/x', APP_URL)).toBeUndefined()
+  })
+
+  // --- port handling ---
+  // Decision: compare hostname ONLY — port is ignored.
+  // Rationale: Cloud Run assigns the same hostname regardless of port, and
+  // app_registry.url typically omits the port number. Blocking on port
+  // differences would be overly strict and would break legitimate traffic
+  // during Cloud Run pilots where internal routing may use a non-standard port.
+  test('same hostname with an explicit port is accepted (hostname-only comparison)', () => {
+    expect(sanitizeRedirectTo('https://heroes.example.com:8443/foo', APP_URL)).toBe(
+      'https://heroes.example.com:8443/foo',
+    )
+  })
+
+  // --- malformed input ---
+
+  test('malformed URL string is rejected', () => {
+    expect(sanitizeRedirectTo('not a url', APP_URL)).toBeUndefined()
+  })
+
+  // --- http scheme ---
+
+  test('http: absolute URL matching host is accepted (covers Cloud Run http-internal traffic)', () => {
+    expect(sanitizeRedirectTo('http://heroes.example.com/path', APP_URL)).toBe(
+      'http://heroes.example.com/path',
+    )
   })
 })

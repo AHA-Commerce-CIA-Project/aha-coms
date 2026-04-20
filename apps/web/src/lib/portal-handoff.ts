@@ -7,20 +7,26 @@ const STORAGE_KEY = 'portal:handoff-intent'
 
 /**
  * Returns true for redirect_to values that are safe to forward to the broker.
+ *
+ * Rejects obviously dangerous values (protocol-relative URLs, non-http
+ * schemes). The authoritative host check is performed server-side by the
+ * broker via sanitizeRedirectTo in auth-broker.ts, which validates the
+ * hostname against the app's registered URL in app_registry.
+ *
  * Accepts:
- *   - Absolute HTTPS URLs whose hostname ends with .ahacommerce.net (or is exactly ahacommerce.net)
  *   - Relative paths starting with / but NOT // (no protocol-relative URLs)
+ *   - Absolute http: or https: URLs on any hostname
  */
 export function isSafeRedirectTo(value: string): boolean {
+  if (!value) return false
+
   if (value.startsWith('//')) return false
 
   if (value.startsWith('/')) return true
 
   try {
     const u = new URL(value)
-    if (u.protocol !== 'https:') return false
-    const host = u.hostname
-    return host === 'ahacommerce.net' || host.endsWith('.ahacommerce.net')
+    return u.protocol === 'http:' || u.protocol === 'https:'
   } catch {
     return false
   }

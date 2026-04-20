@@ -15,6 +15,74 @@ const PORTAL_BROKER_ISSUER = 'coms-portal-broker'
 const BROKER_CODE_TTL_SECONDS = 300
 const BROKER_TOKEN_TTL_SECONDS = 300
 
+/**
+ * Validate redirect_to against the target app's registered URL.
+ *
+ * Only accepted:
+ *  - Relative paths that start with exactly one '/' (not '//').
+ *  - Absolute URLs whose hostname EXACTLY matches the hostname of the app's
+ *    registered URL in app_registry. Port is intentionally ignored: Cloud Run
+ *    assigns the same host regardless of port, and app_registry.url typically
+ *    omits the port, so comparing hostname alone is both correct and safe.
+ *
+ * Returns the normalized string to store, or `undefined` to drop the value.
+ * Logs a console.warn when a non-empty input is rejected so the decision is
+ * traceable.
+ */
+export function sanitizeRedirectTo(
+  redirectTo: string | undefined | null,
+  appUrl: string,
+): string | undefined {
+  // Empty / absent — nothing to validate.
+  if (!redirectTo) return undefined
+
+  // Protocol-relative URLs are rejected outright (they inherit the current
+  // scheme and can route off-domain).
+  if (redirectTo.startsWith('//')) {
+    console.warn('[auth-broker] rejected protocol-relative redirect_to:', redirectTo)
+    return undefined
+  }
+
+  // Relative paths (starting with exactly one '/') are safe: the app that
+  // receives portal_redirect_to can only redirect within its own origin.
+  if (redirectTo.startsWith('/')) return redirectTo
+
+  // Absolute URL — parse and validate.
+  let parsed: URL
+  try {
+    parsed = new URL(redirectTo)
+  } catch {
+    console.warn('[auth-broker] rejected malformed redirect_to:', redirectTo)
+    return undefined
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    console.warn('[auth-broker] rejected non-http redirect_to:', redirectTo)
+    return undefined
+  }
+
+  // Compare hostname only (port is ignored — see JSDoc rationale above).
+  let registeredHostname: string
+  try {
+    registeredHostname = new URL(appUrl).hostname
+  } catch {
+    console.warn('[auth-broker] invalid appUrl in registry, rejecting redirect_to:', appUrl)
+    return undefined
+  }
+
+  if (parsed.hostname !== registeredHostname) {
+    console.warn(
+      '[auth-broker] rejected redirect_to with mismatched host:',
+      redirectTo,
+      '(expected host:',
+      registeredHostname + ')',
+    )
+    return undefined
+  }
+
+  return parsed.toString()
+}
+
 export class BrokerAuthorizationError extends Error {}
 export class BrokerValidationError extends Error {}
 
@@ -129,6 +197,9 @@ export async function createBrokerHandoff(
   redirectTo?: string,
 ): Promise<PortalBrokerHandoffResponse> {
   assertAppAccess(app, authUser)
+
+  // Sanitize once at entry; the cleaned value flows into all three handoff paths.
+  redirectTo = sanitizeRedirectTo(redirectTo, app.url)
 
   if (app.transportMode === 'same_host_cookie' || app.handoffMode === 'none') {
     return {
