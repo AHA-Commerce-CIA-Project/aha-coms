@@ -70,10 +70,13 @@ mock.module('drizzle-orm', () => ({
   and: (...conditions: unknown[]) => ({ conditions }),
 }))
 
-// Mock the webhook dispatcher — this is what we assert on
-// Path relative to the test file: '../webhook-dispatcher' = src/services/webhook-dispatcher.ts
+// Mock the dispatcher via the dedicated re-export shim.
+// Bun's `mock.module` is process-global and registered at file load, so a
+// partial mock of '../webhook-dispatcher' leaks into webhook-dispatcher.test.ts
+// and worker tests, breaking imports of signWebhookBody / verifyWebhookSignature
+// / deliverWebhook there. Mocking the shim keeps the dispatcher untouched.
 const dispatchPortalWebhook = mock(async () => undefined)
-mock.module('../webhook-dispatcher', () => ({ dispatchPortalWebhook }))
+mock.module('../portal-webhook-fanout', () => ({ dispatchPortalWebhook }))
 
 const { emitUserProvisioned, emitUserUpdated, emitUserOffboarded } =
   await import('../provisioning-events')
