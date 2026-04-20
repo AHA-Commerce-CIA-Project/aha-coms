@@ -194,6 +194,7 @@ function MessagesPage() {
     const { user } = useAuth();
     const searchParams = useSearchParams();
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
+    const [channelUnreadTotal, setChannelUnreadTotal] = useState(0);
     const [selected, setSelected] = useState<ConversationItem | null>(null);
     const [messages, setMessages] = useState<DmMessage[]>([]);
     const [loadingConvos, setLoadingConvos] = useState(true);
@@ -246,6 +247,23 @@ function MessagesPage() {
         fetchConversations();
         fetch('/api/chat/users').then(r => r.ok ? r.json() : []).then(setAllUsers).catch(() => {});
     }, [user, fetchConversations]);
+
+    // Poll channel unread total for the Channels tab badge
+    useEffect(() => {
+        if (!user) return;
+        const fetchChannelUnread = async () => {
+            try {
+                const res = await fetch('/api/channels/unread');
+                if (res.ok) {
+                    const data = await res.json();
+                    setChannelUnreadTotal(data.unreadCount || 0);
+                }
+            } catch {}
+        };
+        fetchChannelUnread();
+        const interval = setInterval(fetchChannelUnread, 5000);
+        return () => clearInterval(interval);
+    }, [user]);
 
     // Auto-open conversation from URL param
     useEffect(() => {
@@ -425,8 +443,8 @@ function MessagesPage() {
     return (
         <div>
             <PageTabs tabs={[
-                { href: '/channels', label: 'Channels' },
-                { href: '/messages', label: 'Messages' },
+                { href: '/channels', label: 'Channels', badge: channelUnreadTotal },
+                { href: '/messages', label: 'Messages', badge: conversations.reduce((s, c) => s + (c.unreadCount || 0), 0) },
             ]} />
         <div className="flex bg-white rounded-2xl border border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 168px)' }}>
             {/* Left: Conversation list */}

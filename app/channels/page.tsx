@@ -76,6 +76,7 @@ function ChannelsPageContent() {
   const [searchResults, setSearchResults] = useState<{ messages: any[]; replies: any[] } | null>(null);
   const [searching, setSearching] = useState(false);
   const [perChannelUnread, setPerChannelUnread] = useState<Record<string, number>>({});
+  const [dmUnreadTotal, setDmUnreadTotal] = useState(0);
   const [typingUsers, setTypingUsers] = useState<{ id: string; name: string }[]>([]);
   const [forwardMessage, setForwardMessage] = useState<any | null>(null);
   const [scrollTrigger, setScrollTrigger] = useState(0);
@@ -164,15 +165,22 @@ function ChannelsPageContent() {
     }
   }, [messages, searchParamsObj]);
 
-  // Fetch per-channel unread counts
+  // Fetch per-channel unread counts + DM total unread (for tab badges)
   useEffect(() => {
     if (!session) return;
     const fetchUnread = async () => {
       try {
-        const res = await fetch('/api/channels/unread');
-        if (res.ok) {
-          const data = await res.json();
+        const [chRes, dmRes] = await Promise.all([
+          fetch('/api/channels/unread'),
+          fetch('/api/chat/unread'),
+        ]);
+        if (chRes.ok) {
+          const data = await chRes.json();
           setPerChannelUnread(data.perChannel || {});
+        }
+        if (dmRes.ok) {
+          const data = await dmRes.json();
+          setDmUnreadTotal(data.unreadCount || 0);
         }
       } catch {}
     };
@@ -382,8 +390,8 @@ function ChannelsPageContent() {
     <div className="-mx-6 -mt-6">
       <div className="px-6 pt-4 pb-2">
         <PageTabs tabs={[
-          { href: '/channels', label: 'Channels' },
-          { href: '/messages', label: 'Messages' },
+          { href: '/channels', label: 'Channels', badge: Object.values(perChannelUnread).reduce((s, n) => s + (n || 0), 0) },
+          { href: '/messages', label: 'Messages', badge: dmUnreadTotal },
         ]} />
       </div>
     <div className="flex" style={{ height: 'calc(100vh - 168px)' }}>
