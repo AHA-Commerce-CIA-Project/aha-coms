@@ -57,6 +57,13 @@
       "when": 1776650975318,
       "tag": "0007_workable_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776654296740,
+      "tag": "0008_chief_ricochet",
+      "breakpoints": true
     }
   ]
 }

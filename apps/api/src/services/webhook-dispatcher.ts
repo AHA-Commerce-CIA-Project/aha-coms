@@ -1,16 +1,21 @@
 /**
  * Webhook dispatcher — delivers portal events to registered app_webhook_endpoints.
  *
- * NOTE: The retry queue is in-process (module-level Map<id, Timer>).
- * If the API runs on multiple instances, deliveries will not be coordinated
- * and retries will be lost on restart. For multi-instance deployments this
- * must be replaced with a durable queue (BullMQ or a Postgres-backed job table).
+ * Retry strategy (durable, Postgres-backed):
+ *   - Attempt 1: inline, synchronous (fire-and-forget from the caller's perspective).
+ *   - On failure: a `webhook_delivery_jobs` row is inserted with attemptCount=1 and
+ *     nextAttemptAt = now + 30s. The webhook-delivery-worker polls and processes it.
+ *   - Attempt 2 (worker): on failure, nextAttemptAt = +2min (attemptCount=2).
+ *   - Attempt 3 (worker): on failure, endpoint disabled (attemptCount=3).
+ *
+ * No in-process timers — retries survive Cloud Run restarts and scale-to-zero.
  */
 
 import { createHmac } from 'node:crypto'
 import { eq, and, sql } from 'drizzle-orm'
 import { db } from '~/db'
 import { appWebhookEndpoints } from '~/db/schema/app-webhook-endpoints'
+import { webhookDeliveryJobs } from '~/db/schema/webhook-delivery-jobs'
 import { appRegistry } from '~/db/schema/apps'
 import type {
   PortalWebhookEvent,
@@ -25,14 +30,22 @@ import {
 } from '@coms-portal/shared'
 
 // ---------------------------------------------------------------------------
-// In-memory retry state
+// Retry constants — shared with webhook-delivery-worker.ts
+//
+// Retry cadence (from the user's perspective, T=0 is when the event fires):
+//   T+0     inline attempt (attempt 1)  — this file
+//   T+30s   job retry     (attempt 2)  — worker
+//   T+2m30s job retry     (attempt 3)  — worker → on failure, disable endpoint
+//
+// RETRY_DELAYS_MS[i] is the delay before attempt (i+2), i.e. indexed by the
+// current attemptCount after the failure:
+//   attemptCount=1 after inline fail  → delay[0] = 30s  → schedules attempt 2
+//   attemptCount=2 after retry fail   → delay[1] = 120s → schedules attempt 3
+//   attemptCount=3                    → MAX reached, disable (no further retry)
 // ---------------------------------------------------------------------------
 
-const MAX_RETRY_ATTEMPTS = 3
-const RETRY_DELAYS_MS = [30_000, 120_000, 600_000] // 30s, 2min, 10min
-
-/** Tracks pending retry timers keyed by endpoint id. */
-const pendingRetries = new Map<string, ReturnType<typeof setTimeout>>()
+export const MAX_RETRY_ATTEMPTS = 3
+export const RETRY_DELAYS_MS = [30_000, 120_000] as const // 30s, 2min
 
 // ---------------------------------------------------------------------------
 // Signing helpers
@@ -82,17 +95,22 @@ export function signWebhookBody(secret: string, timestamp: string, jsonBody: str
 
 type EndpointRow = typeof appWebhookEndpoints.$inferSelect & { appSlug: string }
 
-async function deliver(
-  endpoint: EndpointRow,
+/**
+ * Perform a single HTTP delivery attempt. Throws on non-2xx or network error.
+ * Exported for re-use by the worker.
+ */
+export async function deliverWebhook(
+  endpointUrl: string,
+  endpointSecret: string,
   event: PortalWebhookEvent,
   jsonBody: string,
   eventId: string,
   occurredAt: string,
   fetchImpl: typeof fetch,
 ): Promise<void> {
-  const signature = computeSignature(endpoint.secret, occurredAt, jsonBody)
+  const signature = computeSignature(endpointSecret, occurredAt, jsonBody)
 
-  const response = await fetchImpl(endpoint.url, {
+  const response = await fetchImpl(endpointUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -109,89 +127,6 @@ async function deliver(
   }
 }
 
-async function onDeliverySuccess(endpointId: string, now: Date): Promise<void> {
-  pendingRetries.delete(endpointId)
-  await db
-    .update(appWebhookEndpoints)
-    .set({ failureCount: 0, lastDeliveredAt: now })
-    .where(eq(appWebhookEndpoints.id, endpointId))
-}
-
-async function onDeliveryFailure(
-  endpoint: EndpointRow,
-  event: PortalWebhookEvent,
-  jsonBody: string,
-  eventId: string,
-  occurredAt: string,
-  reason: string,
-  attempt: number,
-  fetchImpl: typeof fetch,
-): Promise<void> {
-  const now = new Date()
-  const nextAttempt = attempt + 1
-
-  if (nextAttempt >= MAX_RETRY_ATTEMPTS) {
-    // Disable endpoint after exhausting retries
-    console.error(
-      `[webhook-dispatcher] endpoint ${endpoint.id} (${endpoint.url}) disabled after ${MAX_RETRY_ATTEMPTS} failed attempts. Last error: ${reason}`,
-    )
-    await db
-      .update(appWebhookEndpoints)
-      .set({
-        status: 'disabled',
-        failureCount: sql`${appWebhookEndpoints.failureCount} + 1`,
-        lastFailureAt: now,
-        lastFailureReason: reason.slice(0, 500),
-        updatedAt: now,
-      })
-      .where(eq(appWebhookEndpoints.id, endpoint.id))
-    return
-  }
-
-  await db
-    .update(appWebhookEndpoints)
-    .set({
-      failureCount: sql`${appWebhookEndpoints.failureCount} + 1`,
-      lastFailureAt: now,
-      lastFailureReason: reason.slice(0, 500),
-      updatedAt: now,
-    })
-    .where(eq(appWebhookEndpoints.id, endpoint.id))
-
-  const delayMs = RETRY_DELAYS_MS[attempt] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]
-  console.warn(
-    `[webhook-dispatcher] endpoint ${endpoint.id} delivery failed (attempt ${nextAttempt}/${MAX_RETRY_ATTEMPTS}), retrying in ${delayMs / 1000}s. Reason: ${reason}`,
-  )
-
-  // Cancel any existing timer for this endpoint
-  const existing = pendingRetries.get(endpoint.id)
-  if (existing) clearTimeout(existing)
-
-  const timer = setTimeout(() => {
-    pendingRetries.delete(endpoint.id)
-    attemptDelivery(endpoint, event, jsonBody, eventId, occurredAt, nextAttempt, fetchImpl)
-  }, delayMs)
-
-  pendingRetries.set(endpoint.id, timer)
-}
-
-function attemptDelivery(
-  endpoint: EndpointRow,
-  event: PortalWebhookEvent,
-  jsonBody: string,
-  eventId: string,
-  occurredAt: string,
-  attempt: number,
-  fetchImpl: typeof fetch,
-): void {
-  deliver(endpoint, event, jsonBody, eventId, occurredAt, fetchImpl)
-    .then(() => onDeliverySuccess(endpoint.id, new Date()))
-    .catch((err: unknown) => {
-      const reason = err instanceof Error ? err.message : String(err)
-      onDeliveryFailure(endpoint, event, jsonBody, eventId, occurredAt, reason, attempt, fetchImpl)
-    })
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -200,7 +135,10 @@ function attemptDelivery(
  * Dispatch a portal webhook event to all active, subscribed endpoints.
  *
  * Fire-and-forget: the function returns immediately after kicking off parallel
- * deliveries. Retries happen via in-process setTimeout (see module-level note).
+ * deliveries. On first-attempt success, the endpoint stats are updated inline.
+ * On first-attempt failure, a durable `webhook_delivery_jobs` row is inserted
+ * for the worker to pick up and retry (30s, 2min cadence; disabled after 3 total
+ * failures).
  *
  * @param event     - The event name (must be in PORTAL_WEBHOOK_EVENTS)
  * @param payload   - Event-specific payload object
@@ -268,13 +206,67 @@ export async function dispatchPortalWebhook<T>(
       }
       const jsonBody = JSON.stringify(envelope)
 
-      return new Promise<void>((resolve) => {
-        attemptDelivery(endpoint, event, jsonBody, eventId, occurredAt, 0, fetchImpl)
-        // Resolve immediately — attemptDelivery is fire-and-forget with internal retry
-        resolve()
-      })
+      return inlineAttempt(endpoint, event, jsonBody, eventId, occurredAt, fetchImpl)
     }),
   ).catch(() => {
     // allSettled never rejects, but satisfy linters
   })
+}
+
+/**
+ * Perform the inline (first) delivery attempt.
+ * On success: update endpoint stats (failureCount=0, lastDeliveredAt).
+ * On failure: insert a webhook_delivery_jobs row for durable retry.
+ */
+async function inlineAttempt(
+  endpoint: EndpointRow,
+  event: PortalWebhookEvent,
+  jsonBody: string,
+  eventId: string,
+  occurredAt: string,
+  fetchImpl: typeof fetch,
+): Promise<void> {
+  const now = new Date()
+  try {
+    await deliverWebhook(endpoint.url, endpoint.secret, event, jsonBody, eventId, occurredAt, fetchImpl)
+
+    // Success — reset failure state
+    await db
+      .update(appWebhookEndpoints)
+      .set({ failureCount: 0, lastDeliveredAt: now })
+      .where(eq(appWebhookEndpoints.id, endpoint.id))
+  } catch (err: unknown) {
+    const reason = err instanceof Error ? err.message : String(err)
+
+    console.warn(
+      `[webhook-dispatcher] endpoint ${endpoint.id} (${endpoint.url}) inline delivery failed. Enqueueing for retry. Reason: ${reason}`,
+    )
+
+    // Update endpoint failure stats
+    await db
+      .update(appWebhookEndpoints)
+      .set({
+        failureCount: sql`${appWebhookEndpoints.failureCount} + 1`,
+        lastFailureAt: now,
+        lastFailureReason: reason.slice(0, 500),
+        updatedAt: now,
+      })
+      .where(eq(appWebhookEndpoints.id, endpoint.id))
+
+    // Enqueue a durable job for the worker to pick up.
+    // attemptCount=1: the inline attempt counts as attempt 1.
+    // nextAttemptAt=+30s: first worker retry is 30s from now.
+    const nextAttemptAt = new Date(now.getTime() + RETRY_DELAYS_MS[0])
+    await db.insert(webhookDeliveryJobs).values({
+      endpointId: endpoint.id,
+      event,
+      eventId,
+      jsonBody,
+      occurredAt: new Date(occurredAt),
+      attemptCount: 1,
+      nextAttemptAt,
+      status: 'pending',
+      lastError: reason.slice(0, 500),
+    })
+  }
 }

@@ -9,8 +9,15 @@ import { personalEmailSyncRoutes } from './routes/personal-email-sync'
 import { appWebhookRoutes } from './routes/app-webhooks'
 import { authPlugin } from './middleware/auth'
 import { initGip } from './gip'
+import { startWebhookDeliveryWorker } from './services/webhook-delivery-worker'
 
 initGip()
+
+// Start the durable webhook retry worker. Skipped in test environments — tests
+// start the worker explicitly with injected dependencies.
+if (process.env.NODE_ENV !== 'test') {
+  startWebhookDeliveryWorker()
+}
 
 export const app = new Elysia({ prefix: '/api' })
   .onError(({ error, path }) => {

@@ -24,6 +24,19 @@ const appRegistry = {
   slug: 'app_registry.slug',
 }
 
+const webhookDeliveryJobs = {
+  id: 'webhook_delivery_jobs.id',
+  endpointId: 'webhook_delivery_jobs.endpoint_id',
+  event: 'webhook_delivery_jobs.event',
+  eventId: 'webhook_delivery_jobs.event_id',
+  jsonBody: 'webhook_delivery_jobs.json_body',
+  occurredAt: 'webhook_delivery_jobs.occurred_at',
+  attemptCount: 'webhook_delivery_jobs.attempt_count',
+  nextAttemptAt: 'webhook_delivery_jobs.next_attempt_at',
+  status: 'webhook_delivery_jobs.status',
+  lastError: 'webhook_delivery_jobs.last_error',
+}
+
 // ---------------------------------------------------------------------------
 // In-memory DB simulation
 // ---------------------------------------------------------------------------
@@ -44,8 +57,21 @@ type EndpointRecord = {
   updatedAt: Date
 }
 
+type JobRecord = {
+  endpointId: string
+  event: string
+  eventId: string
+  jsonBody: string
+  occurredAt: Date
+  attemptCount: number
+  nextAttemptAt: Date
+  status: string
+  lastError: string | null
+}
+
 let endpointStore: EndpointRecord[] = []
 const dbUpdates: Array<Record<string, unknown>> = []
+let jobInserts: JobRecord[] = []
 
 // Tracks the WHERE condition values passed to update().where() so we can
 // identify which endpoint was updated.
@@ -89,10 +115,16 @@ const db = {
       }
     },
   }),
+  insert: (_table: unknown) => ({
+    values: async (record: JobRecord) => {
+      jobInserts.push(record)
+    },
+  }),
 }
 
 mock.module('~/db', () => ({ db }))
 mock.module('~/db/schema/app-webhook-endpoints', () => ({ appWebhookEndpoints }))
+mock.module('~/db/schema/webhook-delivery-jobs', () => ({ webhookDeliveryJobs }))
 mock.module('~/db/schema/apps', () => ({ appRegistry }))
 mock.module('drizzle-orm', () => ({
   eq: (left: unknown, right: unknown) => ({ type: 'eq', left, right }),
@@ -218,6 +250,7 @@ describe('dispatchPortalWebhook', () => {
   beforeEach(() => {
     endpointStore = []
     dbUpdates.length = 0
+    jobInserts = []
     lastUpdatePayload = {}
     lastUpdateWhereId = null
   })
@@ -332,61 +365,48 @@ describe('dispatchPortalWebhook', () => {
     expect(ep.lastFailureReason).toContain('503')
   })
 
-  // After MAX_RETRY_ATTEMPTS (3) failures the dispatcher sets status='disabled'.
-  // We cannot fast-forward the retry timers (they're 30s+) without timer mocks,
-  // so we simulate the third failed attempt by pre-setting failureCount = 2 so
-  // the *next* onDeliveryFailure call tips the counter to >= MAX_RETRY_ATTEMPTS.
-  //
-  // NOTE: The dispatcher checks `nextAttempt >= MAX_RETRY_ATTEMPTS` where
-  // attempt starts at 0. The counter in the DB is the actual failure count, so
-  // at attempt=2 (the third failure), nextAttempt=3 >= 3, and status is set to
-  // 'disabled'. We drive that by feeding an endpoint whose failureCount is
-  // already 2 and a fetch that fails, so onDeliveryFailure is called with
-  // attempt=0 (first programmatic call). The in-memory store starts at fc=2;
-  // on failure the code checks nextAttempt = attempt+1 = 1, which is < 3, so it
-  // schedules a retry — NOT what we want. To actually hit the disable branch we
-  // must simulate three sequential failures. The cleanest approach without timer
-  // mocks is to verify the disable logic exists in the source and confirm that
-  // a single failure with attempt=2 sets status='disabled'. We achieve this by
-  // directly invoking the internal path through a fresh dispatch where the fetch
-  // fails three times in rapid succession (each retry is scheduled via
-  // setTimeout(0) by overriding RETRY_DELAYS_MS — but that const is not exported).
-  //
-  // Given the constraints (no timer mocking, no exported delay override), we
-  // validate the partial state: after 1 failure attempt=0 the endpoint is NOT
-  // yet disabled, confirming the guard at attempt<MAX_RETRY_ATTEMPTS-1 works.
-  // The disable path itself is verified by source inspection (it exists at
-  // onDeliveryFailure line ~133) and the test below checks post-attempt-0 state.
-  test('after 3 failed attempts, sets status to disabled (attempt=2 triggers disable)', async () => {
-    // Override the select stub to give an endpoint that reports it has already
-    // received 2 failures, so the NEXT delivery failure will disable it.
-    // We simulate this by monkey-patching: the dispatcher's internal `attempt`
-    // counter starts at 0 on the first programmatic dispatch. We cannot directly
-    // set attempt=2 without calling through retry timers.
-    //
-    // What we CAN do: call dispatchPortalWebhook three times in sequence with
-    // zero-delay awaiting — but each has its own attempt=0 counter, so they don't
-    // accumulate. The actual accumulation happens via the retry timer chain.
-    //
-    // Resolution: override RETRY_DELAYS_MS to 0 via a trick — we set the
-    // module-level pendingRetries Map's timer to a zero-ms timeout by patching
-    // setTimeout. This is the cleanest in-process approach without exporting
-    // a test hook.
-    //
-    // For safety: assert only that after attempt=0 the endpoint is NOT disabled
-    // (i.e. the guard correctly requires 3 failures before disabling).
+  // On first-attempt failure the dispatcher no longer drives retries internally
+  // (the old in-memory retry timer chain has been removed). Instead it inserts a
+  // durable webhook_delivery_jobs row for the worker to pick up.
+  // Full retry behavior (3 total attempts, disable on exhaustion) is tested in
+  // webhook-delivery-worker.test.ts.
+  test('on failure, inserts a webhook_delivery_jobs row with status=pending, attemptCount=1, nextAttemptAt ~= now+30s', async () => {
     const ep = makeEndpoint({
-      id: 'ep-disable-test',
+      id: 'ep-enqueue',
       subscribedEvents: ['session.revoked'],
       failureCount: 0,
     })
     endpointStore.push(ep)
 
+    const before = Date.now()
     await dispatchPortalWebhook('session.revoked', { userId: 'u-6' }, { fetchImpl: failFetch(500) })
     await new Promise((r) => setTimeout(r, 10))
+    const after = Date.now()
 
-    // After one failure (attempt=0), the endpoint should NOT be disabled yet
+    expect(jobInserts).toHaveLength(1)
+    const job = jobInserts[0]
+    expect(job.endpointId).toBe(ep.id)
+    expect(job.status).toBe('pending')
+    expect(job.attemptCount).toBe(1)
+
+    // nextAttemptAt should be approximately now + 30s
+    const nextMs = job.nextAttemptAt instanceof Date ? job.nextAttemptAt.getTime() : Number(job.nextAttemptAt)
+    expect(nextMs).toBeGreaterThanOrEqual(before + 29_000)
+    expect(nextMs).toBeLessThanOrEqual(after + 31_000)
+  })
+
+  test('on failure, endpoint status remains active (disabling is the worker\'s job after max retries)', async () => {
+    const ep = makeEndpoint({
+      id: 'ep-no-disable',
+      subscribedEvents: ['session.revoked'],
+      failureCount: 0,
+    })
+    endpointStore.push(ep)
+
+    await dispatchPortalWebhook('session.revoked', { userId: 'u-7' }, { fetchImpl: failFetch(500) })
+    await new Promise((r) => setTimeout(r, 10))
+
+    // The dispatcher never disables the endpoint — that is the worker's responsibility
     expect(ep.status).toBe('active')
-    expect(ep.failureCount).toBeGreaterThanOrEqual(1)
   })
 })
