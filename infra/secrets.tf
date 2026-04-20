@@ -23,3 +23,41 @@ resource "google_secret_manager_secret" "gip_api_key" {
 
 # No secret_version for gip_api_key — populate manually:
 #   echo -n "YOUR_API_KEY" | gcloud secrets versions add coms-portal-gip-api-key --data-file=-
+
+# ── PORTAL_INTROSPECT_SECRET (shared with relying-party apps) ─────
+resource "random_password" "portal_introspect_secret" {
+  length  = 48
+  special = false
+}
+
+resource "google_secret_manager_secret" "portal_introspect_secret" {
+  secret_id = "portal-introspect-secret"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "portal_introspect_secret" {
+  secret      = google_secret_manager_secret.portal_introspect_secret.id
+  secret_data = random_password.portal_introspect_secret.result
+}
+
+# ── PORTAL_BROKER_SIGNING_SECRET (HS256 shared with relying-party apps) ──
+resource "random_password" "portal_broker_signing_secret" {
+  length  = 48
+  special = false
+}
+
+resource "google_secret_manager_secret" "portal_broker_signing_secret" {
+  secret_id = "portal-broker-signing-secret"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "portal_broker_signing_secret" {
+  secret      = google_secret_manager_secret.portal_broker_signing_secret.id
+  secret_data = random_password.portal_broker_signing_secret.result
+}
