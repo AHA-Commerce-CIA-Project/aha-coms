@@ -6,6 +6,7 @@ import { appRoutes } from './routes/apps'
 import { accessRoutes } from './routes/access'
 import { dashboardRoutes } from './routes/dashboard'
 import { personalEmailSyncRoutes } from './routes/personal-email-sync'
+import { appWebhookRoutes } from './routes/app-webhooks'
 import { authPlugin } from './middleware/auth'
 import { initGip } from './gip'
 
@@ -26,7 +27,8 @@ export const app = new Elysia({ prefix: '/api' })
       .use(appRoutes)
       .use(accessRoutes)
       .use(dashboardRoutes)
-      .use(personalEmailSyncRoutes),
+      .use(personalEmailSyncRoutes)
+      .use(appWebhookRoutes),
   )
 
 export type App = typeof app

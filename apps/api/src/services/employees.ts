@@ -5,6 +5,8 @@ import { resolveAndSyncClaims } from './claims'
 import type { NewIdentityUser } from '~/db/schema'
 import { setGipUserDisabled } from '../gip-admin'
 import { processEmployeeProvisioning } from './employee-provisioning'
+import { revokePortalSession } from './session-revocation'
+import { emitUserProvisioned, emitUserOffboarded, emitUserUpdated } from './provisioning-events'
 
 export async function createEmployee(data: {
   email: string
@@ -47,6 +49,13 @@ export async function createEmployee(data: {
 
   const provisioning = await processEmployeeProvisioning(user.id)
 
+  // Fire-and-forget: fan out user.provisioned after the transaction commits
+  // and GIP provisioning has run (so gipUid is set). No await — does not block
+  // the response. If the user has no teams yet, dispatchPortalWebhook is a no-op.
+  emitUserProvisioned(user.id).catch((err) => {
+    console.error(`[provisioning-events] emitUserProvisioned failed for ${user.id}:`, err)
+  })
+
   return {
     id: user.id,
     provisioningStatus: provisioning.status,
@@ -69,6 +78,24 @@ export async function deactivateEmployee(userId: string): Promise<void> {
   if (user.gipUid) {
     await setGipUserDisabled(user.gipUid, true)
   }
+
+  // Revoke portal sessions and fan out webhooks.
+  // revokeRefreshTokens is called inside revokePortalSession, so we do NOT
+  // call setGipUserDisabled + revokeRefreshTokens separately — but setGipUserDisabled
+  // is a distinct operation (disables account, not just tokens) and remains above.
+  // revokePortalSession handles the refresh-token revocation side independently.
+  try {
+    await revokePortalSession({ userId, reason: 'offboarded' })
+  } catch (err) {
+    console.error(`[deactivateEmployee] revokePortalSession failed for ${userId}:`, err)
+  }
+
+  // Emit user.offboarded AFTER session.revoked so events arrive in order.
+  // The user's team memberships still exist post-deactivation, so appSlugs
+  // are resolved from current DB state (accurate for fanout).
+  emitUserOffboarded(userId).catch((err) => {
+    console.error(`[provisioning-events] emitUserOffboarded failed for ${userId}:`, err)
+  })
 }
 
 export async function batchUpdateEmployees(
@@ -94,6 +121,13 @@ export async function batchUpdateEmployees(
         .filter((u) => u.gipUid)
         .map((u) => resolveAndSyncClaims(u.gipUid as string, u.id)),
     )
+
+    // Fan out user.updated for each affected user — fire-and-forget
+    for (const u of users) {
+      emitUserUpdated(u.id, ['portalRole']).catch((err) => {
+        console.error(`[provisioning-events] emitUserUpdated failed for ${u.id}:`, err)
+      })
+    }
   }
 
   return ids.length

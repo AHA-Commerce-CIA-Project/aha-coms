@@ -5,6 +5,7 @@ import { and, eq, desc, sql } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { resolveAndSyncClaims } from '../services/claims'
 import { logAudit } from '../services/audit'
+import { emitUserUpdated } from '../services/provisioning-events'
 
 async function refreshTeamMemberClaims(teamId: string): Promise<void> {
   const members = await db
@@ -19,6 +20,9 @@ async function refreshTeamMemberClaims(teamId: string): Promise<void> {
     if (user?.gipUid) {
       await resolveAndSyncClaims(user.gipUid, userId)
     }
+    emitUserUpdated(userId, ['teamIds', 'apps']).catch((err) => {
+      console.error(`[provisioning-events] emitUserUpdated failed for ${userId}:`, err)
+    })
   }
 }
 

@@ -12,12 +12,15 @@ import type {
 } from '@coms-portal/shared'
 
 const PORTAL_BROKER_ISSUER = 'coms-portal-broker'
-const PORTAL_BROKER_AUDIENCE = 'coms-service-app'
 const BROKER_CODE_TTL_SECONDS = 300
 const BROKER_TOKEN_TTL_SECONDS = 300
 
 export class BrokerAuthorizationError extends Error {}
 export class BrokerValidationError extends Error {}
+
+export function brokerAudienceFor(appSlug: string): string {
+  return `portal:app:${appSlug}`
+}
 
 type BrokerCapableApp = Pick<
   AppRegistry,
@@ -77,7 +80,7 @@ async function signBrokerToken(payload: BrokerTokenPayload): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuer(PORTAL_BROKER_ISSUER)
-    .setAudience(PORTAL_BROKER_AUDIENCE)
+    .setAudience(brokerAudienceFor(payload.appSlug))
     .setIssuedAt(now)
     .setExpirationTime(now + BROKER_TOKEN_TTL_SECONDS)
     .sign(getBrokerSecret())
@@ -237,7 +240,7 @@ export async function exchangeBrokerHandoff(input: {
   const secret = getBrokerSecret()
   const { payload } = await jwtVerify<BrokerTokenPayload>(input.token!, secret, {
     issuer: PORTAL_BROKER_ISSUER,
-    audience: PORTAL_BROKER_AUDIENCE,
+    audience: brokerAudienceFor(input.appSlug),
   })
 
   if (payload.appSlug !== input.appSlug) {

@@ -9,6 +9,7 @@ import { importEmployeesFromGoogleAdminCsv } from '../services/employee-import'
 import { processEmployeeProvisioning } from '../services/employee-provisioning'
 import { resolveAndSyncClaims } from '../services/claims'
 import { logAudit } from '../services/audit'
+import { emitUserUpdated } from '../services/provisioning-events'
 
 const employeeBody = t.Object({
   email: t.String({ format: 'email' }),
@@ -201,6 +202,17 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         targetId: params.id,
         details: body.portalRole ? { portalRole: body.portalRole } : undefined,
       })
+
+      // Compute changedFields from request body keys (only fields present in body)
+      const changedFields = Object.keys(body).filter(
+        (k) => body[k as keyof typeof body] !== undefined,
+      )
+      if (changedFields.length > 0) {
+        emitUserUpdated(params.id, changedFields).catch((err) => {
+          console.error(`[provisioning-events] emitUserUpdated failed for ${params.id}:`, err)
+        })
+      }
+
       return { ok: true }
     },
     { body: t.Partial(employeeBody) },

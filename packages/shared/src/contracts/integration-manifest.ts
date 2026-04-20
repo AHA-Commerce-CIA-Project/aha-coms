@@ -44,8 +44,10 @@ export const AUTH_ENTRYPOINT_KINDS = [
   'logout',
   'callback',
   'session_probe',
+  'session_introspection',
   'token_exchange',
   'refresh',
+  'lifecycle_webhook',
 ] as const
 
 export type AuthEntrypointKind = (typeof AUTH_ENTRYPOINT_KINDS)[number]
@@ -95,6 +97,20 @@ export interface PortalComplianceMetadata {
   lastVerifiedAt?: string | null
 }
 
+/**
+ * Declares that the relying-party app exposes a webhook receiver for portal
+ * lifecycle events (session.revoked, user.provisioned, user.updated,
+ * user.offboarded). The portal admin registers the concrete URL + HMAC secret
+ * via the portal admin UI; this manifest field only documents the receiver's
+ * capability surface.
+ */
+export interface PortalLifecycleWebhookContract {
+  receiverPath: string
+  subscribedEvents: string[]
+  signatureHeader?: string
+  description?: string
+}
+
 export interface PortalIntegrationManifest {
   manifestVersion: typeof PORTAL_INTEGRATION_MANIFEST_VERSION
   appSlug: string
@@ -105,6 +121,7 @@ export interface PortalIntegrationManifest {
   protectedRoutes: PortalRoutePattern[]
   requiredEnv: PortalEnvRequirement[]
   compliance: PortalComplianceMetadata
+  lifecycleWebhooks?: PortalLifecycleWebhookContract
 }
 
 export function createPortalIntegrationManifest(

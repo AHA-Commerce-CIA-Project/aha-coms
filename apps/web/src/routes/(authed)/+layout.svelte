@@ -4,6 +4,7 @@
   import { page } from '$app/stores'
   import { fetchMe, type SessionUser } from '$lib/auth'
   import Sidebar from '$lib/components/sidebar.svelte'
+  import { readHandoffIntent, popStashedIntent, buildLaunchUrl } from '$lib/portal-handoff'
 
   let user = $state<SessionUser | null>(null)
   let checking = $state(true)
@@ -18,6 +19,15 @@
       await goto(`/login?redirect=${encodeURIComponent($page.url.pathname)}`)
       return
     }
+
+    // Intercept any authed-page entry that carries a handoff intent.
+    // URL params take priority; fall back to a stashed intent from a prior login bounce.
+    const intent = readHandoffIntent($page.url) ?? popStashedIntent()
+    if (intent) {
+      window.location.assign(buildLaunchUrl(intent))
+      return
+    }
+
     checking = false
   })
 </script>

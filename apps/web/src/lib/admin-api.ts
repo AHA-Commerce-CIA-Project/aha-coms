@@ -6,6 +6,30 @@ import type {
   PortalRole,
 } from '@coms-portal/shared'
 
+export interface WebhookEndpoint {
+  id: string
+  appId: string
+  url: string
+  subscribedEvents: string[]
+  status: 'active' | 'disabled'
+  failureCount: number
+  lastDeliveredAt: string | null
+  lastFailureAt: string | null
+  lastFailureReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WebhookEndpointWithSecret extends WebhookEndpoint {
+  secret: string
+}
+
+export interface WebhookTestResult {
+  delivered: boolean
+  status?: number
+  error?: string
+}
+
 export interface EmployeeRecord {
   id: string
   email: string
@@ -295,6 +319,47 @@ export const adminApi = {
   deleteApp(id: string) {
     return requestJson<{ ok: true }>(`/api/v1/apps/${id}`, {
       method: 'DELETE',
+    })
+  },
+
+  // ---------------------------------------------------------------------------
+  // Webhook endpoint management
+  // ---------------------------------------------------------------------------
+
+  listWebhooks(appId: string) {
+    return requestJson<WebhookEndpoint[]>(`/api/v1/apps/${appId}/webhooks`)
+  },
+  createWebhook(appId: string, body: { url: string; subscribedEvents: string[] }) {
+    return requestJson<WebhookEndpointWithSecret>(`/api/v1/apps/${appId}/webhooks`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+  updateWebhook(
+    appId: string,
+    id: string,
+    body: { url?: string; subscribedEvents?: string[]; status?: 'active' | 'disabled' },
+  ) {
+    return requestJson<WebhookEndpoint>(`/api/v1/apps/${appId}/webhooks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
+  },
+  rotateWebhookSecret(appId: string, id: string) {
+    return requestJson<{ secret: string }>(`/api/v1/apps/${appId}/webhooks/${id}/rotate-secret`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+  },
+  deleteWebhook(appId: string, id: string) {
+    return requestJson<{ ok: true }>(`/api/v1/apps/${appId}/webhooks/${id}`, {
+      method: 'DELETE',
+    })
+  },
+  testWebhook(appId: string, id: string) {
+    return requestJson<WebhookTestResult>(`/api/v1/apps/${appId}/webhooks/${id}/test`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     })
   },
 }
