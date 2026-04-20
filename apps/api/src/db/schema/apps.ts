@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, unique, integer } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, timestamp, unique, integer, uniqueIndex } from 'drizzle-orm/pg-core'
 import { sql, relations } from 'drizzle-orm'
 import { teams } from './teams'
 import { identityUsers } from './identity-users'
@@ -9,7 +9,7 @@ import {
 
 export const appRegistry = pgTable('app_registry', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  slug: varchar('slug', { length: 50 }).notNull().unique(),
+  slug: varchar('slug', { length: 50 }).notNull(),
   name: varchar('name', { length: 100 }).notNull(),
   description: text('description'),
   url: varchar('url', { length: 500 }).notNull(),
@@ -29,7 +29,12 @@ export const appRegistry = pgTable('app_registry', {
   status: varchar('status', { length: 20 }).notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
+},
+(t) => [
+  uniqueIndex('app_registry_slug_active_unique')
+    .on(t.slug)
+    .where(sql`${t.status} != 'deprecated'`),
+])
 
 export const teamAppAccess = pgTable(
   'team_app_access',

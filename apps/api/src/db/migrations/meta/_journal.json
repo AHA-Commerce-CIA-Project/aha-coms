@@ -64,6 +64,13 @@
       "when": 1776654296740,
       "tag": "0008_chief_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776669243233,
+      "tag": "0009_wandering_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

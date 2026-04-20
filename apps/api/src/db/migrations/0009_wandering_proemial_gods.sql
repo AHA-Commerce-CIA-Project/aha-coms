@@ -1,0 +1,2 @@
+ALTER TABLE "app_registry" DROP CONSTRAINT "app_registry_slug_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "app_registry_slug_active_unique" ON "app_registry" USING btree ("slug") WHERE "app_registry"."status" != 'deprecated';
