@@ -11,8 +11,26 @@ export async function GET() {
 
   const userId = session.user.id;
 
+  // Mirror the visibility rules from GET /api/channels so unread counts
+  // only include channels this user can actually see.
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { teamId: true },
+  });
+  const myTeamId = me?.teamId ?? null;
+
   const channels = await prisma.channel.findMany({
-    where: { isArchived: false },
+    where: {
+      isArchived: false,
+      OR: [
+        { createdBy: userId },
+        { members: { some: { userId } } },
+        { isPrivate: false, visibleToAllTeams: true },
+        ...(myTeamId
+          ? [{ isPrivate: false, allowedTeamIds: { has: myTeamId } }]
+          : []),
+      ],
+    },
     select: {
       id: true,
       readStatuses: {
