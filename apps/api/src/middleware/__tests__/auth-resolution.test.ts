@@ -39,6 +39,9 @@ mock.module('~/db/schema', () => {
     teams: { id: 'teams.id' },
     teamAppAccess: { id: 'teamAppAccess.id' },
     accessAuditLog: { actorId: 'accessAuditLog.actorId' },
+    // Added in the SSO upgrade — barrel re-exports these new schema tables
+    sessionRevocations: { userId: 'sessionRevocations.userId' },
+    appWebhookEndpoints: { id: 'appWebhookEndpoints.id' },
   }
 })
 
@@ -46,6 +49,13 @@ mock.module('drizzle-orm', () => {
   return {
     eq: (left: unknown, right: unknown) => ({ left, right }),
     inArray: (left: unknown, right: unknown) => ({ left, right }),
+    // sql and relations needed by the schema barrel's new re-exports
+    sql: new Proxy(
+      (strings: TemplateStringsArray) => strings.join(''),
+      { get: (_t, prop) => prop },
+    ),
+    relations: () => ({}),
+    and: (...conditions: unknown[]) => ({ conditions }),
   }
 })
 

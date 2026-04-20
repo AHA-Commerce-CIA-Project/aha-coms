@@ -2,6 +2,7 @@ import { db } from '~/db'
 import { teams, teamMembers, identityUsers } from '~/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { resolveAndSyncClaims } from './claims'
+import { emitUserUpdated } from './provisioning-events'
 
 export async function addTeamMember(teamId: string, userId: string, roleInTeam?: string): Promise<void> {
   await db.insert(teamMembers).values({ teamId, userId, ...(roleInTeam ? { roleInTeam } : {}) })
@@ -13,6 +14,11 @@ export async function addTeamMember(teamId: string, userId: string, roleInTeam?:
   if (user?.gipUid) {
     await resolveAndSyncClaims(user.gipUid, userId)
   }
+
+  // Fan out user.updated — team membership changed, which may change app access
+  emitUserUpdated(userId, ['teamIds', 'apps']).catch((err) => {
+    console.error(`[provisioning-events] emitUserUpdated failed for ${userId}:`, err)
+  })
 }
 
 export async function removeTeamMember(teamId: string, userId: string): Promise<void> {
@@ -27,6 +33,11 @@ export async function removeTeamMember(teamId: string, userId: string): Promise<
   if (user?.gipUid) {
     await resolveAndSyncClaims(user.gipUid, userId)
   }
+
+  // Fan out user.updated — team removed, app access may have narrowed
+  emitUserUpdated(userId, ['teamIds', 'apps']).catch((err) => {
+    console.error(`[provisioning-events] emitUserUpdated failed for ${userId}:`, err)
+  })
 }
 
 export async function deleteTeam(teamId: string): Promise<void> {

@@ -3,11 +3,10 @@ import {
   verifyIdToken,
   createSessionCookie,
   verifySessionCookie,
-  revokeRefreshTokens,
 } from '../gip-admin'
 import { db } from '~/db'
-import { identityUsers } from '~/db/schema'
-import { eq } from 'drizzle-orm'
+import { identityUsers, sessionRevocations, teamMembers } from '~/db/schema'
+import { eq, and, gte } from 'drizzle-orm'
 import {
   type PortalBrokerExchangePayload,
   type PortalSessionUser,
@@ -23,6 +22,11 @@ import {
   exchangeBrokerHandoff,
   findBrokerAppBySlug,
 } from '../services/auth-broker'
+import {
+  revokePortalSession,
+  listAppSlugsForUser,
+  type RevocationReason,
+} from '../services/session-revocation'
 
 async function resolveSessionUser(request: Request): Promise<PortalSessionUser> {
   const cookieHeader = request.headers.get('cookie') ?? ''
@@ -100,6 +104,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   /**
    * POST /api/auth/logout
    * Clear the session cookie and revoke the GIP session.
+   * Also fans out session.revoked webhooks to all apps the user has access to.
    */
   .post('/logout', async ({ request, cookie }) => {
     const cookieHeader = request.headers.get('cookie') ?? ''
@@ -108,9 +113,16 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     if (sessionCookie) {
       try {
         const decoded = await verifySessionCookie(sessionCookie)
-        await revokeRefreshTokens(decoded.uid)
+        // Resolve portal userId from GIP uid
+        const user = await db.query.identityUsers.findFirst({
+          where: eq(identityUsers.gipUid, decoded.uid),
+          columns: { id: true },
+        })
+        if (user) {
+          await revokePortalSession({ userId: user.id, reason: 'logout' })
+        }
       } catch {
-        // Already invalid — clear anyway
+        // Already invalid or user not found — clear the cookie anyway
       }
     }
 
@@ -235,3 +247,105 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       return { message: 'Invalid session' }
     }
   })
+
+  /**
+   * POST /api/auth/broker/introspect
+   * Machine-to-machine session introspection endpoint for relying-party apps.
+   * Protected by the PORTAL_INTROSPECT_SECRET shared secret.
+   *
+   * Returns { active: false } if the session has been revoked, the user is
+   * inactive, or the app no longer has access. Returns { active: true, user }
+   * if the session is still valid.
+   */
+  .post(
+    '/broker/introspect',
+    async ({ body, set, request }) => {
+      // Enforce shared secret authentication
+      const secret = process.env.PORTAL_INTROSPECT_SECRET
+      if (!secret) {
+        set.status = 503
+        return { message: 'Introspection is not configured on the portal' }
+      }
+
+      const provided = request.headers.get('x-portal-introspect-secret') ?? ''
+      if (provided !== secret) {
+        set.status = 401
+        return { message: 'Unauthorized' }
+      }
+
+      const { userId, sessionIssuedAt, appSlug } = body
+      const issuedAt = new Date(sessionIssuedAt)
+
+      // 1. Look up the user
+      const user = await db.query.identityUsers.findFirst({
+        where: eq(identityUsers.id, userId),
+      })
+
+      if (!user) {
+        set.status = 404
+        return { message: 'User not found' }
+      }
+
+      // 2. Check for a revocation record more recent than when the session was issued
+      const revocation = await db.query.sessionRevocations.findFirst({
+        where: and(
+          eq(sessionRevocations.userId, userId),
+          gte(sessionRevocations.notBefore, issuedAt),
+        ),
+        // Most recent first — we want the one that would cover the given issuedAt
+        orderBy: (t, { desc }) => [desc(t.revokedAt)],
+      })
+
+      if (revocation) {
+        return {
+          active: false,
+          revokedAt: revocation.revokedAt.toISOString(),
+          reason: revocation.reason as RevocationReason,
+        }
+      }
+
+      // 3. Check user account status
+      if (user.status !== 'active') {
+        return {
+          active: false,
+          reason: 'status_change' as RevocationReason,
+        }
+      }
+
+      // 4. Verify the relying-party app is still in the user's accessible apps
+      const appSlugs = await listAppSlugsForUser(userId)
+      if (!appSlugs.includes(appSlug)) {
+        return {
+          active: false,
+          reason: 'admin' as RevocationReason,
+        }
+      }
+
+      // 5. Build and return the active session user
+      // Resolve teamIds via team memberships (mirrors claims.ts resolution)
+      const memberships = await db
+        .select({ teamId: teamMembers.teamId })
+        .from(teamMembers)
+        .where(eq(teamMembers.userId, userId))
+      const teamIds = memberships.map((m) => m.teamId)
+
+      const sessionUser: PortalSessionUser = {
+        id: user.id,
+        gipUid: user.gipUid ?? '',
+        email: user.email,
+        name: user.name,
+        portalRole: user.portalRole as PortalSessionUser['portalRole'],
+        teamIds,
+        apps: appSlugs,
+      }
+
+      return { active: true, user: sessionUser }
+    },
+    {
+      body: t.Object({
+        userId: t.String({ minLength: 1 }),
+        sessionIssuedAt: t.String({ minLength: 1 }),
+        appSlug: t.String({ minLength: 1 }),
+      }),
+    },
+  )

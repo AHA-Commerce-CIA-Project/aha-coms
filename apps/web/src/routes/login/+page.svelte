@@ -9,6 +9,8 @@
   } from 'firebase/auth'
   import { clientAuth, googleProvider } from '$lib/firebase'
   import { api } from '$lib/api'
+  import { readHandoffIntent, stashIntent, popStashedIntent, buildLaunchUrl } from '$lib/portal-handoff'
+  import { onMount } from 'svelte'
 
   let email = $state('')
   let password = $state('')
@@ -17,10 +19,20 @@
 
   const redirectTo = $derived($page.url.searchParams.get('redirect') ?? '/')
 
+  onMount(() => {
+    const intent = readHandoffIntent($page.url)
+    if (intent) stashIntent(intent)
+  })
+
   async function exchangeToken(idToken: string) {
     const { error: err } = await api.api.auth.session.post({ idToken })
     if (err) throw new Error((err.value as { message?: string })?.message ?? 'Login failed')
-    await goto(redirectTo)
+    const intent = popStashedIntent()
+    if (intent) {
+      window.location.assign(buildLaunchUrl(intent))
+    } else {
+      await goto(redirectTo)
+    }
   }
 
   async function handleGoogle() {

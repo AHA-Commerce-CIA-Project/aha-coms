@@ -36,9 +36,19 @@ const db = {
 mock.module('~/db', () => ({ db }))
 mock.module('~/db/schema', () => ({
   appRegistry: { id: 'app_registry.id' },
+  // Added in the SSO upgrade — barrel re-exports these new schema tables
+  sessionRevocations: { userId: 'sessionRevocations.userId' },
+  appWebhookEndpoints: { id: 'appWebhookEndpoints.id' },
 }))
 mock.module('drizzle-orm', () => ({
   eq: (left: unknown, right: unknown) => ({ left, right }),
+  // sql and relations needed by the schema barrel's new re-exports
+  sql: new Proxy(
+    (strings: TemplateStringsArray) => strings.join(''),
+    { get: (_t, prop) => prop },
+  ),
+  relations: () => ({}),
+  and: (...conditions: unknown[]) => ({ conditions }),
 }))
 
 const {

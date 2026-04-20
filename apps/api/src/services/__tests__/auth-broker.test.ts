@@ -57,6 +57,14 @@ mock.module('~/db/schema/auth-handoffs', () => ({
 }))
 mock.module('drizzle-orm', () => ({
   eq: (left: unknown, right: unknown) => ({ type: 'eq', left, right }),
+  // sql and relations needed by the ~/db/schema barrel's new re-exports
+  // (session-revocations.ts and app-webhook-endpoints.ts added in SSO upgrade)
+  sql: new Proxy(
+    (strings: TemplateStringsArray) => strings.join(''),
+    { get: (_t, prop) => prop },
+  ),
+  relations: () => ({}),
+  and: (...conditions: unknown[]) => ({ conditions }),
 }))
 
 const {

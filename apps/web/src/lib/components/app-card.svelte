@@ -1,9 +1,18 @@
 <script lang="ts">
-  let { app }: { app: { id: string; slug: string; name: string; description: string | null; url: string; iconUrl: string | null; status: string } } = $props()
+  let { app, redirectTo }: {
+    app: { id: string; slug: string; name: string; description: string | null; url: string; iconUrl: string | null; status: string }
+    redirectTo?: string
+  } = $props()
+
+  const launchHref = $derived(
+    redirectTo
+      ? `/api/auth/broker/launch/${app.slug}?redirectTo=${encodeURIComponent(redirectTo)}`
+      : `/api/auth/broker/launch/${app.slug}`
+  )
 </script>
 
 <a
-  href={`/api/auth/broker/launch/${app.slug}`}
+  href={launchHref}
   class="group flex flex-col gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4 transition-colors hover:border-indigo-700 hover:bg-neutral-800"
 >
   <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-neutral-800 group-hover:bg-neutral-700">

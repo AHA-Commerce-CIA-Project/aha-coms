@@ -17,6 +17,13 @@ mock.module('drizzle-orm', () => {
   return {
     eq: () => {},
     inArray: () => {},
+    // sql and relations added to satisfy the new schema re-exports in ~/db/schema/index.ts
+    sql: new Proxy(
+      (strings: TemplateStringsArray) => strings.join(''),
+      { get: (_t, prop) => prop },
+    ),
+    relations: () => ({}),
+    and: () => ({}),
   }
 })
 mock.module('../sheets-client', () => ({

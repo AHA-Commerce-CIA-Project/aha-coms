@@ -94,19 +94,44 @@ mock.module('~/db/schema', () => {
     teams: { id: 'teams.id' },
     teamAppAccess: { id: 'teamAppAccess.id' },
     accessAuditLog: { actorId: 'accessAuditLog.actorId' },
+    // Added in the SSO upgrade — barrel re-exports these new schema tables
+    sessionRevocations: { userId: 'sessionRevocations.userId' },
+    appWebhookEndpoints: { id: 'appWebhookEndpoints.id' },
   }
 })
 mock.module('drizzle-orm', () => {
   return {
     eq,
     inArray: (left: unknown, right: unknown) => ({ left, right }),
+    // sql and relations are needed by the schema barrel's new re-exports
+    // (session-revocations.ts and app-webhook-endpoints.ts were added to
+    // the ~/db/schema barrel as part of the SSO upgrade).
+    sql: new Proxy(
+      (strings: TemplateStringsArray) => strings.join(''),
+      { get: (_t, prop) => prop },
+    ),
+    relations: () => ({}),
+    and: (...conditions: unknown[]) => ({ conditions }),
   }
 })
 mock.module('../claims', () => ({ resolveAndSyncClaims }))
+// New dependencies added to employees.ts in the SSO upgrade.
+// session-revocation and provisioning-events are fire-and-forget;
+// mock them so their transitive imports (gip-admin, webhook-dispatcher) don't load.
+mock.module('./session-revocation', () => ({
+  revokePortalSession: mock(async () => ({ revokedAt: new Date() })),
+}))
+mock.module('./provisioning-events', () => ({
+  emitUserProvisioned: mock(async () => undefined),
+  emitUserOffboarded: mock(async () => undefined),
+  emitUserUpdated: mock(async () => undefined),
+}))
 mock.module('../../gip-admin', () => ({
   createGipUser,
   setGipUserDisabled,
   generatePasswordResetLink,
+  // revokeRefreshTokens added here so any transitive gip-admin import is fully stubbed
+  revokeRefreshTokens: mock(async () => undefined),
 }))
 
 const { createEmployee } = await import('../employees')

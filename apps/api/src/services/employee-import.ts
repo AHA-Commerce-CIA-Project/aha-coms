@@ -155,10 +155,11 @@ export async function importEmployeesFromGoogleAdminCsv(
   csv: string,
   options?: { preview?: boolean },
 ): Promise<EmployeeCsvImportResult> {
-  const [{ db }, { identityUsers }, { createEmployee }] = await Promise.all([
+  const [{ db }, { identityUsers }, { createEmployee }, { emitUserProvisioned }] = await Promise.all([
     import('~/db'),
     import('~/db/schema'),
     import('./employees'),
+    import('./provisioning-events'),
   ])
 
   const mode = options?.preview ? 'preview' : 'commit'
@@ -259,6 +260,20 @@ export async function importEmployeesFromGoogleAdminCsv(
         })
       }
     }
+  }
+
+  // Fan out user.provisioned for each successfully created user — fire-and-forget,
+  // does not block the import response. Batch all in parallel via Promise.all.
+  if (created.length > 0) {
+    Promise.all(
+      created.map((c) =>
+        emitUserProvisioned(c.id).catch((err) => {
+          console.error(`[provisioning-events] emitUserProvisioned failed for ${c.id}:`, err)
+        }),
+      ),
+    ).catch(() => {
+      // allSettled-style: individual errors already logged above
+    })
   }
 
   return {

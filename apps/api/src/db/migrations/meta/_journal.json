@@ -50,6 +50,13 @@
       "when": 1776406194499,
       "tag": "0006_tricky_chamber",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1776650975318,
+      "tag": "0007_workable_cloak",
+      "breakpoints": true
     }
   ]
 }
