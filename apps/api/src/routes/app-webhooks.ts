@@ -67,14 +67,18 @@ function toPublicEndpoint(row: typeof appWebhookEndpoints.$inferSelect) {
 // Route definitions
 // ---------------------------------------------------------------------------
 
-export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
+// Prefix uses ':id' (not ':appId') because Elysia's router does not allow two
+// different parameter names at the same path position, and apps.ts already
+// registers '/apps/:id'. The inner endpoint param is renamed to ':endpointId'
+// to avoid colliding with the outer ':id' from this prefix.
+export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
   .use(requireRole('admin'))
 
-  // GET /api/v1/apps/:appId/webhooks
+  // GET /api/v1/apps/:id/webhooks
   .get('/', async ({ params, set }) => {
     // Verify app exists
     const app = await db.query.appRegistry.findFirst({
-      where: eq(appRegistry.id, params.appId),
+      where: eq(appRegistry.id, params.id),
     })
     if (!app) {
       set.status = 404
@@ -84,18 +88,18 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
     const rows = await db
       .select()
       .from(appWebhookEndpoints)
-      .where(eq(appWebhookEndpoints.appId, params.appId))
+      .where(eq(appWebhookEndpoints.appId, params.id))
 
     return rows.map(toPublicEndpoint)
   })
 
-  // POST /api/v1/apps/:appId/webhooks
+  // POST /api/v1/apps/:id/webhooks
   .post(
     '/',
     async ({ params, body, authUser, set }) => {
       // Validate app exists
       const app = await db.query.appRegistry.findFirst({
-        where: eq(appRegistry.id, params.appId),
+        where: eq(appRegistry.id, params.id),
       })
       if (!app) {
         set.status = 404
@@ -126,7 +130,7 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
       const [row] = await db
         .insert(appWebhookEndpoints)
         .values({
-          appId: params.appId,
+          appId: params.id,
           url: body.url,
           secret,
           subscribedEvents: body.subscribedEvents,
@@ -138,7 +142,7 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
         actorId: authUser.id,
         action: 'create_webhook_endpoint',
         targetType: 'app',
-        targetId: params.appId,
+        targetId: params.id,
         details: { endpointId: row.id, url: body.url, subscribedEvents: body.subscribedEvents },
       })
 
@@ -156,14 +160,14 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
     },
   )
 
-  // PATCH /api/v1/apps/:appId/webhooks/:id
+  // PATCH /api/v1/apps/:id/webhooks/:endpointId
   .patch(
-    '/:id',
+    '/:endpointId',
     async ({ params, body, set }) => {
       const existing = await db.query.appWebhookEndpoints.findFirst({
         where: and(
-          eq(appWebhookEndpoints.id, params.id),
-          eq(appWebhookEndpoints.appId, params.appId),
+          eq(appWebhookEndpoints.id, params.endpointId),
+          eq(appWebhookEndpoints.appId, params.id),
         ),
       })
       if (!existing) {
@@ -198,8 +202,8 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
         .set(updates)
         .where(
           and(
-            eq(appWebhookEndpoints.id, params.id),
-            eq(appWebhookEndpoints.appId, params.appId),
+            eq(appWebhookEndpoints.id, params.endpointId),
+            eq(appWebhookEndpoints.appId, params.id),
           ),
         )
         .returning()
@@ -217,12 +221,12 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
     },
   )
 
-  // POST /api/v1/apps/:appId/webhooks/:id/rotate-secret
-  .post('/:id/rotate-secret', async ({ params, authUser, set }) => {
+  // POST /api/v1/apps/:id/webhooks/:endpointId/rotate-secret
+  .post('/:endpointId/rotate-secret', async ({ params, authUser, set }) => {
     const existing = await db.query.appWebhookEndpoints.findFirst({
       where: and(
-        eq(appWebhookEndpoints.id, params.id),
-        eq(appWebhookEndpoints.appId, params.appId),
+        eq(appWebhookEndpoints.id, params.endpointId),
+        eq(appWebhookEndpoints.appId, params.id),
       ),
     })
     if (!existing) {
@@ -238,8 +242,8 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
       .set({ secret, updatedAt: new Date() })
       .where(
         and(
-          eq(appWebhookEndpoints.id, params.id),
-          eq(appWebhookEndpoints.appId, params.appId),
+          eq(appWebhookEndpoints.id, params.endpointId),
+          eq(appWebhookEndpoints.appId, params.id),
         ),
       )
 
@@ -247,19 +251,19 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
       actorId: authUser.id,
       action: 'rotate_webhook_secret',
       targetType: 'app',
-      targetId: params.appId,
-      details: { endpointId: params.id },
+      targetId: params.id,
+      details: { endpointId: params.endpointId },
     })
 
     return { secret }
   })
 
-  // DELETE /api/v1/apps/:appId/webhooks/:id
-  .delete('/:id', async ({ params, authUser, set }) => {
+  // DELETE /api/v1/apps/:id/webhooks/:endpointId
+  .delete('/:endpointId', async ({ params, authUser, set }) => {
     const existing = await db.query.appWebhookEndpoints.findFirst({
       where: and(
-        eq(appWebhookEndpoints.id, params.id),
-        eq(appWebhookEndpoints.appId, params.appId),
+        eq(appWebhookEndpoints.id, params.endpointId),
+        eq(appWebhookEndpoints.appId, params.id),
       ),
     })
     if (!existing) {
@@ -271,8 +275,8 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
       .delete(appWebhookEndpoints)
       .where(
         and(
-          eq(appWebhookEndpoints.id, params.id),
-          eq(appWebhookEndpoints.appId, params.appId),
+          eq(appWebhookEndpoints.id, params.endpointId),
+          eq(appWebhookEndpoints.appId, params.id),
         ),
       )
 
@@ -280,19 +284,19 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:appId/webhooks' })
       actorId: authUser.id,
       action: 'delete_webhook_endpoint',
       targetType: 'app',
-      targetId: params.appId,
-      details: { endpointId: params.id, url: existing.url },
+      targetId: params.id,
+      details: { endpointId: params.endpointId, url: existing.url },
     })
 
     return { ok: true }
   })
 
-  // POST /api/v1/apps/:appId/webhooks/:id/test
-  .post('/:id/test', async ({ params, set }) => {
+  // POST /api/v1/apps/:id/webhooks/:endpointId/test
+  .post('/:endpointId/test', async ({ params, set }) => {
     const existing = await db.query.appWebhookEndpoints.findFirst({
       where: and(
-        eq(appWebhookEndpoints.id, params.id),
-        eq(appWebhookEndpoints.appId, params.appId),
+        eq(appWebhookEndpoints.id, params.endpointId),
+        eq(appWebhookEndpoints.appId, params.id),
       ),
     })
     if (!existing) {
