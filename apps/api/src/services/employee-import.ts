@@ -1,4 +1,5 @@
-import { inArray } from 'drizzle-orm'
+import { inArray, eq } from 'drizzle-orm'
+import { findBestMatch } from './name-matching'
 
 export interface ParsedGoogleAdminUserRow {
   rowNumber: number
@@ -18,10 +19,18 @@ export interface EmployeeCsvImportResult {
   previewCount: number
   createdCount: number
   skippedCount: number
+  flaggedCount: number
   errorCount: number
   preview: Array<{ rowNumber: number; email: string; name: string }>
   created: Array<{ rowNumber: number; id: string; email: string; name: string }>
   skipped: Array<{ rowNumber: number; email?: string; reason: string }>
+  flagged: Array<{
+    rowNumber: number
+    csvEmail: string
+    csvName: string
+    existingName: string
+    existingEmail: string
+  }>
   errors: Array<{ rowNumber: number; email?: string; message: string }>
 }
 
@@ -55,7 +64,7 @@ function parseCsv(csv: string): string[][] {
   let cell = ''
   let inQuotes = false
 
-  const input = csv.replace(/^\uFEFF/, '')
+  const input = csv.replace(/^﻿/, '')
 
   for (let i = 0; i < input.length; i++) {
     const char = input[i]
@@ -167,18 +176,26 @@ export async function importEmployeesFromGoogleAdminCsv(
   const preview: EmployeeCsvImportResult['preview'] = []
   const created: EmployeeCsvImportResult['created'] = []
   const skipped: EmployeeCsvImportResult['skipped'] = []
+  const flagged: EmployeeCsvImportResult['flagged'] = []
   const errors: EmployeeCsvImportResult['errors'] = []
 
   const validRows = rows.filter((row) => row.email)
   const uniqueEmails = [...new Set(validRows.map((row) => row.email))]
-  const existingUsers = uniqueEmails.length
-    ? await db
-        .select({ email: identityUsers.email })
-        .from(identityUsers)
-        .where(inArray(identityUsers.email, uniqueEmails))
-    : []
+  const [existingUsers, nonWorkspaceUsers] = await Promise.all([
+    uniqueEmails.length
+      ? db
+          .select({ email: identityUsers.email })
+          .from(identityUsers)
+          .where(inArray(identityUsers.email, uniqueEmails))
+      : Promise.resolve([]),
+    db
+      .select({ id: identityUsers.id, name: identityUsers.name, email: identityUsers.email })
+      .from(identityUsers)
+      .where(eq(identityUsers.hasGoogleWorkspace, false)),
+  ])
 
   const existingEmails = new Set(existingUsers.map((user) => user.email.toLowerCase()))
+
   const pendingRows: ParsedGoogleAdminUserRow[] = []
 
   for (const row of rows) {
@@ -202,6 +219,18 @@ export async function importEmployeesFromGoogleAdminCsv(
       continue
     }
 
+    const { match: nwMatch, score: nwScore, ambiguous: nwAmbiguous } = findBestMatch(row.fullName, nonWorkspaceUsers)
+    if (nwScore > 0) {
+      flagged.push({
+        rowNumber: row.rowNumber,
+        csvEmail: row.email,
+        csvName: row.fullName,
+        existingName: nwAmbiguous ? '(multiple matches)' : nwMatch!.name,
+        existingEmail: nwAmbiguous ? '(ambiguous)' : nwMatch!.email,
+      })
+      continue
+    }
+
     if (mode === 'preview') {
       preview.push({
         rowNumber: row.rowNumber,
@@ -214,7 +243,6 @@ export async function importEmployeesFromGoogleAdminCsv(
     pendingRows.push(row)
   }
 
-  // Process commits in batches of 5 concurrent provisioning operations
   const CONCURRENCY = 5
   for (let i = 0; i < pendingRows.length; i += CONCURRENCY) {
     const batch = pendingRows.slice(i, i + CONCURRENCY)
@@ -228,6 +256,7 @@ export async function importEmployeesFromGoogleAdminCsv(
           position: row.position,
           portalRole: 'employee',
           hasGoogleWorkspace: true,
+          source: 'csv_import',
         })
         return { row, result }
       }),
@@ -262,8 +291,6 @@ export async function importEmployeesFromGoogleAdminCsv(
     }
   }
 
-  // Fan out user.provisioned for each successfully created user — fire-and-forget,
-  // does not block the import response. Batch all in parallel via Promise.all.
   if (created.length > 0) {
     Promise.all(
       created.map((c) =>
@@ -271,9 +298,7 @@ export async function importEmployeesFromGoogleAdminCsv(
           console.error(`[provisioning-events] emitUserProvisioned failed for ${c.id}:`, err)
         }),
       ),
-    ).catch(() => {
-      // allSettled-style: individual errors already logged above
-    })
+    ).catch(() => {})
   }
 
   return {
@@ -282,10 +307,12 @@ export async function importEmployeesFromGoogleAdminCsv(
     previewCount: preview.length,
     createdCount: created.length,
     skippedCount: skipped.length,
+    flaggedCount: flagged.length,
     errorCount: errors.length,
     preview,
     created,
     skipped,
+    flagged,
     errors,
   }
 }

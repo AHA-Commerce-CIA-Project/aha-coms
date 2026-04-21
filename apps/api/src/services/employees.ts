@@ -2,7 +2,7 @@ import { db } from '~/db'
 import { identityUsers, teamMembers } from '~/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { resolveAndSyncClaims } from './claims'
-import type { NewIdentityUser } from '~/db/schema'
+import type { NewIdentityUser, IdentityUserSource } from '~/db/schema'
 import { setGipUserDisabled } from '../gip-admin'
 import { processEmployeeProvisioning } from './employee-provisioning'
 import { revokePortalSession } from './session-revocation'
@@ -19,6 +19,7 @@ export async function createEmployee(data: {
   portalRole?: string
   teamId?: string
   hasGoogleWorkspace?: boolean
+  source?: IdentityUserSource
 }): Promise<{ id: string; provisioningStatus: string; provisioningError?: string }> {
   const [user] = await db.transaction(async (tx) => {
     const insertedUsers = await tx
@@ -33,6 +34,7 @@ export async function createEmployee(data: {
         branch: data.branch,
         portalRole: data.portalRole ?? 'employee',
         hasGoogleWorkspace: data.hasGoogleWorkspace ?? false,
+        source: data.source ?? 'manual',
         provisioningStatus: 'pending',
         provisioningError: null,
       } satisfies Omit<NewIdentityUser, 'id' | 'createdAt' | 'updatedAt'>)

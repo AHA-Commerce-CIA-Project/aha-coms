@@ -24,6 +24,10 @@
   let provisioningMessage = $state<string | null>(null)
   let provisioningError = $state<string | null>(null)
   let retryProvisioningPending = $state(false)
+  let editingWorkspace = $state(false)
+  let workspaceEmail = $state('')
+  let workspaceError = $state<string | null>(null)
+  let workspacePending = $state(false)
 
   // Sync selectedRole when data loads or changes
   $effect(() => {
@@ -67,6 +71,23 @@
       resetError = error instanceof Error ? error.message : 'Failed to send reset email'
     } finally {
       resetPending = false
+    }
+  }
+
+  async function handleUpgradeWorkspace() {
+    workspaceError = null
+    workspacePending = true
+    try {
+      await $mutation.mutateAsync({
+        id,
+        data: { email: workspaceEmail, hasGoogleWorkspace: true },
+      })
+      editingWorkspace = false
+      workspaceEmail = ''
+    } catch (error) {
+      workspaceError = error instanceof Error ? error.message : 'Failed to update'
+    } finally {
+      workspacePending = false
     }
   }
 
@@ -208,6 +229,51 @@
         <span class="text-xs text-neutral-400">Status</span>
         <span class="text-sm" class:text-green-400={emp.status === 'active'} class:text-red-400={emp.status !== 'active'}>{emp.status}</span>
       </div>
+      {#if !emp.hasGoogleWorkspace}
+        <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
+          <span class="text-xs text-neutral-400">Workspace</span>
+          <div class="text-right">
+            {#if editingWorkspace}
+              <div class="flex flex-col items-end gap-2">
+                <input
+                  type="email"
+                  bind:value={workspaceEmail}
+                  placeholder="workspace@ahacommerce.net"
+                  class="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+                />
+                {#if workspaceError}
+                  <p class="text-xs text-red-400">{workspaceError}</p>
+                {/if}
+                <div class="flex gap-2">
+                  <button
+                    onclick={handleUpgradeWorkspace}
+                    disabled={!workspaceEmail || workspacePending}
+                    class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+                  >
+                    {workspacePending ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    onclick={() => { editingWorkspace = false; workspaceEmail = ''; workspaceError = null }}
+                    class="rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            {:else}
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-neutral-500">No workspace account</span>
+                <button
+                  onclick={() => { editingWorkspace = true; workspaceEmail = '' }}
+                  class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                >
+                  Upgrade
+                </button>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
       <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
         <span class="text-xs text-neutral-400">Provisioning</span>
         <div class="text-right">
