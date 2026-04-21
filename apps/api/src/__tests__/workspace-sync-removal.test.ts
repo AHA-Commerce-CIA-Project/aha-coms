@@ -11,6 +11,6 @@ test('workspace sync feature is not exposed in source surfaces', () => {
   const apiIndex = readFileSync(join(repoRoot, 'apps/api/src/index.ts'), 'utf8')
   expect(apiIndex.includes('workspaceSyncRoutes')).toBe(false)
 
-  const sidebar = readFileSync(join(repoRoot, 'apps/web/src/lib/components/sidebar.svelte'), 'utf8')
+  const sidebar = readFileSync(join(repoRoot, 'apps/web/src/lib/components/layout/Sidebar.svelte'), 'utf8')
   expect(sidebar.includes('/admin/workspace-sync')).toBe(false)
 })
