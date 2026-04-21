@@ -3,7 +3,6 @@ import { identityUsers } from '~/db/schema'
 import { eq } from 'drizzle-orm'
 import { readPersonalEmailSheet, type SheetRow } from './sheets-client'
 import { findBestMatch } from './name-matching'
-import { createEmployee } from './employees'
 
 export { normalizeName, nameTokens, matchScore } from './name-matching'
 
@@ -78,6 +77,8 @@ export async function syncPersonalEmails(): Promise<MatchResult> {
 
     toUpdate.push({ row, match })
   }
+
+  const { createEmployee } = await import('./employees')
 
   // Batch create non-workspace users (concurrency 5, mirrors CSV import pattern)
   const CONCURRENCY = 5
