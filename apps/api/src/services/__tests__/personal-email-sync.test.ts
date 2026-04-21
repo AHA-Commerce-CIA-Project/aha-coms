@@ -29,9 +29,6 @@ mock.module('drizzle-orm', () => {
 mock.module('../sheets-client', () => ({
   readPersonalEmailSheet: async () => [],
 }))
-mock.module('../employees', () => ({
-  createEmployee: async () => ({ id: 'mock-id', provisioningStatus: 'ready' }),
-}))
 
 const { matchScore, normalizeName, nameTokens } = await import('../personal-email-sync')
 
