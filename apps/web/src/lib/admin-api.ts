@@ -43,6 +43,7 @@ export interface EmployeeRecord {
   status: string
   provisioningStatus: 'ready' | 'pending' | 'processing' | 'failed'
   provisioningError: string | null
+  hasGoogleWorkspace: boolean
 }
 
 export interface EmployeesListResponse {
@@ -59,6 +60,14 @@ export interface CsvImportResult {
   createdCount: number
   skippedCount: number
   errorCount: number
+  flaggedCount: number
+  flagged: Array<{
+    rowNumber: number
+    csvEmail: string
+    csvName: string
+    existingName: string
+    existingEmail: string
+  }>
   preview: Array<{ rowNumber: number; email: string; name: string }>
   created: Array<{ rowNumber: number; id: string; email: string; name: string }>
   skipped: Array<{ rowNumber: number; email?: string; reason: string }>
@@ -182,7 +191,7 @@ export const adminApi = {
       body: JSON.stringify(body),
     })
   },
-  updateEmployee(id: string, body: { portalRole?: string }) {
+  updateEmployee(id: string, body: { portalRole?: string; email?: string; hasGoogleWorkspace?: boolean }) {
     return requestJson<{ ok: true }>(`/api/v1/employees/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),

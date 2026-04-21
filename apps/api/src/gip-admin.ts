@@ -232,6 +232,26 @@ export async function createGipUser(email: string, password: string): Promise<st
   return data.localId
 }
 
+/** Update the email address of a GIP user. */
+export async function updateGipUserEmail(uid: string, newEmail: string): Promise<void> {
+  const accessToken = await getAccessToken()
+  const res = await fetch(
+    `${GIP_BASE}/projects/${PROJECT_ID}/accounts:update`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ localId: uid, email: newEmail }),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`updateGipUserEmail failed (${res.status}): ${body}`)
+  }
+}
+
 /** Disable or enable a GIP user account. */
 export async function setGipUserDisabled(uid: string, disabled: boolean): Promise<void> {
   const accessToken = await getAccessToken()

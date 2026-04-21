@@ -39,7 +39,7 @@ export function createEmployeeMutation() {
 export function updateEmployeeMutation() {
   const queryClient = useQueryClient()
   return createMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { portalRole?: string } }) => {
+    mutationFn: async ({ id, data }: { id: string; data: { portalRole?: string; email?: string; hasGoogleWorkspace?: boolean } }) => {
       return adminApi.updateEmployee(id, data)
     },
     onSuccess: (_data, { id }) => {

@@ -4,6 +4,9 @@ import { sql } from 'drizzle-orm'
 export const EMPLOYEE_PROVISIONING_STATUSES = ['ready', 'pending', 'processing', 'failed'] as const
 export type EmployeeProvisioningStatus = (typeof EMPLOYEE_PROVISIONING_STATUSES)[number]
 
+export const IDENTITY_USER_SOURCES = ['manual', 'csv_import', 'sheet_sync'] as const
+export type IdentityUserSource = (typeof IDENTITY_USER_SOURCES)[number]
+
 export const identityUsers = pgTable('identity_users', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   gipUid: text('gip_uid').unique(),
@@ -16,6 +19,7 @@ export const identityUsers = pgTable('identity_users', {
   portalRole: varchar('portal_role', { length: 20 }).notNull().default('employee'),
   personalEmail: varchar('personal_email', { length: 255 }),
   hasGoogleWorkspace: boolean('has_google_workspace').notNull().default(false),
+  source: varchar('source', { length: 20 }).notNull().default('manual'),
   status: varchar('status', { length: 20 }).notNull().default('active'),
   provisioningStatus: varchar('provisioning_status', { length: 20 }).notNull().default('ready'),
   provisioningError: text('provisioning_error'),

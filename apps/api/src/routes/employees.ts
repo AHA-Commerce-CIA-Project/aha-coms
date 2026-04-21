@@ -3,7 +3,7 @@ import { db } from '~/db'
 import { identityUsers } from '~/db/schema'
 import { eq, ilike, sql } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
-import { generatePasswordResetLink } from '../gip-admin'
+import { generatePasswordResetLink, updateGipUserEmail } from '../gip-admin'
 import { createEmployee, deactivateEmployee, batchUpdateEmployees } from '../services/employees'
 import { importEmployeesFromGoogleAdminCsv } from '../services/employee-import'
 import { processEmployeeProvisioning } from '../services/employee-provisioning'
@@ -23,6 +23,7 @@ const employeeBody = t.Object({
     t.Union([t.Literal('employee'), t.Literal('admin')]),
   ),
   teamId: t.Optional(t.String()),
+  hasGoogleWorkspace: t.Optional(t.Boolean()),
 })
 
 export const employeeRoutes = new Elysia({ prefix: '/employees' })
@@ -163,6 +164,7 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         branch: identityUsers.branch,
         portalRole: identityUsers.portalRole,
         status: identityUsers.status,
+        hasGoogleWorkspace: identityUsers.hasGoogleWorkspace,
         provisioningStatus: identityUsers.provisioningStatus,
         provisioningError: identityUsers.provisioningError,
         createdAt: identityUsers.createdAt,
@@ -181,18 +183,22 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
   .patch(
     '/:id',
     async ({ params, body, authUser }) => {
+      const needsExistingUser = body.email !== undefined || body.portalRole !== undefined
+      const existingUser = needsExistingUser
+        ? await db.query.identityUsers.findFirst({ where: eq(identityUsers.id, params.id) })
+        : undefined
+
+      if (body.email !== undefined && existingUser?.gipUid && existingUser.email !== body.email) {
+        await updateGipUserEmail(existingUser.gipUid, body.email)
+      }
+
       await db
         .update(identityUsers)
         .set({ ...body, updatedAt: new Date() })
         .where(eq(identityUsers.id, params.id))
 
-      if (body.portalRole) {
-        const user = await db.query.identityUsers.findFirst({
-          where: eq(identityUsers.id, params.id),
-        })
-        if (user?.gipUid) {
-          await resolveAndSyncClaims(user.gipUid, params.id)
-        }
+      if (body.portalRole && existingUser?.gipUid) {
+        await resolveAndSyncClaims(existingUser.gipUid, params.id)
       }
 
       await logAudit({

@@ -35,6 +35,8 @@
     createdCount: number
     skippedCount: number
     errorCount: number
+    flaggedCount: number
+    flagged: Array<{ rowNumber: number; csvEmail: string; csvName: string; existingName: string; existingEmail: string }>
     preview: Array<{ rowNumber: number; email: string; name: string }>
     created: Array<{ rowNumber: number; id: string; email: string; name: string }>
     skipped: Array<{ rowNumber: number; email?: string; reason: string }>
@@ -107,7 +109,7 @@
     try {
       const csv = await csvFile.text()
       importResult = await $importMutation.mutateAsync({ csv, preview: false })
-      importSuccess = `Import complete. Created ${importResult.createdCount} employee(s).`
+      importSuccess = `Import complete. Created ${importResult.createdCount} employee(s)${importResult.flaggedCount > 0 ? `, ${importResult.flaggedCount} flagged for review` : ''}.`
       csvFile = null
       previewReady = false
     } catch (error) {
@@ -175,7 +177,7 @@
 
     {#if importResult}
       <div class="mt-4 space-y-3 border-t border-neutral-800 pt-4">
-        <div class="grid gap-3 sm:grid-cols-4">
+        <div class="grid gap-3 sm:grid-cols-5">
           <div class="rounded-lg bg-neutral-950 p-3">
             <p class="text-xs text-neutral-500">Parsed</p>
             <p class="mt-1 text-lg font-semibold">{importResult.parsedCount}</p>
@@ -189,6 +191,10 @@
           <div class="rounded-lg bg-neutral-950 p-3">
             <p class="text-xs text-neutral-500">Skipped</p>
             <p class="mt-1 text-lg font-semibold text-yellow-400">{importResult.skippedCount}</p>
+          </div>
+          <div class="rounded-lg bg-neutral-950 p-3">
+            <p class="text-xs text-neutral-500">Flagged</p>
+            <p class="mt-1 text-lg font-semibold text-orange-400">{importResult.flaggedCount}</p>
           </div>
           <div class="rounded-lg bg-neutral-950 p-3">
             <p class="text-xs text-neutral-500">Errors</p>
@@ -224,6 +230,18 @@
             <div class="space-y-1 text-sm text-neutral-400">
               {#each importResult.skipped.slice(0, 10) as row}
                 <p>Row {row.rowNumber}{row.email ? ` — ${row.email}` : ''}: {row.reason}</p>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if importResult.flagged.length > 0}
+          <div>
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-orange-400">Needs Review</h3>
+            <p class="mb-2 text-xs text-neutral-500">These CSV rows match a non-workspace user by name. Update the existing employee record with their workspace email instead of creating a new one.</p>
+            <div class="space-y-1 text-sm text-neutral-400">
+              {#each importResult.flagged.slice(0, 10) as row}
+                <p>Row {row.rowNumber} — <span class="text-white">{row.csvName}</span> ({row.csvEmail}) matches existing: <a href="/admin/employees" class="text-indigo-400 hover:text-indigo-300">{row.existingName}</a> ({row.existingEmail})</p>
               {/each}
             </div>
           </div>
