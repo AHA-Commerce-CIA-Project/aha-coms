@@ -49,6 +49,7 @@ infra/*.tfstate.backup
 infra/*.tfvars
 !infra/*.tfvars.example
 infra/.terraform.lock.hcl
+infra/tfplan
 
 # Personal folders
 my-document/
@@ -62,5 +63,4 @@ AGENTS.md
 .mcp.json
 .omx/
 .omc/
-graphify-out/
 .codex/
