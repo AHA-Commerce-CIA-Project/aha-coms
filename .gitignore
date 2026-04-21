@@ -36,8 +36,6 @@ Thumbs.db
 CLAUDE.md
 .claude/
 
-# Internal docs (not for public repo)
-docs/
 
 # Type cache
 *.tsbuildinfo
