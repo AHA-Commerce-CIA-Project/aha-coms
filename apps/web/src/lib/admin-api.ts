@@ -372,7 +372,13 @@ export const adminApi = {
     })
   },
   triggerEmployeeInfoSync() {
-    return requestJson<{ updated: number; unmatched: Array<{ sheetName: string; reason: string }>; errors: string[] }>('/api/v1/employee-info-sync/trigger', {
+    return requestJson<{
+      updated: number
+      created: Array<{ sheetName: string; personalEmail: string; userId: string }>
+      matched: Array<{ sheetName: string; dbName: string; email: string }>
+      unmatched: Array<{ sheetName: string; reason: string }>
+      errors: string[]
+    }>('/api/v1/employee-info-sync/trigger', {
       method: 'POST',
       body: JSON.stringify({}),
     })

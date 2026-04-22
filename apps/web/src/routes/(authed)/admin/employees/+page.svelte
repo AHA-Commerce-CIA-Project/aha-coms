@@ -26,7 +26,13 @@
   const allSelected = $derived(allIds.length > 0 && allIds.every((employeeId) => selected.has(employeeId)))
 
   let syncPending = $state(false)
-  let syncResult = $state<{ updated: number; unmatched: Array<{ sheetName: string; reason: string }>; errors: string[] } | null>(null)
+  let syncResult = $state<{
+    updated: number
+    created: Array<{ sheetName: string; personalEmail: string; userId: string }>
+    matched: Array<{ sheetName: string; dbName: string; email: string }>
+    unmatched: Array<{ sheetName: string; reason: string }>
+    errors: string[]
+  } | null>(null)
   let syncError = $state<string | null>(null)
 
   async function handleSyncEmployeeInfo() {
@@ -146,7 +152,7 @@
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div class="max-w-2xl space-y-2">
         <h2 class="text-sm font-semibold">Sync employee info from sheet</h2>
-        <p class="text-sm text-neutral-400">Sinkronisasi data karyawan (HP, tanggal lahir, jabatan, tim, penilai) dari Google Sheet. Data yang kosong di sheet tidak akan menimpa data yang sudah ada.</p>
+        <p class="text-sm text-neutral-400">Sinkronisasi data karyawan (HP, tanggal lahir, jabatan, tim, penilai) dari Google Sheet. Karyawan yang belum terdaftar tapi punya email pribadi akan otomatis dibuat. Data yang kosong di sheet tidak akan menimpa data yang sudah ada.</p>
       </div>
       <div class="flex flex-col gap-3 lg:min-w-64">
         <button
@@ -163,6 +169,14 @@
         {#if syncResult}
           <div class="space-y-1 text-sm">
             <p class="text-green-400">Updated: {syncResult.updated}</p>
+            {#if syncResult.created.length > 0}
+              <p class="text-blue-400">Created: {syncResult.created.length}</p>
+              <ul class="ml-2 space-y-0.5 text-xs text-neutral-400">
+                {#each syncResult.created.slice(0, 5) as c}
+                  <li>{c.sheetName} — {c.personalEmail}</li>
+                {/each}
+              </ul>
+            {/if}
             {#if syncResult.unmatched.length > 0}
               <p class="text-yellow-400">Unmatched: {syncResult.unmatched.length}</p>
               <ul class="ml-2 space-y-0.5 text-xs text-neutral-400">

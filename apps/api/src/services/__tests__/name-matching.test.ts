@@ -1,36 +1,5 @@
-import { describe, test, expect, mock } from 'bun:test'
-
-// Stub DB and sheets-client before importing the service so module-level
-// side-effects (postgres connection, env reads) don't run during unit tests.
-mock.module('~/db', () => ({ db: {} }))
-mock.module('~/db/schema', () => {
-  return {
-    identityUsers: {},
-    teamMembers: {},
-    appRegistry: {},
-    teams: {},
-    teamAppAccess: {},
-    accessAuditLog: {},
-  }
-})
-mock.module('drizzle-orm', () => {
-  return {
-    eq: () => {},
-    inArray: () => {},
-    // sql and relations added to satisfy the new schema re-exports in ~/db/schema/index.ts
-    sql: new Proxy(
-      (strings: TemplateStringsArray) => strings.join(''),
-      { get: (_t, prop) => prop },
-    ),
-    relations: () => ({}),
-    and: () => ({}),
-  }
-})
-mock.module('../sheets-client', () => ({
-  readPersonalEmailSheet: async () => [],
-}))
-
-const { matchScore, normalizeName, nameTokens } = await import('../personal-email-sync')
+import { describe, test, expect } from 'bun:test'
+import { matchScore, normalizeName, nameTokens } from '../name-matching'
 
 describe('normalizeName', () => {
   test('lowercases and trims', () => {

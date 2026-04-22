@@ -6,6 +6,8 @@ import { findBestMatch } from './name-matching'
 
 export interface EmployeeInfoSyncResult {
   updated: number
+  created: Array<{ sheetName: string; personalEmail: string; userId: string }>
+  matched: Array<{ sheetName: string; dbName: string; email: string }>
   unmatched: Array<{ sheetName: string; reason: string }>
   errors: string[]
 }
@@ -13,6 +15,8 @@ export interface EmployeeInfoSyncResult {
 export async function syncEmployeeInfo(): Promise<EmployeeInfoSyncResult> {
   const result: EmployeeInfoSyncResult = {
     updated: 0,
+    created: [],
+    matched: [],
     unmatched: [],
     errors: [],
   }
@@ -36,6 +40,8 @@ export async function syncEmployeeInfo(): Promise<EmployeeInfoSyncResult> {
     .from(identityUsers)
     .where(eq(identityUsers.status, 'active'))
 
+  const toCreate: EmployeeInfoSheetRow[] = []
+
   for (const row of sheetRows) {
     const { match, score, ambiguous } = findBestMatch(row.fullName, employees)
 
@@ -48,10 +54,15 @@ export async function syncEmployeeInfo(): Promise<EmployeeInfoSyncResult> {
     }
 
     if (!match || score === 0) {
-      result.unmatched.push({
-        sheetName: row.fullName,
-        reason: 'No matching employee found',
-      })
+      // If the row has a personal email, queue for creation; otherwise mark unmatched
+      if (row.personalEmail) {
+        toCreate.push(row)
+      } else {
+        result.unmatched.push({
+          sheetName: row.fullName,
+          reason: 'No matching employee found',
+        })
+      }
       continue
     }
 
@@ -72,10 +83,41 @@ export async function syncEmployeeInfo(): Promise<EmployeeInfoSyncResult> {
         await upsertTeamMembership(match.id, row.teamName)
       }
 
+      result.matched.push({ sheetName: row.fullName, dbName: match.name, email: match.email })
       result.updated++
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       result.errors.push(`Failed to update ${match.email}: ${message}`)
+    }
+  }
+
+  // Create non-workspace employees for unmatched rows that have a personal email
+  const { createEmployee } = await import('./employees')
+  const CONCURRENCY = 5
+  for (let i = 0; i < toCreate.length; i += CONCURRENCY) {
+    const batch = toCreate.slice(i, i + CONCURRENCY)
+    const settled = await Promise.allSettled(
+      batch.map((row) =>
+        createEmployee({
+          email: row.personalEmail,
+          name: row.fullName,
+          hasGoogleWorkspace: false,
+          source: 'sheet_sync',
+        }).then((newUser) => ({ row, userId: newUser.id })),
+      ),
+    )
+    for (const [idx, s] of settled.entries()) {
+      if (s.status === 'fulfilled') {
+        result.created.push({
+          sheetName: s.value.row.fullName,
+          personalEmail: s.value.row.personalEmail,
+          userId: s.value.userId,
+        })
+      } else {
+        const row = batch[idx]!
+        const message = s.reason instanceof Error ? s.reason.message : String(s.reason)
+        result.errors.push(`Failed to create user for ${row.fullName} (${row.personalEmail}): ${message}`)
+      }
     }
   }
 
