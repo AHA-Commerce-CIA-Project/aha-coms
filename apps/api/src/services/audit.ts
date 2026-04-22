@@ -19,11 +19,12 @@ export type AuditAction =
   | 'update_app'
   | 'deregister_app'
   | 'personal_email_sync_triggered'
+  | 'employee_info_sync_triggered'
   | 'create_webhook_endpoint'
   | 'rotate_webhook_secret'
   | 'delete_webhook_endpoint'
 
-export type AuditTargetType = 'user' | 'team' | 'app' | 'personal_email_sync'
+export type AuditTargetType = 'user' | 'team' | 'app' | 'personal_email_sync' | 'employee_info_sync'
 
 export async function logAudit(params: {
   actorId: string

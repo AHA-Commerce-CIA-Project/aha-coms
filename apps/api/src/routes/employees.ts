@@ -24,6 +24,9 @@ const employeeBody = t.Object({
   ),
   teamId: t.Optional(t.String()),
   hasGoogleWorkspace: t.Optional(t.Boolean()),
+  mobilePhone: t.Optional(t.String()),
+  birthDate: t.Optional(t.String()),
+  leaderName: t.Optional(t.String()),
 })
 
 export const employeeRoutes = new Elysia({ prefix: '/employees' })
@@ -48,6 +51,9 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
             department: identityUsers.department,
             position: identityUsers.position,
             branch: identityUsers.branch,
+            mobilePhone: identityUsers.mobilePhone,
+            birthDate: identityUsers.birthDate,
+            leaderName: identityUsers.leaderName,
             portalRole: identityUsers.portalRole,
             status: identityUsers.status,
             provisioningStatus: identityUsers.provisioningStatus,
@@ -162,6 +168,9 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         department: identityUsers.department,
         position: identityUsers.position,
         branch: identityUsers.branch,
+        mobilePhone: identityUsers.mobilePhone,
+        birthDate: identityUsers.birthDate,
+        leaderName: identityUsers.leaderName,
         portalRole: identityUsers.portalRole,
         status: identityUsers.status,
         hasGoogleWorkspace: identityUsers.hasGoogleWorkspace,

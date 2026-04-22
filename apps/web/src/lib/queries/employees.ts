@@ -29,6 +29,9 @@ export function createEmployeeMutation() {
       branch?: 'indonesia' | 'thailand'
       portalRole?: PortalRole
       teamId?: string
+      mobilePhone?: string
+      birthDate?: string
+      leaderName?: string
     }) => adminApi.createEmployee(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
@@ -39,7 +42,22 @@ export function createEmployeeMutation() {
 export function updateEmployeeMutation() {
   const queryClient = useQueryClient()
   return createMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { portalRole?: string; email?: string; hasGoogleWorkspace?: boolean } }) => {
+    mutationFn: async ({ id, data }: {
+      id: string
+      data: {
+        portalRole?: string
+        email?: string
+        hasGoogleWorkspace?: boolean
+        phone?: string
+        mobilePhone?: string
+        birthDate?: string
+        leaderName?: string
+        position?: string
+        personalEmail?: string
+        teamId?: string
+        branch?: 'indonesia' | 'thailand'
+      }
+    }) => {
       return adminApi.updateEmployee(id, data)
     },
     onSuccess: (_data, { id }) => {
