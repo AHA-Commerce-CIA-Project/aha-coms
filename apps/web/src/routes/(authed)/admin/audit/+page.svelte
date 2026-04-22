@@ -22,19 +22,19 @@
 <div class="p-8">
   <div class="mb-6">
     <h1 class="text-xl font-semibold">Audit Log</h1>
-    <p class="mt-1 text-sm text-neutral-400">Record of all access and admin actions</p>
+    <p class="mt-1 text-sm text-muted-foreground">Record of all access and admin actions</p>
   </div>
 
   {#if $query.isLoading}
     <div class="animate-pulse space-y-2">
       {#each Array(8) as _}
-        <div class="h-12 rounded-lg bg-neutral-800"></div>
+        <div class="h-12 rounded-lg bg-muted"></div>
       {/each}
     </div>
   {:else if $query.data}
     <table class="w-full text-sm">
       <thead>
-        <tr class="border-b border-neutral-800 text-left text-xs text-neutral-400">
+        <tr class="border-b border-border text-left text-xs text-muted-foreground">
           <th class="pb-2 font-medium">Action</th>
           <th class="pb-2 font-medium">Target Type</th>
           <th class="pb-2 font-medium">Target ID</th>
@@ -44,19 +44,19 @@
       </thead>
       <tbody>
         {#each ($query.data.entries ?? $query.data) as entry}
-          <tr class="border-b border-neutral-800/50 hover:bg-neutral-900">
+          <tr class="border-b border-border/50 hover:bg-accent">
             <td class="py-2">
-              <span class="rounded-full bg-neutral-800 px-2 py-0.5 text-xs font-mono">{entry.action}</span>
+              <span class="rounded-full bg-muted px-2 py-0.5 text-xs font-mono">{entry.action}</span>
             </td>
-            <td class="py-2 text-neutral-400">{entry.targetType ?? '-'}</td>
-            <td class="py-2 font-mono text-xs text-neutral-500">{entry.targetId ?? '-'}</td>
+            <td class="py-2 text-muted-foreground">{entry.targetType ?? '-'}</td>
+            <td class="py-2 font-mono text-xs text-muted-foreground">{entry.targetId ?? '-'}</td>
             <td class="py-2">
               <p class="text-sm">{entry.actor?.name ?? '-'}</p>
               {#if entry.actor?.email}
-                <p class="text-xs text-neutral-500">{entry.actor.email}</p>
+                <p class="text-xs text-muted-foreground">{entry.actor.email}</p>
               {/if}
             </td>
-            <td class="py-2 text-xs text-neutral-400">
+            <td class="py-2 text-xs text-muted-foreground">
               {new Date(entry.createdAt).toLocaleString()}
             </td>
           </tr>
@@ -65,10 +65,10 @@
     </table>
 
     {#if ($query.data.entries ?? $query.data).length === 0}
-      <p class="mt-4 text-sm text-neutral-500">No audit entries found.</p>
+      <p class="mt-4 text-sm text-muted-foreground">No audit entries found.</p>
     {/if}
 
-    <div class="mt-4 flex items-center justify-between text-xs text-neutral-500">
+    <div class="mt-4 flex items-center justify-between text-xs text-muted-foreground">
       {#if $query.data.total}
         <span>{$query.data.total} total</span>
       {:else}
@@ -78,7 +78,7 @@
         <button
           onclick={() => page = Math.max(1, page - 1)}
           disabled={page === 1}
-          class="rounded px-2 py-1 hover:bg-neutral-800 disabled:opacity-30"
+          class="rounded px-2 py-1 hover:bg-accent disabled:opacity-30"
         >
           Prev
         </button>
@@ -86,13 +86,13 @@
         <button
           onclick={() => page++}
           disabled={($query.data.entries ?? $query.data).length < limit}
-          class="rounded px-2 py-1 hover:bg-neutral-800 disabled:opacity-30"
+          class="rounded px-2 py-1 hover:bg-accent disabled:opacity-30"
         >
           Next
         </button>
       </div>
     </div>
   {:else if $query.error}
-    <p class="text-sm text-red-400">Failed to load audit log.</p>
+    <p class="text-sm text-destructive">Failed to load audit log.</p>
   {/if}
 </div>

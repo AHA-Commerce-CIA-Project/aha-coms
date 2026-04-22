@@ -52,7 +52,7 @@
       <span class="text-[11px] font-extrabold text-white">C</span>
     </div>
     <span class="font-manrope text-[15px] font-extrabold tracking-wide text-white">
-      COMS Portal
+      COMS
     </span>
   </div>
 

@@ -57,38 +57,38 @@
 
   <form onsubmit={handleSubmit} class="max-w-lg space-y-4">
     <div>
-      <label for="employee-email" class="mb-1 block text-xs text-neutral-400">Email</label>
-      <input id="employee-email" type="email" bind:value={form.email} required class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+      <label for="employee-email" class="mb-1 block text-xs text-muted-foreground">Email</label>
+      <input id="employee-email" type="email" bind:value={form.email} required class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
     </div>
     <div>
-      <label for="employee-name" class="mb-1 block text-xs text-neutral-400">Name</label>
-      <input id="employee-name" type="text" bind:value={form.name} required class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+      <label for="employee-name" class="mb-1 block text-xs text-muted-foreground">Name</label>
+      <input id="employee-name" type="text" bind:value={form.name} required class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
     </div>
     <div>
-      <label for="employee-personal-email" class="mb-1 block text-xs text-neutral-400">Personal Email</label>
-      <input id="employee-personal-email" type="email" bind:value={form.personalEmail} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+      <label for="employee-personal-email" class="mb-1 block text-xs text-muted-foreground">Personal Email</label>
+      <input id="employee-personal-email" type="email" bind:value={form.personalEmail} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
     </div>
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label for="employee-phone" class="mb-1 block text-xs text-neutral-400">Phone</label>
-        <input id="employee-phone" type="text" bind:value={form.phone} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+        <label for="employee-phone" class="mb-1 block text-xs text-muted-foreground">Phone</label>
+        <input id="employee-phone" type="text" bind:value={form.phone} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
       </div>
       <div>
-        <label for="employee-position" class="mb-1 block text-xs text-neutral-400">Position</label>
-        <input id="employee-position" type="text" bind:value={form.position} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+        <label for="employee-position" class="mb-1 block text-xs text-muted-foreground">Position</label>
+        <input id="employee-position" type="text" bind:value={form.position} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
       </div>
     </div>
     <div>
-      <label for="employee-birth-date" class="mb-1 block text-xs text-neutral-400">Birth Date</label>
-      <input id="employee-birth-date" type="date" bind:value={form.birthDate} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+      <label for="employee-birth-date" class="mb-1 block text-xs text-muted-foreground">Birth Date</label>
+      <input id="employee-birth-date" type="date" bind:value={form.birthDate} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
     </div>
     <div>
-      <label for="employee-leader" class="mb-1 block text-xs text-neutral-400">Leader</label>
-      <input id="employee-leader" type="text" bind:value={form.leaderName} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+      <label for="employee-leader" class="mb-1 block text-xs text-muted-foreground">Leader</label>
+      <input id="employee-leader" type="text" bind:value={form.leaderName} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
     </div>
     <div>
-      <label for="employee-branch" class="mb-1 block text-xs text-neutral-400">Branch</label>
-      <select id="employee-branch" bind:value={form.branch} required class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+      <label for="employee-branch" class="mb-1 block text-xs text-muted-foreground">Branch</label>
+      <select id="employee-branch" bind:value={form.branch} required class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none">
         <option value="" disabled>Select branch</option>
         <option value="indonesia">Indonesia</option>
         <option value="thailand">Thailand</option>
@@ -96,16 +96,16 @@
     </div>
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label for="employee-portal-role" class="mb-1 block text-xs text-neutral-400">Portal Role</label>
-        <select id="employee-portal-role" bind:value={form.portalRole} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+        <label for="employee-portal-role" class="mb-1 block text-xs text-muted-foreground">Portal Role</label>
+        <select id="employee-portal-role" bind:value={form.portalRole} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none">
           {#each PORTAL_ROLES as role}
             <option value={role}>{PORTAL_ROLE_LABELS[role]}</option>
           {/each}
         </select>
       </div>
       <div>
-        <label for="employee-team" class="mb-1 block text-xs text-neutral-400">Team</label>
-        <select id="employee-team" bind:value={form.teamId} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+        <label for="employee-team" class="mb-1 block text-xs text-muted-foreground">Team</label>
+        <select id="employee-team" bind:value={form.teamId} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none">
           <option value="">No team</option>
           {#if $teams.data}
             {#each $teams.data as team}
@@ -116,12 +116,12 @@
       </div>
     </div>
     {#if error}
-      <p class="text-xs text-red-400">{error}</p>
+      <p class="text-xs text-destructive">{error}</p>
     {/if}
 
     <div class="flex gap-3">
-      <button type="submit" disabled={$mutation.isPending} class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50">Create</button>
-      <a href="/admin/employees" class="rounded-lg border border-neutral-700 px-4 py-2 text-sm hover:bg-neutral-800">Cancel</a>
+      <button type="submit" disabled={$mutation.isPending} class="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50">Create</button>
+      <a href="/admin/employees" class="rounded-lg border border-border px-4 py-2 text-sm hover:bg-accent">Cancel</a>
     </div>
   </form>
 </div>

@@ -252,32 +252,32 @@
 <div class="p-8">
   {#if $query.isLoading}
     <div class="animate-pulse space-y-4">
-      <div class="h-8 w-48 rounded bg-neutral-800"></div>
-      <div class="h-64 rounded-xl bg-neutral-800"></div>
+      <div class="h-8 w-48 rounded bg-muted"></div>
+      <div class="h-64 rounded-xl bg-muted"></div>
     </div>
   {:else if $query.data}
     {@const emp = $query.data}
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="text-xl font-semibold">{emp.name}</h1>
-        <p class="text-sm text-neutral-400">{emp.email}</p>
+        <p class="text-sm text-muted-foreground">{emp.email}</p>
         {#if provisioningFailedFromCreate}
-          <p class="mt-2 text-xs text-yellow-400">Employee was created, but provisioning failed. Retry provisioning below.</p>
+          <p class="mt-2 text-xs text-status-pending">Employee was created, but provisioning failed. Retry provisioning below.</p>
         {/if}
         {#if resetMessage}
-          <p class="mt-2 text-xs text-green-400">{resetMessage}</p>
+          <p class="mt-2 text-xs text-status-active">{resetMessage}</p>
         {/if}
         {#if resetError}
-          <p class="mt-2 text-xs text-red-400">{resetError}</p>
+          <p class="mt-2 text-xs text-destructive">{resetError}</p>
         {/if}
         {#if deleteError}
-          <p class="mt-2 text-xs text-red-400">{deleteError}</p>
+          <p class="mt-2 text-xs text-destructive">{deleteError}</p>
         {/if}
         {#if provisioningMessage}
-          <p class="mt-2 text-xs text-green-400">{provisioningMessage}</p>
+          <p class="mt-2 text-xs text-status-active">{provisioningMessage}</p>
         {/if}
         {#if provisioningError}
-          <p class="mt-2 text-xs text-red-400">{provisioningError}</p>
+          <p class="mt-2 text-xs text-destructive">{provisioningError}</p>
         {/if}
       </div>
       <div class="flex gap-2">
@@ -285,7 +285,7 @@
           <button
             onclick={handleResetPassword}
             disabled={resetPending}
-            class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800 disabled:opacity-50"
+            class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
           >
             {resetPending ? 'Sending…' : 'Reset Password'}
           </button>
@@ -295,13 +295,13 @@
             <button
               onclick={handleDeactivate}
               disabled={deletePending}
-              class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950 disabled:opacity-50"
+              class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
             >
               {deletePending ? 'Deactivating…' : 'Confirm Deactivate'}
             </button>
             <button
               onclick={() => { confirmingDeactivate = false; deleteError = null }}
-              class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800"
+              class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent"
             >
               Cancel
             </button>
@@ -309,7 +309,7 @@
         {:else}
           <button
             onclick={() => { confirmingDeactivate = true; deleteError = null }}
-            class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950"
+            class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10"
           >
             Deactivate
           </button>
@@ -317,14 +317,14 @@
       </div>
     </div>
 
-    <div class="max-w-lg space-y-3 rounded-xl border border-neutral-800 bg-neutral-900 p-6">
+    <div class="max-w-lg space-y-3 rounded-xl border border-border bg-card p-6">
       <!-- Role -->
-      <div class="flex items-center justify-between border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Role</span>
+      <div class="flex items-center justify-between border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Role</span>
         <div class="flex items-center gap-2">
           <select
             bind:value={selectedRole}
-            class="rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+            class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
           >
             {#each ROLES as role}
               <option value={role}>{PORTAL_ROLE_LABELS[role]}</option>
@@ -334,7 +334,7 @@
             <button
               onclick={handleSaveRole}
               disabled={$mutation.isPending}
-              class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+              class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
             >
               {$mutation.isPending ? 'Saving...' : 'Save'}
             </button>
@@ -343,36 +343,36 @@
       </div>
 
       <!-- Department (read-only) -->
-      <div class="flex justify-between border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Department</span>
+      <div class="flex justify-between border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Department</span>
         <span class="text-sm">{emp.department ?? '-'}</span>
       </div>
 
       <!-- Position (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Position</span>
+      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Position</span>
         <div class="text-right">
           {#if editingPosition}
             <div class="flex flex-col items-end gap-2">
               <input
                 type="text"
                 bind:value={positionValue}
-                class="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
               />
               {#if positionError}
-                <p class="text-xs text-red-400">{positionError}</p>
+                <p class="text-xs text-destructive">{positionError}</p>
               {/if}
               <div class="flex gap-2">
                 <button
                   onclick={handleSavePosition}
                   disabled={positionPending}
-                  class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
                 >
                   {positionPending ? 'Saving…' : 'Save'}
                 </button>
                 <button
                   onclick={() => { editingPosition = false; positionError = null }}
-                  class="rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800"
+                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
                 >
                   Cancel
                 </button>
@@ -383,7 +383,7 @@
               <span class="text-sm">{emp.position ?? '-'}</span>
               <button
                 onclick={() => { editingPosition = true; positionValue = emp.position ?? '' }}
-                class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
               >
                 Edit
               </button>
@@ -393,30 +393,30 @@
       </div>
 
       <!-- Phone / WA (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Phone (WA)</span>
+      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Phone (WA)</span>
         <div class="text-right">
           {#if editingPhone}
             <div class="flex flex-col items-end gap-2">
               <input
                 type="text"
                 bind:value={phoneValue}
-                class="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
               />
               {#if phoneError}
-                <p class="text-xs text-red-400">{phoneError}</p>
+                <p class="text-xs text-destructive">{phoneError}</p>
               {/if}
               <div class="flex gap-2">
                 <button
                   onclick={handleSavePhone}
                   disabled={phonePending}
-                  class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
                 >
                   {phonePending ? 'Saving…' : 'Save'}
                 </button>
                 <button
                   onclick={() => { editingPhone = false; phoneError = null }}
-                  class="rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800"
+                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
                 >
                   Cancel
                 </button>
@@ -427,7 +427,7 @@
               <span class="text-sm">{emp.phone ?? '-'}</span>
               <button
                 onclick={() => { editingPhone = true; phoneValue = emp.phone ?? '' }}
-                class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
               >
                 Edit
               </button>
@@ -437,30 +437,30 @@
       </div>
 
       <!-- Birth Date (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Birth Date</span>
+      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Birth Date</span>
         <div class="text-right">
           {#if editingBirthDate}
             <div class="flex flex-col items-end gap-2">
               <input
                 type="date"
                 bind:value={birthDateValue}
-                class="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
               />
               {#if birthDateError}
-                <p class="text-xs text-red-400">{birthDateError}</p>
+                <p class="text-xs text-destructive">{birthDateError}</p>
               {/if}
               <div class="flex gap-2">
                 <button
                   onclick={handleSaveBirthDate}
                   disabled={birthDatePending}
-                  class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
                 >
                   {birthDatePending ? 'Saving…' : 'Save'}
                 </button>
                 <button
                   onclick={() => { editingBirthDate = false; birthDateError = null }}
-                  class="rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800"
+                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
                 >
                   Cancel
                 </button>
@@ -471,7 +471,7 @@
               <span class="text-sm">{(emp as any).birthDate ?? '-'}</span>
               <button
                 onclick={() => { editingBirthDate = true; birthDateValue = (emp as any).birthDate ?? '' }}
-                class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
               >
                 Edit
               </button>
@@ -481,30 +481,30 @@
       </div>
 
       <!-- Personal Email (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Personal Email</span>
+      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Personal Email</span>
         <div class="text-right">
           {#if editingPersonalEmail}
             <div class="flex flex-col items-end gap-2">
               <input
                 type="email"
                 bind:value={personalEmailValue}
-                class="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
               />
               {#if personalEmailError}
-                <p class="text-xs text-red-400">{personalEmailError}</p>
+                <p class="text-xs text-destructive">{personalEmailError}</p>
               {/if}
               <div class="flex gap-2">
                 <button
                   onclick={handleSavePersonalEmail}
                   disabled={personalEmailPending}
-                  class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
                 >
                   {personalEmailPending ? 'Saving…' : 'Save'}
                 </button>
                 <button
                   onclick={() => { editingPersonalEmail = false; personalEmailError = null }}
-                  class="rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800"
+                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
                 >
                   Cancel
                 </button>
@@ -515,7 +515,7 @@
               <span class="text-sm">{(emp as any).personalEmail ?? '-'}</span>
               <button
                 onclick={() => { editingPersonalEmail = true; personalEmailValue = (emp as any).personalEmail ?? '' }}
-                class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
               >
                 Edit
               </button>
@@ -525,30 +525,30 @@
       </div>
 
       <!-- Leader (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Leader</span>
+      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Leader</span>
         <div class="text-right">
           {#if editingLeader}
             <div class="flex flex-col items-end gap-2">
               <input
                 type="text"
                 bind:value={leaderValue}
-                class="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
               />
               {#if leaderError}
-                <p class="text-xs text-red-400">{leaderError}</p>
+                <p class="text-xs text-destructive">{leaderError}</p>
               {/if}
               <div class="flex gap-2">
                 <button
                   onclick={handleSaveLeader}
                   disabled={leaderPending}
-                  class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
                 >
                   {leaderPending ? 'Saving…' : 'Save'}
                 </button>
                 <button
                   onclick={() => { editingLeader = false; leaderError = null }}
-                  class="rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800"
+                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
                 >
                   Cancel
                 </button>
@@ -559,7 +559,7 @@
               <span class="text-sm">{(emp as any).leaderName ?? '-'}</span>
               <button
                 onclick={() => { editingLeader = true; leaderValue = (emp as any).leaderName ?? '' }}
-                class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
               >
                 Edit
               </button>
@@ -569,14 +569,14 @@
       </div>
 
       <!-- Team (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Team</span>
+      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Team</span>
         <div class="text-right">
           {#if editingTeam}
             <div class="flex flex-col items-end gap-2">
               <select
                 bind:value={teamIdValue}
-                class="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
               >
                 <option value="">No team</option>
                 {#if $teams.data}
@@ -586,19 +586,19 @@
                 {/if}
               </select>
               {#if teamError}
-                <p class="text-xs text-red-400">{teamError}</p>
+                <p class="text-xs text-destructive">{teamError}</p>
               {/if}
               <div class="flex gap-2">
                 <button
                   onclick={handleSaveTeam}
                   disabled={teamPending}
-                  class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
                 >
                   {teamPending ? 'Saving…' : 'Save'}
                 </button>
                 <button
                   onclick={() => { editingTeam = false; teamError = null }}
-                  class="rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800"
+                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
                 >
                   Cancel
                 </button>
@@ -615,7 +615,7 @@
               </span>
               <button
                 onclick={() => { editingTeam = true; teamIdValue = (emp as any).teamId ?? '' }}
-                class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
               >
                 Edit
               </button>
@@ -625,33 +625,33 @@
       </div>
 
       <!-- Branch (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Branch</span>
+      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Branch</span>
         <div class="text-right">
           {#if editingBranch}
             <div class="flex flex-col items-end gap-2">
               <select
                 bind:value={branchValue}
-                class="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
               >
                 <option value="">Not set</option>
                 <option value="indonesia">Indonesia</option>
                 <option value="thailand">Thailand</option>
               </select>
               {#if branchError}
-                <p class="text-xs text-red-400">{branchError}</p>
+                <p class="text-xs text-destructive">{branchError}</p>
               {/if}
               <div class="flex gap-2">
                 <button
                   onclick={handleSaveBranch}
                   disabled={branchPending}
-                  class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
                 >
                   {branchPending ? 'Saving…' : 'Save'}
                 </button>
                 <button
                   onclick={() => { editingBranch = false; branchError = null }}
-                  class="rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800"
+                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
                 >
                   Cancel
                 </button>
@@ -662,7 +662,7 @@
               <span class="text-sm capitalize">{emp.branch ?? '-'}</span>
               <button
                 onclick={() => { editingBranch = true; branchValue = (emp.branch as 'indonesia' | 'thailand' | '') ?? '' }}
-                class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
               >
                 Edit
               </button>
@@ -672,15 +672,15 @@
       </div>
 
       <!-- Status (read-only) -->
-      <div class="flex justify-between border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Status</span>
-        <span class="text-sm" class:text-green-400={emp.status === 'active'} class:text-red-400={emp.status !== 'active'}>{emp.status}</span>
+      <div class="flex justify-between border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Status</span>
+        <span class="text-sm" class:text-status-active={emp.status === 'active'} class:text-destructive={emp.status !== 'active'}>{emp.status}</span>
       </div>
 
       <!-- Workspace upgrade -->
       {#if !emp.hasGoogleWorkspace}
-        <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Workspace</span>
+        <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Workspace</span>
           <div class="text-right">
             {#if editingWorkspace}
               <div class="flex flex-col items-end gap-2">
@@ -688,22 +688,22 @@
                   type="email"
                   bind:value={workspaceEmail}
                   placeholder="workspace@ahacommerce.net"
-                  class="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+                  class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
                 />
                 {#if workspaceError}
-                  <p class="text-xs text-red-400">{workspaceError}</p>
+                  <p class="text-xs text-destructive">{workspaceError}</p>
                 {/if}
                 <div class="flex gap-2">
                   <button
                     onclick={handleUpgradeWorkspace}
                     disabled={!workspaceEmail || workspacePending}
-                    class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+                    class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
                   >
                     {workspacePending ? 'Saving…' : 'Save'}
                   </button>
                   <button
                     onclick={() => { editingWorkspace = false; workspaceEmail = ''; workspaceError = null }}
-                    class="rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800"
+                    class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
                   >
                     Cancel
                   </button>
@@ -711,10 +711,10 @@
               </div>
             {:else}
               <div class="flex items-center gap-2">
-                <span class="text-sm text-neutral-500">No workspace account</span>
+                <span class="text-sm text-muted-foreground">No workspace account</span>
                 <button
                   onclick={() => { editingWorkspace = true; workspaceEmail = '' }}
-                  class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                  class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
                 >
                   Upgrade
                 </button>
@@ -725,25 +725,25 @@
       {/if}
 
       <!-- Provisioning -->
-      <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Provisioning</span>
+      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+        <span class="text-xs text-muted-foreground">Provisioning</span>
         <div class="text-right">
           <p
             class="text-sm"
-            class:text-green-400={emp.provisioningStatus === 'ready'}
-            class:text-yellow-400={emp.provisioningStatus === 'pending' || emp.provisioningStatus === 'processing'}
-            class:text-red-400={emp.provisioningStatus === 'failed'}
+            class:text-status-active={emp.provisioningStatus === 'ready'}
+            class:text-status-pending={emp.provisioningStatus === 'pending' || emp.provisioningStatus === 'processing'}
+            class:text-destructive={emp.provisioningStatus === 'failed'}
           >
             {emp.provisioningStatus}
           </p>
           {#if emp.provisioningError}
-            <p class="mt-1 text-xs text-red-400">{emp.provisioningError}</p>
+            <p class="mt-1 text-xs text-destructive">{emp.provisioningError}</p>
           {/if}
           {#if emp.provisioningStatus === 'failed' && emp.status === 'active'}
             <button
               onclick={handleRetryProvisioning}
               disabled={retryProvisioningPending}
-              class="mt-2 rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800 disabled:opacity-50"
+              class="mt-2 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent disabled:opacity-50"
             >
               {retryProvisioningPending ? 'Retrying…' : 'Retry Provisioning'}
             </button>
@@ -752,8 +752,8 @@
       </div>
     </div>
   {:else}
-    <p class="text-sm text-neutral-500">Employee not found.</p>
+    <p class="text-sm text-muted-foreground">Employee not found.</p>
   {/if}
 
-  <a href="/admin/employees" class="mt-6 inline-block text-xs text-indigo-400 hover:text-indigo-300">&larr; Back to employees</a>
+  <a href="/admin/employees" class="mt-6 inline-block text-xs text-primary hover:text-primary/80">&larr; Back to employees</a>
 </div>

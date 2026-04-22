@@ -81,7 +81,7 @@
       </div>
       {#if !collapsed}
         <span class="font-manrope text-[15px] font-extrabold tracking-wide text-foreground">
-          COMS Portal
+          COMS
         </span>
       {/if}
     </div>

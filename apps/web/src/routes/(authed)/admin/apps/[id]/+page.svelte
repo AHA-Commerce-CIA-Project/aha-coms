@@ -243,8 +243,8 @@
 <div class="p-8">
   {#if $query.isLoading}
     <div class="animate-pulse space-y-4">
-      <div class="h-8 w-48 rounded bg-neutral-800"></div>
-      <div class="h-48 rounded-xl bg-neutral-800"></div>
+      <div class="h-8 w-48 rounded bg-muted"></div>
+      <div class="h-48 rounded-xl bg-muted"></div>
     </div>
   {:else if $query.data}
     {@const app = $query.data}
@@ -254,41 +254,41 @@
         {#if editing}
           <form onsubmit={handleSaveEdit} class="space-y-3">
             <div>
-              <label for="app-name" class="mb-1 block text-xs text-neutral-400">Name</label>
+              <label for="app-name" class="mb-1 block text-xs text-muted-foreground">Name</label>
               <input
                 id="app-name"
                 type="text"
                 bind:value={editName}
                 required
-                class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
               />
             </div>
             <div>
-              <label for="app-url" class="mb-1 block text-xs text-neutral-400">URL</label>
+              <label for="app-url" class="mb-1 block text-xs text-muted-foreground">URL</label>
               <input
                 id="app-url"
                 type="url"
                 bind:value={editUrl}
                 required
-                class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
               />
             </div>
             <div>
-              <label for="app-base-path" class="mb-1 block text-xs text-neutral-400">Base Path</label>
+              <label for="app-base-path" class="mb-1 block text-xs text-muted-foreground">Base Path</label>
               <input
                 id="app-base-path"
                 type="text"
                 bind:value={editBasePath}
                 placeholder="e.g. /app"
-                class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
               />
             </div>
             <div>
-              <label for="app-status" class="mb-1 block text-xs text-neutral-400">Status</label>
+              <label for="app-status" class="mb-1 block text-xs text-muted-foreground">Status</label>
               <select
                 id="app-status"
                 bind:value={editStatus}
-                class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
               >
                 <option value="active">Active</option>
                 <option value="maintenance">Maintenance</option>
@@ -297,11 +297,11 @@
             </div>
             <div class="grid gap-3 sm:grid-cols-2">
               <div>
-                <label for="app-adapter-type" class="mb-1 block text-xs text-neutral-400">Adapter Type</label>
+                <label for="app-adapter-type" class="mb-1 block text-xs text-muted-foreground">Adapter Type</label>
                 <select
                   id="app-adapter-type"
                   bind:value={editAdapterType}
-                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
                 >
                   {#each PORTAL_ADAPTER_TYPES as adapterType}
                     <option value={adapterType}>{adapterType}</option>
@@ -309,11 +309,11 @@
                 </select>
               </div>
               <div>
-                <label for="app-transport-mode" class="mb-1 block text-xs text-neutral-400">Transport</label>
+                <label for="app-transport-mode" class="mb-1 block text-xs text-muted-foreground">Transport</label>
                 <select
                   id="app-transport-mode"
                   bind:value={editTransportMode}
-                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
                 >
                   <option value="portable_token">portal-brokered token</option>
                   <option value="same_host_cookie">same-host cookie</option>
@@ -322,11 +322,11 @@
             </div>
             <div class="grid gap-3 sm:grid-cols-2">
               <div>
-                <label for="app-handoff-mode" class="mb-1 block text-xs text-neutral-400">Handoff Mode</label>
+                <label for="app-handoff-mode" class="mb-1 block text-xs text-muted-foreground">Handoff Mode</label>
                 <select
                   id="app-handoff-mode"
                   bind:value={editHandoffMode}
-                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
                 >
                   {#each PORTAL_HANDOFF_MODES as handoffMode}
                     <option value={handoffMode}>{handoffMode}</option>
@@ -334,11 +334,11 @@
                 </select>
               </div>
               <div>
-                <label for="app-compliance-status" class="mb-1 block text-xs text-neutral-400">Compliance</label>
+                <label for="app-compliance-status" class="mb-1 block text-xs text-muted-foreground">Compliance</label>
                 <select
                   id="app-compliance-status"
                   bind:value={editComplianceStatus}
-                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
                 >
                   {#each PORTAL_COMPLIANCE_STATUSES as complianceStatus}
                     <option value={complianceStatus}>{complianceStatus}</option>
@@ -348,46 +348,46 @@
             </div>
             <div class="grid gap-3 sm:grid-cols-2">
               <div>
-                <label for="app-broker-origin" class="mb-1 block text-xs text-neutral-400">Broker Origin</label>
+                <label for="app-broker-origin" class="mb-1 block text-xs text-muted-foreground">Broker Origin</label>
                 <input
                   id="app-broker-origin"
                   type="url"
                   bind:value={editBrokerOrigin}
                   disabled={editTransportMode !== 'portable_token'}
-                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none disabled:opacity-50"
+                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
                 />
               </div>
               <div>
-                <label for="app-manifest-path" class="mb-1 block text-xs text-neutral-400">Manifest Path</label>
+                <label for="app-manifest-path" class="mb-1 block text-xs text-muted-foreground">Manifest Path</label>
                 <input
                   id="app-manifest-path"
                   type="text"
                   bind:value={editManifestPath}
-                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
                 />
               </div>
             </div>
             {#if editError}
-              <p class="text-xs text-red-400">{editError}</p>
+              <p class="text-xs text-destructive">{editError}</p>
             {/if}
             <div class="flex gap-2">
-              <button type="submit" disabled={editPending} class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50">Save</button>
-              <button type="button" onclick={() => editing = false} class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800">Cancel</button>
+              <button type="submit" disabled={editPending} class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50">Save</button>
+              <button type="button" onclick={() => editing = false} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">Cancel</button>
             </div>
           </form>
         {:else}
           <h1 class="text-xl font-semibold">{app.name}</h1>
-          <p class="text-sm text-neutral-400">{app.slug}</p>
+          <p class="text-sm text-muted-foreground">{app.slug}</p>
         {/if}
       </div>
       {#if !editing}
         <div class="flex gap-2">
-          <button onclick={startEdit} class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800">Edit</button>
+          <button onclick={startEdit} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">Edit</button>
           {#if confirmingDelete}
             <button
               onclick={handleDelete}
               disabled={deletePending}
-              class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950 disabled:opacity-50"
+              class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
             >
               {deletePending ? 'Deleting…' : 'Confirm Delete'}
             </button>
@@ -396,7 +396,7 @@
                 confirmingDelete = false
                 deleteError = null
               }}
-              class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800"
+              class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent"
             >
               Cancel
             </button>
@@ -406,7 +406,7 @@
                 confirmingDelete = true
                 deleteError = null
               }}
-              class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950"
+              class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10"
             >
               Delete
             </button>
@@ -416,58 +416,58 @@
     </div>
 
     {#if deleteError}
-      <p class="mb-4 text-sm text-red-400">{deleteError}</p>
+      <p class="mb-4 text-sm text-destructive">{deleteError}</p>
     {/if}
 
     {#if !editing}
-      <div class="max-w-lg space-y-3 rounded-xl border border-neutral-800 bg-neutral-900 p-6">
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Slug</span>
+      <div class="max-w-lg space-y-3 rounded-xl border border-border bg-card p-6">
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Slug</span>
           <span class="text-sm">{app.slug}</span>
         </div>
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">URL</span>
-          <a href={app.url} target="_blank" class="text-sm text-indigo-400 hover:text-indigo-300">{app.url}</a>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">URL</span>
+          <a href={app.url} target="_blank" class="text-sm text-primary hover:text-primary/80">{app.url}</a>
         </div>
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Base Path</span>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Base Path</span>
           <span class="text-sm">{app.basePath ?? '-'}</span>
         </div>
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Adapter Type</span>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Adapter Type</span>
           <span class="text-sm">{app.adapterType}</span>
         </div>
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Transport</span>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Transport</span>
           <span class="text-sm">{app.transportMode}</span>
         </div>
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Handoff</span>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Handoff</span>
           <span class="text-sm">{app.handoffMode}</span>
         </div>
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Broker Origin</span>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Broker Origin</span>
           <span class="text-sm">{app.brokerOrigin ?? '-'}</span>
         </div>
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Contract Version</span>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Contract Version</span>
           <span class="text-sm">{app.contractVersion}</span>
         </div>
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Compliance</span>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Compliance</span>
           <span class="text-sm">{app.complianceStatus}</span>
         </div>
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Manifest Path</span>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Manifest Path</span>
           <span class="text-sm">{app.manifestPath ?? '-'}</span>
         </div>
-        <div class="flex justify-between border-b border-neutral-800 pb-2">
-          <span class="text-xs text-neutral-400">Last Verified</span>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Last Verified</span>
           <span class="text-sm">{app.lastVerifiedAt ?? '-'}</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-xs text-neutral-400">Status</span>
-          <span class="text-sm" class:text-green-400={app.status === 'active'} class:text-red-400={app.status !== 'active'}>{app.status}</span>
+          <span class="text-xs text-muted-foreground">Status</span>
+          <span class="text-sm" class:text-status-active={app.status === 'active'} class:text-destructive={app.status !== 'active'}>{app.status}</span>
         </div>
       </div>
 
@@ -475,10 +475,10 @@
       {#if app.teamGrants && app.teamGrants.length > 0}
         <div class="mt-6 max-w-lg">
           <h2 class="mb-3 text-sm font-semibold">Teams with Access</h2>
-          <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4 space-y-1">
+          <div class="rounded-xl border border-border bg-card p-4 space-y-1">
             {#each app.teamGrants as grant}
               <div class="flex items-center justify-between py-1">
-                <a href="/admin/teams/{grant.teamId}" class="text-sm text-indigo-400 hover:text-indigo-300">{grant.teamName ?? grant.teamId}</a>
+                <a href="/admin/teams/{grant.teamId}" class="text-sm text-primary hover:text-primary/80">{grant.teamName ?? grant.teamId}</a>
               </div>
             {/each}
           </div>
@@ -486,7 +486,7 @@
       {/if}
     {/if}
   {:else if $query.error}
-    <p class="text-sm text-red-400">Failed to load app.</p>
+    <p class="text-sm text-destructive">Failed to load app.</p>
   {/if}
 
   <!-- ======================================================================
@@ -546,44 +546,44 @@
     {/if}
 
     {#if webhookActionError}
-      <p class="mb-3 text-xs text-red-400">{webhookActionError}</p>
+      <p class="mb-3 text-xs text-destructive">{webhookActionError}</p>
     {/if}
 
     <!-- Endpoint list -->
     {#if $webhooksQuery.isLoading}
-      <div class="animate-pulse h-16 rounded-xl bg-neutral-800"></div>
+      <div class="animate-pulse h-16 rounded-xl bg-muted"></div>
     {:else if $webhooksQuery.data && $webhooksQuery.data.length > 0}
       <div class="mb-4 space-y-2">
         {#each $webhooksQuery.data as endpoint}
           {@const testResult = testResults[endpoint.id]}
-          <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+          <div class="rounded-xl border border-border bg-card p-4">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium">{endpoint.url}</p>
                 <div class="mt-1 flex flex-wrap gap-1">
                   {#each endpoint.subscribedEvents as ev}
-                    <span class="rounded bg-neutral-700 px-1.5 py-0.5 text-xs text-neutral-300">{ev}</span>
+                    <span class="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{ev}</span>
                   {/each}
                 </div>
-                <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
-                  <span class:text-green-400={endpoint.status === 'active'} class:text-neutral-400={endpoint.status !== 'active'}>
+                <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span class:text-status-active={endpoint.status === 'active'} class:text-muted-foreground={endpoint.status !== 'active'}>
                     {endpoint.status}
                   </span>
                   {#if endpoint.failureCount > 0}
-                    <span class="text-red-400">{endpoint.failureCount} failure{endpoint.failureCount !== 1 ? 's' : ''}</span>
+                    <span class="text-destructive">{endpoint.failureCount} failure{endpoint.failureCount !== 1 ? 's' : ''}</span>
                   {/if}
                   {#if endpoint.lastDeliveredAt}
                     <span>Last delivered {new Date(endpoint.lastDeliveredAt).toLocaleString()}</span>
                   {/if}
                   {#if endpoint.lastFailureAt}
-                    <span class="text-red-400" title={endpoint.lastFailureReason ?? ''}>
+                    <span class="text-destructive" title={endpoint.lastFailureReason ?? ''}>
                       Last failed {new Date(endpoint.lastFailureAt).toLocaleString()}
                     </span>
                   {/if}
                 </div>
 
                 {#if testResult}
-                  <div class="mt-2 rounded border px-2 py-1 text-xs {testResult.delivered ? 'border-green-800 bg-green-950 text-green-300' : 'border-red-800 bg-red-950 text-red-300'}">
+                  <div class="mt-2 rounded border px-2 py-1 text-xs {testResult.delivered ? 'border-status-active/30 bg-status-active/10 text-status-active' : 'border-destructive/30 bg-destructive/10 text-destructive'}">
                     {#if testResult.delivered}
                       Delivered — HTTP {testResult.status}
                     {:else}
@@ -597,7 +597,7 @@
                 <button
                   onclick={() => handleTestWebhook(endpoint.id)}
                   disabled={pendingTestWebhook === endpoint.id}
-                  class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800 disabled:opacity-50"
+                  class="rounded border border-border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                 >
                   {pendingTestWebhook === endpoint.id ? 'Sending…' : 'Test'}
                 </button>
@@ -605,7 +605,7 @@
                 <button
                   onclick={() => handleToggleStatus(endpoint)}
                   disabled={pendingToggleWebhook === endpoint.id}
-                  class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800 disabled:opacity-50"
+                  class="rounded border border-border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                 >
                   {#if pendingToggleWebhook === endpoint.id}
                     Updating…
@@ -619,7 +619,7 @@
                 <button
                   onclick={() => handleRotateSecret(endpoint.id)}
                   disabled={pendingRotateWebhook === endpoint.id}
-                  class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800 disabled:opacity-50"
+                  class="rounded border border-border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                 >
                   {pendingRotateWebhook === endpoint.id ? 'Rotating…' : 'Rotate secret'}
                 </button>
@@ -628,20 +628,20 @@
                   <button
                     onclick={() => handleDeleteWebhook(endpoint.id)}
                     disabled={pendingDeleteWebhook === endpoint.id}
-                    class="rounded border border-red-800 px-2 py-1 text-xs text-red-400 hover:bg-red-950 disabled:opacity-50"
+                    class="rounded border border-destructive/50 px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
                   >
                     {pendingDeleteWebhook === endpoint.id ? 'Deleting…' : 'Confirm delete'}
                   </button>
                   <button
                     onclick={() => { confirmingDeleteWebhook = null; webhookActionError = null }}
-                    class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                    class="rounded border border-border px-2 py-1 text-xs hover:bg-accent"
                   >
                     Cancel
                   </button>
                 {:else}
                   <button
                     onclick={() => { confirmingDeleteWebhook = endpoint.id; webhookActionError = null }}
-                    class="rounded border border-red-800 px-2 py-1 text-xs text-red-400 hover:bg-red-950"
+                    class="rounded border border-destructive/50 px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
                   >
                     Delete
                   </button>
@@ -652,36 +652,36 @@
         {/each}
       </div>
     {:else if !$webhooksQuery.isLoading}
-      <p class="mb-4 text-xs text-neutral-500">No webhook endpoints registered.</p>
+      <p class="mb-4 text-xs text-muted-foreground">No webhook endpoints registered.</p>
     {/if}
 
     <!-- Register endpoint form -->
-    <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
-      <h3 class="mb-4 text-xs font-semibold text-neutral-300">Register Endpoint</h3>
+    <div class="rounded-xl border border-border bg-card p-5">
+      <h3 class="mb-4 text-xs font-semibold text-muted-foreground">Register Endpoint</h3>
       <form onsubmit={handleRegisterWebhook} class="space-y-3">
         <div>
-          <label for="wh-url" class="mb-1 block text-xs text-neutral-400">URL</label>
+          <label for="wh-url" class="mb-1 block text-xs text-muted-foreground">URL</label>
           <input
             id="wh-url"
             type="url"
             bind:value={newWebhookUrl}
             required
             placeholder="https://your-app.example.com/webhook"
-            class="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
           />
-          <p class="mt-1 text-xs text-neutral-500">https:// required (http://localhost allowed for dev)</p>
+          <p class="mt-1 text-xs text-muted-foreground">https:// required (http://localhost allowed for dev)</p>
         </div>
 
         <div>
-          <p class="mb-2 text-xs text-neutral-400">Subscribe to events</p>
+          <p class="mb-2 text-xs text-muted-foreground">Subscribe to events</p>
           <div class="grid grid-cols-2 gap-1.5">
             {#each PORTAL_WEBHOOK_EVENTS as ev}
-              <label class="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-neutral-800">
+              <label class="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent">
                 <input
                   type="checkbox"
                   checked={newWebhookEvents.includes(ev)}
                   onchange={() => toggleEventSelection(ev)}
-                  class="accent-indigo-500"
+                  class="accent-primary"
                 />
                 <span class="text-xs">{ev}</span>
               </label>
@@ -690,13 +690,13 @@
         </div>
 
         {#if registerError}
-          <p class="text-xs text-red-400">{registerError}</p>
+          <p class="text-xs text-destructive">{registerError}</p>
         {/if}
 
         <button
           type="submit"
           disabled={registerPending}
-          class="rounded-lg bg-indigo-600 px-4 py-1.5 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+          class="rounded-lg bg-primary text-primary-foreground px-4 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
         >
           {registerPending ? 'Registering…' : 'Register endpoint'}
         </button>
@@ -704,5 +704,5 @@
     </div>
   </div>
 
-  <a href="/admin/apps" class="mt-6 inline-block text-xs text-indigo-400 hover:text-indigo-300">&larr; Back to apps</a>
+  <a href="/admin/apps" class="mt-6 inline-block text-xs text-primary hover:text-primary/80">&larr; Back to apps</a>
 </div>

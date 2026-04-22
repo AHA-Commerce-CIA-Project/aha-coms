@@ -141,8 +141,8 @@
 <div class="p-8">
   {#if $query.isLoading}
     <div class="animate-pulse space-y-4">
-      <div class="h-8 w-48 rounded bg-neutral-800"></div>
-      <div class="h-64 rounded-xl bg-neutral-800"></div>
+      <div class="h-8 w-48 rounded bg-muted"></div>
+      <div class="h-64 rounded-xl bg-muted"></div>
     </div>
   {:else if $query.data}
     {@const team = $query.data}
@@ -157,7 +157,7 @@
                 type="text"
                 bind:value={editName}
                 required
-                class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
               />
             </div>
             <div>
@@ -165,33 +165,33 @@
                 type="text"
                 bind:value={editDescription}
                 placeholder="Description"
-                class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
               />
             </div>
             {#if editError}
-              <p class="text-xs text-red-400">{editError}</p>
+              <p class="text-xs text-destructive">{editError}</p>
             {/if}
             <div class="flex gap-2">
-              <button type="submit" disabled={editPending} class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50">Save</button>
-              <button type="button" onclick={() => editing = false} class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800">Cancel</button>
+              <button type="submit" disabled={editPending} class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50">Save</button>
+              <button type="button" onclick={() => editing = false} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">Cancel</button>
             </div>
           </form>
         {:else}
           <h1 class="text-xl font-semibold">{team.name}</h1>
           {#if team.description}
-            <p class="mt-1 text-sm text-neutral-400">{team.description}</p>
+            <p class="mt-1 text-sm text-muted-foreground">{team.description}</p>
           {/if}
         {/if}
       </div>
       <div class="flex gap-2">
         {#if !editing}
-          <button onclick={startEdit} class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800">Edit</button>
+          <button onclick={startEdit} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">Edit</button>
         {/if}
         {#if confirmingDelete}
           <button
             onclick={handleDeleteTeam}
             disabled={deletePending}
-            class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950 disabled:opacity-50"
+            class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
           >
             {deletePending ? 'Deleting…' : 'Confirm Delete'}
           </button>
@@ -200,7 +200,7 @@
               confirmingDelete = false
               actionError = null
             }}
-            class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800"
+            class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent"
           >
             Cancel
           </button>
@@ -210,7 +210,7 @@
               confirmingDelete = true
               actionError = null
             }}
-            class="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950"
+            class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10"
           >
             Delete
           </button>
@@ -219,21 +219,21 @@
     </div>
 
     {#if actionError}
-      <p class="mb-4 text-sm text-red-400">{actionError}</p>
+      <p class="mb-4 text-sm text-destructive">{actionError}</p>
     {/if}
 
     <div class="grid gap-6 lg:grid-cols-2">
       <!-- Members -->
-      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+      <div class="rounded-xl border border-border bg-card p-5">
         <h2 class="mb-4 text-sm font-semibold">Members</h2>
 
         {#if team.members && team.members.length > 0}
           <div class="mb-4 space-y-1">
             {#each team.members as member}
-              <div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-neutral-800">
+              <div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-accent">
                 <div>
                   <p class="text-sm">{member.name ?? member.userId}</p>
-                  <p class="text-xs text-neutral-500">{member.email ?? ''} &middot; {member.roleInTeam}</p>
+                  <p class="text-xs text-muted-foreground">{member.email ?? ''} &middot; {member.roleInTeam}</p>
                 </div>
                 <button
                   onclick={() => {
@@ -245,7 +245,7 @@
                     }
                   }}
                   disabled={pendingMemberRemovalId === member.userId}
-                  class="rounded px-2 py-0.5 text-xs text-red-400 hover:bg-red-950"
+                  class="rounded px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10"
                 >
                   {#if pendingMemberRemovalId === member.userId}
                     Removing…
@@ -259,33 +259,33 @@
             {/each}
           </div>
         {:else}
-          <p class="mb-4 text-xs text-neutral-500">No members yet.</p>
+          <p class="mb-4 text-xs text-muted-foreground">No members yet.</p>
         {/if}
 
         <!-- Add member form -->
-        <form onsubmit={handleAddMember} class="space-y-2 border-t border-neutral-800 pt-4">
-          <p class="text-xs font-medium text-neutral-400">Add Member</p>
+        <form onsubmit={handleAddMember} class="space-y-2 border-t border-border pt-4">
+          <p class="text-xs font-medium text-muted-foreground">Add Member</p>
           <input
             type="text"
             bind:value={addMemberUserId}
             placeholder="User ID"
             required
-            class="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
           />
           <select
             bind:value={addMemberRole}
-            class="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
           >
             <option value="member">Member</option>
             <option value="lead">Lead</option>
           </select>
           {#if addMemberError}
-            <p class="text-xs text-red-400">{addMemberError}</p>
+            <p class="text-xs text-destructive">{addMemberError}</p>
           {/if}
           <button
             type="submit"
             disabled={addMemberPending}
-            class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+            class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
           >
             Add
           </button>
@@ -293,16 +293,16 @@
       </div>
 
       <!-- App Access -->
-      <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+      <div class="rounded-xl border border-border bg-card p-5">
         <h2 class="mb-4 text-sm font-semibold">App Access</h2>
 
         {#if team.apps && team.apps.length > 0}
           <div class="mb-4 space-y-1">
             {#each team.apps as app}
-              <div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-neutral-800">
+              <div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-accent">
                 <div>
                   <p class="text-sm">{app.name ?? app.appId}</p>
-                  <p class="text-xs text-neutral-500">{app.slug ?? ''}</p>
+                  <p class="text-xs text-muted-foreground">{app.slug ?? ''}</p>
                 </div>
                 <button
                   onclick={() => {
@@ -314,7 +314,7 @@
                     }
                   }}
                   disabled={pendingRevokeAppId === app.appId}
-                  class="rounded px-2 py-0.5 text-xs text-red-400 hover:bg-red-950"
+                  class="rounded px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10"
                 >
                   {#if pendingRevokeAppId === app.appId}
                     Revoking…
@@ -328,26 +328,26 @@
             {/each}
           </div>
         {:else}
-          <p class="mb-4 text-xs text-neutral-500">No app access granted.</p>
+          <p class="mb-4 text-xs text-muted-foreground">No app access granted.</p>
         {/if}
 
         <!-- Grant app form -->
-        <form onsubmit={handleGrantApp} class="space-y-2 border-t border-neutral-800 pt-4">
-          <p class="text-xs font-medium text-neutral-400">Grant App Access</p>
+        <form onsubmit={handleGrantApp} class="space-y-2 border-t border-border pt-4">
+          <p class="text-xs font-medium text-muted-foreground">Grant App Access</p>
           <input
             type="text"
             bind:value={grantAppId}
             placeholder="App ID"
             required
-            class="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
           />
           {#if grantAppError}
-            <p class="text-xs text-red-400">{grantAppError}</p>
+            <p class="text-xs text-destructive">{grantAppError}</p>
           {/if}
           <button
             type="submit"
             disabled={grantAppPending}
-            class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+            class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
           >
             Grant
           </button>
@@ -355,8 +355,8 @@
       </div>
     </div>
   {:else if $query.error}
-    <p class="text-sm text-red-400">Failed to load team.</p>
+    <p class="text-sm text-destructive">Failed to load team.</p>
   {/if}
 
-  <a href="/admin/teams" class="mt-6 inline-block text-xs text-indigo-400 hover:text-indigo-300">&larr; Back to teams</a>
+  <a href="/admin/teams" class="mt-6 inline-block text-xs text-primary hover:text-primary/80">&larr; Back to teams</a>
 </div>
