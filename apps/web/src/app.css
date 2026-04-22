@@ -22,10 +22,10 @@
   --color-penalti: #C73E3E;
   --color-sky-blue: #759EEE;
 
-  --color-status-active: #22C55E;
-  --color-status-pending: #F4C144;
+  --color-status-active: #16a34a;
+  --color-status-pending: #a07700;
   --color-status-challenged: #6D50B8;
-  --color-status-rejected: #EF4444;
+  --color-status-rejected: #dc2626;
 
   --shadow-card: 0 2px 12px rgba(15, 14, 127, 0.10), 0 1px 3px rgba(0,0,0,0.06);
   --shadow-card-hover: 0 8px 28px rgba(15, 14, 127, 0.16), 0 2px 8px rgba(0,0,0,0.08);

@@ -181,49 +181,49 @@
 <div class="p-8">
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold">Employees</h1>
-    <a href="/admin/employees/new" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500">Add Employee</a>
+    <a href="/admin/employees/new" class="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90">Add Employee</a>
   </div>
 
-  <div class="mb-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+  <div class="mb-6 rounded-xl border border-border bg-card p-5">
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div class="max-w-2xl space-y-2">
         <h2 class="text-sm font-semibold">Sync employee info from sheet</h2>
-        <p class="text-sm text-neutral-400">Sinkronisasi data karyawan (HP, tanggal lahir, jabatan, tim, penilai) dari Google Sheet. Karyawan yang belum terdaftar tapi punya email pribadi akan otomatis dibuat. Data yang kosong di sheet tidak akan menimpa data yang sudah ada.</p>
+        <p class="text-sm text-muted-foreground">Sinkronisasi data karyawan (HP, tanggal lahir, jabatan, tim, penilai) dari Google Sheet. Karyawan yang belum terdaftar tapi punya email pribadi akan otomatis dibuat. Data yang kosong di sheet tidak akan menimpa data yang sudah ada.</p>
       </div>
       <div class="flex flex-col gap-3 lg:min-w-64">
         <button
           type="button"
           onclick={handleSyncEmployeeInfo}
           disabled={syncPending}
-          class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
+          class="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
         >
           {syncPending ? 'Syncing…' : 'Sync Employee Info'}
         </button>
         {#if syncError}
-          <p class="text-sm text-red-400">{syncError}</p>
+          <p class="text-sm text-destructive">{syncError}</p>
         {/if}
         {#if syncResult}
           <div class="space-y-1 text-sm">
-            <p class="text-green-400">Updated: {syncResult.updated}</p>
+            <p class="text-status-active">Updated: {syncResult.updated}</p>
             {#if syncResult.created.length > 0}
-              <p class="text-blue-400">Created: {syncResult.created.length}</p>
-              <ul class="ml-2 space-y-0.5 text-xs text-neutral-400">
+              <p class="text-primary">Created: {syncResult.created.length}</p>
+              <ul class="ml-2 space-y-0.5 text-xs text-muted-foreground">
                 {#each syncResult.created.slice(0, 5) as c}
                   <li>{c.sheetName} — {c.personalEmail}</li>
                 {/each}
               </ul>
             {/if}
             {#if syncResult.unmatched.length > 0}
-              <p class="text-yellow-400">Unmatched: {syncResult.unmatched.length}</p>
-              <ul class="ml-2 space-y-0.5 text-xs text-neutral-400">
+              <p class="text-status-pending">Unmatched: {syncResult.unmatched.length}</p>
+              <ul class="ml-2 space-y-0.5 text-xs text-muted-foreground">
                 {#each syncResult.unmatched.slice(0, 5) as u}
                   <li>{u.sheetName} — {u.reason}</li>
                 {/each}
               </ul>
             {/if}
             {#if syncResult.errors.length > 0}
-              <p class="text-red-400">Errors: {syncResult.errors.length}</p>
-              <ul class="ml-2 space-y-0.5 text-xs text-red-300">
+              <p class="text-destructive">Errors: {syncResult.errors.length}</p>
+              <ul class="ml-2 space-y-0.5 text-xs text-destructive/80">
                 {#each syncResult.errors.slice(0, 5) as e}
                   <li>{e}</li>
                 {/each}
@@ -235,11 +235,11 @@
     </div>
   </div>
 
-  <div class="mb-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+  <div class="mb-6 rounded-xl border border-border bg-card p-5">
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div class="max-w-2xl space-y-2">
         <h2 class="text-sm font-semibold">Import employees from Google Admin CSV</h2>
-        <p class="text-sm text-neutral-400">
+        <p class="text-sm text-muted-foreground">
           Upload file export seperti <code>User_Download_15042026_093211.csv</code>. Sistem hanya membuat
           employee baru dengan status <strong>Active</strong>; employee yang sudah ada akan dilewati.
         </p>
@@ -250,14 +250,14 @@
           type="file"
           accept=".csv,text/csv"
           onchange={handleCsvFileChange}
-          class="block w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-neutral-800 file:px-3 file:py-1.5 file:text-sm file:text-neutral-200"
+          class="block w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:text-foreground"
         />
         <div class="flex gap-3">
           <button
             type="button"
             onclick={handlePreviewCsv}
             disabled={!csvFile || $importMutation.isPending}
-            class="rounded-lg border border-neutral-700 px-4 py-2 text-sm font-medium hover:bg-neutral-800 disabled:opacity-50"
+            class="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
           >
             {$importMutation.isPending && !previewReady ? 'Previewing…' : 'Preview CSV'}
           </button>
@@ -265,7 +265,7 @@
             type="button"
             onclick={handleImportCsv}
             disabled={!csvFile || !previewReady || $importMutation.isPending}
-            class="rounded-lg bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-white disabled:opacity-50"
+            class="rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50"
           >
             {$importMutation.isPending && previewReady ? 'Importing…' : 'Import CSV'}
           </button>
@@ -274,51 +274,51 @@
     </div>
 
     {#if csvFile}
-      <p class="mt-3 text-xs text-neutral-500">
+      <p class="mt-3 text-xs text-muted-foreground">
         Selected file: {csvFile.name} ({(csvFile.size / 1024).toFixed(1)} KB)
       </p>
     {/if}
 
     {#if importError}
-      <p class="mt-3 text-sm text-red-400">{importError}</p>
+      <p class="mt-3 text-sm text-destructive">{importError}</p>
     {/if}
     {#if importSuccess}
-      <p class="mt-3 text-sm text-green-400">{importSuccess}</p>
+      <p class="mt-3 text-sm text-status-active">{importSuccess}</p>
     {/if}
 
     {#if importResult}
-      <div class="mt-4 space-y-3 border-t border-neutral-800 pt-4">
+      <div class="mt-4 space-y-3 border-t border-border pt-4">
         <div class="grid gap-3 sm:grid-cols-5">
-          <div class="rounded-lg bg-neutral-950 p-3">
-            <p class="text-xs text-neutral-500">Parsed</p>
+          <div class="rounded-lg bg-muted p-3">
+            <p class="text-xs text-muted-foreground">Parsed</p>
             <p class="mt-1 text-lg font-semibold">{importResult.parsedCount}</p>
           </div>
-          <div class="rounded-lg bg-neutral-950 p-3">
-            <p class="text-xs text-neutral-500">{importResult.mode === 'preview' ? 'Ready to create' : 'Created'}</p>
-            <p class="mt-1 text-lg font-semibold text-green-400">
+          <div class="rounded-lg bg-muted p-3">
+            <p class="text-xs text-muted-foreground">{importResult.mode === 'preview' ? 'Ready to create' : 'Created'}</p>
+            <p class="mt-1 text-lg font-semibold text-status-active">
               {importResult.mode === 'preview' ? importResult.previewCount : importResult.createdCount}
             </p>
           </div>
-          <div class="rounded-lg bg-neutral-950 p-3">
-            <p class="text-xs text-neutral-500">Skipped</p>
-            <p class="mt-1 text-lg font-semibold text-yellow-400">{importResult.skippedCount}</p>
+          <div class="rounded-lg bg-muted p-3">
+            <p class="text-xs text-muted-foreground">Skipped</p>
+            <p class="mt-1 text-lg font-semibold text-status-pending">{importResult.skippedCount}</p>
           </div>
-          <div class="rounded-lg bg-neutral-950 p-3">
-            <p class="text-xs text-neutral-500">Flagged</p>
-            <p class="mt-1 text-lg font-semibold text-orange-400">{importResult.flaggedCount}</p>
+          <div class="rounded-lg bg-muted p-3">
+            <p class="text-xs text-muted-foreground">Flagged</p>
+            <p class="mt-1 text-lg font-semibold text-status-pending">{importResult.flaggedCount}</p>
           </div>
-          <div class="rounded-lg bg-neutral-950 p-3">
-            <p class="text-xs text-neutral-500">Errors</p>
-            <p class="mt-1 text-lg font-semibold text-red-400">{importResult.errorCount}</p>
+          <div class="rounded-lg bg-muted p-3">
+            <p class="text-xs text-muted-foreground">Errors</p>
+            <p class="mt-1 text-lg font-semibold text-destructive">{importResult.errorCount}</p>
           </div>
         </div>
 
         {#if importResult.mode === 'preview' && importResult.preview.length > 0}
           <div>
-            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Preview</h3>
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Preview</h3>
             <div class="space-y-1 text-sm">
               {#each importResult.preview.slice(0, 10) as row}
-                <p>{row.email} <span class="text-neutral-500">({row.name})</span></p>
+                <p>{row.email} <span class="text-muted-foreground">({row.name})</span></p>
               {/each}
             </div>
           </div>
@@ -326,10 +326,10 @@
 
         {#if importResult.mode === 'commit' && importResult.created.length > 0}
           <div>
-            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Created</h3>
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Created</h3>
             <div class="space-y-1 text-sm">
               {#each importResult.created.slice(0, 10) as row}
-                <p>{row.email} <span class="text-neutral-500">({row.name})</span></p>
+                <p>{row.email} <span class="text-muted-foreground">({row.name})</span></p>
               {/each}
             </div>
           </div>
@@ -337,8 +337,8 @@
 
         {#if importResult.skipped.length > 0}
           <div>
-            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Skipped</h3>
-            <div class="space-y-1 text-sm text-neutral-400">
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Skipped</h3>
+            <div class="space-y-1 text-sm text-muted-foreground">
               {#each importResult.skipped.slice(0, 10) as row}
                 <p>Row {row.rowNumber}{row.email ? ` — ${row.email}` : ''}: {row.reason}</p>
               {/each}
@@ -349,7 +349,7 @@
         {#if importResult.flagged.length > 0}
           <div>
             <div class="mb-2 flex items-center justify-between">
-              <h3 class="text-xs font-semibold uppercase tracking-wide text-orange-400">Needs Review</h3>
+              <h3 class="text-xs font-semibold uppercase tracking-wide text-status-pending">Needs Review</h3>
               {#if importResult.flagged.some((f) => f.existingId && !mergedIds.has(f.existingId))}
                 <button
                   type="button"
@@ -361,29 +361,29 @@
                 </button>
               {/if}
             </div>
-            <p class="mb-2 text-xs text-neutral-500">These CSV rows match a non-workspace user by name. Merge to upgrade the existing employee with their workspace email.</p>
-            <div class="space-y-2 text-sm text-neutral-400">
+            <p class="mb-2 text-xs text-muted-foreground">These CSV rows match a non-workspace user by name. Merge to upgrade the existing employee with their workspace email.</p>
+            <div class="space-y-2 text-sm text-muted-foreground">
               {#each importResult.flagged as row}
                 {#if mergedIds.has(row.existingId)}
-                  <p class="text-green-400">Row {row.rowNumber} — {row.csvName} merged successfully</p>
+                  <p class="text-status-active">Row {row.rowNumber} — {row.csvName} merged successfully</p>
                 {:else}
                   <div class="flex items-start justify-between gap-3">
-                    <p>Row {row.rowNumber} — <span class="text-white">{row.csvName}</span> ({row.csvEmail}) matches existing: <span class="text-indigo-400">{row.existingName}</span> ({row.existingEmail})</p>
+                    <p>Row {row.rowNumber} — <span class="text-foreground">{row.csvName}</span> ({row.csvEmail}) matches existing: <span class="text-primary">{row.existingName}</span> ({row.existingEmail})</p>
                     {#if row.existingId}
                       <button
                         type="button"
                         onclick={() => handleMergeOne(row)}
                         disabled={$upgradeMutation.isPending}
-                        class="shrink-0 rounded-md border border-orange-600 px-3 py-1 text-xs font-medium text-orange-400 hover:bg-orange-600 hover:text-white disabled:opacity-50"
+                        class="shrink-0 rounded-md border border-orange-600 px-3 py-1 text-xs font-medium text-status-pending hover:bg-orange-600 hover:text-foreground disabled:opacity-50"
                       >
                         Merge
                       </button>
                     {:else}
-                      <span class="shrink-0 text-xs text-neutral-600">Ambiguous</span>
+                      <span class="shrink-0 text-xs text-muted-foreground">Ambiguous</span>
                     {/if}
                   </div>
                   {#if mergeErrors.has(row.existingId)}
-                    <p class="ml-4 text-xs text-red-400">{mergeErrors.get(row.existingId)}</p>
+                    <p class="ml-4 text-xs text-destructive">{mergeErrors.get(row.existingId)}</p>
                   {/if}
                 {/if}
               {/each}
@@ -393,8 +393,8 @@
 
         {#if importResult.errors.length > 0}
           <div>
-            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-red-400">Errors</h3>
-            <div class="space-y-1 text-sm text-red-300">
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-destructive">Errors</h3>
+            <div class="space-y-1 text-sm text-destructive/80">
               {#each importResult.errors.slice(0, 10) as row}
                 <p>Row {row.rowNumber}{row.email ? ` — ${row.email}` : ''}: {row.message}</p>
               {/each}
@@ -405,7 +405,7 @@
     {/if}
   </div>
 
-  <input type="text" placeholder="Search by email..." bind:value={search} class="mb-4 w-full max-w-sm rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+  <input type="text" placeholder="Search by email..." bind:value={search} class="mb-4 w-full max-w-sm rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
 
   <div class="mb-3">
     <BatchToolbar
@@ -420,15 +420,15 @@
   {#if $query.isLoading}
     <div class="animate-pulse space-y-2">
       {#each Array(5) as _}
-        <div class="h-12 rounded-lg bg-neutral-800"></div>
+        <div class="h-12 rounded-lg bg-muted"></div>
       {/each}
     </div>
   {:else if $query.data}
     <table class="w-full text-sm">
       <thead>
-        <tr class="border-b border-neutral-800 text-left text-xs text-neutral-400">
+        <tr class="border-b border-border text-left text-xs text-muted-foreground">
           <th class="pb-2 w-8">
-            <input type="checkbox" checked={allSelected} onchange={toggleAll} class="rounded border-neutral-700" />
+            <input type="checkbox" checked={allSelected} onchange={toggleAll} class="rounded border-border" />
           </th>
           <th class="pb-2 font-medium">Name</th>
           <th class="pb-2 font-medium">Email</th>
@@ -440,21 +440,21 @@
       </thead>
       <tbody>
         {#each $query.data.data as employee}
-          <tr class="border-b border-neutral-800/50 hover:bg-neutral-900">
+          <tr class="border-b border-border/50 hover:bg-accent">
             <td class="py-2">
-              <input type="checkbox" checked={selected.has(employee.id)} onchange={() => toggleOne(employee.id)} class="rounded border-neutral-700" />
+              <input type="checkbox" checked={selected.has(employee.id)} onchange={() => toggleOne(employee.id)} class="rounded border-border" />
             </td>
-            <td class="py-2"><a href="/admin/employees/{employee.id}" class="text-indigo-400 hover:text-indigo-300">{employee.name}</a></td>
-            <td class="py-2 text-neutral-400">{employee.email}</td>
-            <td class="py-2 text-neutral-400">{employee.personalEmail ?? '—'}</td>
-            <td class="py-2"><span class="rounded-full bg-neutral-800 px-2 py-0.5 text-xs">{employee.portalRole}</span></td>
-            <td class="py-2"><span class="text-xs" class:text-green-400={employee.status === 'active'} class:text-red-400={employee.status !== 'active'}>{employee.status}</span></td>
+            <td class="py-2"><a href="/admin/employees/{employee.id}" class="text-primary hover:text-primary/80">{employee.name}</a></td>
+            <td class="py-2 text-muted-foreground">{employee.email}</td>
+            <td class="py-2 text-muted-foreground">{employee.personalEmail ?? '—'}</td>
+            <td class="py-2"><span class="rounded-full bg-muted px-2 py-0.5 text-xs">{employee.portalRole}</span></td>
+            <td class="py-2"><span class="text-xs" class:text-status-active={employee.status === 'active'} class:text-destructive={employee.status !== 'active'}>{employee.status}</span></td>
             <td class="py-2">
               <span
                 class="text-xs"
-                class:text-green-400={employee.provisioningStatus === 'ready'}
-                class:text-yellow-400={employee.provisioningStatus === 'pending' || employee.provisioningStatus === 'processing'}
-                class:text-red-400={employee.provisioningStatus === 'failed'}
+                class:text-status-active={employee.provisioningStatus === 'ready'}
+                class:text-status-pending={employee.provisioningStatus === 'pending' || employee.provisioningStatus === 'processing'}
+                class:text-destructive={employee.provisioningStatus === 'failed'}
               >
                 {employee.provisioningStatus}
               </span>
@@ -464,12 +464,12 @@
       </tbody>
     </table>
 
-    <div class="mt-4 flex items-center justify-between text-xs text-neutral-500">
+    <div class="mt-4 flex items-center justify-between text-xs text-muted-foreground">
       <span>{$query.data.total} total</span>
       <div class="flex gap-2">
-        <button onclick={() => page = Math.max(1, page - 1)} disabled={page === 1} class="rounded px-2 py-1 hover:bg-neutral-800 disabled:opacity-30">Prev</button>
+        <button onclick={() => page = Math.max(1, page - 1)} disabled={page === 1} class="rounded px-2 py-1 hover:bg-accent disabled:opacity-30">Prev</button>
         <span>Page {page}</span>
-        <button onclick={() => page++} disabled={$query.data.data.length < 20} class="rounded px-2 py-1 hover:bg-neutral-800 disabled:opacity-30">Next</button>
+        <button onclick={() => page++} disabled={$query.data.data.length < 20} class="rounded px-2 py-1 hover:bg-accent disabled:opacity-30">Next</button>
       </div>
     </div>
   {/if}

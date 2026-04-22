@@ -1,6 +1,7 @@
 <script lang="ts">
   import { dashboardQuery } from '$lib/queries/dashboard'
   import AppCard from '$lib/components/app-card.svelte'
+  import { AppWindow } from 'lucide-svelte'
 
   const query = dashboardQuery()
 </script>
@@ -25,7 +26,7 @@
 {:else}
   <div class="flex flex-col items-center justify-center py-20 text-center">
     <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-      <span class="text-2xl">🔲</span>
+      <AppWindow class="h-7 w-7 text-primary" />
     </div>
     <p class="text-sm font-medium text-foreground">No applications assigned</p>
     <p class="mt-1 text-xs text-muted-foreground">Contact your administrator to get access.</p>

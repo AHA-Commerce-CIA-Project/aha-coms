@@ -53,13 +53,13 @@
 </script>
 
 {#if selectedCount > 0}
-  <div class="flex items-center gap-3 rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm">
-    <span class="text-xs text-neutral-400">{selectedCount} selected</span>
+  <div class="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2 text-sm">
+    <span class="text-xs text-muted-foreground">{selectedCount} selected</span>
 
     <select
       bind:value={activeAction}
       onchange={() => { activeValue = '' }}
-      class="rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none"
+      class="rounded-lg border border-border bg-muted px-2 py-1 text-xs focus:border-ring focus:outline-none"
     >
       <option value={null}>Action...</option>
       {#each actions as action}
@@ -70,7 +70,7 @@
     {#if currentAction}
       <select
         bind:value={activeValue}
-        class="rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none"
+        class="rounded-lg border border-border bg-muted px-2 py-1 text-xs focus:border-ring focus:outline-none"
       >
         <option value="">Select...</option>
         {#each currentAction.options as opt}
@@ -82,7 +82,7 @@
         <button
           onclick={handleApplyClick}
           disabled={isPending}
-          class="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+          class="rounded-lg bg-primary text-primary-foreground px-3 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
         >
           Apply
         </button>
@@ -91,17 +91,17 @@
   </div>
 
   {#if showConfirm}
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div class="w-full max-w-sm rounded-xl border border-neutral-700 bg-neutral-900 p-6">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
+      <div class="w-full max-w-sm rounded-xl border border-border bg-card p-6">
         <p class="mb-4 text-sm">
           {currentAction?.label} to <strong>{currentAction?.options.find((o) => o.value === activeValue)?.label}</strong> for <strong>{selectedCount}</strong> {entityLabel}{selectedCount > 1 ? 's' : ''}?
         </p>
         <div class="flex justify-end gap-2">
-          <button onclick={handleCancel} class="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs hover:bg-neutral-800">Cancel</button>
+          <button onclick={handleCancel} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">Cancel</button>
           <button
             onclick={handleConfirm}
             disabled={isPending}
-            class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
+            class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
           >
             {isPending ? 'Applying...' : 'Confirm'}
           </button>
