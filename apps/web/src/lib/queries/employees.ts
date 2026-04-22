@@ -29,7 +29,7 @@ export function createEmployeeMutation() {
       branch?: 'indonesia' | 'thailand'
       portalRole?: PortalRole
       teamId?: string
-      mobilePhone?: string
+
       birthDate?: string
       leaderName?: string
     }) => adminApi.createEmployee(body),
@@ -49,7 +49,7 @@ export function updateEmployeeMutation() {
         email?: string
         hasGoogleWorkspace?: boolean
         phone?: string
-        mobilePhone?: string
+  
         birthDate?: string
         leaderName?: string
         position?: string
@@ -85,6 +85,29 @@ export function importEmployeesCsvMutation() {
       if (result.mode === 'commit') {
         queryClient.invalidateQueries({ queryKey: ['employees'] })
       }
+    },
+  })
+}
+
+export function upgradeWorkspaceMutation() {
+  const queryClient = useQueryClient()
+  return createMutation({
+    mutationFn: (body: {
+      id: string
+      workspaceEmail: string
+      name?: string
+      department?: string
+      position?: string
+      phone?: string
+    }) => adminApi.upgradeEmployeeWorkspace(body.id, {
+      workspaceEmail: body.workspaceEmail,
+      name: body.name,
+      department: body.department,
+      position: body.position,
+      phone: body.phone,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
     },
   })
 }

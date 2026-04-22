@@ -1,5 +1,5 @@
   <script lang="ts">
-  import { employeesQuery, batchUpdateEmployeesMutation, importEmployeesCsvMutation } from '$lib/queries/employees'
+  import { employeesQuery, batchUpdateEmployeesMutation, importEmployeesCsvMutation, upgradeWorkspaceMutation } from '$lib/queries/employees'
   import BatchToolbar from '$lib/components/batch-toolbar.svelte'
   import { PORTAL_ROLE_LABELS, PORTAL_ROLES } from '@coms-portal/shared'
   import { adminApi } from '$lib/admin-api'
@@ -13,6 +13,42 @@
   const query = $derived(employeesQuery(page, 20, search))
   const mutation = batchUpdateEmployeesMutation()
   const importMutation = importEmployeesCsvMutation()
+
+  const upgradeMutation = upgradeWorkspaceMutation()
+  let mergedIds = $state<Set<string>>(new Set())
+  let mergeErrors = $state<Map<string, string>>(new Map())
+  let mergingAll = $state(false)
+
+  async function handleMergeOne(flagged: { existingId: string; csvEmail: string; csvName: string; csvDepartment?: string; csvPosition?: string; csvPhone?: string }) {
+    mergeErrors = new Map(mergeErrors)
+    mergeErrors.delete(flagged.existingId)
+    try {
+      await $upgradeMutation.mutateAsync({
+        id: flagged.existingId,
+        workspaceEmail: flagged.csvEmail,
+        name: flagged.csvName,
+        department: flagged.csvDepartment,
+        position: flagged.csvPosition,
+        phone: flagged.csvPhone,
+      })
+      mergedIds = new Set(mergedIds).add(flagged.existingId)
+    } catch (err) {
+      mergeErrors = new Map(mergeErrors).set(
+        flagged.existingId,
+        err instanceof Error ? err.message : 'Merge failed',
+      )
+    }
+  }
+
+  async function handleMergeAll() {
+    if (!importResult?.flagged) return
+    mergingAll = true
+    const mergeable = importResult.flagged.filter((f) => f.existingId && !mergedIds.has(f.existingId))
+    for (const flagged of mergeable) {
+      await handleMergeOne(flagged)
+    }
+    mergingAll = false
+  }
 
   const BATCH_ACTIONS = [
     {
@@ -60,7 +96,7 @@
     skippedCount: number
     errorCount: number
     flaggedCount: number
-    flagged: Array<{ rowNumber: number; csvEmail: string; csvName: string; existingName: string; existingEmail: string }>
+    flagged: Array<{ rowNumber: number; csvEmail: string; csvName: string; csvDepartment?: string; csvPosition?: string; csvPhone?: string; existingId: string; existingName: string; existingEmail: string }>
     preview: Array<{ rowNumber: number; email: string; name: string }>
     created: Array<{ rowNumber: number; id: string; email: string; name: string }>
     skipped: Array<{ rowNumber: number; email?: string; reason: string }>
@@ -312,11 +348,44 @@
 
         {#if importResult.flagged.length > 0}
           <div>
-            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-orange-400">Needs Review</h3>
-            <p class="mb-2 text-xs text-neutral-500">These CSV rows match a non-workspace user by name. Update the existing employee record with their workspace email instead of creating a new one.</p>
-            <div class="space-y-1 text-sm text-neutral-400">
-              {#each importResult.flagged.slice(0, 10) as row}
-                <p>Row {row.rowNumber} — <span class="text-white">{row.csvName}</span> ({row.csvEmail}) matches existing: <a href="/admin/employees" class="text-indigo-400 hover:text-indigo-300">{row.existingName}</a> ({row.existingEmail})</p>
+            <div class="mb-2 flex items-center justify-between">
+              <h3 class="text-xs font-semibold uppercase tracking-wide text-orange-400">Needs Review</h3>
+              {#if importResult.flagged.some((f) => f.existingId && !mergedIds.has(f.existingId))}
+                <button
+                  type="button"
+                  onclick={handleMergeAll}
+                  disabled={mergingAll || $upgradeMutation.isPending}
+                  class="rounded-md bg-orange-600 px-3 py-1 text-xs font-medium hover:bg-orange-500 disabled:opacity-50"
+                >
+                  {mergingAll ? 'Merging…' : 'Merge All'}
+                </button>
+              {/if}
+            </div>
+            <p class="mb-2 text-xs text-neutral-500">These CSV rows match a non-workspace user by name. Merge to upgrade the existing employee with their workspace email.</p>
+            <div class="space-y-2 text-sm text-neutral-400">
+              {#each importResult.flagged as row}
+                {#if mergedIds.has(row.existingId)}
+                  <p class="text-green-400">Row {row.rowNumber} — {row.csvName} merged successfully</p>
+                {:else}
+                  <div class="flex items-start justify-between gap-3">
+                    <p>Row {row.rowNumber} — <span class="text-white">{row.csvName}</span> ({row.csvEmail}) matches existing: <span class="text-indigo-400">{row.existingName}</span> ({row.existingEmail})</p>
+                    {#if row.existingId}
+                      <button
+                        type="button"
+                        onclick={() => handleMergeOne(row)}
+                        disabled={$upgradeMutation.isPending}
+                        class="shrink-0 rounded-md border border-orange-600 px-3 py-1 text-xs font-medium text-orange-400 hover:bg-orange-600 hover:text-white disabled:opacity-50"
+                      >
+                        Merge
+                      </button>
+                    {:else}
+                      <span class="shrink-0 text-xs text-neutral-600">Ambiguous</span>
+                    {/if}
+                  </div>
+                  {#if mergeErrors.has(row.existingId)}
+                    <p class="ml-4 text-xs text-red-400">{mergeErrors.get(row.existingId)}</p>
+                  {/if}
+                {/if}
               {/each}
             </div>
           </div>

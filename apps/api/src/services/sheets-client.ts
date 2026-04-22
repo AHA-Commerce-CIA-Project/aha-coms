@@ -23,8 +23,7 @@ function buildSheetsAuth() {
 export interface EmployeeInfoSheetRow {
   fullName: string
   personalEmail: string
-  phone: string        // WA column
-  mobilePhone: string  // HP column
+  phone: string        // HP column
   birthDate: string    // Tanggal Lahir — raw string from sheet
   teamName: string     // Tim
   position: string     // Jabatan
@@ -57,7 +56,6 @@ export async function readEmployeeInfoSheet(): Promise<EmployeeInfoSheetRow[]> {
 
   const iNama = col('Nama Lengkap')
   const iEmail = col('Email')
-  const iWA = col('WA')
   const iHP = col('HP')
   const iTanggalLahir = col('Tanggal Lahir')
   const iTim = col('Tim')
@@ -78,8 +76,7 @@ export async function readEmployeeInfoSheet(): Promise<EmployeeInfoSheetRow[]> {
     results.push({
       fullName,
       personalEmail: get(iEmail),
-      phone: get(iWA),
-      mobilePhone: get(iHP),
+      phone: get(iHP),
       birthDate: get(iTanggalLahir),
       teamName: get(iTim),
       position: get(iJabatan),

@@ -8,6 +8,7 @@ export type AuditAction =
   | 'update_employee'
   | 'batch_update_employee'
   | 'deactivate_employee'
+  | 'upgrade_workspace'
   | 'create_team'
   | 'update_team'
   | 'delete_team'

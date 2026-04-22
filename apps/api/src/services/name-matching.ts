@@ -22,7 +22,7 @@ export function matchScore(a: string, b: string): number {
 
   if (at.full === bt.full) return 2
   if (at.first === bt.first && at.last === bt.last) return 1
-  if (!at.last && at.first === bt.first) return 1
+  if ((!at.last || !bt.last) && at.first === bt.first) return 1
 
   return 0
 }

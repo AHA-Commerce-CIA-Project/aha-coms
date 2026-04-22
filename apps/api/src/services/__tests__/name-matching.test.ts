@@ -48,6 +48,19 @@ describe('matchScore', () => {
     expect(matchScore('Pauzi', 'Pauzi AHA')).toBe(1)
   })
 
+  test('DB single-word name matching sheet multi-word name returns 1 (symmetric)', () => {
+    expect(matchScore('Fauzi AHA', 'Fauzi')).toBe(1)
+  })
+
+  test('both directions match symmetrically for single-name cases', () => {
+    expect(matchScore('Fauzi', 'Fauzi AHA')).toBe(1)
+    expect(matchScore('Fauzi AHA', 'Fauzi')).toBe(1)
+  })
+
+  test('different last names still return 0 when both have last names', () => {
+    expect(matchScore('Fauzi AHA', 'Fauzi Ramadhan')).toBe(0)
+  })
+
   test('different first names return 0 even with same last name', () => {
     expect(matchScore('John Doe', 'Jane Doe')).toBe(0)
   })

@@ -42,12 +42,6 @@
   let phonePending = $state(false)
   let phoneError = $state<string | null>(null)
 
-  // Mobile Phone (HP)
-  let editingMobilePhone = $state(false)
-  let mobilePhoneValue = $state('')
-  let mobilePhonePending = $state(false)
-  let mobilePhoneError = $state<string | null>(null)
-
   // Birth Date
   let editingBirthDate = $state(false)
   let birthDateValue = $state('')
@@ -173,19 +167,6 @@
       phoneError = error instanceof Error ? error.message : 'Failed to save'
     } finally {
       phonePending = false
-    }
-  }
-
-  async function handleSaveMobilePhone() {
-    mobilePhoneError = null
-    mobilePhonePending = true
-    try {
-      await $mutation.mutateAsync({ id, data: { mobilePhone: mobilePhoneValue } })
-      editingMobilePhone = false
-    } catch (error) {
-      mobilePhoneError = error instanceof Error ? error.message : 'Failed to save'
-    } finally {
-      mobilePhonePending = false
     }
   }
 
@@ -446,50 +427,6 @@
               <span class="text-sm">{emp.phone ?? '-'}</span>
               <button
                 onclick={() => { editingPhone = true; phoneValue = emp.phone ?? '' }}
-                class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
-              >
-                Edit
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Mobile Phone / HP (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-neutral-800 pb-2">
-        <span class="text-xs text-neutral-400">Mobile (HP)</span>
-        <div class="text-right">
-          {#if editingMobilePhone}
-            <div class="flex flex-col items-end gap-2">
-              <input
-                type="text"
-                bind:value={mobilePhoneValue}
-                class="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
-              />
-              {#if mobilePhoneError}
-                <p class="text-xs text-red-400">{mobilePhoneError}</p>
-              {/if}
-              <div class="flex gap-2">
-                <button
-                  onclick={handleSaveMobilePhone}
-                  disabled={mobilePhonePending}
-                  class="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500 disabled:opacity-50"
-                >
-                  {mobilePhonePending ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onclick={() => { editingMobilePhone = false; mobilePhoneError = null }}
-                  class="rounded-lg border border-neutral-700 px-2.5 py-1 text-xs hover:bg-neutral-800"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {:else}
-            <div class="flex items-center gap-2">
-              <span class="text-sm">{(emp as any).mobilePhone ?? '-'}</span>
-              <button
-                onclick={() => { editingMobilePhone = true; mobilePhoneValue = (emp as any).mobilePhone ?? '' }}
                 class="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
               >
                 Edit

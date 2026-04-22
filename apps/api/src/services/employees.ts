@@ -16,7 +16,7 @@ export async function createEmployee(data: {
   department?: string
   position?: string
   branch?: string
-  mobilePhone?: string
+
   birthDate?: string
   leaderName?: string
   portalRole?: string
@@ -35,7 +35,7 @@ export async function createEmployee(data: {
         department: data.department,
         position: data.position,
         branch: data.branch,
-        mobilePhone: data.mobilePhone,
+
         birthDate: data.birthDate,
         leaderName: data.leaderName,
         portalRole: data.portalRole ?? 'employee',
