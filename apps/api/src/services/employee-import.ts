@@ -28,6 +28,10 @@ export interface EmployeeCsvImportResult {
     rowNumber: number
     csvEmail: string
     csvName: string
+    csvDepartment?: string
+    csvPosition?: string
+    csvPhone?: string
+    existingId: string
     existingName: string
     existingEmail: string
   }>
@@ -143,9 +147,6 @@ export function parseGoogleAdminUsersCsv(csv: string): ParsedGoogleAdminUserRow[
     const firstName = getValue(row, HEADER_KEYS.firstName)
     const lastName = getValue(row, HEADER_KEYS.lastName)
     const fullName = [firstName, lastName].filter(Boolean).join(' ').trim()
-    const workPhone = getValue(row, HEADER_KEYS.workPhone)
-    const mobilePhone = getValue(row, HEADER_KEYS.mobilePhone)
-
     return {
       rowNumber: index + 2,
       firstName,
@@ -155,7 +156,7 @@ export function parseGoogleAdminUsersCsv(csv: string): ParsedGoogleAdminUserRow[
       status: getValue(row, HEADER_KEYS.status),
       department: getValue(row, HEADER_KEYS.department) || undefined,
       position: getValue(row, HEADER_KEYS.position) || undefined,
-      phone: workPhone || mobilePhone || undefined,
+      phone: getValue(row, HEADER_KEYS.workPhone) || getValue(row, HEADER_KEYS.mobilePhone) || undefined,
     }
   })
 }
@@ -225,6 +226,10 @@ export async function importEmployeesFromGoogleAdminCsv(
         rowNumber: row.rowNumber,
         csvEmail: row.email,
         csvName: row.fullName,
+        csvDepartment: row.department,
+        csvPosition: row.position,
+        csvPhone: row.phone,
+        existingId: nwAmbiguous ? '' : nwMatch!.id,
         existingName: nwAmbiguous ? '(multiple matches)' : nwMatch!.name,
         existingEmail: nwAmbiguous ? '(ambiguous)' : nwMatch!.email,
       })

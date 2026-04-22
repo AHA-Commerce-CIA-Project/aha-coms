@@ -18,7 +18,7 @@ export const identityUsers = pgTable('identity_users', {
   branch: varchar('branch', { length: 50 }),
   portalRole: varchar('portal_role', { length: 20 }).notNull().default('employee'),
   personalEmail: varchar('personal_email', { length: 255 }),
-  mobilePhone: varchar('mobile_phone', { length: 20 }),
+
   birthDate: varchar('birth_date', { length: 10 }),
   leaderName: varchar('leader_name', { length: 255 }),
   hasGoogleWorkspace: boolean('has_google_workspace').notNull().default(false),

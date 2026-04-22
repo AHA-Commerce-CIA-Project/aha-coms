@@ -65,6 +65,10 @@ export interface CsvImportResult {
     rowNumber: number
     csvEmail: string
     csvName: string
+    csvDepartment?: string
+    csvPosition?: string
+    csvPhone?: string
+    existingId: string
     existingName: string
     existingEmail: string
   }>
@@ -225,6 +229,18 @@ export const adminApi = {
   },
   importEmployeesCsv(body: { csv: string; preview?: boolean }) {
     return requestJson<CsvImportResult>(`/api/v1/employees/import-csv`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+  upgradeEmployeeWorkspace(id: string, body: {
+    workspaceEmail: string
+    name?: string
+    department?: string
+    position?: string
+    phone?: string
+  }) {
+    return requestJson<{ ok: true }>(`/api/v1/employees/${id}/upgrade-workspace`, {
       method: 'POST',
       body: JSON.stringify(body),
     })

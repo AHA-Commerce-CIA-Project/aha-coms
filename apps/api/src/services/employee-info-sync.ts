@@ -71,7 +71,6 @@ export async function syncEmployeeInfo(): Promise<EmployeeInfoSyncResult> {
       const fields: Partial<typeof identityUsers.$inferInsert> = { updatedAt: new Date() }
       if (row.personalEmail) fields.personalEmail = row.personalEmail
       if (row.phone) fields.phone = row.phone
-      if (row.mobilePhone) fields.mobilePhone = row.mobilePhone
       if (row.birthDate) fields.birthDate = row.birthDate
       if (row.position) fields.position = row.position
       if (row.leaderName) fields.leaderName = row.leaderName

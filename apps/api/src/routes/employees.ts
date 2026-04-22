@@ -24,7 +24,7 @@ const employeeBody = t.Object({
   ),
   teamId: t.Optional(t.String()),
   hasGoogleWorkspace: t.Optional(t.Boolean()),
-  mobilePhone: t.Optional(t.String()),
+
   birthDate: t.Optional(t.String()),
   leaderName: t.Optional(t.String()),
 })
@@ -51,7 +51,7 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
             department: identityUsers.department,
             position: identityUsers.position,
             branch: identityUsers.branch,
-            mobilePhone: identityUsers.mobilePhone,
+
             birthDate: identityUsers.birthDate,
             leaderName: identityUsers.leaderName,
             portalRole: identityUsers.portalRole,
@@ -168,7 +168,6 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         department: identityUsers.department,
         position: identityUsers.position,
         branch: identityUsers.branch,
-        mobilePhone: identityUsers.mobilePhone,
         birthDate: identityUsers.birthDate,
         leaderName: identityUsers.leaderName,
         portalRole: identityUsers.portalRole,
@@ -276,3 +275,89 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
     await generatePasswordResetLink(employee.email)
     return { ok: true, email: employee.email }
   })
+
+  .post(
+    '/:id/upgrade-workspace',
+    async ({ params, body, authUser, set }) => {
+      const employee = await db.query.identityUsers.findFirst({
+        where: eq(identityUsers.id, params.id),
+      })
+
+      if (!employee) {
+        set.status = 404
+        return { message: 'Not found' }
+      }
+
+      if (employee.hasGoogleWorkspace) {
+        set.status = 400
+        return { message: 'Employee already has a Google Workspace account' }
+      }
+
+      // Check workspace email is not already taken
+      const emailTaken = await db
+        .select({ id: identityUsers.id })
+        .from(identityUsers)
+        .where(eq(identityUsers.email, body.workspaceEmail.toLowerCase()))
+        .limit(1)
+
+      if (emailTaken.length > 0) {
+        set.status = 409
+        return { message: `Email ${body.workspaceEmail} is already in use by another employee` }
+      }
+
+      // Preserve current email as personalEmail if not already set
+      const personalEmail = employee.personalEmail ?? employee.email
+
+      // Build update fields
+      const updates: Record<string, unknown> = {
+        email: body.workspaceEmail.toLowerCase(),
+        personalEmail,
+        hasGoogleWorkspace: true,
+        source: 'csv_import',
+        updatedAt: new Date(),
+      }
+
+      const changedFields = ['email', 'personalEmail', 'hasGoogleWorkspace', 'source']
+
+      if (body.name) { updates.name = body.name; changedFields.push('name') }
+      if (body.department) { updates.department = body.department; changedFields.push('department') }
+      if (body.position) { updates.position = body.position; changedFields.push('position') }
+      if (body.phone) { updates.phone = body.phone; changedFields.push('phone') }
+
+      // Update GIP email if provisioned
+      if (employee.gipUid) {
+        await updateGipUserEmail(employee.gipUid, body.workspaceEmail.toLowerCase())
+      }
+
+      await db
+        .update(identityUsers)
+        .set(updates)
+        .where(eq(identityUsers.id, params.id))
+
+      await logAudit({
+        actorId: authUser.id,
+        action: 'upgrade_workspace',
+        targetType: 'user',
+        targetId: params.id,
+        details: {
+          previousEmail: employee.email,
+          workspaceEmail: body.workspaceEmail,
+        },
+      })
+
+      emitUserUpdated(params.id, changedFields).catch((err) => {
+        console.error(`[provisioning-events] emitUserUpdated failed for ${params.id}:`, err)
+      })
+
+      return { ok: true }
+    },
+    {
+      body: t.Object({
+        workspaceEmail: t.String({ format: 'email' }),
+        name: t.Optional(t.String()),
+        department: t.Optional(t.String()),
+        position: t.Optional(t.String()),
+        phone: t.Optional(t.String()),
+      }),
+    },
+  )

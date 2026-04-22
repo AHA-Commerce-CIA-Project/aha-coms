@@ -16,7 +16,7 @@
     branch: '' as '' | 'indonesia' | 'thailand',
     portalRole: 'employee' as PortalRole,
     teamId: '',
-    mobilePhone: '',
+
     birthDate: '',
     leaderName: '',
   })
@@ -36,7 +36,7 @@
         branch: form.branch || undefined,
         portalRole: form.portalRole,
         teamId: form.teamId || undefined,
-        mobilePhone: form.mobilePhone || undefined,
+
         birthDate: form.birthDate || undefined,
         leaderName: form.leaderName || undefined,
       })
@@ -78,15 +78,9 @@
         <input id="employee-position" type="text" bind:value={form.position} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
       </div>
     </div>
-    <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label for="employee-mobile" class="mb-1 block text-xs text-neutral-400">Mobile (HP)</label>
-        <input id="employee-mobile" type="text" bind:value={form.mobilePhone} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
-      </div>
-      <div>
-        <label for="employee-birth-date" class="mb-1 block text-xs text-neutral-400">Birth Date</label>
-        <input id="employee-birth-date" type="date" bind:value={form.birthDate} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
-      </div>
+    <div>
+      <label for="employee-birth-date" class="mb-1 block text-xs text-neutral-400">Birth Date</label>
+      <input id="employee-birth-date" type="date" bind:value={form.birthDate} class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
     </div>
     <div>
       <label for="employee-leader" class="mb-1 block text-xs text-neutral-400">Leader</label>
