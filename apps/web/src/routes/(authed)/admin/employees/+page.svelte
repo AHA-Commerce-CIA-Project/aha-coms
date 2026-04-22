@@ -2,6 +2,7 @@
   import { employeesQuery, batchUpdateEmployeesMutation, importEmployeesCsvMutation } from '$lib/queries/employees'
   import BatchToolbar from '$lib/components/batch-toolbar.svelte'
   import { PORTAL_ROLE_LABELS, PORTAL_ROLES } from '@coms-portal/shared'
+  import { adminApi } from '$lib/admin-api'
 
   const MAX_EMPLOYEE_IMPORT_CSV_BYTES = 2 * 1024 * 1024
 
@@ -23,6 +24,23 @@
 
   const allIds = $derived(($query.data?.data ?? []).map((employee) => employee.id))
   const allSelected = $derived(allIds.length > 0 && allIds.every((employeeId) => selected.has(employeeId)))
+
+  let syncPending = $state(false)
+  let syncResult = $state<{ updated: number; unmatched: Array<{ sheetName: string; reason: string }>; errors: string[] } | null>(null)
+  let syncError = $state<string | null>(null)
+
+  async function handleSyncEmployeeInfo() {
+    syncPending = true
+    syncResult = null
+    syncError = null
+    try {
+      syncResult = await adminApi.triggerEmployeeInfoSync()
+    } catch (err) {
+      syncError = err instanceof Error ? err.message : 'Sync failed'
+    } finally {
+      syncPending = false
+    }
+  }
 
   let csvFile = $state<File | null>(null)
   let importError = $state<string | null>(null)
@@ -122,6 +140,49 @@
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold">Employees</h1>
     <a href="/admin/employees/new" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500">Add Employee</a>
+  </div>
+
+  <div class="mb-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div class="max-w-2xl space-y-2">
+        <h2 class="text-sm font-semibold">Sync employee info from sheet</h2>
+        <p class="text-sm text-neutral-400">Sinkronisasi data karyawan (HP, tanggal lahir, jabatan, tim, penilai) dari Google Sheet. Data yang kosong di sheet tidak akan menimpa data yang sudah ada.</p>
+      </div>
+      <div class="flex flex-col gap-3 lg:min-w-64">
+        <button
+          type="button"
+          onclick={handleSyncEmployeeInfo}
+          disabled={syncPending}
+          class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
+        >
+          {syncPending ? 'Syncing…' : 'Sync Employee Info'}
+        </button>
+        {#if syncError}
+          <p class="text-sm text-red-400">{syncError}</p>
+        {/if}
+        {#if syncResult}
+          <div class="space-y-1 text-sm">
+            <p class="text-green-400">Updated: {syncResult.updated}</p>
+            {#if syncResult.unmatched.length > 0}
+              <p class="text-yellow-400">Unmatched: {syncResult.unmatched.length}</p>
+              <ul class="ml-2 space-y-0.5 text-xs text-neutral-400">
+                {#each syncResult.unmatched.slice(0, 5) as u}
+                  <li>{u.sheetName} — {u.reason}</li>
+                {/each}
+              </ul>
+            {/if}
+            {#if syncResult.errors.length > 0}
+              <p class="text-red-400">Errors: {syncResult.errors.length}</p>
+              <ul class="ml-2 space-y-0.5 text-xs text-red-300">
+                {#each syncResult.errors.slice(0, 5) as e}
+                  <li>{e}</li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </div>
   </div>
 
   <div class="mb-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
