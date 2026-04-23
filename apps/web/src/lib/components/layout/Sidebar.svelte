@@ -12,8 +12,6 @@
     FileText,
     User,
     LogOut,
-    Sun,
-    Moon,
   } from 'lucide-svelte'
   import { hasPortalRole } from '@coms-portal/shared'
   import type { SessionUser } from '$lib/auth'
@@ -48,14 +46,6 @@
   function isActive(href: string): boolean {
     if (href === '/') return $page.url.pathname === '/'
     return $page.url.pathname.startsWith(href)
-  }
-
-  function toggleTheme() {
-    document.documentElement.classList.toggle('dark')
-    localStorage.setItem(
-      'theme',
-      document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-    )
   }
 
   async function handleSignOut() {
@@ -131,24 +121,8 @@
     {/if}
   </nav>
 
-  <!-- Footer: theme + user -->
+  <!-- Footer: user -->
   <div class="border-t border-border p-2 space-y-0.5">
-    <!-- Theme toggle -->
-    <button
-      type="button"
-      onclick={toggleTheme}
-      class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors
-        {collapsed ? 'justify-center px-0' : ''}"
-      title={collapsed ? 'Toggle theme' : undefined}
-      aria-label="Toggle theme"
-    >
-      <Sun class="h-[18px] w-[18px] shrink-0 dark:hidden" />
-      <Moon class="hidden h-[18px] w-[18px] shrink-0 dark:block" />
-      {#if !collapsed}
-        <span class="leading-none">Toggle theme</span>
-      {/if}
-    </button>
-
     <!-- Sign out -->
     <button
       type="button"
