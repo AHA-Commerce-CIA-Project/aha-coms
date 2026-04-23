@@ -2,11 +2,13 @@
   import { page } from '$app/stores'
   import { goto } from '$app/navigation'
   import { teamQuery } from '$lib/queries/teams'
+  import { appsQuery } from '$lib/queries/apps'
   import { adminApi } from '$lib/admin-api'
   import { useQueryClient } from '@tanstack/svelte-query'
 
   const id = $derived($page.params.id!)
   const query = $derived(teamQuery(id))
+  const allAppsQuery = appsQuery()
   const queryClient = useQueryClient()
 
   // Edit team state
@@ -24,8 +26,20 @@
 
   // Grant app state
   let grantAppId = $state('')
+  let grantAppRole = $state('')
   let grantAppError = $state<string | null>(null)
   let grantAppPending = $state(false)
+
+  // Derive the selected app's declared roles
+  const selectedAppRoles = $derived(
+    $allAppsQuery.data?.find((a) => a.id === grantAppId)?.appRoles ?? [],
+  )
+
+  // Auto-select the default role when app selection changes
+  $effect(() => {
+    const defaultRole = selectedAppRoles.find((r) => r.default)
+    grantAppRole = defaultRole?.key ?? (selectedAppRoles[0]?.key ?? '')
+  })
   let actionError = $state<string | null>(null)
   let pendingMemberRemovalId = $state<string | null>(null)
   let confirmingMemberRemovalId = $state<string | null>(null)
@@ -99,8 +113,12 @@
     grantAppError = null
     grantAppPending = true
     try {
-      await adminApi.grantTeamApp(id, { appId: grantAppId })
+      await adminApi.grantTeamApp(id, {
+        appId: grantAppId,
+        appRole: grantAppRole || undefined,
+      })
       grantAppId = ''
+      grantAppRole = ''
       queryClient.invalidateQueries({ queryKey: ['teams', id] })
     } catch (e) {
       grantAppError = e instanceof Error ? e.message : 'Failed to grant app'
@@ -334,13 +352,28 @@
         <!-- Grant app form -->
         <form onsubmit={handleGrantApp} class="space-y-2 border-t border-border pt-4">
           <p class="text-xs font-medium text-muted-foreground">Grant App Access</p>
-          <input
-            type="text"
+          <select
             bind:value={grantAppId}
-            placeholder="App ID"
             required
             class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
-          />
+          >
+            <option value="" disabled>Select an app</option>
+            {#if $allAppsQuery.data}
+              {#each $allAppsQuery.data as app}
+                <option value={app.id}>{app.name} ({app.slug})</option>
+              {/each}
+            {/if}
+          </select>
+          {#if selectedAppRoles.length > 0}
+            <select
+              bind:value={grantAppRole}
+              class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
+            >
+              {#each selectedAppRoles as role}
+                <option value={role.key}>{role.label}</option>
+              {/each}
+            </select>
+          {/if}
           {#if grantAppError}
             <p class="text-xs text-destructive">{grantAppError}</p>
           {/if}

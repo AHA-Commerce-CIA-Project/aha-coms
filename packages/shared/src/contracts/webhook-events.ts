@@ -42,6 +42,8 @@ export interface UserProvisionedPayload {
   portalRole: PortalRole
   teamIds: string[]
   apps: string[]
+  /** The resolved app-local role for the recipient app. NULL if the app has no declared roles. */
+  appRole: string | null
 }
 
 export interface UserUpdatedPayload {
@@ -54,6 +56,8 @@ export interface UserUpdatedPayload {
   apps: string[]
   /** e.g. ['email', 'portalRole'] */
   changedFields: string[]
+  /** The current resolved app-local role for the recipient app. NULL if unchanged or no declared roles. */
+  appRole: string | null
 }
 
 export interface UserOffboardedPayload {

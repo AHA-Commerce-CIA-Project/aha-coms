@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 const identityUsers = { id: 'identityUsers.id' }
 const teamMembers = { teamId: 'teamMembers.teamId', userId: 'teamMembers.userId' }
-const teamAppAccess = { teamId: 'teamAppAccess.teamId', appId: 'teamAppAccess.appId' }
-const appRegistry = { id: 'appRegistry.id', slug: 'appRegistry.slug' }
+const teamAppAccess = { teamId: 'teamAppAccess.teamId', appId: 'teamAppAccess.appId', appRole: 'teamAppAccess.appRole' }
+const appRegistry = { id: 'appRegistry.id', slug: 'appRegistry.slug', appRoles: 'appRegistry.appRoles' }
 
 // In-memory user
 type UserRecord = {
@@ -21,10 +21,16 @@ type UserRecord = {
 
 let currentUser: UserRecord | null = null
 
-// Slugs returned by the resolveUserState helper inside provisioning-events.
-// Each .select().from().where() call goes through this counter.
-let appSlugsForUser: string[] = []
-let selectCallCount = 0
+// Per-app data returned by the mock DB. Each entry represents an app the user
+// has access to, including the team-app grant details and declared roles.
+interface MockAppEntry {
+  appId: string
+  slug: string
+  appRole: string | null
+  appRoles: Array<{ key: string; label: string; default?: boolean; description?: string }>
+}
+
+let appsForUser: MockAppEntry[] = []
 
 const db = {
   query: {
@@ -33,19 +39,24 @@ const db = {
     },
   },
   select: (_fields: unknown) => ({
-    from: (_table: unknown) => ({
+    from: (table: unknown) => ({
       where: async () => {
-        selectCallCount++
-        if (selectCallCount === 1) {
-          // teamMembers step
-          return appSlugsForUser.length > 0 ? [{ teamId: 'team-1' }] : []
+        if (table === teamMembers) {
+          return appsForUser.length > 0 ? [{ teamId: 'team-1' }] : []
         }
-        if (selectCallCount === 2) {
-          // teamAppAccess step
-          return appSlugsForUser.length > 0 ? [{ appId: 'app-1' }] : []
+        if (table === teamAppAccess) {
+          // Used by both resolveUserState (needs .appId) and resolvePerAppContext (needs .appId + .appRole)
+          return appsForUser.map((a) => ({ appId: a.appId, appRole: a.appRole }))
         }
-        // appRegistry step
-        return appSlugsForUser.map((slug) => ({ slug }))
+        if (table === appRegistry) {
+          // Used by both resolveUserState (needs .slug) and resolvePerAppContext (needs .id + .slug + .appRoles)
+          return appsForUser.map((a) => ({
+            id: a.appId,
+            slug: a.slug,
+            appRoles: a.appRoles,
+          }))
+        }
+        return []
       },
     }),
   }),
@@ -99,8 +110,7 @@ function setUser(overrides: Partial<UserRecord> = {}) {
 
 function resetState() {
   currentUser = null
-  appSlugsForUser = []
-  selectCallCount = 0
+  appsForUser = []
   dispatchPortalWebhook.mockClear()
 }
 
@@ -111,9 +121,14 @@ function resetState() {
 describe('emitUserProvisioned', () => {
   beforeEach(resetState)
 
-  test('calls dispatchPortalWebhook with user.provisioned and the user app list', async () => {
+  test('dispatches per-app with resolved appRole', async () => {
     setUser()
-    appSlugsForUser = ['heroes', 'orbit']
+    appsForUser = [
+      { appId: 'app-1', slug: 'heroes', appRole: null, appRoles: [
+        { key: 'admin', label: 'Admin' },
+        { key: 'employee', label: 'Employee', default: true },
+      ] },
+    ]
 
     await emitUserProvisioned('user-1')
 
@@ -126,22 +141,64 @@ describe('emitUserProvisioned', () => {
     expect(event).toBe('user.provisioned')
     expect(payload.userId).toBe('user-1')
     expect(payload.email).toBe('user@example.com')
-    expect((payload.apps as string[]).sort()).toEqual(['heroes', 'orbit'])
-    expect(opts?.appSlugs?.sort()).toEqual(['heroes', 'orbit'])
+    // appRole resolved to the default role since no explicit team grant
+    expect(payload.appRole).toBe('employee')
+    expect(opts?.appSlugs).toEqual(['heroes'])
   })
 
-  test('handles users with no apps — still calls dispatcher with undefined appSlugs', async () => {
+  test('dispatches per-app with explicit grant role', async () => {
     setUser()
-    // appSlugsForUser = [] — no team memberships
+    appsForUser = [
+      { appId: 'app-1', slug: 'heroes', appRole: 'leader', appRoles: [
+        { key: 'admin', label: 'Admin' },
+        { key: 'leader', label: 'Leader' },
+        { key: 'employee', label: 'Employee', default: true },
+      ] },
+    ]
 
     await emitUserProvisioned('user-1')
 
-    // The impl calls dispatchPortalWebhook with appSlugs: undefined when slug list is empty.
-    // dispatchPortalWebhook will find zero subscribed endpoints and be a no-op internally.
     expect(dispatchPortalWebhook).toHaveBeenCalledTimes(1)
-    const [, , opts] = dispatchPortalWebhook.mock.calls[0] as unknown as [unknown, unknown, { appSlugs?: string[] }]
-    // appSlugs is undefined when user has no apps
-    expect(opts?.appSlugs).toBeUndefined()
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [string, Record<string, unknown>]
+    expect(payload.appRole).toBe('leader')
+  })
+
+  test('dispatches once per app for multi-app users', async () => {
+    setUser()
+    appsForUser = [
+      { appId: 'app-1', slug: 'heroes', appRole: null, appRoles: [] },
+      { appId: 'app-2', slug: 'orbit', appRole: null, appRoles: [] },
+    ]
+
+    await emitUserProvisioned('user-1')
+
+    // Per-app dispatch — one call per app
+    expect(dispatchPortalWebhook).toHaveBeenCalledTimes(2)
+    const slugs = dispatchPortalWebhook.mock.calls.map(
+      (c: unknown) => ((c as unknown[])[2] as { appSlugs: string[] })?.appSlugs?.[0],
+    )
+    expect(slugs.sort()).toEqual(['heroes', 'orbit'])
+  })
+
+  test('appRole is null when app has no declared roles', async () => {
+    setUser()
+    appsForUser = [
+      { appId: 'app-1', slug: 'heroes', appRole: null, appRoles: [] },
+    ]
+
+    await emitUserProvisioned('user-1')
+
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [string, Record<string, unknown>]
+    expect(payload.appRole).toBeNull()
+  })
+
+  test('does not dispatch when user has no apps', async () => {
+    setUser()
+    // appsForUser = [] — no team memberships / no apps
+
+    await emitUserProvisioned('user-1')
+
+    expect(dispatchPortalWebhook).not.toHaveBeenCalled()
   })
 
   test('does nothing when user is not found', async () => {
@@ -158,7 +215,9 @@ describe('emitUserOffboarded', () => {
 
   test('calls dispatchPortalWebhook with user.offboarded and the user app list', async () => {
     setUser()
-    appSlugsForUser = ['heroes']
+    appsForUser = [
+      { appId: 'app-1', slug: 'heroes', appRole: null, appRoles: [] },
+    ]
 
     await emitUserOffboarded('user-1')
 
@@ -197,9 +256,13 @@ describe('emitUserOffboarded', () => {
 describe('emitUserUpdated', () => {
   beforeEach(resetState)
 
-  test('calls dispatchPortalWebhook with user.updated and the changedFields array', async () => {
+  test('dispatches per-app with changedFields and resolved appRole', async () => {
     setUser()
-    appSlugsForUser = ['heroes']
+    appsForUser = [
+      { appId: 'app-1', slug: 'heroes', appRole: null, appRoles: [
+        { key: 'employee', label: 'Employee', default: true },
+      ] },
+    ]
 
     await emitUserUpdated('user-1', ['email', 'portalRole'])
 
@@ -212,17 +275,16 @@ describe('emitUserUpdated', () => {
     expect(event).toBe('user.updated')
     expect(payload.changedFields).toEqual(['email', 'portalRole'])
     expect(payload.userId).toBe('user-1')
+    expect(payload.appRole).toBe('employee')
     expect(opts?.appSlugs).toEqual(['heroes'])
   })
 
-  test('handles users with no apps', async () => {
+  test('does not dispatch when user has no apps', async () => {
     setUser()
 
     await emitUserUpdated('user-1', ['name'])
 
-    expect(dispatchPortalWebhook).toHaveBeenCalledTimes(1)
-    const [, , opts] = dispatchPortalWebhook.mock.calls[0] as unknown as [unknown, unknown, { appSlugs?: string[] }]
-    expect(opts?.appSlugs).toBeUndefined()
+    expect(dispatchPortalWebhook).not.toHaveBeenCalled()
   })
 
   test('does nothing when user is not found', async () => {

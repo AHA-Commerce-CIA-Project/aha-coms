@@ -111,6 +111,17 @@ export interface PortalLifecycleWebhookContract {
   description?: string
 }
 
+export interface PortalAppRole {
+  /** Machine key — stored in portal DB, sent in webhooks. e.g. 'leader' */
+  key: string
+  /** Human label for the portal admin UI. e.g. 'Team Leader' */
+  label: string
+  /** If true, this role is assigned when no explicit role is selected */
+  default?: boolean
+  /** Optional description shown in the portal admin UI */
+  description?: string
+}
+
 export interface PortalIntegrationManifest {
   manifestVersion: typeof PORTAL_INTEGRATION_MANIFEST_VERSION
   appSlug: string
@@ -122,6 +133,9 @@ export interface PortalIntegrationManifest {
   requiredEnv: PortalEnvRequirement[]
   compliance: PortalComplianceMetadata
   lifecycleWebhooks?: PortalLifecycleWebhookContract
+  /** App-local roles. The portal does not enforce these — it stores and
+   *  forwards them. The app owns interpretation and fine-grained permissions. */
+  appRoles?: PortalAppRole[]
 }
 
 export function createPortalIntegrationManifest(
