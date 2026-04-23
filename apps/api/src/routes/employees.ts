@@ -18,7 +18,7 @@ const employeeBody = t.Object({
   phone: t.Optional(t.String()),
   department: t.Optional(t.String()),
   position: t.Optional(t.String()),
-  branch: t.Optional(t.Union([t.Literal('indonesia'), t.Literal('thailand')])),
+  branch: t.Optional(t.Union([t.Literal('Indonesia'), t.Literal('Thailand')])),
   portalRole: t.Optional(
     t.Union([t.Literal('employee'), t.Literal('admin')]),
   ),

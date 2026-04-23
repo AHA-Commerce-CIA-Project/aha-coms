@@ -55,7 +55,7 @@ In `packages/server/src/routes/portal-webhooks.ts`, replace the `user.provisione
    - `email` from payload
    - `name` from payload
    - `role` mapped from `appRole` (portal sends one of: `admin`, `hr`, `leader`, `employee`) — direct 1:1 match with Heroes' `UserRole` enum
-   - `branchId` — use a default/fallback branch (the team should decide which)
+   - `branchId` — map from `branch` in the payload (e.g. `"Thailand"` → the Thai branch record). If no match or `branch` is null, fall back to a default branch
    - `canSubmitPoints: false`
    - `mustChangePassword: false` (portal handles auth)
    - `isActive: true`
@@ -79,7 +79,8 @@ The portal will send (after Spec 02 is shipped):
     "portalRole": "employee",
     "teamIds": ["team-uuid-1"],
     "apps": ["heroes"],
-    "appRole": "leader"
+    "appRole": "leader",
+    "branch": "Thailand"
   }
 }
 ```
@@ -99,6 +100,7 @@ type PortalEventBody = {
   reason?: string
   notBefore?: string
   appRole?: string | null      // NEW
+  branch?: string | null       // NEW — office/country label (e.g. "Thailand")
   changedFields?: string[]     // NEW
 }
 ```
@@ -132,6 +134,7 @@ In `packages/server/src/routes/portal-webhooks.ts`, replace the `user.updated` n
     "teamIds": ["team-uuid-1"],
     "apps": ["heroes"],
     "appRole": "hr",
+    "branch": "Thailand",
     "changedFields": ["name", "appRole"]
   }
 }
@@ -153,7 +156,7 @@ The portal team has published `@coms-portal/shared` as a Git-based dependency (G
 
 1. Add the dependency:
    ```bash
-   bun add @coms-portal/shared@git+https://github.com/mrdoorba/coms-shared.git#v1.0.0
+   bun add @coms-portal/shared@git+https://github.com/mrdoorba/coms-shared.git#v1.1.0
    ```
 
 2. Replace duplicated types:
@@ -173,7 +176,7 @@ The portal team has published `@coms-portal/shared` as a Git-based dependency (G
 
 ### When
 
-`@coms-portal/shared` v1.0.0 is published and ready — this can be done now.
+`@coms-portal/shared` v1.1.0 is published and ready — this can be done now.
 
 ---
 
@@ -255,7 +258,7 @@ H1, H2, and H4 can start immediately — they don't depend on any portal changes
 ## Questions / Blockers
 
 If you have questions or blockers:
-1. What should the default `branchId` be for auto-provisioned users? (H1 needs this)
+1. ~~What should the default `branchId` be for auto-provisioned users?~~ **Resolved:** the portal now sends `branch` (e.g. `"Thailand"`) in the webhook payload. Map it to a local branch via `branches.code`; fall back to a default branch if unmatched or null.
 2. Should auto-provisioned users get `canSubmitPoints: false` by default? (H1)
 3. Any concerns about the role mapping (`appRole` → `UserRole`) being 1:1?
 

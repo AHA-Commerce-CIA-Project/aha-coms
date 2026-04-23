@@ -113,6 +113,13 @@
       "when": 1776925966216,
       "tag": "0015_seed_heroes_app_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1777094400000,
+      "tag": "0016_capitalize_branch_values",
+      "breakpoints": true
     }
   ]
 }

@@ -220,11 +220,11 @@ export interface UserUpdatedPayload {
 }
 ```
 
-Neither payload includes the resolved app-local role.
+Neither payload includes the resolved app-local role or the employee's branch.
 
 ### Target State
 
-Both payloads include the resolved app role for the target app.
+Both payloads include the resolved app role and the employee's branch label for the target app.
 
 ### Contract Change
 
@@ -239,6 +239,8 @@ export interface UserProvisionedPayload {
   apps: string[]
   /** The resolved app-local role for the recipient app. NULL if the app has no declared roles. */
   appRole: string | null
+  /** The employee's office/country branch label (e.g. "Indonesia", "Thailand"). NULL if not set. */
+  branch?: string | null
 }
 
 export interface UserUpdatedPayload {
@@ -252,6 +254,8 @@ export interface UserUpdatedPayload {
   changedFields: string[]
   /** The current resolved app-local role for the recipient app. NULL if unchanged or no declared roles. */
   appRole: string | null
+  /** The employee's office/country branch label (e.g. "Indonesia", "Thailand"). NULL if not set. */
+  branch?: string | null
 }
 ```
 
@@ -303,7 +307,7 @@ When the portal sends `user.provisioned`, Heroes should:
    - `email` from payload
    - `name` from payload
    - `role` from `appRole` (mapped to Heroes' `UserRole` enum) or default to `'employee'`
-   - `branchId` — requires a default branch (Heroes must have a "Default" or "Unassigned" branch)
+   - `branchId` — map from `branch` in the payload (e.g. `"Thailand"` → the Thai branch record). If no match or `branch` is null, fall back to a default branch
    - `canSubmitPoints` — default `false`
    - `mustChangePassword` — `false` (portal handles auth)
    - `isActive` — `true`
@@ -331,12 +335,22 @@ case 'user.provisioned': {
       .set({ name: body.name ?? undefined, role, updatedAt: new Date() })
       .where(eq(users.id, existing[0].id))
   } else {
-    const defaultBranch = await db.select({ id: branches.id }).from(branches).limit(1)
+    // Map portal branch label to local branch; fall back to first branch
+    const branchLabel = body.branch
+    const [matched] = branchLabel
+      ? await db.select({ id: branches.id }).from(branches)
+          .where(eq(branches.code, branchLabel)).limit(1)
+      : []
+    const fallback = !matched
+      ? await db.select({ id: branches.id }).from(branches).limit(1)
+      : []
+    const branchId = matched?.id ?? fallback[0]?.id
+
     await db.insert(users).values({
       email: body.email,
       name: body.name ?? body.email,
       role,
-      branchId: defaultBranch[0]?.id,
+      branchId,
       canSubmitPoints: false,
       mustChangePassword: false,
       isActive: true,
@@ -375,7 +389,7 @@ case 'user.updated': {
 
 ### Type Safety
 
-The `PortalEventBody` type in `portal-webhooks.ts:7-13` needs updating to include `appRole`:
+The `PortalEventBody` type in `portal-webhooks.ts:7-13` needs updating to include `appRole` and `branch`:
 
 ```typescript
 type PortalEventBody = {
@@ -386,6 +400,7 @@ type PortalEventBody = {
   reason?: string
   notBefore?: string
   appRole?: string | null
+  branch?: string | null
   changedFields?: string[]
 }
 ```
