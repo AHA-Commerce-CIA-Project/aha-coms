@@ -1,6 +1,6 @@
 {
-  "id": "c669beee-b68c-4d56-80e2-6c56e15b8f32",
-  "prevId": "d77b64af-480f-4a68-aebb-50eed57a643b",
+  "id": "b98a515e-bfc8-45d2-b0e4-6dd1b84c9cf3",
+  "prevId": "6269368c-90fc-4c79-b5d0-51472615274a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -404,6 +404,25 @@
         "last_verified_at": {
           "name": "last_verified_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "health_status": {
+          "name": "health_status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'unknown'"
+        },
+        "last_health_check_at": {
+          "name": "last_health_check_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_health_error": {
+          "name": "last_health_error",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

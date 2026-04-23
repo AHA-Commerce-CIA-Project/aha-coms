@@ -23,6 +23,8 @@ export const dashboardRoutes = new Elysia({ prefix: '/dashboard' })
         url: appRegistry.url,
         iconUrl: appRegistry.iconUrl,
         status: appRegistry.status,
+        healthStatus: appRegistry.healthStatus,
+        lastHealthCheckAt: appRegistry.lastHealthCheckAt,
       })
       .from(appRegistry)
       .where(inArray(appRegistry.slug, authUser.apps))

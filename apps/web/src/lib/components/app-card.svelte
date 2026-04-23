@@ -1,6 +1,6 @@
 <script lang="ts">
   let { app, redirectTo }: {
-    app: { id: string; slug: string; name: string; description: string | null; url: string; iconUrl: string | null; status: string }
+    app: { id: string; slug: string; name: string; description: string | null; url: string; iconUrl: string | null; status: string; healthStatus?: string }
     redirectTo?: string
   } = $props()
 
@@ -24,6 +24,22 @@
       <p class="text-sm font-semibold text-foreground">{app.name}</p>
       {#if app.description}
         <p class="mt-0.5 text-xs text-muted-foreground line-clamp-2">{app.description}</p>
+      {/if}
+      {#if app.healthStatus === 'unhealthy'}
+        <div class="mt-2 flex items-center gap-1 text-xs text-red-500">
+          <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+          Unavailable
+        </div>
+      {:else if app.healthStatus === 'degraded'}
+        <div class="mt-2 flex items-center gap-1 text-xs text-yellow-500">
+          <span class="h-1.5 w-1.5 rounded-full bg-yellow-500"></span>
+          Degraded
+        </div>
+      {:else if app.healthStatus === 'unknown'}
+        <div class="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+          <span class="h-1.5 w-1.5 rounded-full bg-muted-foreground"></span>
+          Status unknown
+        </div>
       {/if}
     </div>
   </button>

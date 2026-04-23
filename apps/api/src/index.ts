@@ -10,6 +10,8 @@ import { appWebhookRoutes } from './routes/app-webhooks'
 import { authPlugin } from './middleware/auth'
 import { initGip } from './gip'
 import { startWebhookDeliveryWorker } from './services/webhook-delivery-worker'
+import { startHealthProbeInterval } from './services/health-probe'
+import { adminRoutes } from './routes/admin'
 
 initGip()
 
@@ -17,6 +19,7 @@ initGip()
 // start the worker explicitly with injected dependencies.
 if (process.env.NODE_ENV !== 'test') {
   startWebhookDeliveryWorker()
+  startHealthProbeInterval()
 }
 
 export const app = new Elysia({ prefix: '/api' })
@@ -35,7 +38,8 @@ export const app = new Elysia({ prefix: '/api' })
       .use(accessRoutes)
       .use(dashboardRoutes)
       .use(employeeInfoSyncRoutes)
-      .use(appWebhookRoutes),
+      .use(appWebhookRoutes)
+      .use(adminRoutes),
   )
 
 export type App = typeof app
