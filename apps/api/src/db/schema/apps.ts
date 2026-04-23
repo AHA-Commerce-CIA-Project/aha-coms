@@ -22,6 +22,8 @@ export const appRegistry = pgTable('app_registry', {
     .default(DEFAULT_AUTH_TRANSPORT_MODE),
   handoffMode: varchar('handoff_mode', { length: 40 }).notNull().default('one_time_code'),
   brokerOrigin: text('broker_origin'),
+  brokerSigningSecret: text('broker_signing_secret'),
+  introspectSecret: text('introspect_secret'),
   contractVersion: integer('contract_version').notNull().default(PLATFORM_AUTH_CONTRACT_VERSION),
   complianceStatus: varchar('compliance_status', { length: 20 }).notNull().default('draft'),
   manifestPath: text('manifest_path'),

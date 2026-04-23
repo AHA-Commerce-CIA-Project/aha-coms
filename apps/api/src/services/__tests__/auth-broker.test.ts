@@ -10,6 +10,9 @@ const authHandoffs = {
 
 const handoffStore: Array<Record<string, unknown>> = []
 
+// Registry of apps keyed by slug for the token-exchange lookup in exchangeBrokerHandoff.
+const appRegistryStore: Record<string, Record<string, unknown>> = {}
+
 const db = {
   insert: (_table: unknown) => ({
     values(value: Record<string, unknown>) {
@@ -45,6 +48,12 @@ const db = {
         )
       },
     },
+    appRegistry: {
+      findFirst: async (opts: { where: { right?: unknown } }) => {
+        const slug = opts.where.right as string
+        return appRegistryStore[slug] ?? null
+      },
+    },
   },
 }
 
@@ -77,6 +86,13 @@ const {
 describe('auth broker', () => {
   beforeEach(() => {
     handoffStore.length = 0
+    // Reset app registry store and seed known test apps for token-exchange lookups.
+    for (const key of Object.keys(appRegistryStore)) delete appRegistryStore[key]
+    const testApps = [
+      { slug: 'heroes', url: 'https://heroes.example.com', transportMode: 'portable_token', handoffMode: 'one_time_code', brokerOrigin: 'https://coms.example.com', status: 'active', brokerSigningSecret: null },
+      { slug: 'orbit', url: 'https://orbit.example.com', transportMode: 'portable_token', handoffMode: 'token_exchange', brokerOrigin: 'https://coms.example.com', status: 'active', brokerSigningSecret: null },
+    ]
+    for (const app of testApps) appRegistryStore[app.slug] = app
     process.env.PORTAL_BROKER_SIGNING_SECRET = 'test-broker-secret'
   })
 
@@ -89,6 +105,7 @@ describe('auth broker', () => {
         handoffMode: 'one_time_code',
         brokerOrigin: 'https://coms.example.com',
         status: 'active',
+        brokerSigningSecret: null,
       },
       {
         id: 'user-1',
@@ -117,6 +134,7 @@ describe('auth broker', () => {
         handoffMode: 'token_exchange',
         brokerOrigin: 'https://coms.example.com',
         status: 'active',
+        brokerSigningSecret: null,
       },
       {
         id: 'user-1',
@@ -144,6 +162,7 @@ describe('auth broker', () => {
           handoffMode: 'one_time_code',
           brokerOrigin: 'https://coms.example.com',
           status: 'active',
+          brokerSigningSecret: null,
         },
         {
           id: 'user-1',
@@ -167,6 +186,7 @@ describe('auth broker', () => {
         handoffMode: 'one_time_code',
         brokerOrigin: 'https://coms.example.com',
         status: 'active',
+        brokerSigningSecret: null,
       },
       {
         id: 'user-1',
@@ -203,6 +223,7 @@ describe('auth broker', () => {
         handoffMode: 'token_exchange',
         brokerOrigin: 'https://coms.example.com',
         status: 'active',
+        brokerSigningSecret: null,
       },
       {
         id: 'user-1',

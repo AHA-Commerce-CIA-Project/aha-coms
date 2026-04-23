@@ -12,6 +12,7 @@ interface AppIntegrationMetadata {
   transportMode: NonNullable<AppRegistryWrite['transportMode']>
   handoffMode: NonNullable<AppRegistryWrite['handoffMode']>
   brokerOrigin: AppRegistryWrite['brokerOrigin'] | null
+  brokerSigningSecret: string | null
   contractVersion: number
   complianceStatus: NonNullable<AppRegistryWrite['complianceStatus']>
   manifestPath: AppRegistryWrite['manifestPath'] | null
@@ -34,6 +35,7 @@ export function resolveAppIntegrationMetadata(input: AppRegistryUpdate): AppInte
     handoffMode:
       input.handoffMode ?? (transportMode === 'same_host_cookie' ? 'none' : 'one_time_code'),
     brokerOrigin: input.brokerOrigin ?? null,
+    brokerSigningSecret: input.brokerSigningSecret ?? null,
     contractVersion: input.contractVersion ?? PLATFORM_AUTH_CONTRACT_VERSION,
     complianceStatus: input.complianceStatus ?? 'draft',
     manifestPath: input.manifestPath ?? null,

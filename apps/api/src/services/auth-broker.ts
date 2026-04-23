@@ -92,7 +92,7 @@ export function brokerAudienceFor(appSlug: string): string {
 
 type BrokerCapableApp = Pick<
   AppRegistry,
-  'slug' | 'url' | 'transportMode' | 'handoffMode' | 'brokerOrigin' | 'status'
+  'slug' | 'url' | 'transportMode' | 'handoffMode' | 'brokerOrigin' | 'status' | 'brokerSigningSecret'
 >
 
 type BrokerTokenPayload = {
@@ -107,10 +107,13 @@ type BrokerTokenPayload = {
   redirectTo?: string | null
 }
 
-function getBrokerSecret(): Uint8Array {
-  const secret = process.env.PORTAL_BROKER_SIGNING_SECRET
+function getBrokerSecretForApp(app: BrokerCapableApp): Uint8Array {
+  const secret = app.brokerSigningSecret ?? process.env.PORTAL_BROKER_SIGNING_SECRET
   if (!secret) {
-    throw new BrokerValidationError('PORTAL_BROKER_SIGNING_SECRET is required for token_exchange')
+    throw new BrokerValidationError(
+      `No broker signing secret configured for app "${app.slug}". ` +
+      'Set broker_signing_secret in app_registry or PORTAL_BROKER_SIGNING_SECRET as fallback.'
+    )
   }
   return new TextEncoder().encode(secret)
 }
@@ -143,7 +146,7 @@ function assertAppAccess(app: BrokerCapableApp, authUser: PortalSessionUser): vo
   }
 }
 
-async function signBrokerToken(payload: BrokerTokenPayload): Promise<string> {
+async function signBrokerToken(payload: BrokerTokenPayload, app: BrokerCapableApp): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
@@ -151,7 +154,7 @@ async function signBrokerToken(payload: BrokerTokenPayload): Promise<string> {
     .setAudience(brokerAudienceFor(payload.appSlug))
     .setIssuedAt(now)
     .setExpirationTime(now + BROKER_TOKEN_TTL_SECONDS)
-    .sign(getBrokerSecret())
+    .sign(getBrokerSecretForApp(app))
 }
 
 function payloadToExchangeResponse(
@@ -186,6 +189,7 @@ export async function findBrokerAppBySlug(appSlug: string): Promise<BrokerCapabl
         handoffMode: true,
         brokerOrigin: true,
         status: true,
+        brokerSigningSecret: true,
       },
     })) ?? null
   )
@@ -223,7 +227,7 @@ export async function createBrokerHandoff(
       teamIds: authUser.teamIds,
       apps: authUser.apps,
       redirectTo,
-    })
+    }, app)
 
     return {
       appSlug: app.slug,
@@ -308,7 +312,12 @@ export async function exchangeBrokerHandoff(input: {
     }
   }
 
-  const secret = getBrokerSecret()
+  const app = await db.query.appRegistry.findFirst({
+    where: eq(appRegistry.slug, input.appSlug),
+    columns: { slug: true, url: true, transportMode: true, handoffMode: true, brokerOrigin: true, status: true, brokerSigningSecret: true },
+  })
+  if (!app) throw new BrokerValidationError('App not found')
+  const secret = getBrokerSecretForApp(app)
   const { payload } = await jwtVerify<BrokerTokenPayload>(input.token!, secret, {
     issuer: PORTAL_BROKER_ISSUER,
     audience: brokerAudienceFor(input.appSlug),

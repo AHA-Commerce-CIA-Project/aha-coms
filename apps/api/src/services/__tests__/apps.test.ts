@@ -102,6 +102,7 @@ describe('app integration metadata validation', () => {
       transportMode: 'portable_token',
       handoffMode: 'none',
       brokerOrigin: null,
+      brokerSigningSecret: null,
       contractVersion: 1,
       complianceStatus: 'compliant',
       manifestPath: null,
