@@ -5,7 +5,8 @@
  * mocking gip-admin, session cookies, auth middleware, etc.), we inline the
  * introspect handler logic from routes/auth.ts as a plain async function. The
  * implementation in auth.ts is a self-contained block that only touches:
- *   - process.env.PORTAL_INTROSPECT_SECRET
+ *   - appRegistry (per-app introspect secret, with env var fallback)
+ *   - process.env.PORTAL_INTROSPECT_SECRET (fallback when app has no secret)
  *   - the X-Portal-Introspect-Secret request header
  *   - db.query.identityUsers.findFirst
  *   - db.query.sessionRevocations.findFirst
@@ -14,6 +15,7 @@
  *
  * We replicate that logic here so tests are hermetic and fast.
  */
+import { timingSafeEqual } from 'node:crypto'
 import { beforeEach, describe, expect, test } from 'bun:test'
 
 // ---------------------------------------------------------------------------
@@ -40,6 +42,8 @@ type RevocationRecord = {
 let currentUser: UserRecord | null = null
 let currentRevocation: RevocationRecord | null = null
 let appSlugsForUser: string[] = []
+// Per-app introspect secret — null means "app not found", undefined means "app exists, no secret set"
+let appIntrospectSecret: string | null | undefined = undefined
 
 // ---------------------------------------------------------------------------
 // Inline implementation of the introspect handler
@@ -68,17 +72,25 @@ async function introspectHandler(
   body: IntrospectBody,
   headers: Record<string, string>,
 ): Promise<{ status: number; body: unknown }> {
-  const secret = process.env.PORTAL_INTROSPECT_SECRET
-  if (!secret) {
-    return { status: 503, body: { message: 'Introspection is not configured on the portal' } }
+  const { userId, sessionIssuedAt, appSlug } = body
+
+  // Simulate per-app lookup: null means app not found, undefined means app exists but no secret
+  if (appIntrospectSecret === null) {
+    return { status: 404, body: { message: 'App not found' } }
+  }
+
+  const expectedSecret = appIntrospectSecret ?? process.env.PORTAL_INTROSPECT_SECRET
+  if (!expectedSecret) {
+    return { status: 503, body: { message: 'Introspection is not configured for this app' } }
   }
 
   const provided = headers['x-portal-introspect-secret'] ?? ''
-  if (provided !== secret) {
+  if (
+    provided.length !== expectedSecret.length ||
+    !timingSafeEqual(Buffer.from(provided), Buffer.from(expectedSecret))
+  ) {
     return { status: 401, body: { message: 'Unauthorized' } }
   }
-
-  const { userId, sessionIssuedAt, appSlug } = body
 
   // 1. Look up user
   const user = currentUser
@@ -135,6 +147,8 @@ describe('introspect endpoint', () => {
     currentUser = null
     currentRevocation = null
     appSlugsForUser = []
+    // Default: app exists but has no per-app secret → falls back to env var
+    appIntrospectSecret = undefined
     process.env.PORTAL_INTROSPECT_SECRET = VALID_SECRET
   })
 
@@ -162,11 +176,46 @@ describe('introspect endpoint', () => {
     expect(status).toBe(401)
   })
 
-  test('returns 503 when PORTAL_INTROSPECT_SECRET env is unset', async () => {
+  test('returns 503 when neither per-app secret nor PORTAL_INTROSPECT_SECRET env is set', async () => {
     delete process.env.PORTAL_INTROSPECT_SECRET
+    appIntrospectSecret = undefined // app exists but no per-app secret
     const { status, body } = await introspectHandler(validBody(), validHeaders())
     expect(status).toBe(503)
     expect((body as Record<string, unknown>).message).toContain('not configured')
+  })
+
+  test('returns 404 for an unknown app slug', async () => {
+    appIntrospectSecret = null // simulate app not found in DB
+    const { status, body } = await introspectHandler(validBody(), validHeaders())
+    expect(status).toBe(404)
+    expect((body as Record<string, unknown>).message).toContain('App not found')
+  })
+
+  test('uses per-app secret when set, ignoring env var', async () => {
+    const PER_APP_SECRET = 'per-app-secret-xyz'
+    appIntrospectSecret = PER_APP_SECRET
+    process.env.PORTAL_INTROSPECT_SECRET = 'different-global-secret'
+    currentUser = {
+      id: 'user-1',
+      gipUid: 'gip-1',
+      email: 'user@example.com',
+      name: 'Test User',
+      portalRole: 'employee',
+      status: 'active',
+    }
+    appSlugsForUser = ['heroes']
+
+    // Wrong secret (global) → 401
+    const { status: s401 } = await introspectHandler(validBody(), {
+      'x-portal-introspect-secret': 'different-global-secret',
+    })
+    expect(s401).toBe(401)
+
+    // Correct per-app secret → 200
+    const { status: s200 } = await introspectHandler(validBody(), {
+      'x-portal-introspect-secret': PER_APP_SECRET,
+    })
+    expect(s200).toBe(200)
   })
 
   test('returns 404 for a nonexistent userId', async () => {

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import { Elysia, t } from 'elysia'
 import {
   verifyIdToken,
@@ -5,7 +6,7 @@ import {
   verifySessionCookie,
 } from '../gip-admin'
 import { db } from '~/db'
-import { identityUsers, sessionRevocations, teamMembers } from '~/db/schema'
+import { identityUsers, sessionRevocations, teamMembers, appRegistry } from '~/db/schema'
 import { eq, and, gte } from 'drizzle-orm'
 import {
   type PortalBrokerExchangePayload,
@@ -168,9 +169,16 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     },
   )
 
-  .get(
+  .get('/broker/launch/:appSlug', ({ set }) => {
+    set.status = 405
+    return {
+      message: 'Use POST /api/auth/broker/launch/:appSlug instead. See the migration guide.',
+    }
+  })
+
+  .post(
     '/broker/launch/:appSlug',
-    async ({ request, params, query, set }) => {
+    async ({ request, params, body, set }) => {
       try {
         const authUser = await resolveSessionUser(request)
         const app = await findBrokerAppBySlug(params.appSlug)
@@ -180,7 +188,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           return { message: 'App not found' }
         }
 
-        const handoff = await createBrokerHandoff(app, authUser, query.redirectTo)
+        const handoff = await createBrokerHandoff(app, authUser, body.redirectTo)
         return new Response(null, {
           status: 302,
           headers: {
@@ -200,7 +208,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }
     },
     {
-      query: t.Object({
+      body: t.Object({
         redirectTo: t.Optional(t.String()),
       }),
     },
@@ -260,20 +268,33 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   .post(
     '/broker/introspect',
     async ({ body, set, request }) => {
-      // Enforce shared secret authentication
-      const secret = process.env.PORTAL_INTROSPECT_SECRET
-      if (!secret) {
+      const { userId, sessionIssuedAt, appSlug } = body
+
+      // Look up the app to get its per-app introspect secret
+      const targetApp = await db.query.appRegistry.findFirst({
+        where: eq(appRegistry.slug, appSlug),
+        columns: { introspectSecret: true },
+      })
+
+      if (!targetApp) {
+        set.status = 404
+        return { message: 'App not found' }
+      }
+
+      const expectedSecret = targetApp.introspectSecret ?? process.env.PORTAL_INTROSPECT_SECRET
+      if (!expectedSecret) {
         set.status = 503
-        return { message: 'Introspection is not configured on the portal' }
+        return { message: 'Introspection is not configured for this app' }
       }
 
       const provided = request.headers.get('x-portal-introspect-secret') ?? ''
-      if (provided !== secret) {
+      if (
+        provided.length !== expectedSecret.length ||
+        !timingSafeEqual(Buffer.from(provided), Buffer.from(expectedSecret))
+      ) {
         set.status = 401
         return { message: 'Unauthorized' }
       }
-
-      const { userId, sessionIssuedAt, appSlug } = body
       const issuedAt = new Date(sessionIssuedAt)
 
       // 1. Look up the user
