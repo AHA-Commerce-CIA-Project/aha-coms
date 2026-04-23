@@ -17,7 +17,7 @@ import type {
   UserUpdatedPayload,
   UserOffboardedPayload,
 } from '@coms-portal/shared'
-import type { PortalRole } from '@coms-portal/shared'
+import type { PortalRole, PortalAppRole } from '@coms-portal/shared'
 
 // ---------------------------------------------------------------------------
 // Internal: resolve user + teams + app slugs from DB
@@ -31,6 +31,14 @@ interface ResolvedUserState {
   portalRole: PortalRole
   teamIds: string[]
   appSlugs: string[]
+}
+
+/** Per-app data needed for role resolution and per-app dispatch */
+interface ResolvedAppContext {
+  appId: string
+  slug: string
+  appRoles: PortalAppRole[]
+  teamGrants: Array<{ appRole: string | null }>
 }
 
 async function resolveUserState(userId: string): Promise<ResolvedUserState | null> {
@@ -78,6 +86,86 @@ async function resolveUserState(userId: string): Promise<ResolvedUserState | nul
 }
 
 // ---------------------------------------------------------------------------
+// Internal: resolve per-app context (team grants + declared roles)
+// ---------------------------------------------------------------------------
+
+async function resolvePerAppContext(teamIds: string[]): Promise<ResolvedAppContext[]> {
+  if (teamIds.length === 0) return []
+
+  // Fetch all team-app grants with their appRole for the user's teams
+  const grants = await db
+    .select({
+      appId: teamAppAccess.appId,
+      appRole: teamAppAccess.appRole,
+    })
+    .from(teamAppAccess)
+    .where(inArray(teamAppAccess.teamId, teamIds))
+
+  if (grants.length === 0) return []
+
+  // Group grants by appId
+  const grantsByApp = new Map<string, Array<{ appRole: string | null }>>()
+  for (const g of grants) {
+    const list = grantsByApp.get(g.appId)
+    if (list) {
+      list.push({ appRole: g.appRole })
+    } else {
+      grantsByApp.set(g.appId, [{ appRole: g.appRole }])
+    }
+  }
+
+  const appIds = [...grantsByApp.keys()]
+
+  // Fetch each app's slug + declared appRoles
+  const apps = await db
+    .select({
+      id: appRegistry.id,
+      slug: appRegistry.slug,
+      appRoles: appRegistry.appRoles,
+    })
+    .from(appRegistry)
+    .where(inArray(appRegistry.id, appIds))
+
+  return apps.map((app) => ({
+    appId: app.id,
+    slug: app.slug,
+    appRoles: app.appRoles ?? [],
+    teamGrants: grantsByApp.get(app.id) ?? [],
+  }))
+}
+
+// ---------------------------------------------------------------------------
+// Internal: resolve the highest-priority app role for a user
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the app-local role for a user given their team grants and the app's
+ * declared role list.
+ *
+ * Priority:
+ * 1. Explicit roles from team grants — pick the one earliest in the app's
+ *    declared role order (highest priority).
+ * 2. If no explicit role, fall back to the app's default role.
+ * 3. If no default is declared, fall back to the first role in the list.
+ * 4. If the app declares no roles at all, return null.
+ */
+export function resolveAppRoleForUser(
+  teamGrants: Array<{ appRole: string | null }>,
+  appRoles: PortalAppRole[],
+): string | null {
+  if (appRoles.length === 0) return null
+
+  const explicit = teamGrants.map((g) => g.appRole).filter(Boolean) as string[]
+  if (explicit.length > 0) {
+    const roleOrder = appRoles.map((r) => r.key)
+    return explicit.sort((a, b) => roleOrder.indexOf(a) - roleOrder.indexOf(b))[0]
+  }
+
+  const defaultRole = appRoles.find((r) => r.default)
+  return defaultRole?.key ?? appRoles[0]?.key ?? 'employee'
+}
+
+// ---------------------------------------------------------------------------
 // Public emitters
 // ---------------------------------------------------------------------------
 
@@ -85,27 +173,37 @@ async function resolveUserState(userId: string): Promise<ResolvedUserState | nul
  * Emit user.provisioned after a new identity_users row has been committed
  * and initial provisioning has run.
  *
- * Edge case: a freshly-created user with no team memberships has no appSlugs,
- * so dispatchPortalWebhook finds no endpoints and is effectively a no-op.
- * This is intentional — there is nothing to fan out to yet.
+ * Dispatches one webhook per app the user has access to, each with the
+ * correct resolved appRole for that specific app.
+ *
+ * Edge case: a freshly-created user with no team memberships has no apps,
+ * so no webhooks are dispatched. This is intentional.
  */
 export async function emitUserProvisioned(userId: string): Promise<void> {
   const state = await resolveUserState(userId)
   if (!state) return
 
-  const payload: UserProvisionedPayload = {
-    userId: state.id,
-    gipUid: state.gipUid,
-    email: state.email,
-    name: state.name,
-    portalRole: state.portalRole,
-    teamIds: state.teamIds,
-    apps: state.appSlugs,
-  }
+  const perApp = await resolvePerAppContext(state.teamIds)
+  if (perApp.length === 0) return
 
-  await dispatchPortalWebhook('user.provisioned', payload, {
-    appSlugs: state.appSlugs.length > 0 ? state.appSlugs : undefined,
-  })
+  for (const app of perApp) {
+    const appRole = resolveAppRoleForUser(app.teamGrants, app.appRoles)
+
+    const payload: UserProvisionedPayload = {
+      userId: state.id,
+      gipUid: state.gipUid,
+      email: state.email,
+      name: state.name,
+      portalRole: state.portalRole,
+      teamIds: state.teamIds,
+      apps: state.appSlugs,
+      appRole,
+    }
+
+    await dispatchPortalWebhook('user.provisioned', payload, {
+      appSlugs: [app.slug],
+    })
+  }
 }
 
 /**
@@ -113,25 +211,36 @@ export async function emitUserProvisioned(userId: string): Promise<void> {
  *
  * changedFields should contain only the field names that were actually
  * modified (e.g. ['email', 'portalRole'], ['teamIds'], ['apps']).
+ *
+ * Dispatches one webhook per app the user has access to, each with the
+ * correct resolved appRole for that specific app.
  */
 export async function emitUserUpdated(userId: string, changedFields: string[]): Promise<void> {
   const state = await resolveUserState(userId)
   if (!state) return
 
-  const payload: UserUpdatedPayload = {
-    userId: state.id,
-    gipUid: state.gipUid,
-    email: state.email,
-    name: state.name,
-    portalRole: state.portalRole,
-    teamIds: state.teamIds,
-    apps: state.appSlugs,
-    changedFields,
-  }
+  const perApp = await resolvePerAppContext(state.teamIds)
+  if (perApp.length === 0) return
 
-  await dispatchPortalWebhook('user.updated', payload, {
-    appSlugs: state.appSlugs.length > 0 ? state.appSlugs : undefined,
-  })
+  for (const app of perApp) {
+    const appRole = resolveAppRoleForUser(app.teamGrants, app.appRoles)
+
+    const payload: UserUpdatedPayload = {
+      userId: state.id,
+      gipUid: state.gipUid,
+      email: state.email,
+      name: state.name,
+      portalRole: state.portalRole,
+      teamIds: state.teamIds,
+      apps: state.appSlugs,
+      changedFields,
+      appRole,
+    }
+
+    await dispatchPortalWebhook('user.updated', payload, {
+      appSlugs: [app.slug],
+    })
+  }
 }
 
 /**

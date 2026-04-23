@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
-import { accessAuditLog, teamAppAccess, teamMembers, identityUsers } from '~/db/schema'
+import { accessAuditLog, teamAppAccess, teamMembers, identityUsers, appRegistry } from '~/db/schema'
 import { and, eq, desc, sql } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { resolveAndSyncClaims } from '../services/claims'
@@ -31,7 +31,26 @@ export const accessRoutes = new Elysia()
 
   .post(
     '/teams/:id/apps',
-    async ({ params, body, authUser }) => {
+    async ({ params, body, set, authUser }) => {
+      // Validate appRole against the app's declared roles (if provided)
+      if (body.appRole) {
+        const app = await db.query.appRegistry.findFirst({
+          where: eq(appRegistry.id, body.appId),
+          columns: { appRoles: true },
+        })
+
+        if (!app) {
+          set.status = 404
+          return { message: 'App not found' }
+        }
+
+        const declaredKeys = (app.appRoles ?? []).map((r) => r.key)
+        if (!declaredKeys.includes(body.appRole)) {
+          set.status = 400
+          return { message: `Invalid appRole '${body.appRole}'. Valid roles: ${declaredKeys.join(', ') || '(none)'}` }
+        }
+      }
+
       const actor = await db.query.identityUsers.findFirst({
         where: eq(identityUsers.gipUid, authUser.gipUid),
       })
@@ -39,6 +58,7 @@ export const accessRoutes = new Elysia()
       await db.insert(teamAppAccess).values({
         teamId: params.id,
         appId: body.appId,
+        appRole: body.appRole ?? null,
         grantedBy: actor?.id,
       })
 
@@ -49,12 +69,12 @@ export const accessRoutes = new Elysia()
         action: 'grant_app_access',
         targetType: 'team',
         targetId: params.id,
-        details: { appId: body.appId },
+        details: { appId: body.appId, appRole: body.appRole ?? null },
       })
 
       return { ok: true }
     },
-    { body: t.Object({ appId: t.String() }) },
+    { body: t.Object({ appId: t.String(), appRole: t.Optional(t.String()) }) },
   )
 
   .get(

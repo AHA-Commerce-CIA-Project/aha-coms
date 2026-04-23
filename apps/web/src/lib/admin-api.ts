@@ -1,6 +1,7 @@
 import type {
   AuthTransportMode,
   PortalAdapterType,
+  PortalAppRole,
   PortalComplianceStatus,
   PortalHandoffMode,
   PortalRole,
@@ -129,6 +130,7 @@ export interface AppRecord {
   contractVersion: number
   complianceStatus: PortalComplianceStatus
   manifestPath: string | null
+  appRoles: PortalAppRole[]
   lastVerifiedAt: string | null
   status: 'active' | 'maintenance' | 'deprecated'
   createdAt: string
@@ -279,7 +281,7 @@ export const adminApi = {
       method: 'DELETE',
     })
   },
-  grantTeamApp(id: string, body: { appId: string }) {
+  grantTeamApp(id: string, body: { appId: string; appRole?: string }) {
     return requestJson<{ ok: true }>(`/api/v1/teams/${id}/apps`, {
       method: 'POST',
       body: JSON.stringify(body),

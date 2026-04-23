@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, unique, integer, uniqueIndex } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, timestamp, unique, integer, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
 import { sql, relations } from 'drizzle-orm'
 import { teams } from './teams'
 import { identityUsers } from './identity-users'
@@ -6,6 +6,7 @@ import {
   DEFAULT_AUTH_TRANSPORT_MODE,
   PLATFORM_AUTH_CONTRACT_VERSION,
 } from '@coms-portal/shared/contracts/auth'
+import type { PortalAppRole } from '@coms-portal/shared/contracts/integration-manifest'
 
 export const appRegistry = pgTable('app_registry', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
@@ -27,6 +28,7 @@ export const appRegistry = pgTable('app_registry', {
   contractVersion: integer('contract_version').notNull().default(PLATFORM_AUTH_CONTRACT_VERSION),
   complianceStatus: varchar('compliance_status', { length: 20 }).notNull().default('draft'),
   manifestPath: text('manifest_path'),
+  appRoles: jsonb('app_roles').$type<PortalAppRole[]>().notNull().default(sql`'[]'::jsonb`),
   lastVerifiedAt: timestamp('last_verified_at', { withTimezone: true }),
   status: varchar('status', { length: 20 }).notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -48,6 +50,7 @@ export const teamAppAccess = pgTable(
     appId: uuid('app_id')
       .notNull()
       .references(() => appRegistry.id, { onDelete: 'cascade' }),
+    appRole: varchar('app_role', { length: 50 }),
     grantedBy: uuid('granted_by').references(() => identityUsers.id),
     grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
   },
