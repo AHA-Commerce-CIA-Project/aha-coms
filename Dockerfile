@@ -6,7 +6,6 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-COPY packages/shared/package.json packages/shared/
 RUN bun install --frozen-lockfile
 
 # ── Stage 2: Build SvelteKit static files ────────────────────────
@@ -18,7 +17,6 @@ ENV VITE_GIP_API_KEY=$VITE_GIP_API_KEY
 ENV VITE_GIP_AUTH_DOMAIN=$VITE_GIP_AUTH_DOMAIN
 ENV VITE_GIP_PROJECT_ID=$VITE_GIP_PROJECT_ID
 COPY tsconfig.base.json ./
-COPY packages/shared/ packages/shared/
 COPY apps/api/src/ apps/api/src/
 COPY apps/api/package.json apps/api/
 COPY apps/web/ apps/web/
@@ -31,7 +29,6 @@ LABEL org.opencontainers.image.title="COMS Portal" \
 WORKDIR /app
 COPY --from=deps /app/node_modules/ node_modules/
 COPY apps/api/ apps/api/
-COPY packages/shared/ packages/shared/
 COPY --from=web-build /app/apps/web/build/ public/
 COPY package.json ./
 EXPOSE 3000
