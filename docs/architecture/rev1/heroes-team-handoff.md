@@ -147,13 +147,13 @@ Heroes duplicates portal types locally. These are already drifting — `PortalSe
 
 ### Prerequisites
 
-The portal team will publish `@coms-portal/shared` as a Git-based dependency (GitHub repo `mrdoorba/coms-portal-shared`). This must be done before Heroes can consume it.
+The portal team has published `@coms-portal/shared` as a Git-based dependency (GitHub repo `mrdoorba/coms-shared`, public). This is ready to consume now.
 
 ### What to Do
 
 1. Add the dependency:
    ```bash
-   bun add @coms-portal/shared@github:mrdoorba/coms-portal-shared#v1.0.0
+   bun add @coms-portal/shared@git+https://github.com/mrdoorba/coms-shared.git#v1.0.0
    ```
 
 2. Replace duplicated types:
@@ -173,7 +173,7 @@ The portal team will publish `@coms-portal/shared` as a Git-based dependency (Gi
 
 ### When
 
-After the portal team notifies you that `@coms-portal/shared` v1.0.0 is published.
+`@coms-portal/shared` v1.0.0 is published and ready — this can be done now.
 
 ---
 
@@ -242,7 +242,7 @@ This enables the portal admin UI to show a role picker when granting teams acces
 ```
 Portal ships Spec 01 (security)        → No Heroes action needed
 Portal ships Spec 02 (provisioning)    → Heroes does H1, H2, manifest update
-Portal publishes @coms-portal/shared   → Heroes does H3
+Portal publishes @coms-portal/shared   → Heroes does H3 ✅ PUBLISHED
 Heroes does H4 (introspect resilience) → Independent, anytime
 Portal ships Spec 04 (health checks)   → No Heroes action needed
 Portal ships Spec 05 (SSR, tasks)      → No Heroes action needed
