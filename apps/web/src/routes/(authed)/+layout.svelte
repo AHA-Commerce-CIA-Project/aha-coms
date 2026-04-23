@@ -58,7 +58,7 @@
   </div>
 {:else if user}
   <div class="app-bg min-h-screen {sidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded'}">
-    <ServiceBar {apps} />
+    <ServiceBar {apps} {user} />
     <TopBar {user} />
     <Sidebar {user} />
 
