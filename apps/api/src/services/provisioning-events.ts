@@ -29,6 +29,7 @@ interface ResolvedUserState {
   email: string
   name: string
   portalRole: PortalRole
+  branch: string | null
   teamIds: string[]
   appSlugs: string[]
 }
@@ -80,6 +81,7 @@ async function resolveUserState(userId: string): Promise<ResolvedUserState | nul
     email: user.email,
     name: user.name,
     portalRole: user.portalRole as PortalRole,
+    branch: user.branch ?? null,
     teamIds,
     appSlugs,
   }
@@ -198,6 +200,7 @@ export async function emitUserProvisioned(userId: string): Promise<void> {
       teamIds: state.teamIds,
       apps: state.appSlugs,
       appRole,
+      branch: state.branch,
     }
 
     await dispatchPortalWebhook('user.provisioned', payload, {
@@ -235,6 +238,7 @@ export async function emitUserUpdated(userId: string, changedFields: string[]): 
       apps: state.appSlugs,
       changedFields,
       appRole,
+      branch: state.branch,
     }
 
     await dispatchPortalWebhook('user.updated', payload, {

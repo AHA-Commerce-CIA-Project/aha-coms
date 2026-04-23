@@ -16,6 +16,7 @@ type UserRecord = {
   email: string
   name: string
   portalRole: string
+  branch: string | null
   status: string
 }
 
@@ -103,6 +104,7 @@ function setUser(overrides: Partial<UserRecord> = {}) {
     email: 'user@example.com',
     name: 'Test User',
     portalRole: 'employee',
+    branch: 'Thailand',
     status: 'active',
     ...overrides,
   }

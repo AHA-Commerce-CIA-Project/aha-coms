@@ -74,7 +74,7 @@
 
   // Branch
   let editingBranch = $state(false)
-  let branchValue = $state<'indonesia' | 'thailand' | ''>('')
+  let branchValue = $state<'Indonesia' | 'Thailand' | ''>('')
   let branchPending = $state(false)
   let branchError = $state<string | null>(null)
 
@@ -635,8 +635,8 @@
                 class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
               >
                 <option value="">Not set</option>
-                <option value="indonesia">Indonesia</option>
-                <option value="thailand">Thailand</option>
+                <option value="Indonesia">Indonesia</option>
+                <option value="Thailand">Thailand</option>
               </select>
               {#if branchError}
                 <p class="text-xs text-destructive">{branchError}</p>
@@ -661,7 +661,7 @@
             <div class="flex items-center gap-2">
               <span class="text-sm capitalize">{emp.branch ?? '-'}</span>
               <button
-                onclick={() => { editingBranch = true; branchValue = (emp.branch as 'indonesia' | 'thailand' | '') ?? '' }}
+                onclick={() => { editingBranch = true; branchValue = (emp.branch as 'Indonesia' | 'Thailand' | '') ?? '' }}
                 class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
               >
                 Edit

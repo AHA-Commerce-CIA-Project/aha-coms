@@ -21,7 +21,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.0.0",
+    "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.1.0",
     "@elysiajs/static": "^1.2",
     "@googleapis/sheets": "^13.0.1",
     "drizzle-orm": "^0.45.0",

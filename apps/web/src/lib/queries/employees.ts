@@ -26,7 +26,7 @@ export function createEmployeeMutation() {
       phone?: string
       department?: string
       position?: string
-      branch?: 'indonesia' | 'thailand'
+      branch?: 'Indonesia' | 'Thailand'
       portalRole?: PortalRole
       teamId?: string
 
@@ -55,7 +55,7 @@ export function updateEmployeeMutation() {
         position?: string
         personalEmail?: string
         teamId?: string
-        branch?: 'indonesia' | 'thailand'
+        branch?: 'Indonesia' | 'Thailand'
       }
     }) => {
       return adminApi.updateEmployee(id, data)

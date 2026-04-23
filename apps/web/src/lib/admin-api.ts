@@ -188,7 +188,7 @@ export const adminApi = {
     phone?: string
     department?: string
     position?: string
-    branch?: 'indonesia' | 'thailand'
+    branch?: 'Indonesia' | 'Thailand'
     portalRole?: PortalRole
     teamId?: string
   }) {

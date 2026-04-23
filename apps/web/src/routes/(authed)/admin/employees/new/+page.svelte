@@ -13,7 +13,7 @@
     name: '',
     phone: '',
     position: '',
-    branch: '' as '' | 'indonesia' | 'thailand',
+    branch: '' as '' | 'Indonesia' | 'Thailand',
     portalRole: 'employee' as PortalRole,
     teamId: '',
 
@@ -90,8 +90,8 @@
       <label for="employee-branch" class="mb-1 block text-xs text-muted-foreground">Branch</label>
       <select id="employee-branch" bind:value={form.branch} required class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none">
         <option value="" disabled>Select branch</option>
-        <option value="indonesia">Indonesia</option>
-        <option value="thailand">Thailand</option>
+        <option value="Indonesia">Indonesia</option>
+        <option value="Thailand">Thailand</option>
       </select>
     </div>
     <div class="grid grid-cols-2 gap-4">
