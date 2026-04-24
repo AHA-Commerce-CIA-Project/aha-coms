@@ -9,6 +9,23 @@ const findFirst = mock(async () => ({
   status: 'active',
 }))
 
+// Track what select().from().where() chains return
+let selectResults: Record<string, unknown[]> = {}
+
+function makeSelectChain() {
+  let tableName = ''
+  return {
+    from: (table: { teamId?: string; appId?: string; slug?: string }) => {
+      if (table.teamId) tableName = 'teamMembers'
+      else if (table.appId) tableName = 'teamAppAccess'
+      else tableName = 'appRegistry'
+      return {
+        where: async () => selectResults[tableName] ?? [],
+      }
+    },
+  }
+}
+
 mock.module('~/db', () => ({
   db: {
     query: {
@@ -16,6 +33,7 @@ mock.module('~/db', () => ({
         findFirst,
       },
     },
+    select: () => makeSelectChain(),
     transaction: async () => undefined,
     update: () => ({
       set: () => ({
@@ -73,13 +91,16 @@ describe('resolveAuthUser', () => {
       portalRole: 'admin',
       status: 'active',
     }))
+    selectResults = {
+      teamMembers: [{ teamId: 'team-1' }],
+      teamAppAccess: [{ appId: 'app-1' }],
+      appRegistry: [{ slug: 'portal' }],
+    }
   })
 
-  test('returns the DB-backed auth user with claims from the decoded cookie', async () => {
+  test('returns the DB-backed auth user with teams and apps resolved from DB', async () => {
     const authUser = await resolveAuthUser({
       uid: 'gip-123',
-      teamIds: ['team-1'],
-      apps: ['portal'],
     })
 
     expect(findFirst).toHaveBeenCalledTimes(1)
@@ -92,6 +113,15 @@ describe('resolveAuthUser', () => {
       teamIds: ['team-1'],
       apps: ['portal'],
     })
+  })
+
+  test('returns empty apps when user has no team memberships', async () => {
+    selectResults = { teamMembers: [], teamAppAccess: [], appRegistry: [] }
+
+    const authUser = await resolveAuthUser({ uid: 'gip-123' })
+
+    expect(authUser.teamIds).toEqual([])
+    expect(authUser.apps).toEqual([])
   })
 
   test('throws a 403 resolution error for inactive users', async () => {

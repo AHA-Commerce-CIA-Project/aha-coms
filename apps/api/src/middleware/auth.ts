@@ -2,8 +2,8 @@ import { Elysia } from 'elysia'
 import { verifySessionCookie } from '../gip-admin'
 import type { PortalClaims } from '@coms-portal/shared'
 import { db } from '~/db'
-import { identityUsers } from '~/db/schema'
-import { eq } from 'drizzle-orm'
+import { identityUsers, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
+import { eq, inArray } from 'drizzle-orm'
 import { getSessionCookieValue } from './session-cookie'
 import type { DecodedToken } from '../gip-admin'
 
@@ -39,14 +39,42 @@ export async function resolveAuthUser(decoded: DecodedToken): Promise<AuthUser> 
     throw new AuthResolutionError('Account is inactive or suspended', 403)
   }
 
+  // Resolve teamIds and apps from DB so changes take effect immediately
+  // without requiring the user to re-login.
+  const memberships = await db
+    .select({ teamId: teamMembers.teamId })
+    .from(teamMembers)
+    .where(eq(teamMembers.userId, user.id))
+
+  const teamIds = memberships.map((m) => m.teamId)
+
+  let appSlugs: string[] = []
+  if (teamIds.length > 0) {
+    const access = await db
+      .select({ appId: teamAppAccess.appId })
+      .from(teamAppAccess)
+      .where(inArray(teamAppAccess.teamId, teamIds))
+
+    const appIds = [...new Set(access.map((a) => a.appId))]
+
+    if (appIds.length > 0) {
+      const apps = await db
+        .select({ slug: appRegistry.slug })
+        .from(appRegistry)
+        .where(inArray(appRegistry.id, appIds))
+
+      appSlugs = apps.map((a) => a.slug)
+    }
+  }
+
   return {
     id: user.id,
     gipUid: user.gipUid ?? decoded.uid,
     email: user.email,
     name: user.name,
     portalRole: user.portalRole as PortalClaims['portalRole'],
-    teamIds: (decoded['teamIds'] as string[]) ?? [],
-    apps: (decoded['apps'] as string[]) ?? [],
+    teamIds,
+    apps: appSlugs,
   }
 }
 
