@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
-import { accessAuditLog, teamAppAccess, teamMembers, identityUsers, appRegistry } from '~/db/schema'
-import { and, eq, desc, sql } from 'drizzle-orm'
+import { accessAuditLog, teamAppAccess, teamMembers, identityUsers, appRegistry, memberAppRole } from '~/db/schema'
+import { and, eq, desc, sql, inArray } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { resolveAndSyncClaims } from '../services/claims'
 import { logAudit } from '../services/audit'
@@ -31,26 +31,7 @@ export const accessRoutes = new Elysia()
 
   .post(
     '/teams/:id/apps',
-    async ({ params, body, set, authUser }) => {
-      // Validate appRole against the app's declared roles (if provided)
-      if (body.appRole) {
-        const app = await db.query.appRegistry.findFirst({
-          where: eq(appRegistry.id, body.appId),
-          columns: { appRoles: true },
-        })
-
-        if (!app) {
-          set.status = 404
-          return { message: 'App not found' }
-        }
-
-        const declaredKeys = (app.appRoles ?? []).map((r) => r.key)
-        if (!declaredKeys.includes(body.appRole)) {
-          set.status = 400
-          return { message: `Invalid appRole '${body.appRole}'. Valid roles: ${declaredKeys.join(', ') || '(none)'}` }
-        }
-      }
-
+    async ({ params, body, authUser }) => {
       const actor = await db.query.identityUsers.findFirst({
         where: eq(identityUsers.gipUid, authUser.gipUid),
       })
@@ -58,7 +39,6 @@ export const accessRoutes = new Elysia()
       await db.insert(teamAppAccess).values({
         teamId: params.id,
         appId: body.appId,
-        appRole: body.appRole ?? null,
         grantedBy: actor?.id,
       })
 
@@ -69,12 +49,12 @@ export const accessRoutes = new Elysia()
         action: 'grant_app_access',
         targetType: 'team',
         targetId: params.id,
-        details: { appId: body.appId, appRole: body.appRole ?? null },
+        details: { appId: body.appId },
       })
 
       return { ok: true }
     },
-    { body: t.Object({ appId: t.String(), appRole: t.Optional(t.String()) }) },
+    { body: t.Object({ appId: t.String() }) },
   )
 
   .get(
@@ -117,6 +97,36 @@ export const accessRoutes = new Elysia()
   )
 
   .delete('/teams/:id/apps/:appId', async ({ params, authUser }) => {
+    // Also clean up per-member role assignments for this team's members
+    const members = await db
+      .select({ userId: teamMembers.userId })
+      .from(teamMembers)
+      .where(eq(teamMembers.teamId, params.id))
+
+    if (members.length > 0) {
+      const memberUserIds = members.map((m) => m.userId)
+      // Only delete roles for users who don't have access via another team
+      for (const userId of memberUserIds) {
+        const otherAccess = await db
+          .select({ id: teamAppAccess.id })
+          .from(teamAppAccess)
+          .innerJoin(teamMembers, eq(teamMembers.teamId, teamAppAccess.teamId))
+          .where(
+            and(
+              eq(teamMembers.userId, userId),
+              eq(teamAppAccess.appId, params.appId),
+              sql`${teamAppAccess.teamId} != ${params.id}`,
+            ),
+          )
+
+        if (otherAccess.length === 0) {
+          await db
+            .delete(memberAppRole)
+            .where(and(eq(memberAppRole.userId, userId), eq(memberAppRole.appId, params.appId)))
+        }
+      }
+    }
+
     await db
       .delete(teamAppAccess)
       .where(and(eq(teamAppAccess.teamId, params.id), eq(teamAppAccess.appId, params.appId)))
@@ -128,6 +138,97 @@ export const accessRoutes = new Elysia()
       action: 'revoke_app_access',
       targetType: 'team',
       targetId: params.id,
+      details: { appId: params.appId },
+    })
+
+    return { ok: true }
+  })
+
+  // ---------------------------------------------------------------------------
+  // Per-member app role management
+  // ---------------------------------------------------------------------------
+
+  .put(
+    '/members/:userId/apps/:appId/role',
+    async ({ params, body, set, authUser }) => {
+      // Validate the role against the app's declared roles
+      const app = await db.query.appRegistry.findFirst({
+        where: eq(appRegistry.id, params.appId),
+        columns: { appRoles: true },
+      })
+
+      if (!app) {
+        set.status = 404
+        return { message: 'App not found' }
+      }
+
+      const declaredKeys = (app.appRoles ?? []).map((r) => r.key)
+      if (declaredKeys.length > 0 && !declaredKeys.includes(body.appRole)) {
+        set.status = 400
+        return { message: `Invalid appRole '${body.appRole}'. Valid roles: ${declaredKeys.join(', ')}` }
+      }
+
+      const actor = await db.query.identityUsers.findFirst({
+        where: eq(identityUsers.gipUid, authUser.gipUid),
+      })
+
+      await db
+        .insert(memberAppRole)
+        .values({
+          userId: params.userId,
+          appId: params.appId,
+          appRole: body.appRole,
+          grantedBy: actor?.id,
+        })
+        .onConflictDoUpdate({
+          target: [memberAppRole.userId, memberAppRole.appId],
+          set: { appRole: body.appRole, grantedBy: actor?.id, grantedAt: new Date() },
+        })
+
+      // Refresh claims and emit webhook for the affected user
+      const user = await db.query.identityUsers.findFirst({
+        where: eq(identityUsers.id, params.userId),
+      })
+      if (user?.gipUid) {
+        await resolveAndSyncClaims(user.gipUid, params.userId)
+      }
+      emitUserUpdated(params.userId, ['appRole']).catch((err) => {
+        console.error(`[provisioning-events] emitUserUpdated failed for ${params.userId}:`, err)
+      })
+
+      await logAudit({
+        actorId: authUser.id,
+        action: 'set_member_app_role',
+        targetType: 'user',
+        targetId: params.userId,
+        details: { appId: params.appId, appRole: body.appRole },
+      })
+
+      return { ok: true }
+    },
+    { body: t.Object({ appRole: t.String() }) },
+  )
+
+  .delete('/members/:userId/apps/:appId/role', async ({ params, authUser }) => {
+    await db
+      .delete(memberAppRole)
+      .where(and(eq(memberAppRole.userId, params.userId), eq(memberAppRole.appId, params.appId)))
+
+    const user = await db.query.identityUsers.findFirst({
+      where: eq(identityUsers.id, params.userId),
+    })
+    if (user?.gipUid) {
+      await resolveAndSyncClaims(user.gipUid, params.userId)
+    }
+    emitUserUpdated(params.userId, ['appRole']).catch((err) => {
+      console.error(`[provisioning-events] emitUserUpdated failed for ${params.userId}:`, err)
+    })
+
+    await logAudit({
+      actorId: authUser.id,
+      action: 'remove_member_app_role',
+      targetType: 'user',
+      targetId: params.userId,
       details: { appId: params.appId },
     })
 

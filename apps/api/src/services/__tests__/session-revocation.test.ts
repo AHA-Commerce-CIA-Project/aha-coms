@@ -64,6 +64,7 @@ mock.module('~/db/schema', () => ({
   teamMembers,
   teamAppAccess,
   appRegistry,
+  memberAppRole: { userId: 'memberAppRole.userId', appId: 'memberAppRole.appId', appRole: 'memberAppRole.appRole' },
 }))
 
 mock.module('drizzle-orm', () => ({

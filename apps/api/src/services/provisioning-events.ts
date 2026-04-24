@@ -8,9 +8,9 @@
  * without blocking the response path.
  */
 
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, and } from 'drizzle-orm'
 import { db } from '~/db'
-import { identityUsers, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
+import { identityUsers, teamMembers, teamAppAccess, appRegistry, memberAppRole } from '~/db/schema'
 import { dispatchPortalWebhook } from './portal-webhook-fanout'
 import type {
   UserProvisionedPayload,
@@ -39,7 +39,7 @@ interface ResolvedAppContext {
   appId: string
   slug: string
   appRoles: PortalAppRole[]
-  teamGrants: Array<{ appRole: string | null }>
+  memberRole: string | null
 }
 
 async function resolveUserState(userId: string): Promise<ResolvedUserState | null> {
@@ -91,32 +91,20 @@ async function resolveUserState(userId: string): Promise<ResolvedUserState | nul
 // Internal: resolve per-app context (team grants + declared roles)
 // ---------------------------------------------------------------------------
 
-async function resolvePerAppContext(teamIds: string[]): Promise<ResolvedAppContext[]> {
+async function resolvePerAppContext(userId: string, teamIds: string[]): Promise<ResolvedAppContext[]> {
   if (teamIds.length === 0) return []
 
-  // Fetch all team-app grants with their appRole for the user's teams
+  // Fetch all team-app grants (access gate only, no role)
   const grants = await db
     .select({
       appId: teamAppAccess.appId,
-      appRole: teamAppAccess.appRole,
     })
     .from(teamAppAccess)
     .where(inArray(teamAppAccess.teamId, teamIds))
 
   if (grants.length === 0) return []
 
-  // Group grants by appId
-  const grantsByApp = new Map<string, Array<{ appRole: string | null }>>()
-  for (const g of grants) {
-    const list = grantsByApp.get(g.appId)
-    if (list) {
-      list.push({ appRole: g.appRole })
-    } else {
-      grantsByApp.set(g.appId, [{ appRole: g.appRole }])
-    }
-  }
-
-  const appIds = [...grantsByApp.keys()]
+  const appIds = [...new Set(grants.map((g) => g.appId))]
 
   // Fetch each app's slug + declared appRoles
   const apps = await db
@@ -128,11 +116,27 @@ async function resolvePerAppContext(teamIds: string[]): Promise<ResolvedAppConte
     .from(appRegistry)
     .where(inArray(appRegistry.id, appIds))
 
+  // Fetch the user's per-member role assignments for these apps
+  const userRoles = await db
+    .select({
+      appId: memberAppRole.appId,
+      appRole: memberAppRole.appRole,
+    })
+    .from(memberAppRole)
+    .where(
+      and(
+        eq(memberAppRole.userId, userId),
+        inArray(memberAppRole.appId, appIds),
+      ),
+    )
+
+  const roleByApp = new Map(userRoles.map((r) => [r.appId, r.appRole]))
+
   return apps.map((app) => ({
     appId: app.id,
     slug: app.slug,
     appRoles: app.appRoles ?? [],
-    teamGrants: grantsByApp.get(app.id) ?? [],
+    memberRole: roleByApp.get(app.id) ?? null,
   }))
 }
 
@@ -141,27 +145,22 @@ async function resolvePerAppContext(teamIds: string[]): Promise<ResolvedAppConte
 // ---------------------------------------------------------------------------
 
 /**
- * Resolves the app-local role for a user given their team grants and the app's
- * declared role list.
+ * Resolves the app-local role for a user given their per-member role and
+ * the app's declared role list.
  *
  * Priority:
- * 1. Explicit roles from team grants — pick the one earliest in the app's
- *    declared role order (highest priority).
+ * 1. Explicit per-member role from member_app_role table.
  * 2. If no explicit role, fall back to the app's default role.
  * 3. If no default is declared, fall back to the first role in the list.
  * 4. If the app declares no roles at all, return null.
  */
 export function resolveAppRoleForUser(
-  teamGrants: Array<{ appRole: string | null }>,
+  memberRole: string | null,
   appRoles: PortalAppRole[],
 ): string | null {
   if (appRoles.length === 0) return null
 
-  const explicit = teamGrants.map((g) => g.appRole).filter(Boolean) as string[]
-  if (explicit.length > 0) {
-    const roleOrder = appRoles.map((r) => r.key)
-    return explicit.sort((a, b) => roleOrder.indexOf(a) - roleOrder.indexOf(b))[0]
-  }
+  if (memberRole) return memberRole
 
   const defaultRole = appRoles.find((r) => r.default)
   return defaultRole?.key ?? appRoles[0]?.key ?? 'employee'
@@ -185,11 +184,11 @@ export async function emitUserProvisioned(userId: string): Promise<void> {
   const state = await resolveUserState(userId)
   if (!state) return
 
-  const perApp = await resolvePerAppContext(state.teamIds)
+  const perApp = await resolvePerAppContext(userId, state.teamIds)
   if (perApp.length === 0) return
 
   for (const app of perApp) {
-    const appRole = resolveAppRoleForUser(app.teamGrants, app.appRoles)
+    const appRole = resolveAppRoleForUser(app.memberRole, app.appRoles)
 
     const payload: UserProvisionedPayload = {
       userId: state.id,
@@ -222,11 +221,11 @@ export async function emitUserUpdated(userId: string, changedFields: string[]): 
   const state = await resolveUserState(userId)
   if (!state) return
 
-  const perApp = await resolvePerAppContext(state.teamIds)
+  const perApp = await resolvePerAppContext(userId, state.teamIds)
   if (perApp.length === 0) return
 
   for (const app of perApp) {
-    const appRole = resolveAppRoleForUser(app.teamGrants, app.appRoles)
+    const appRole = resolveAppRoleForUser(app.memberRole, app.appRoles)
 
     const payload: UserUpdatedPayload = {
       userId: state.id,

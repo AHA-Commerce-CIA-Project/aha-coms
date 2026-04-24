@@ -42,6 +42,7 @@ mock.module('~/db/schema', () => {
     // Added in the SSO upgrade — barrel re-exports these new schema tables
     sessionRevocations: { userId: 'sessionRevocations.userId' },
     appWebhookEndpoints: { id: 'appWebhookEndpoints.id' },
+    memberAppRole: { userId: 'memberAppRole.userId', appId: 'memberAppRole.appId', appRole: 'memberAppRole.appRole' },
   }
 })
 
