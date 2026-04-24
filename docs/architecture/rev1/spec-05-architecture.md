@@ -65,6 +65,8 @@ bun remove @sveltejs/adapter-static
 bun add @sveltejs/adapter-node
 ```
 
+> **Note:** SvelteKit's `adapter-node` emits a `polka`-based Node.js server. Bun handles most Node.js APIs but edge cases exist around streaming responses, `set-cookie` header handling, and `__dirname`/`__filename` usage. Test thoroughly. If compatibility issues arise, evaluate the community `adapter-bun` package as an alternative.
+
 Update `apps/web/svelte.config.js`:
 
 ```javascript
@@ -90,15 +92,15 @@ Create `apps/web/src/hooks.server.ts`:
 
 ```typescript
 import type { Handle } from '@sveltejs/kit'
+import { validateSession } from '~/services/auth'
 
 const AUTHED_PREFIX = '/(authed)'
+const AUTH_TIMEOUT_MS = 3_000
 
 export const handle: Handle = async ({ event, resolve }) => {
-  // Check if this is an authed route
   const isAuthedRoute = event.route.id?.startsWith(AUTHED_PREFIX)
 
   if (isAuthedRoute) {
-    // Validate session server-side by calling the API
     const sessionCookie = event.cookies.get('__session')
     if (!sessionCookie) {
       return new Response(null, {
@@ -107,25 +109,42 @@ export const handle: Handle = async ({ event, resolve }) => {
       })
     }
 
-    // Call /api/auth/me to validate
-    const res = await fetch(`http://localhost:${process.env.PORT ?? 3000}/api/auth/me`, {
-      headers: { cookie: `__session=${sessionCookie}` },
-    })
+    // Validate session via direct function call (no loopback HTTP).
+    // A timeout prevents a hung auth check from blocking the entire SSR response.
+    try {
+      const user = await Promise.race([
+        validateSession(sessionCookie),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Auth validation timed out')), AUTH_TIMEOUT_MS),
+        ),
+      ])
 
-    if (!res.ok) {
+      if (!user) {
+        return new Response(null, {
+          status: 303,
+          headers: { location: '/login' },
+        })
+      }
+
+      event.locals.user = user
+    } catch {
+      // Fail-closed: redirect to login rather than rendering authed content.
       return new Response(null, {
         status: 303,
         headers: { location: '/login' },
       })
     }
-
-    const user = await res.json()
-    event.locals.user = user
   }
 
   return resolve(event)
 }
 ```
+
+> **Design decisions:**
+>
+> - **Direct function import** instead of a loopback HTTP call. Both processes share the same Bun runtime (Option B), so a direct call avoids an HTTP round-trip per SSR request and eliminates hard-coded port assumptions.
+> - **Timeout** (3 s) prevents a stalled auth call from producing blank pages or 500s.
+> - **Fail-closed** on error: redirect to `/login` rather than rendering authenticated content. This is the safer default for an internal admin portal.
 
 #### Step 3: Update Authed Layout
 
@@ -191,8 +210,8 @@ Root `package.json` build order remains the same: shared → api → web.
 
 ### Risks
 
-- **adapter-node with Bun**: SvelteKit's `adapter-node` emits a Node.js server. Bun is compatible with most Node.js APIs but some edge cases exist. Test thoroughly.
-- **Internal API calls**: The server hook calls `fetch('http://localhost:3000/api/auth/me')` — this works in single-process mode but needs adjustment if API and SSR run on different ports.
+- **adapter-node with Bun**: SvelteKit's `adapter-node` emits a Node.js server. Bun is compatible with most Node.js APIs but edge cases exist with streaming responses and `set-cookie` handling. Test thoroughly; fall back to community `adapter-bun` if needed.
+- **Route ID matching**: The hook checks `event.route.id?.startsWith('/(authed)')` which depends on SvelteKit's internal route ID format. If routes are reorganized or grouped differently, this could silently break. Pin a smoke test that asserts the route IDs match expectations.
 - **Build time**: SSR builds are slower than static builds. Not a concern at this scale.
 
 ---
@@ -244,7 +263,7 @@ Webhook event occurs
 
 #### Step 1: Create Cloud Tasks Queue
 
-Terraform in `infra/`:
+OpenTofu in `infra/`:
 
 ```hcl
 resource "google_cloud_tasks_queue" "webhook_delivery" {
@@ -270,17 +289,37 @@ resource "google_cloud_tasks_queue" "webhook_delivery" {
 New route in `apps/api/src/routes/internal.ts`:
 
 ```typescript
+import { OAuth2Client } from 'google-auth-library'
+
+const authClient = new OAuth2Client()
+const TASK_SA_EMAIL = process.env.CLOUD_TASKS_SA_EMAIL!
+const SERVICE_URL = process.env.SERVICE_URL!
+
 export const internalRoutes = new Elysia({ prefix: '/internal' })
   .post('/webhook-delivery', async ({ body, request, set }) => {
-    // Verify the request comes from Cloud Tasks
-    const oidcToken = request.headers.get('authorization')
-    if (!oidcToken) {
+    // --- OIDC token verification ---
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
       set.status = 401
       return { message: 'Unauthorized' }
     }
-    // Verify OIDC token from Cloud Tasks service account
 
-    // Process the delivery
+    try {
+      const ticket = await authClient.verifyIdToken({
+        idToken: authHeader.slice(7),
+        audience: SERVICE_URL,
+      })
+      const payload = ticket.getPayload()
+      if (payload?.email !== TASK_SA_EMAIL) {
+        set.status = 403
+        return { message: 'Forbidden' }
+      }
+    } catch {
+      set.status = 401
+      return { message: 'Invalid token' }
+    }
+
+    // --- Process the delivery ---
     const { endpointId, event, eventId, jsonBody, occurredAt } = body
     // ... delivery logic from webhook-dispatcher.ts ...
   })
@@ -295,46 +334,115 @@ In `apps/api/src/services/webhook-dispatcher.ts`, replace the `webhook_delivery_
 await db.insert(webhookDeliveryJobs).values({ ... })
 
 // After:
-const { CloudTasksClient } = await import('@google-cloud/tasks')
-const client = new CloudTasksClient()
-const parent = client.queuePath(projectId, region, 'coms-portal-webhook-delivery')
+// Use the Cloud Tasks REST API directly instead of @google-cloud/tasks SDK.
+// The SDK pulls in google-gax + grpc-js (~20 MB) which is heavy for Bun;
+// a single fetch call is sufficient for task creation.
+const { GoogleAuth } = await import('google-auth-library')
+const auth = new GoogleAuth()
+const accessToken = await auth.getAccessToken()
 
-await client.createTask({
-  parent,
-  task: {
-    httpRequest: {
-      httpMethod: 'POST',
-      url: `${serviceUrl}/api/internal/webhook-delivery`,
-      headers: { 'content-type': 'application/json' },
-      body: Buffer.from(JSON.stringify({
-        endpointId: endpoint.id,
-        event,
-        eventId,
-        jsonBody,
-        occurredAt,
-      })),
-      oidcToken: { serviceAccountEmail: taskServiceAccount },
-    },
-    scheduleTime: { seconds: Math.floor(Date.now() / 1000) + 30 },
+const parent = `projects/${projectId}/locations/${region}/queues/coms-portal-webhook-delivery`
+await fetch(`https://cloudtasks.googleapis.com/v2/${parent}/tasks`, {
+  method: 'POST',
+  headers: {
+    'authorization': `Bearer ${accessToken}`,
+    'content-type': 'application/json',
   },
+  body: JSON.stringify({
+    task: {
+      httpRequest: {
+        httpMethod: 'POST',
+        url: `${serviceUrl}/api/internal/webhook-delivery`,
+        headers: { 'content-type': 'application/json' },
+        body: btoa(JSON.stringify({
+          endpointId: endpoint.id,
+          event,
+          eventId,
+          jsonBody,
+          occurredAt,
+        })),
+        oidcToken: { serviceAccountEmail: taskServiceAccount },
+      },
+      scheduleTime: new Date(Date.now() + 30_000).toISOString(),
+    },
+  }),
 })
 ```
 
-#### Step 4: Handle Max Retries
+#### Step 4: Handle Max Retries (Dead-Letter Queue)
 
-Cloud Tasks automatically retries based on the queue config. After `maxAttempts` failures, the task is dropped. To detect this and disable the endpoint:
+Cloud Tasks automatically retries based on the queue config. After `maxAttempts` failures, the task is dropped. To detect this and disable the endpoint, use a **dead-letter queue**:
 
-Option A: Check `X-CloudTasks-TaskRetryCount` header in the delivery endpoint. If it equals `maxAttempts - 1` and delivery fails, disable the endpoint.
+> **Why not check `X-CloudTasks-TaskRetryCount`?** Checking the retry count header in the delivery endpoint and disabling on the last attempt has a race condition: Cloud Tasks may retry due to transient network issues without incrementing the attempt count, leading to premature endpoint disabling. A dead-letter queue is more robust because it only fires after Cloud Tasks has definitively given up.
 
-Option B: Use a Cloud Tasks dead-letter queue that routes to a separate endpoint which disables the endpoint.
+```hcl
+# infra/cloud-tasks.tf — add dead-letter topic
+resource "google_pubsub_topic" "webhook_dlq" {
+  name = "coms-portal-webhook-dlq"
+}
 
-#### Step 5: Remove In-Process Worker
+resource "google_pubsub_subscription" "webhook_dlq_push" {
+  name  = "coms-portal-webhook-dlq-push"
+  topic = google_pubsub_topic.webhook_dlq.name
+
+  push_config {
+    push_endpoint = "${var.service_url}/api/internal/webhook-dlq"
+    oidc_token {
+      service_account_email = var.task_service_account
+    }
+  }
+}
+```
+
+Add a DLQ handler endpoint:
+
+```typescript
+// apps/api/src/routes/internal.ts
+.post('/webhook-dlq', async ({ body, request, set }) => {
+  // Verify OIDC token (same pattern as /webhook-delivery)
+  // ...
+
+  // Decode the original task payload from the Pub/Sub message
+  const message = JSON.parse(Buffer.from(body.message.data, 'base64').toString())
+  const { endpointId } = message
+
+  // Disable the webhook endpoint after exhausting retries
+  await db
+    .update(webhookEndpoints)
+    .set({ enabled: false })
+    .where(eq(webhookEndpoints.id, endpointId))
+
+  console.log(`Webhook endpoint ${endpointId} disabled after max retries`)
+})
+
+#### Step 5: Delivery Observability
+
+The in-process worker currently provides implicit observability via the `webhook_delivery_jobs` table. After migrating to Cloud Tasks, replace this with structured logging:
+
+```typescript
+// In the /webhook-delivery handler, log every attempt:
+console.log(JSON.stringify({
+  severity: 'INFO',
+  message: 'webhook_delivery_attempt',
+  endpointId,
+  eventId,
+  event,
+  retryCount: request.headers.get('x-cloudtasks-taskretrycount') ?? '0',
+  status: result.ok ? 'success' : 'failure',
+  httpStatus: result.status,
+  durationMs: Date.now() - start,
+}))
+```
+
+> Cloud Logging ingests structured JSON from stdout automatically on Cloud Run. Use `severity` for log level filtering and create a log-based metric on `webhook_delivery_attempt` to build a delivery success rate dashboard. The `webhook_delivery_jobs` table can be kept as a historical audit trail or dropped once the team is confident in the logging pipeline.
+
+#### Step 6: Remove In-Process Worker
 
 - Delete `apps/api/src/services/webhook-delivery-worker.ts`
 - Remove `startWebhookDeliveryWorker()` from `apps/api/src/index.ts`
 - The `webhook_delivery_jobs` table can be kept for historical audit or dropped
 
-#### Step 6: Migration Period
+#### Step 7: Migration Period
 
 Run both systems in parallel during transition:
 1. Deploy the Cloud Tasks endpoint
@@ -345,8 +453,9 @@ Run both systems in parallel during transition:
 
 ### Dependencies
 
-- `@google-cloud/tasks` npm package
+- `google-auth-library` package (for OIDC verification and access token generation — avoids the heavy `@google-cloud/tasks` gRPC SDK)
 - Cloud Tasks API enabled in GCP project
+- Pub/Sub API enabled in GCP project (for dead-letter queue)
 - Service account with Cloud Tasks Enqueuer role
 - OIDC authentication for task-to-service calls
 
@@ -359,12 +468,13 @@ Cloud Tasks pricing: first 1 million operations/month free. At current scale (< 
 ## Implementation Order
 
 1. **SSR migration** — can be done independently, high UX impact
-2. **Cloud Tasks setup** — Terraform queue + service account
+2. **Cloud Tasks setup** — OpenTofu queue + service account
 3. **Internal delivery endpoint** — new route
 4. **Dispatcher switch** — Cloud Tasks enqueue instead of DB insert
 5. **Worker drain + removal** — after jobs table is empty
+6. **Health probe to Cloud Scheduler** — move `startHealthProbeInterval()` from in-process `setInterval` to a Cloud Scheduler job calling `POST /api/v1/admin/health-probe` every 60s (see Spec 04). Same scale-to-zero problem as the webhook worker — without this, health statuses go stale when Cloud Run scales to zero.
 
-SSR (step 1) and Cloud Tasks (steps 2-5) are independent and can be done in parallel.
+SSR (step 1) and Cloud Tasks (steps 2-6) are independent and can be done in parallel.
 
 ---
 
@@ -386,9 +496,9 @@ SSR (step 1) and Cloud Tasks (steps 2-5) are independent and can be done in para
 
 | File | Change |
 |------|--------|
-| `infra/cloud-tasks.tf` | New: Cloud Tasks queue resource |
-| `apps/api/src/routes/internal.ts` | New: webhook delivery endpoint |
+| `infra/cloud-tasks.tf` | New: Cloud Tasks queue + Pub/Sub dead-letter topic/subscription |
+| `apps/api/src/routes/internal.ts` | New: webhook delivery endpoint + DLQ handler, with OIDC verification |
 | `apps/api/src/index.ts` | Register internal routes, remove `startWebhookDeliveryWorker()` |
-| `apps/api/src/services/webhook-dispatcher.ts` | Enqueue Cloud Tasks instead of DB insert |
+| `apps/api/src/services/webhook-dispatcher.ts` | Enqueue via Cloud Tasks REST API instead of DB insert |
 | `apps/api/src/services/webhook-delivery-worker.ts` | Remove (after drain) |
-| `apps/api/package.json` | Add `@google-cloud/tasks` dependency |
+| `apps/api/package.json` | Add `google-auth-library` dependency |

@@ -114,6 +114,16 @@ Stale-while-revalidate introduces a window where a revoked session might still b
 - The 5-minute window is bounded and logged
 - The alternative (hard failure) denies service to all users when the portal has a transient outage
 
+### Alerting on Stale-Serve
+
+When a stale cache result is served, the `console.warn` log is necessary but not sufficient — if the portal is down for minutes, ops needs to know. Heroes should:
+
+- Emit a structured log with `severity: 'WARNING'` when serving a stale result
+- If stale-serves exceed a threshold (e.g. 5 in a 2-minute window), escalate to `severity: 'ERROR'`
+- Create a Cloud Monitoring alert policy on the escalated log to page the on-call team
+
+Without alerting, a 5-minute stale-serve window is invisible unless someone checks the logs manually.
+
 ---
 
 ## 2. App Health Check System
@@ -169,6 +179,7 @@ export async function probeAppHealth(app: { id: string; url: string; slug: strin
     })
 
     if (res.ok) return { status: 'healthy' }
+    if (res.status === 404) return { status: 'unknown', error: 'No /api/health endpoint' }
     if (res.status >= 500) return { status: 'unhealthy', error: `HTTP ${res.status}` }
     return { status: 'degraded', error: `HTTP ${res.status}` }
   } catch (err) {
@@ -221,6 +232,8 @@ Create a Cloud Scheduler job that calls `POST /api/v1/admin/health-probe` every 
 ### Recommendation
 
 Start with Option A. Move to Option B when the webhook worker moves to Cloud Tasks (Spec 05). Both changes are part of the same "externalize background work" migration.
+
+> **Action item:** Track the Option A → Option B migration in Spec 05's scope. The health probe has the same scale-to-zero problem as the webhook worker — when Cloud Run scales to zero, the `setInterval` stops and health statuses go stale. Adding a Cloud Scheduler job for the health probe should be a step in Spec 05's implementation order.
 
 ### API Endpoint
 
