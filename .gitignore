@@ -33,7 +33,6 @@ Thumbs.db
 *.swo
 
 # Claude / AI tooling
-CLAUDE.md
 .claude/
 
 
