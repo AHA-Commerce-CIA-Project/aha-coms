@@ -359,7 +359,7 @@
           >
             <option value="" disabled>Select an app</option>
             {#if $allAppsQuery.data}
-              {#each $allAppsQuery.data as app}
+              {#each $allAppsQuery.data.filter((a) => a.status !== 'deprecated') as app}
                 <option value={app.id}>{app.name} ({app.slug})</option>
               {/each}
             {/if}
