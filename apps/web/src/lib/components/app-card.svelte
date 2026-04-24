@@ -8,7 +8,7 @@
   const initial = $derived(app.name.charAt(0).toUpperCase())
 </script>
 
-<form method="POST" action={launchAction}>
+<form method="GET" action={launchAction}>
   {#if redirectTo}
     <input type="hidden" name="redirectTo" value={redirectTo} />
   {/if}
