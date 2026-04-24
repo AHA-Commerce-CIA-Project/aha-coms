@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
-import { teams, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
-import { eq, sql } from 'drizzle-orm'
+import { teams, teamMembers, teamAppAccess, appRegistry, memberAppRole } from '~/db/schema'
+import { eq, sql, inArray } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { addTeamMember, addTeamMembersBatch, removeTeamMember, deleteTeam } from '../services/teams'
 import { logAudit } from '../services/audit'
@@ -53,6 +53,20 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
       .innerJoin(appRegistry, eq(appRegistry.id, teamAppAccess.appId))
       .where(eq(teamAppAccess.teamId, params.id))
 
+    // Fetch per-member app roles for all members of this team
+    const memberIds = team.members.map((m) => m.userId)
+    let memberRoles: Array<{ userId: string; appId: string; appRole: string }> = []
+    if (memberIds.length > 0) {
+      memberRoles = await db
+        .select({
+          userId: memberAppRole.userId,
+          appId: memberAppRole.appId,
+          appRole: memberAppRole.appRole,
+        })
+        .from(memberAppRole)
+        .where(inArray(memberAppRole.userId, memberIds))
+    }
+
     return {
       ...team,
       members: team.members.map((member) => ({
@@ -61,6 +75,9 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
         roleInTeam: member.roleInTeam,
         name: member.user?.name ?? null,
         email: member.user?.email ?? null,
+        appRoles: memberRoles
+          .filter((r) => r.userId === member.userId)
+          .map((r) => ({ appId: r.appId, appRole: r.appRole })),
       })),
       apps: appAccess,
     }

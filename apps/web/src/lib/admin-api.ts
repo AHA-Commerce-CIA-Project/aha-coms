@@ -105,6 +105,7 @@ export interface TeamDetail {
     roleInTeam: string
     name: string | null
     email: string | null
+    appRoles: Array<{ appId: string; appRole: string }>
   }>
   apps: Array<{
     id: string
@@ -292,7 +293,7 @@ export const adminApi = {
       method: 'DELETE',
     })
   },
-  grantTeamApp(id: string, body: { appId: string; appRole?: string }) {
+  grantTeamApp(id: string, body: { appId: string }) {
     return requestJson<{ ok: true }>(`/api/v1/teams/${id}/apps`, {
       method: 'POST',
       body: JSON.stringify(body),
@@ -300,6 +301,17 @@ export const adminApi = {
   },
   revokeTeamApp(id: string, appId: string) {
     return requestJson<{ ok: true }>(`/api/v1/teams/${id}/apps/${appId}`, {
+      method: 'DELETE',
+    })
+  },
+  setMemberAppRole(userId: string, appId: string, appRole: string) {
+    return requestJson<{ ok: true }>(`/api/v1/members/${userId}/apps/${appId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ appRole }),
+    })
+  },
+  removeMemberAppRole(userId: string, appId: string) {
+    return requestJson<{ ok: true }>(`/api/v1/members/${userId}/apps/${appId}/role`, {
       method: 'DELETE',
     })
   },

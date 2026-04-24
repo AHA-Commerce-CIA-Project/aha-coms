@@ -6,8 +6,9 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 const identityUsers = { id: 'identityUsers.id' }
 const teamMembers = { teamId: 'teamMembers.teamId', userId: 'teamMembers.userId' }
-const teamAppAccess = { teamId: 'teamAppAccess.teamId', appId: 'teamAppAccess.appId', appRole: 'teamAppAccess.appRole' }
+const teamAppAccess = { teamId: 'teamAppAccess.teamId', appId: 'teamAppAccess.appId' }
 const appRegistry = { id: 'appRegistry.id', slug: 'appRegistry.slug', appRoles: 'appRegistry.appRoles' }
+const memberAppRole = { userId: 'memberAppRole.userId', appId: 'memberAppRole.appId', appRole: 'memberAppRole.appRole' }
 
 // In-memory user
 type UserRecord = {
@@ -23,11 +24,11 @@ type UserRecord = {
 let currentUser: UserRecord | null = null
 
 // Per-app data returned by the mock DB. Each entry represents an app the user
-// has access to, including the team-app grant details and declared roles.
+// has access to, including the per-member role and declared roles.
 interface MockAppEntry {
   appId: string
   slug: string
-  appRole: string | null
+  memberRole: string | null
   appRoles: Array<{ key: string; label: string; default?: boolean; description?: string }>
 }
 
@@ -46,16 +47,21 @@ const db = {
           return appsForUser.length > 0 ? [{ teamId: 'team-1' }] : []
         }
         if (table === teamAppAccess) {
-          // Used by both resolveUserState (needs .appId) and resolvePerAppContext (needs .appId + .appRole)
-          return appsForUser.map((a) => ({ appId: a.appId, appRole: a.appRole }))
+          // Access gate only — no appRole
+          return appsForUser.map((a) => ({ appId: a.appId }))
         }
         if (table === appRegistry) {
-          // Used by both resolveUserState (needs .slug) and resolvePerAppContext (needs .id + .slug + .appRoles)
           return appsForUser.map((a) => ({
             id: a.appId,
             slug: a.slug,
             appRoles: a.appRoles,
           }))
+        }
+        if (table === memberAppRole) {
+          // Per-member role lookups
+          return appsForUser
+            .filter((a) => a.memberRole !== null)
+            .map((a) => ({ appId: a.appId, appRole: a.memberRole }))
         }
         return []
       },
@@ -69,6 +75,7 @@ mock.module('~/db/schema', () => ({
   teamMembers,
   teamAppAccess,
   appRegistry,
+  memberAppRole,
 }))
 mock.module('drizzle-orm', () => ({
   eq: (left: unknown, right: unknown) => ({ left, right }),
@@ -126,7 +133,7 @@ describe('emitUserProvisioned', () => {
   test('dispatches per-app with resolved appRole', async () => {
     setUser()
     appsForUser = [
-      { appId: 'app-1', slug: 'heroes', appRole: null, appRoles: [
+      { appId: 'app-1', slug: 'heroes', memberRole: null, appRoles: [
         { key: 'admin', label: 'Admin' },
         { key: 'employee', label: 'Employee', default: true },
       ] },
@@ -151,7 +158,7 @@ describe('emitUserProvisioned', () => {
   test('dispatches per-app with explicit grant role', async () => {
     setUser()
     appsForUser = [
-      { appId: 'app-1', slug: 'heroes', appRole: 'leader', appRoles: [
+      { appId: 'app-1', slug: 'heroes', memberRole: 'leader', appRoles: [
         { key: 'admin', label: 'Admin' },
         { key: 'leader', label: 'Leader' },
         { key: 'employee', label: 'Employee', default: true },
@@ -168,8 +175,8 @@ describe('emitUserProvisioned', () => {
   test('dispatches once per app for multi-app users', async () => {
     setUser()
     appsForUser = [
-      { appId: 'app-1', slug: 'heroes', appRole: null, appRoles: [] },
-      { appId: 'app-2', slug: 'orbit', appRole: null, appRoles: [] },
+      { appId: 'app-1', slug: 'heroes', memberRole: null, appRoles: [] },
+      { appId: 'app-2', slug: 'orbit', memberRole: null, appRoles: [] },
     ]
 
     await emitUserProvisioned('user-1')
@@ -185,7 +192,7 @@ describe('emitUserProvisioned', () => {
   test('appRole is null when app has no declared roles', async () => {
     setUser()
     appsForUser = [
-      { appId: 'app-1', slug: 'heroes', appRole: null, appRoles: [] },
+      { appId: 'app-1', slug: 'heroes', memberRole: null, appRoles: [] },
     ]
 
     await emitUserProvisioned('user-1')
@@ -218,7 +225,7 @@ describe('emitUserOffboarded', () => {
   test('calls dispatchPortalWebhook with user.offboarded and the user app list', async () => {
     setUser()
     appsForUser = [
-      { appId: 'app-1', slug: 'heroes', appRole: null, appRoles: [] },
+      { appId: 'app-1', slug: 'heroes', memberRole: null, appRoles: [] },
     ]
 
     await emitUserOffboarded('user-1')
@@ -261,7 +268,7 @@ describe('emitUserUpdated', () => {
   test('dispatches per-app with changedFields and resolved appRole', async () => {
     setUser()
     appsForUser = [
-      { appId: 'app-1', slug: 'heroes', appRole: null, appRoles: [
+      { appId: 'app-1', slug: 'heroes', memberRole: null, appRoles: [
         { key: 'employee', label: 'Employee', default: true },
       ] },
     ]

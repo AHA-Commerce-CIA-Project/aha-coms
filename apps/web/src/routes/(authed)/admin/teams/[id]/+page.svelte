@@ -90,20 +90,11 @@
 
   // Grant app state
   let grantAppId = $state('')
-  let grantAppRole = $state('')
   let grantAppError = $state<string | null>(null)
   let grantAppPending = $state(false)
 
-  // Derive the selected app's declared roles
-  const selectedAppRoles = $derived(
-    $allAppsQuery.data?.find((a) => a.id === grantAppId)?.appRoles ?? [],
-  )
-
-  // Auto-select the default role when app selection changes
-  $effect(() => {
-    const defaultRole = selectedAppRoles.find((r) => r.default)
-    grantAppRole = defaultRole?.key ?? (selectedAppRoles[0]?.key ?? '')
-  })
+  // Per-member role update state
+  let memberRolePending = $state<string | null>(null)
   let actionError = $state<string | null>(null)
   let pendingMemberRemovalId = $state<string | null>(null)
   let confirmingMemberRemovalId = $state<string | null>(null)
@@ -158,17 +149,30 @@
     grantAppError = null
     grantAppPending = true
     try {
-      await adminApi.grantTeamApp(id, {
-        appId: grantAppId,
-        appRole: grantAppRole || undefined,
-      })
+      await adminApi.grantTeamApp(id, { appId: grantAppId })
       grantAppId = ''
-      grantAppRole = ''
       queryClient.invalidateQueries({ queryKey: ['teams', id] })
     } catch (e) {
       grantAppError = e instanceof Error ? e.message : 'Failed to grant app'
     } finally {
       grantAppPending = false
+    }
+  }
+
+  async function handleMemberRoleChange(userId: string, appId: string, role: string) {
+    const key = `${userId}-${appId}`
+    memberRolePending = key
+    try {
+      if (role) {
+        await adminApi.setMemberAppRole(userId, appId, role)
+      } else {
+        await adminApi.removeMemberAppRole(userId, appId)
+      }
+      queryClient.invalidateQueries({ queryKey: ['teams', id] })
+    } catch (e) {
+      actionError = e instanceof Error ? e.message : 'Failed to update member role'
+    } finally {
+      memberRolePending = null
     }
   }
 
@@ -293,31 +297,58 @@
         {#if team.members && team.members.length > 0}
           <div class="mb-4 space-y-1">
             {#each team.members as member}
-              <div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-accent">
-                <div>
-                  <p class="text-sm">{member.name ?? member.userId}</p>
-                  <p class="text-xs text-muted-foreground">{member.email ?? ''} &middot; {member.roleInTeam}</p>
+              <div class="rounded-lg px-2 py-1.5 hover:bg-accent">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-sm">{member.name ?? member.userId}</p>
+                    <p class="text-xs text-muted-foreground">{member.email ?? ''} &middot; {member.roleInTeam}</p>
+                  </div>
+                  <button
+                    onclick={() => {
+                      if (confirmingMemberRemovalId === member.userId) {
+                        handleRemoveMember(member.userId)
+                      } else {
+                        confirmingMemberRemovalId = member.userId
+                        actionError = null
+                      }
+                    }}
+                    disabled={pendingMemberRemovalId === member.userId}
+                    class="rounded px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10"
+                  >
+                    {#if pendingMemberRemovalId === member.userId}
+                      Removing…
+                    {:else if confirmingMemberRemovalId === member.userId}
+                      Confirm Remove
+                    {:else}
+                      Remove
+                    {/if}
+                  </button>
                 </div>
-                <button
-                  onclick={() => {
-                    if (confirmingMemberRemovalId === member.userId) {
-                      handleRemoveMember(member.userId)
-                    } else {
-                      confirmingMemberRemovalId = member.userId
-                      actionError = null
-                    }
-                  }}
-                  disabled={pendingMemberRemovalId === member.userId}
-                  class="rounded px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10"
-                >
-                  {#if pendingMemberRemovalId === member.userId}
-                    Removing…
-                  {:else if confirmingMemberRemovalId === member.userId}
-                    Confirm Remove
-                  {:else}
-                    Remove
-                  {/if}
-                </button>
+                {#if team.apps && team.apps.length > 0}
+                  <div class="mt-1 flex flex-wrap gap-1.5">
+                    {#each team.apps as app}
+                      {@const appDetail = $allAppsQuery.data?.find((a) => a.id === app.appId)}
+                      {@const declaredRoles = appDetail?.appRoles ?? []}
+                      {@const currentRole = member.appRoles?.find((r) => r.appId === app.appId)?.appRole ?? ''}
+                      {#if declaredRoles.length > 0}
+                        <div class="flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5">
+                          <span class="text-[10px] text-muted-foreground">{app.slug ?? app.name}:</span>
+                          <select
+                            value={currentRole}
+                            onchange={(e) => handleMemberRoleChange(member.userId, app.appId, e.currentTarget.value)}
+                            disabled={memberRolePending === `${member.userId}-${app.appId}`}
+                            class="rounded border-none bg-transparent px-0.5 py-0 text-[10px] focus:outline-none disabled:opacity-50"
+                          >
+                            <option value="">Default</option>
+                            {#each declaredRoles as role}
+                              <option value={role.key}>{role.label}</option>
+                            {/each}
+                          </select>
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>
@@ -448,16 +479,6 @@
               {/each}
             {/if}
           </select>
-          {#if selectedAppRoles.length > 0}
-            <select
-              bind:value={grantAppRole}
-              class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
-            >
-              {#each selectedAppRoles as role}
-                <option value={role.key}>{role.label}</option>
-              {/each}
-            </select>
-          {/if}
           {#if grantAppError}
             <p class="text-xs text-destructive">{grantAppError}</p>
           {/if}

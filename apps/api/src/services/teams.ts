@@ -1,5 +1,5 @@
 import { db } from '~/db'
-import { teams, teamMembers, identityUsers } from '~/db/schema'
+import { teams, teamMembers, teamAppAccess, memberAppRole, identityUsers } from '~/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { resolveAndSyncClaims } from './claims'
 import { emitUserUpdated } from './provisioning-events'
@@ -50,9 +50,38 @@ export async function addTeamMembersBatch(
 }
 
 export async function removeTeamMember(teamId: string, userId: string): Promise<void> {
+  // Find apps this team grants access to
+  const teamApps = await db
+    .select({ appId: teamAppAccess.appId })
+    .from(teamAppAccess)
+    .where(eq(teamAppAccess.teamId, teamId))
+
   await db
     .delete(teamMembers)
     .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
+
+  // Clean up member app roles for apps the user no longer has access to
+  if (teamApps.length > 0) {
+    for (const { appId } of teamApps) {
+      // Check if user still has access via another team
+      const otherAccess = await db
+        .select({ id: teamAppAccess.id })
+        .from(teamAppAccess)
+        .innerJoin(teamMembers, eq(teamMembers.teamId, teamAppAccess.teamId))
+        .where(
+          and(
+            eq(teamMembers.userId, userId),
+            eq(teamAppAccess.appId, appId),
+          ),
+        )
+
+      if (otherAccess.length === 0) {
+        await db
+          .delete(memberAppRole)
+          .where(and(eq(memberAppRole.userId, userId), eq(memberAppRole.appId, appId)))
+      }
+    }
+  }
 
   const user = await db.query.identityUsers.findFirst({
     where: eq(identityUsers.id, userId),

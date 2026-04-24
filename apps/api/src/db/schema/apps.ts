@@ -53,15 +53,32 @@ export const teamAppAccess = pgTable(
     appId: uuid('app_id')
       .notNull()
       .references(() => appRegistry.id, { onDelete: 'cascade' }),
-    appRole: varchar('app_role', { length: 50 }),
     grantedBy: uuid('granted_by').references(() => identityUsers.id),
     grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique().on(t.teamId, t.appId)],
 )
 
+export const memberAppRole = pgTable(
+  'member_app_role',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => identityUsers.id, { onDelete: 'cascade' }),
+    appId: uuid('app_id')
+      .notNull()
+      .references(() => appRegistry.id, { onDelete: 'cascade' }),
+    appRole: varchar('app_role', { length: 50 }).notNull(),
+    grantedBy: uuid('granted_by').references(() => identityUsers.id),
+    grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique().on(t.userId, t.appId)],
+)
+
 export const appRegistryRelations = relations(appRegistry, ({ many }) => ({
   teamAccess: many(teamAppAccess),
+  memberRoles: many(memberAppRole),
 }))
 
 export const teamAppAccessRelations = relations(teamAppAccess, ({ one }) => ({
@@ -73,7 +90,19 @@ export const teamAppAccessRelations = relations(teamAppAccess, ({ one }) => ({
   }),
 }))
 
+export const memberAppRoleRelations = relations(memberAppRole, ({ one }) => ({
+  user: one(identityUsers, { fields: [memberAppRole.userId], references: [identityUsers.id] }),
+  app: one(appRegistry, { fields: [memberAppRole.appId], references: [appRegistry.id] }),
+  grantedByUser: one(identityUsers, {
+    fields: [memberAppRole.grantedBy],
+    references: [identityUsers.id],
+    relationName: 'memberAppRoleGrantedBy',
+  }),
+}))
+
 export type AppRegistry = typeof appRegistry.$inferSelect
 export type NewAppRegistry = typeof appRegistry.$inferInsert
 export type TeamAppAccess = typeof teamAppAccess.$inferSelect
 export type NewTeamAppAccess = typeof teamAppAccess.$inferInsert
+export type MemberAppRole = typeof memberAppRole.$inferSelect
+export type NewMemberAppRole = typeof memberAppRole.$inferInsert
