@@ -169,43 +169,12 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     },
   )
 
-  .get(
-    '/broker/launch/:appSlug',
-    async ({ request, params, query, set }) => {
-      try {
-        const authUser = await resolveSessionUser(request)
-        const app = await findBrokerAppBySlug(params.appSlug)
-
-        if (!app) {
-          set.status = 404
-          return { message: 'App not found' }
-        }
-
-        const handoff = await createBrokerHandoff(app, authUser, query.redirectTo)
-        return new Response(null, {
-          status: 302,
-          headers: {
-            Location: handoff.redirectUrl,
-          },
-        })
-      } catch (error) {
-        if (error instanceof BrokerAuthorizationError) {
-          set.status = 403
-          return { message: error.message }
-        }
-        if (error instanceof BrokerValidationError) {
-          set.status = 401
-          return { message: error.message }
-        }
-        throw error
-      }
-    },
-    {
-      query: t.Object({
-        redirectTo: t.Optional(t.String()),
-      }),
-    },
-  )
+  .get('/broker/launch/:appSlug', ({ set }) => {
+    set.status = 405
+    return {
+      message: 'Use POST /api/auth/broker/launch/:appSlug instead.',
+    }
+  })
 
   .post(
     '/broker/launch/:appSlug',

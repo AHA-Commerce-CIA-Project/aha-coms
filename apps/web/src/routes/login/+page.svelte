@@ -9,7 +9,7 @@
   } from 'firebase/auth'
   import { clientAuth, googleProvider } from '$lib/firebase'
   import { api } from '$lib/api'
-  import { readHandoffIntent, stashIntent, popStashedIntent, buildLaunchUrl } from '$lib/portal-handoff'
+  import { readHandoffIntent, stashIntent, popStashedIntent, navigateToLaunch } from '$lib/portal-handoff'
   import { onMount } from 'svelte'
 
   let email = $state('')
@@ -29,7 +29,7 @@
     if (err) throw new Error((err.value as { message?: string })?.message ?? 'Login failed')
     const intent = popStashedIntent()
     if (intent) {
-      window.location.assign(buildLaunchUrl(intent))
+      navigateToLaunch(intent)
     } else {
       await goto(redirectTo)
     }

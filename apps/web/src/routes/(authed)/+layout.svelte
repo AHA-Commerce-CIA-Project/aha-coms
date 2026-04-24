@@ -8,7 +8,7 @@
   import TopBar from '$lib/components/layout/TopBar.svelte'
   import Sidebar from '$lib/components/layout/Sidebar.svelte'
   import MobileNav from '$lib/components/layout/MobileNav.svelte'
-  import { readHandoffIntent, popStashedIntent, buildLaunchUrl } from '$lib/portal-handoff'
+  import { readHandoffIntent, popStashedIntent, navigateToLaunch } from '$lib/portal-handoff'
 
   let user = $state<SessionUser | null>(null)
   let apps = $state<{ slug: string; name: string }[]>([])
@@ -41,7 +41,7 @@
     // Intercept handoff intents
     const intent = readHandoffIntent($page.url) ?? popStashedIntent()
     if (intent) {
-      window.location.assign(buildLaunchUrl(intent))
+      navigateToLaunch(intent)
       return
     }
 

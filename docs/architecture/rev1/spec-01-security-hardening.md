@@ -118,12 +118,14 @@ No route-level changes — the app is already looked up before calling `createBr
 
 ## 2. CSRF Protection on Broker Launch
 
-### Current State
+### Current State (Implemented)
 
-The broker launch endpoint in `apps/api/src/routes/auth.ts:171-207`:
+The broker launch endpoint is POST-only. `GET` returns `405 Method Not Allowed`.
+
+The POST endpoint reads `redirectTo` from **query params** (not the request body) to avoid Elysia body-validation failures on form-encoded submissions:
 
 ```typescript
-.get(
+.post(
   '/broker/launch/:appSlug',
   async ({ request, params, query, set }) => {
     const authUser = await resolveSessionUser(request)
@@ -131,54 +133,33 @@ The broker launch endpoint in `apps/api/src/routes/auth.ts:171-207`:
     const handoff = await createBrokerHandoff(app, authUser, query.redirectTo)
     return new Response(null, { status: 302, headers: { Location: handoff.redirectUrl } })
   },
+  { query: t.Object({ redirectTo: t.Optional(t.String()) }) },
 )
 ```
 
-This is a GET endpoint that:
-1. Reads the `__session` cookie (automatic — `SameSite=Lax` allows GET)
-2. Creates a one-time auth handoff code
-3. 302-redirects the browser to the target app with the code in the URL
+`SameSite=Lax` fully protects: cross-origin POSTs don't send the session cookie.
 
-A malicious page on the same site (or a user tricked into clicking a link) could trigger `GET /api/auth/broker/launch/evil-app` and silently redirect the user to a registered app with a valid handoff code.
+### All Launch Callers
 
-`SameSite=Lax` mitigates cross-origin attacks (the cookie isn't sent on cross-origin navigation triggered by non-top-level requests), but same-site attacks remain possible.
+Every path that triggers a broker launch must use POST. Three caller types exist:
 
-### Target State
+1. **`app-card.svelte`** — `<form method="POST">` with `redirectTo` in the action URL query string
+2. **`ServiceBar.svelte`** — `<form method="POST">` (no `redirectTo`)
+3. **`portal-handoff.ts` → `navigateToLaunch()`** — programmatically creates and submits a POST form for handoff intents (post-login redirect, deep-link interception)
 
-Convert the dashboard app-card launch flow from a direct `<a href>` GET to a form-based POST with a CSRF token.
+### Design Decisions
 
-### Approach: State-Changing Action = POST
+**Why query params instead of body for `redirectTo`?**
 
-**Option A (recommended): Convert to POST**
+HTML `<form method="POST">` sends hidden inputs as `application/x-www-form-urlencoded`. Elysia's `t.Object()` body schema validates against JSON — an empty form-encoded body (no inputs) fails with "Expected object". Moving `redirectTo` to query params avoids body validation entirely while keeping the POST method for CSRF protection.
 
-1. Change the dashboard's `app-card.svelte` (`apps/web/src/lib/components/app-card.svelte`) from an `<a>` tag to a `<form method="POST">` that submits to `/api/auth/broker/launch/:appSlug`
-2. The route handler at `apps/api/src/routes/auth.ts` changes from `.get(...)` to `.post(...)`
-3. `SameSite=Lax` now fully protects: cross-origin POSTs don't send the cookie
+**Why `navigateToLaunch()` instead of `window.location.assign()`?**
 
-```svelte
-<!-- Before -->
-<a href={launchHref}>...</a>
-
-<!-- After -->
-<form method="POST" action="/api/auth/broker/launch/{app.slug}">
-  {#if redirectTo}
-    <input type="hidden" name="redirectTo" value={redirectTo} />
-  {/if}
-  <button type="submit" class="...">...</button>
-</form>
-```
-
-**Option B: CSRF token on GET (more complex, less benefit)**
-
-Mint a short-lived CSRF token in the dashboard page load, embed in the launch URL as a query param, verify server-side. This adds state management complexity for marginal gain over Option A.
-
-### Recommendation
-
-Option A. The semantic meaning of "launch an app" is a state-changing action (it creates a handoff code and consumes a redirect). POST is correct.
+`window.location.assign(url)` performs a GET request. The old `buildLaunchUrl()` helper built GET URLs, which would hit the 405 stub. `navigateToLaunch()` creates a hidden `<form method="POST">`, sets the action URL (with `redirectTo` as a query param if present), and submits it — producing a same-origin POST that carries the session cookie.
 
 ### Migration
 
-The `GET /api/auth/broker/launch/:appSlug` endpoint is also referenced in external documentation. Keep the GET endpoint temporarily but have it return `405 Method Not Allowed` with a message pointing to the POST endpoint, or redirect to the dashboard if no valid session.
+The `GET /api/auth/broker/launch/:appSlug` stub returns `405 Method Not Allowed` for any remaining external references.
 
 ---
 
