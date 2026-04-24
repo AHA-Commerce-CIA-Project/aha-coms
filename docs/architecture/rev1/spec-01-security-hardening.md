@@ -127,11 +127,11 @@ The POST endpoint reads `redirectTo` from **query params** (not the request body
 ```typescript
 .post(
   '/broker/launch/:appSlug',
-  async ({ request, params, query, set }) => {
+  async ({ request, params, query, set, redirect }) => {
     const authUser = await resolveSessionUser(request)
     const app = await findBrokerAppBySlug(params.appSlug)
     const handoff = await createBrokerHandoff(app, authUser, query.redirectTo)
-    return new Response(null, { status: 302, headers: { Location: handoff.redirectUrl } })
+    return redirect(handoff.redirectUrl)
   },
   { query: t.Object({ redirectTo: t.Optional(t.String()) }) },
 )
