@@ -276,6 +276,56 @@ Note: Use `timingSafeEqual` from `node:crypto` instead of `!==` for constant-tim
 
 ---
 
+## 4. Fallback Deprecation Enforcement
+
+The env var fallbacks (`?? process.env.PORTAL_BROKER_SIGNING_SECRET` and `?? process.env.PORTAL_INTROSPECT_SECRET`) are temporary migration aids. To ensure they don't linger indefinitely:
+
+- **Log a deprecation warning** every time a fallback is used, including the app slug:
+  ```typescript
+  console.warn(`[auth-broker] app "${app.slug}" using global PORTAL_BROKER_SIGNING_SECRET fallback — migrate to per-app secret`)
+  ```
+- Once all apps have per-app secrets populated, remove the fallback code paths entirely and delete the global env vars from the deployment config.
+
+---
+
+## 5. Secret Rotation
+
+No rotation mechanism currently exists. If a per-app secret is compromised, the admin must update the DB column and coordinate with the relying-party app for a simultaneous switch — any gap causes auth failures.
+
+### Future: Dual-Secret Rotation Window
+
+When secret rotation is needed, support accepting two secrets simultaneously during a transition period:
+
+1. Add a `broker_signing_secret_previous` column (and equivalent for introspect)
+2. On verification, try the current secret first; if it fails, try the previous secret
+3. Admin UI: "Rotate secret" generates a new secret, moves the current one to `_previous`, and shows the new value for the relying-party team to adopt
+4. After the relying-party app has updated, clear `_previous`
+
+This is not needed at current scale (2 apps) but becomes important as more services onboard.
+
+---
+
+## 6. Secrets at Rest
+
+`broker_signing_secret` and `introspect_secret` are stored as plaintext `text` columns. If the database is compromised (leaked backup, SQL injection in a future feature), all signing keys are exposed.
+
+### Current Mitigation
+
+Cloud SQL encrypts data at rest by default (Google-managed keys). This protects against disk-level theft but not application-level DB access.
+
+### Future: Application-Level Envelope Encryption
+
+For stronger isolation, encrypt secrets with a KMS-wrapped data encryption key (DEK) before storing:
+
+1. Generate a DEK per secret (or per app) using Cloud KMS
+2. Encrypt the secret value with the DEK before writing to Postgres
+3. Decrypt on read using the KEK stored in KMS
+4. Only the portal's service account can call KMS — a DB dump alone is useless
+
+Low priority at current scale but worth revisiting before onboarding apps from external teams.
+
+---
+
 ## Implementation Order
 
 1. **Schema migration** — add both columns (`broker_signing_secret`, `introspect_secret`) to `app_registry` in a single migration
@@ -283,7 +333,7 @@ Note: Use `timingSafeEqual` from `node:crypto` instead of `!==` for constant-tim
 3. **Per-app introspect secrets** — update introspect endpoint with fallback to env var + timing-safe comparison
 4. **CSRF on launch** — convert GET to POST, update `app-card.svelte`
 5. **Data migration** — populate columns for existing apps, distribute new secrets
-6. **Deprecate global env vars** — remove fallbacks once all apps have per-app secrets
+6. **Deprecate global env vars** — add deprecation logging on fallback use, remove fallbacks once all apps have per-app secrets
 
 Steps 2-4 can be done in parallel. Step 5 requires coordination with relying-party teams (see `heroes-team-handoff.md`).
 

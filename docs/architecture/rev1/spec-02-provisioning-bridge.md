@@ -50,6 +50,11 @@ export interface PortalAppRole {
   default?: boolean
   /** Optional description shown in the portal admin UI */
   description?: string
+  /** Explicit privilege priority (lower = higher privilege). Used to resolve
+   *  conflicts when a user has multiple team grants with different roles.
+   *  If omitted, array position is used as a fallback — but explicit priority
+   *  is preferred to avoid silent privilege changes when the array is reordered. */
+  priority?: number
 }
 
 export interface PortalIntegrationManifest {
@@ -112,6 +117,18 @@ When an admin registers or updates an app, the `appRoles` field from the manifes
 
 Future: an endpoint that the relying-party app calls on startup to push its manifest, auto-updating the roles.
 
+### Stale Role Cleanup
+
+When an app's `appRoles` array is updated (roles renamed or removed), existing `team_app_access` rows may reference role keys that no longer exist. The webhook dispatch would then send a stale `appRole` value that the receiving app doesn't recognize.
+
+**On `appRoles` update**, the portal should:
+
+1. Query `team_app_access` rows for the app whose `app_role` is not in the new `appRoles` key set
+2. Set those rows' `app_role` to `NULL` (revert to default role resolution)
+3. Log a warning listing the affected teams and old role values
+
+This prevents silent delivery of unrecognized role keys in webhook payloads.
+
 ---
 
 ## 3. Role Selection in Team-App Access Grant
@@ -149,7 +166,7 @@ When the portal provisions a user to an app:
 
 1. Look up the user's team(s) that have access to this app
 2. If `team_app_access.app_role` is set, use it
-3. If multiple teams grant access with different roles, use the highest-privilege one (role hierarchy is defined by the app's `appRoles` order — first = highest)
+3. If multiple teams grant access with different roles, use the highest-privilege one — determined by `priority` field (lower = higher privilege), falling back to array position if `priority` is not set
 4. If no role is specified, use the app's default role (the one with `default: true`)
 5. If no default, use the first declared role
 
@@ -161,15 +178,22 @@ function resolveAppRoleForUser(
   // Explicit grants (filter nulls)
   const explicit = teamGrants.map(g => g.appRole).filter(Boolean) as string[]
   if (explicit.length > 0) {
-    // Use the one with the lowest index in appRoles (= highest privilege)
-    const roleOrder = appRoles.map(r => r.key)
-    return explicit.sort((a, b) => roleOrder.indexOf(a) - roleOrder.indexOf(b))[0]
+    // Sort by explicit priority if available, otherwise by array position
+    const roleOrder = appRoles.map((r, i) => ({ key: r.key, priority: r.priority ?? i }))
+    return explicit.sort((a, b) => {
+      const pa = roleOrder.find(r => r.key === a)?.priority ?? Infinity
+      const pb = roleOrder.find(r => r.key === b)?.priority ?? Infinity
+      return pa - pb
+    })[0]
   }
 
   // Fall back to app's default
   const defaultRole = appRoles.find(r => r.default)
   return defaultRole?.key ?? appRoles[0]?.key ?? 'employee'
 }
+```
+
+> **Why explicit priority?** Relying on array position means reordering the `appRoles` array in the manifest silently changes the privilege hierarchy. An explicit `priority` field makes the ranking durable and obvious. Array position is kept as a fallback for backwards compatibility.
 ```
 
 ### Admin UI Change
@@ -258,6 +282,18 @@ export interface UserUpdatedPayload {
   branch?: string | null
 }
 ```
+
+### Branch Mapping Caveat
+
+The `branch` field is a free-text label (e.g. `"Thailand"`, `"Indonesia"`) sourced from the employee's record in the portal. Relying-party apps must match this string to their own branch/office records — this is fragile:
+
+- Case mismatch (`"thailand"` vs `"Thailand"`) breaks the lookup
+- Different naming conventions (`"TH"` vs `"Thailand"`) produce no match
+- The portal has no visibility into what branch labels each app recognizes
+
+**Current approach:** Heroes matches `branch` against `branches.code` and falls back to a default branch if unmatched. This is acceptable at current scale (one consumer, shared team maintaining both repos).
+
+**Future improvement:** If more apps consume `branch`, consider adding a `branchMapping` field to the integration manifest where each app declares its recognized branch codes, allowing the portal admin UI to show a validated mapping.
 
 ### Dispatch Change
 
