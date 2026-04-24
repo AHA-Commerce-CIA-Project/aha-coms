@@ -51,13 +51,17 @@ export function readHandoffIntent(url: URL): HandoffIntent | null {
   return { appSlug, redirectTo }
 }
 
-/** Build the broker launch URL for an intent. */
-export function buildLaunchUrl(intent: HandoffIntent): string {
-  let url = `/api/auth/broker/launch/${intent.appSlug}`
+/** Navigate to the broker launch endpoint via POST form submission (CSRF-safe). */
+export function navigateToLaunch(intent: HandoffIntent): void {
+  const form = document.createElement('form')
+  form.method = 'POST'
+  let action = `/api/auth/broker/launch/${intent.appSlug}`
   if (intent.redirectTo) {
-    url += `?redirectTo=${encodeURIComponent(intent.redirectTo)}`
+    action += `?redirectTo=${encodeURIComponent(intent.redirectTo)}`
   }
-  return url
+  form.action = action
+  document.body.appendChild(form)
+  form.submit()
 }
 
 /** Persist an intent into sessionStorage so it survives a login bounce. */

@@ -48,7 +48,7 @@ HEROES:
 | Per-app introspect secrets | 01 | DONE |
 | CSRF on broker launch | 01 | DONE |
 
-**Delivered:** Schema migration (two new columns on `app_registry`), updated broker and introspect code, app-card POST conversion.
+**Delivered:** Schema migration (two new columns on `app_registry`), updated broker and introspect code, app-card POST conversion, ServiceBar POST conversion, `navigateToLaunch()` POST form for handoff intents, `redirectTo` moved from body to query params.
 
 ### Heroes
 
