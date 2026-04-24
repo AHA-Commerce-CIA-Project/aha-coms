@@ -190,9 +190,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
         const handoff = await createBrokerHandoff(app, authUser, query.redirectTo)
         console.log('[broker-launch] redirecting to:', handoff.redirectUrl)
-        set.status = 302
-        set.headers['location'] = handoff.redirectUrl
-        return
+        set.headers['content-type'] = 'text/html'
+        return `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=${handoff.redirectUrl}"></head><body><p>Redirecting to <a href="${handoff.redirectUrl}">${handoff.appSlug}</a>...</p></body></html>`
       } catch (error) {
         if (error instanceof BrokerAuthorizationError) {
           set.status = 403
