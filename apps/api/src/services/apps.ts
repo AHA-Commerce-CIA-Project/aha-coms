@@ -127,8 +127,5 @@ export async function updateApp(
 }
 
 export async function deregisterApp(appId: string): Promise<void> {
-  await db
-    .update(appRegistry)
-    .set({ status: 'deprecated', updatedAt: new Date() })
-    .where(eq(appRegistry.id, appId))
+  await db.delete(appRegistry).where(eq(appRegistry.id, appId))
 }

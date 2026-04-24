@@ -145,13 +145,21 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
     { body: t.Partial(appBody) },
   )
 
-  .delete('/:id', async ({ params, authUser }) => {
+  .delete('/:id', async ({ params, authUser, set }) => {
+    const app = await db.query.appRegistry.findFirst({
+      where: eq(appRegistry.id, params.id),
+    })
+    if (!app) {
+      set.status = 404
+      return { message: 'Not found' }
+    }
     await deregisterApp(params.id)
     await logAudit({
       actorId: authUser.id,
       action: 'deregister_app',
       targetType: 'app',
       targetId: params.id,
+      details: { slug: app.slug, name: app.name },
     })
     return { ok: true }
   })
