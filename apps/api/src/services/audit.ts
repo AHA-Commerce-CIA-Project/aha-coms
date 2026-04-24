@@ -17,6 +17,8 @@ export type AuditAction =
   | 'remove_team_member'
   | 'grant_app_access'
   | 'revoke_app_access'
+  | 'set_member_app_role'
+  | 'remove_member_app_role'
   | 'register_app'
   | 'update_app'
   | 'deregister_app'
