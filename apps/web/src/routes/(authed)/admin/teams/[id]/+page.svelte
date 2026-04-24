@@ -18,24 +18,20 @@
   let editError = $state<string | null>(null)
   let editPending = $state(false)
 
-  // Add member state
-  let addMemberUserId = $state('')
-  let addMemberRole = $state('member')
-  let addMemberError = $state<string | null>(null)
-  let addMemberPending = $state(false)
+  // Staged members state
+  let stagedMembers = $state<Array<{ id: string; name: string; email: string; roleInTeam: string }>>([])
+  let batchPending = $state(false)
+  let batchError = $state<string | null>(null)
 
   // User search autocomplete state
   let searchInput = $state('')
   let searchResults = $state<Array<{ id: string; name: string; email: string }>>([])
-  let selectedUser = $state<{ id: string; name: string; email: string } | null>(null)
   let showDropdown = $state(false)
   let searchLoading = $state(false)
   let debounceTimer: ReturnType<typeof setTimeout> | undefined
 
   function handleSearchInput(value: string) {
     searchInput = value
-    selectedUser = null
-    addMemberUserId = ''
     clearTimeout(debounceTimer)
     if (value.trim().length < 2) {
       searchResults = []
@@ -47,7 +43,8 @@
       try {
         const results = await adminApi.searchUsers(value.trim())
         const memberIds = new Set($query.data?.members?.map((m) => m.userId) ?? [])
-        searchResults = results.filter((u) => !memberIds.has(u.id))
+        const stagedIds = new Set(stagedMembers.map(m => m.id))
+        searchResults = results.filter((u) => !memberIds.has(u.id) && !stagedIds.has(u.id))
         showDropdown = searchResults.length > 0
       } catch {
         searchResults = []
@@ -58,20 +55,37 @@
     }, 300)
   }
 
-  function selectUser(user: { id: string; name: string; email: string }) {
-    selectedUser = user
-    addMemberUserId = user.id
+  function stageUser(user: { id: string; name: string; email: string }) {
+    stagedMembers = [...stagedMembers, { ...user, roleInTeam: 'member' }]
     searchInput = ''
     searchResults = []
     showDropdown = false
   }
 
-  function clearSelection() {
-    selectedUser = null
-    addMemberUserId = ''
-    searchInput = ''
-    searchResults = []
-    showDropdown = false
+  function unstageMember(userId: string) {
+    stagedMembers = stagedMembers.filter(m => m.id !== userId)
+  }
+
+  function updateStagedRole(userId: string, role: string) {
+    stagedMembers = stagedMembers.map(m => m.id === userId ? { ...m, roleInTeam: role } : m)
+  }
+
+  async function handleBatchAdd(e: SubmitEvent) {
+    e.preventDefault()
+    if (stagedMembers.length === 0) return
+    batchError = null
+    batchPending = true
+    try {
+      await adminApi.addTeamMembersBatch(id, {
+        members: stagedMembers.map(m => ({ userId: m.id, roleInTeam: m.roleInTeam }))
+      })
+      stagedMembers = []
+      queryClient.invalidateQueries({ queryKey: ['teams', id] })
+    } catch (e) {
+      batchError = e instanceof Error ? e.message : 'Failed to add members'
+    } finally {
+      batchPending = false
+    }
   }
 
   // Grant app state
@@ -122,29 +136,6 @@
       editError = e instanceof Error ? e.message : 'Failed to update team'
     } finally {
       editPending = false
-    }
-  }
-
-  async function handleAddMember(e: SubmitEvent) {
-    e.preventDefault()
-    addMemberError = null
-    addMemberPending = true
-    try {
-      await adminApi.addTeamMember(id, {
-        userId: addMemberUserId,
-        roleInTeam: addMemberRole,
-      })
-      addMemberUserId = ''
-      addMemberRole = 'member'
-      selectedUser = null
-      searchInput = ''
-      searchResults = []
-      showDropdown = false
-      queryClient.invalidateQueries({ queryKey: ['teams', id] })
-    } catch (e) {
-      addMemberError = e instanceof Error ? e.message : 'Failed to add member'
-    } finally {
-      addMemberPending = false
     }
   }
 
@@ -335,63 +326,70 @@
         {/if}
 
         <!-- Add member form -->
-        <form onsubmit={handleAddMember} class="space-y-2 border-t border-border pt-4">
+        <form onsubmit={handleBatchAdd} class="space-y-2 border-t border-border pt-4">
           <p class="text-xs font-medium text-muted-foreground">Add Member</p>
           <div class="relative">
-            {#if selectedUser}
-              <div class="flex items-center justify-between rounded-lg border border-border bg-muted px-3 py-2 text-sm">
-                <div>
-                  <span class="font-medium">{selectedUser.name}</span>
-                  <span class="ml-1 text-muted-foreground">{selectedUser.email}</span>
-                </div>
-                <button type="button" onclick={clearSelection} class="ml-2 text-muted-foreground hover:text-foreground">&times;</button>
-              </div>
-            {:else}
-              <input
-                type="text"
-                value={searchInput}
-                oninput={(e) => handleSearchInput(e.currentTarget.value)}
-                onfocus={() => { if (searchResults.length > 0) showDropdown = true }}
-                onblur={() => setTimeout(() => { showDropdown = false }, 200)}
-                placeholder="Search by name or email..."
-                class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
-              />
-              {#if searchLoading}
-                <div class="absolute right-3 top-2.5 text-xs text-muted-foreground">...</div>
-              {/if}
-              {#if showDropdown}
-                <div class="absolute z-10 mt-1 w-full rounded-lg border border-border bg-card shadow-lg">
-                  {#each searchResults as user}
-                    <button
-                      type="button"
-                      onmousedown={() => selectUser(user)}
-                      class="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-lg last:rounded-b-lg"
-                    >
-                      <span class="font-medium">{user.name}</span>
-                      <span class="text-xs text-muted-foreground">{user.email}</span>
-                    </button>
-                  {/each}
-                </div>
-              {/if}
+            <input
+              type="text"
+              value={searchInput}
+              oninput={(e) => handleSearchInput(e.currentTarget.value)}
+              onfocus={() => { if (searchResults.length > 0) showDropdown = true }}
+              onblur={() => setTimeout(() => { showDropdown = false }, 200)}
+              placeholder="Search by name or email..."
+              class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
+            />
+            {#if searchLoading}
+              <div class="absolute right-3 top-2.5 text-xs text-muted-foreground">...</div>
             {/if}
-            <input type="hidden" name="userId" bind:value={addMemberUserId} />
+            {#if showDropdown}
+              <div class="absolute z-10 mt-1 w-full rounded-lg border border-border bg-card shadow-lg">
+                {#each searchResults as user}
+                  <button
+                    type="button"
+                    onmousedown={() => stageUser(user)}
+                    class="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-lg last:rounded-b-lg"
+                  >
+                    <span class="font-medium">{user.name}</span>
+                    <span class="text-xs text-muted-foreground">{user.email}</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
           </div>
-          <select
-            bind:value={addMemberRole}
-            class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
-          >
-            <option value="member">Member</option>
-            <option value="lead">Lead</option>
-          </select>
-          {#if addMemberError}
-            <p class="text-xs text-destructive">{addMemberError}</p>
+          {#if stagedMembers.length > 0}
+            <div class="space-y-1">
+              {#each stagedMembers as staged}
+                <div class="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm">
+                  <div class="min-w-0 flex-1">
+                    <span class="font-medium">{staged.name}</span>
+                    <span class="ml-1 text-xs text-muted-foreground">{staged.email}</span>
+                  </div>
+                  <select
+                    value={staged.roleInTeam}
+                    onchange={(e) => updateStagedRole(staged.id, e.currentTarget.value)}
+                    class="rounded border border-border bg-card px-1.5 py-0.5 text-xs focus:border-ring focus:outline-none"
+                  >
+                    <option value="member">Member</option>
+                    <option value="lead">Lead</option>
+                  </select>
+                  <button
+                    type="button"
+                    onclick={() => unstageMember(staged.id)}
+                    class="text-muted-foreground hover:text-foreground"
+                  >&times;</button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+          {#if batchError}
+            <p class="text-xs text-destructive">{batchError}</p>
           {/if}
           <button
             type="submit"
-            disabled={addMemberPending || !addMemberUserId}
+            disabled={batchPending || stagedMembers.length === 0}
             class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
           >
-            Add
+            {batchPending ? 'Adding…' : stagedMembers.length > 0 ? `Add ${stagedMembers.length} Member${stagedMembers.length === 1 ? '' : 's'}` : 'Add Members'}
           </button>
         </form>
       </div>

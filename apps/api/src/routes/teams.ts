@@ -3,7 +3,7 @@ import { db } from '~/db'
 import { teams, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
 import { eq, sql } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
-import { addTeamMember, removeTeamMember, deleteTeam } from '../services/teams'
+import { addTeamMember, addTeamMembersBatch, removeTeamMember, deleteTeam } from '../services/teams'
 import { logAudit } from '../services/audit'
 
 export const teamRoutes = new Elysia({ prefix: '/teams' })
@@ -109,6 +109,26 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
       return { ok: true }
     },
     { body: t.Object({ userId: t.String(), roleInTeam: t.Optional(t.String()) }) },
+  )
+
+  .post(
+    '/:id/members/batch',
+    async ({ params, body, authUser }) => {
+      await addTeamMembersBatch(params.id, body.members)
+      await logAudit({
+        actorId: authUser.id,
+        action: 'add_team_members_batch',
+        targetType: 'team',
+        targetId: params.id,
+        details: { memberCount: body.members.length },
+      })
+      return { ok: true }
+    },
+    {
+      body: t.Object({
+        members: t.Array(t.Object({ userId: t.String(), roleInTeam: t.Optional(t.String()) })),
+      }),
+    },
   )
 
   .delete('/:id/members/:userId', async ({ params, authUser }) => {

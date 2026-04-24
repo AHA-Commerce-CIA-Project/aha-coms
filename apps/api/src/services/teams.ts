@@ -21,6 +21,34 @@ export async function addTeamMember(teamId: string, userId: string, roleInTeam?:
   })
 }
 
+export async function addTeamMembersBatch(
+  teamId: string,
+  members: Array<{ userId: string; roleInTeam?: string }>
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    for (const member of members) {
+      await tx
+        .insert(teamMembers)
+        .values({ teamId, userId: member.userId, ...(member.roleInTeam ? { roleInTeam: member.roleInTeam } : {}) })
+        .onConflictDoNothing()
+    }
+  })
+
+  for (const member of members) {
+    const user = await db.query.identityUsers.findFirst({
+      where: eq(identityUsers.id, member.userId),
+    })
+
+    if (user?.gipUid) {
+      await resolveAndSyncClaims(user.gipUid, member.userId)
+    }
+
+    emitUserUpdated(member.userId, ['teamIds', 'apps']).catch((err) => {
+      console.error(`[provisioning-events] emitUserUpdated failed for ${member.userId}:`, err)
+    })
+  }
+}
+
 export async function removeTeamMember(teamId: string, userId: string): Promise<void> {
   await db
     .delete(teamMembers)

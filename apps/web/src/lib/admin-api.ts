@@ -281,6 +281,12 @@ export const adminApi = {
       body: JSON.stringify(body),
     })
   },
+  addTeamMembersBatch(id: string, body: { members: Array<{ userId: string; roleInTeam?: string }> }) {
+    return requestJson<{ ok: true }>(`/api/v1/teams/${id}/members/batch`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
   removeTeamMember(id: string, userId: string) {
     return requestJson<{ ok: true }>(`/api/v1/teams/${id}/members/${userId}`, {
       method: 'DELETE',
