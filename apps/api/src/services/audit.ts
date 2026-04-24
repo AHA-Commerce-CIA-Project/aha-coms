@@ -13,6 +13,7 @@ export type AuditAction =
   | 'update_team'
   | 'delete_team'
   | 'add_team_member'
+  | 'add_team_members_batch'
   | 'remove_team_member'
   | 'grant_app_access'
   | 'revoke_app_access'
