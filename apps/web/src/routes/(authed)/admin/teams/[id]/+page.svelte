@@ -24,6 +24,56 @@
   let addMemberError = $state<string | null>(null)
   let addMemberPending = $state(false)
 
+  // User search autocomplete state
+  let searchInput = $state('')
+  let searchResults = $state<Array<{ id: string; name: string; email: string }>>([])
+  let selectedUser = $state<{ id: string; name: string; email: string } | null>(null)
+  let showDropdown = $state(false)
+  let searchLoading = $state(false)
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined
+
+  function handleSearchInput(value: string) {
+    searchInput = value
+    selectedUser = null
+    addMemberUserId = ''
+    clearTimeout(debounceTimer)
+    if (value.trim().length < 2) {
+      searchResults = []
+      showDropdown = false
+      return
+    }
+    searchLoading = true
+    debounceTimer = setTimeout(async () => {
+      try {
+        const results = await adminApi.searchUsers(value.trim())
+        const memberIds = new Set($query.data?.members?.map((m) => m.userId) ?? [])
+        searchResults = results.filter((u) => !memberIds.has(u.id))
+        showDropdown = searchResults.length > 0
+      } catch {
+        searchResults = []
+        showDropdown = false
+      } finally {
+        searchLoading = false
+      }
+    }, 300)
+  }
+
+  function selectUser(user: { id: string; name: string; email: string }) {
+    selectedUser = user
+    addMemberUserId = user.id
+    searchInput = ''
+    searchResults = []
+    showDropdown = false
+  }
+
+  function clearSelection() {
+    selectedUser = null
+    addMemberUserId = ''
+    searchInput = ''
+    searchResults = []
+    showDropdown = false
+  }
+
   // Grant app state
   let grantAppId = $state('')
   let grantAppRole = $state('')
@@ -86,6 +136,10 @@
       })
       addMemberUserId = ''
       addMemberRole = 'member'
+      selectedUser = null
+      searchInput = ''
+      searchResults = []
+      showDropdown = false
       queryClient.invalidateQueries({ queryKey: ['teams', id] })
     } catch (e) {
       addMemberError = e instanceof Error ? e.message : 'Failed to add member'
@@ -283,13 +337,45 @@
         <!-- Add member form -->
         <form onsubmit={handleAddMember} class="space-y-2 border-t border-border pt-4">
           <p class="text-xs font-medium text-muted-foreground">Add Member</p>
-          <input
-            type="text"
-            bind:value={addMemberUserId}
-            placeholder="User ID"
-            required
-            class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
-          />
+          <div class="relative">
+            {#if selectedUser}
+              <div class="flex items-center justify-between rounded-lg border border-border bg-muted px-3 py-2 text-sm">
+                <div>
+                  <span class="font-medium">{selectedUser.name}</span>
+                  <span class="ml-1 text-muted-foreground">{selectedUser.email}</span>
+                </div>
+                <button type="button" onclick={clearSelection} class="ml-2 text-muted-foreground hover:text-foreground">&times;</button>
+              </div>
+            {:else}
+              <input
+                type="text"
+                value={searchInput}
+                oninput={(e) => handleSearchInput(e.currentTarget.value)}
+                onfocus={() => { if (searchResults.length > 0) showDropdown = true }}
+                onblur={() => setTimeout(() => { showDropdown = false }, 200)}
+                placeholder="Search by name or email..."
+                class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
+              />
+              {#if searchLoading}
+                <div class="absolute right-3 top-2.5 text-xs text-muted-foreground">...</div>
+              {/if}
+              {#if showDropdown}
+                <div class="absolute z-10 mt-1 w-full rounded-lg border border-border bg-card shadow-lg">
+                  {#each searchResults as user}
+                    <button
+                      type="button"
+                      onmousedown={() => selectUser(user)}
+                      class="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-lg last:rounded-b-lg"
+                    >
+                      <span class="font-medium">{user.name}</span>
+                      <span class="text-xs text-muted-foreground">{user.email}</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            {/if}
+            <input type="hidden" name="userId" bind:value={addMemberUserId} />
+          </div>
           <select
             bind:value={addMemberRole}
             class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
@@ -302,7 +388,7 @@
           {/if}
           <button
             type="submit"
-            disabled={addMemberPending}
+            disabled={addMemberPending || !addMemberUserId}
             class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
           >
             Add

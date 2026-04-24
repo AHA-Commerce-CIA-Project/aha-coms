@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
 import { identityUsers } from '~/db/schema'
-import { eq, ilike, sql } from 'drizzle-orm'
+import { eq, ilike, or, and, sql } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { generatePasswordResetLink, updateGipUserEmail } from '../gip-admin'
 import { createEmployee, deactivateEmployee, batchUpdateEmployees } from '../services/employees'
@@ -74,6 +74,38 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         page: t.Optional(t.String()),
         limit: t.Optional(t.String()),
         search: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  .get(
+    '/search',
+    async ({ query }) => {
+      const q = query.q.trim()
+      if (q.length < 2) return []
+      const pattern = `%${q}%`
+      return db
+        .select({
+          id: identityUsers.id,
+          name: identityUsers.name,
+          email: identityUsers.email,
+        })
+        .from(identityUsers)
+        .where(
+          and(
+            eq(identityUsers.status, 'active'),
+            or(
+              ilike(identityUsers.name, pattern),
+              ilike(identityUsers.email, pattern),
+              ilike(identityUsers.personalEmail, pattern),
+            ),
+          ),
+        )
+        .limit(10)
+    },
+    {
+      query: t.Object({
+        q: t.String({ minLength: 2 }),
       }),
     },
   )
