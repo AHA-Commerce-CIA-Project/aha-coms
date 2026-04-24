@@ -178,7 +178,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
   .post(
     '/broker/launch/:appSlug',
-    async ({ request, params, query, set }) => {
+    async ({ request, params, query, set, redirect }) => {
       try {
         const authUser = await resolveSessionUser(request)
         const app = await findBrokerAppBySlug(params.appSlug)
@@ -189,12 +189,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         }
 
         const handoff = await createBrokerHandoff(app, authUser, query.redirectTo)
-        return new Response(null, {
-          status: 302,
-          headers: {
-            Location: handoff.redirectUrl,
-          },
-        })
+        return redirect(handoff.redirectUrl)
       } catch (error) {
         if (error instanceof BrokerAuthorizationError) {
           set.status = 403
