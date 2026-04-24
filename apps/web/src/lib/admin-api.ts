@@ -170,6 +170,11 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
 }
 
 export const adminApi = {
+  searchUsers(q: string) {
+    return requestJson<Array<{ id: string; name: string; email: string }>>(
+      `/api/v1/employees/search?q=${encodeURIComponent(q)}`,
+    )
+  },
   getEmployees(params: { page: number; limit: number; search: string }) {
     const query = new URLSearchParams({
       page: String(params.page),
