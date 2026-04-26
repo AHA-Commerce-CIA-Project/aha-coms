@@ -7,18 +7,18 @@ import { accessRoutes } from './routes/access'
 import { dashboardRoutes } from './routes/dashboard'
 import { employeeInfoSyncRoutes } from './routes/employee-info-sync'
 import { appWebhookRoutes } from './routes/app-webhooks'
+import { internalRoutes } from './routes/internal'
 import { authPlugin } from './middleware/auth'
 import { initGip } from './gip'
-import { startWebhookDeliveryWorker } from './services/webhook-delivery-worker'
 import { startHealthProbeInterval } from './services/health-probe'
 import { adminRoutes } from './routes/admin'
 
 initGip()
 
-// Start the durable webhook retry worker. Skipped in test environments — tests
-// start the worker explicitly with injected dependencies.
+// Background timers — webhook retry has moved to Cloud Tasks (see
+// services/cloud-tasks-client.ts and routes/internal.ts). Health probing still
+// runs in-process for the moment; spec-04 covers moving it to Cloud Scheduler.
 if (process.env.NODE_ENV !== 'test') {
-  startWebhookDeliveryWorker()
   startHealthProbeInterval()
 }
 
@@ -29,6 +29,7 @@ export const app = new Elysia({ prefix: '/api' })
   })
   .get('/health', () => ({ status: 'ok' }))
   .use(authRoutes)
+  .use(internalRoutes)
   .group('/v1', (app) =>
     app
       .use(authPlugin)

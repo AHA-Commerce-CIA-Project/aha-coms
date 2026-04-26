@@ -1,22 +1,23 @@
 /**
  * Webhook dispatcher — delivers portal events to registered app_webhook_endpoints.
  *
- * Retry strategy (durable, Postgres-backed):
+ * Retry strategy:
  *   - Attempt 1: inline, synchronous (fire-and-forget from the caller's perspective).
- *   - On failure: a `webhook_delivery_jobs` row is inserted with attemptCount=1 and
- *     nextAttemptAt = now + 30s. The webhook-delivery-worker polls and processes it.
- *   - Attempt 2 (worker): on failure, nextAttemptAt = +2min (attemptCount=2).
- *   - Attempt 3 (worker): on failure, endpoint disabled (attemptCount=3).
+ *   - On failure: a Cloud Task is enqueued via the Cloud Tasks REST API. Cloud Tasks
+ *     owns the retry schedule (max_attempts=3, 30s → 2m backoff per queue config).
+ *   - After Cloud Tasks exhausts retries, the dead-letter Pub/Sub topic fires and
+ *     /api/internal/webhook-dlq disables the endpoint.
  *
- * No in-process timers — retries survive Cloud Run restarts and scale-to-zero.
+ * No in-process timers, no DB-backed job table — retries survive Cloud Run
+ * scale-to-zero because Cloud Tasks dispatches them.
  */
 
 import { createHmac } from 'node:crypto'
 import { eq, and, sql } from 'drizzle-orm'
 import { db } from '~/db'
 import { appWebhookEndpoints } from '~/db/schema/app-webhook-endpoints'
-import { webhookDeliveryJobs } from '~/db/schema/webhook-delivery-jobs'
 import { appRegistry } from '~/db/schema/apps'
+import { enqueueWebhookDelivery } from './cloud-tasks-client'
 import type {
   PortalWebhookEvent,
   PortalWebhookEnvelope,
@@ -28,24 +29,6 @@ import {
   PORTAL_WEBHOOK_EVENT_ID_HEADER,
   PORTAL_WEBHOOK_TIMESTAMP_HEADER,
 } from '@coms-portal/shared'
-
-// ---------------------------------------------------------------------------
-// Retry constants — shared with webhook-delivery-worker.ts
-//
-// Retry cadence (from the user's perspective, T=0 is when the event fires):
-//   T+0     inline attempt (attempt 1)  — this file
-//   T+30s   job retry     (attempt 2)  — worker
-//   T+2m30s job retry     (attempt 3)  — worker → on failure, disable endpoint
-//
-// RETRY_DELAYS_MS[i] is the delay before attempt (i+2), i.e. indexed by the
-// current attemptCount after the failure:
-//   attemptCount=1 after inline fail  → delay[0] = 30s  → schedules attempt 2
-//   attemptCount=2 after retry fail   → delay[1] = 120s → schedules attempt 3
-//   attemptCount=3                    → MAX reached, disable (no further retry)
-// ---------------------------------------------------------------------------
-
-export const MAX_RETRY_ATTEMPTS = 3
-export const RETRY_DELAYS_MS = [30_000, 120_000] as const // 30s, 2min
 
 // ---------------------------------------------------------------------------
 // Signing helpers
@@ -97,7 +80,7 @@ type EndpointRow = typeof appWebhookEndpoints.$inferSelect & { appSlug: string }
 
 /**
  * Perform a single HTTP delivery attempt. Throws on non-2xx or network error.
- * Exported for re-use by the worker.
+ * Exported for re-use by the internal /webhook-delivery route.
  */
 export async function deliverWebhook(
   endpointUrl: string,
@@ -136,9 +119,8 @@ export async function deliverWebhook(
  *
  * Fire-and-forget: the function returns immediately after kicking off parallel
  * deliveries. On first-attempt success, the endpoint stats are updated inline.
- * On first-attempt failure, a durable `webhook_delivery_jobs` row is inserted
- * for the worker to pick up and retry (30s, 2min cadence; disabled after 3 total
- * failures).
+ * On first-attempt failure, a Cloud Task is enqueued for retry; Cloud Tasks
+ * owns the schedule and dead-lettering.
  *
  * @param event     - The event name (must be in PORTAL_WEBHOOK_EVENTS)
  * @param payload   - Event-specific payload object
@@ -216,7 +198,10 @@ export async function dispatchPortalWebhook<T>(
 /**
  * Perform the inline (first) delivery attempt.
  * On success: update endpoint stats (failureCount=0, lastDeliveredAt).
- * On failure: insert a webhook_delivery_jobs row for durable retry.
+ * On failure: increment endpoint failure stats and enqueue a Cloud Task that
+ * will hit /api/internal/webhook-delivery after the queue's configured backoff.
+ * Cloud Tasks handles further retries; the DLQ handler disables the endpoint
+ * once retries are exhausted.
  */
 async function inlineAttempt(
   endpoint: EndpointRow,
@@ -239,10 +224,11 @@ async function inlineAttempt(
     const reason = err instanceof Error ? err.message : String(err)
 
     console.warn(
-      `[webhook-dispatcher] endpoint ${endpoint.id} (${endpoint.url}) inline delivery failed. Enqueueing for retry. Reason: ${reason}`,
+      `[webhook-dispatcher] endpoint ${endpoint.id} (${endpoint.url}) inline delivery failed. Enqueueing Cloud Task. Reason: ${reason}`,
     )
 
-    // Update endpoint failure stats
+    // Update endpoint failure stats — same as before, the dispatcher always owns
+    // the inline-failure stats write.
     await db
       .update(appWebhookEndpoints)
       .set({
@@ -253,20 +239,21 @@ async function inlineAttempt(
       })
       .where(eq(appWebhookEndpoints.id, endpoint.id))
 
-    // Enqueue a durable job for the worker to pick up.
-    // attemptCount=1: the inline attempt counts as attempt 1.
-    // nextAttemptAt=+30s: first worker retry is 30s from now.
-    const nextAttemptAt = new Date(now.getTime() + RETRY_DELAYS_MS[0])
-    await db.insert(webhookDeliveryJobs).values({
-      endpointId: endpoint.id,
-      event,
-      eventId,
-      jsonBody,
-      occurredAt: new Date(occurredAt),
-      attemptCount: 1,
-      nextAttemptAt,
-      status: 'pending',
-      lastError: reason.slice(0, 500),
-    })
+    // Hand retry off to Cloud Tasks. The queue config (max_attempts=3,
+    // min_backoff=30s, max_backoff=300s, max_doublings=2) drives the schedule.
+    try {
+      await enqueueWebhookDelivery({
+        endpointId: endpoint.id,
+        event,
+        eventId,
+        jsonBody,
+        occurredAt,
+      })
+    } catch (enqueueErr) {
+      console.error(
+        `[webhook-dispatcher] Failed to enqueue Cloud Task for endpoint ${endpoint.id}:`,
+        enqueueErr,
+      )
+    }
   }
 }
