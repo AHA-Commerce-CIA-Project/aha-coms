@@ -53,3 +53,14 @@ variable "sheets_personal_email_tab" {
   description = "Sheet tab name for personal email data"
   type        = string
 }
+
+variable "service_url" {
+  description = <<-EOT
+    Public base URL of the deployed Cloud Run service (no trailing slash).
+    Used as the Cloud Tasks → service callback URL and as the OIDC audience
+    on the DLQ Pub/Sub push subscription. The Cloud Run URL is only known
+    after the first apply, so this is supplied as a tfvar after the initial
+    deploy (or via a custom domain mapping that's stable from the start).
+  EOT
+  type        = string
+}

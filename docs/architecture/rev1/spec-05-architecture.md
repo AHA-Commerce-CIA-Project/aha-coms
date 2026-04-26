@@ -3,6 +3,8 @@
 > Priority: **5 (long-term)**
 > Scope: Portal only
 > Prerequisites: Can be done independently, but Spec 04 health probe work naturally pairs with the Cloud Tasks migration
+>
+> **Revised 2026-04-26:** Step 4 (DLQ) corrected to match actual Cloud Tasks behavior — Cloud Tasks does not natively forward to Pub/Sub, so the delivery handler publishes to the DLQ topic itself on the final failed attempt. See updated rationale and code below.
 
 ---
 
@@ -371,12 +373,39 @@ await fetch(`https://cloudtasks.googleapis.com/v2/${parent}/tasks`, {
 
 #### Step 4: Handle Max Retries (Dead-Letter Queue)
 
-Cloud Tasks automatically retries based on the queue config. After `maxAttempts` failures, the task is dropped. To detect this and disable the endpoint, use a **dead-letter queue**:
+Cloud Tasks retries based on the queue config. After `maxAttempts` failures, the task is dropped. **Cloud Tasks does not natively forward to Pub/Sub on retry exhaustion**, so the delivery handler publishes to the DLQ topic itself on the final failed attempt. The DLQ handler — running on a separate code path triggered by the Pub/Sub push subscription — is what actually disables the endpoint, and its UPDATE is idempotent so a duplicate publish results in a no-op disable rather than corrupted state.
 
-> **Why not check `X-CloudTasks-TaskRetryCount`?** Checking the retry count header in the delivery endpoint and disabling on the last attempt has a race condition: Cloud Tasks may retry due to transient network issues without incrementing the attempt count, leading to premature endpoint disabling. A dead-letter queue is more robust because it only fires after Cloud Tasks has definitively given up.
+> **Why a DLQ topic + idempotent disable, not a direct count-based disable in the delivery handler?**
+>
+> A direct disable (`if retryCount === MAX-1: db.update().set({status:'disabled'})`) conflates the "is this the final failed attempt" decision with the "should this endpoint be disabled" decision. Splitting them via the DLQ topic gives us a single async chokepoint where disabling happens, plus a natural place to add per-tenant alerting or rate-limit-aware retry policies later. The duplicate-publication race (Cloud Tasks redispatching the same attempt for an internal reason) is absorbed by the DLQ handler reading prior status before its UPDATE — re-disabling an already-disabled endpoint is a no-op, logged as `webhook_dlq_duplicate` for observability.
+>
+> A high-volume system should bridge Cloud Tasks audit logs to Pub/Sub via Eventarc instead — that fires only after Cloud Tasks itself gives up, eliminating the race entirely. At <1000 webhook deliveries/day this complexity is not warranted.
+
+**Producer** — in the `/webhook-delivery` handler, on caught failure:
+
+```typescript
+const retryCount = Number(request.headers.get('x-cloudtasks-taskretrycount') ?? '0')
+
+// MAX_ATTEMPTS must match queue config (max_attempts=3). retryCount is 0-indexed,
+// so the third (final) attempt arrives with retryCount === 2.
+if (Number.isFinite(retryCount) && retryCount === MAX_ATTEMPTS - 1) {
+  try {
+    // Publish BEFORE returning 502 so we don't lose the signal if Cloud Tasks
+    // drops the task between our response and its retry-counter increment.
+    await publishToWebhookDlq({ endpointId, event, eventId })
+  } catch (dlqErr) {
+    // Log + swallow — Cloud Tasks still completes its retry budget via the 502.
+    logJson({ severity: 'ERROR', message: 'webhook_dlq_publish_failed', endpointId, error: dlqErr.message })
+  }
+}
+
+set.status = 502
+return { message: 'Delivery failed', error: reason.slice(0, 200) }
+```
+
+**Infra** — `infra/cloud-tasks.tf` declares the DLQ topic, push subscription, and grants `roles/pubsub.publisher` on the topic to the **Cloud Run runtime service account** (the SA that publishes from inside the delivery handler):
 
 ```hcl
-# infra/cloud-tasks.tf — add dead-letter topic
 resource "google_pubsub_topic" "webhook_dlq" {
   name = "coms-portal-webhook-dlq"
 }
@@ -389,12 +418,20 @@ resource "google_pubsub_subscription" "webhook_dlq_push" {
     push_endpoint = "${var.service_url}/api/internal/webhook-dlq"
     oidc_token {
       service_account_email = var.task_service_account
+      audience              = var.service_url
     }
   }
 }
+
+# Cloud Run runtime SA must publish to the DLQ topic itself.
+resource "google_pubsub_topic_iam_member" "runtime_publisher" {
+  topic  = google_pubsub_topic.webhook_dlq.name
+  role   = "roles/pubsub.publisher"
+  member = "serviceAccount:${var.runtime_service_account}"
+}
 ```
 
-Add a DLQ handler endpoint:
+**Consumer** — the `/webhook-dlq` handler reads prior status before the UPDATE so the duplicate path is observable:
 
 ```typescript
 // apps/api/src/routes/internal.ts
@@ -402,17 +439,26 @@ Add a DLQ handler endpoint:
   // Verify OIDC token (same pattern as /webhook-delivery)
   // ...
 
-  // Decode the original task payload from the Pub/Sub message
-  const message = JSON.parse(Buffer.from(body.message.data, 'base64').toString())
+  // Decode the payload published by /webhook-delivery on the final attempt.
+  const message = JSON.parse(Buffer.from(body.message.data, 'base64').toString('utf8'))
   const { endpointId } = message
 
-  // Disable the webhook endpoint after exhausting retries
-  await db
-    .update(webhookEndpoints)
-    .set({ enabled: false })
-    .where(eq(webhookEndpoints.id, endpointId))
+  // Read prior status so we can distinguish first-time disable from a duplicate.
+  const [priorRow] = await db
+    .select({ status: appWebhookEndpoints.status })
+    .from(appWebhookEndpoints)
+    .where(eq(appWebhookEndpoints.id, endpointId))
 
-  console.log(`Webhook endpoint ${endpointId} disabled after max retries`)
+  await db
+    .update(appWebhookEndpoints)
+    .set({ status: 'disabled', updatedAt: new Date() })
+    .where(eq(appWebhookEndpoints.id, endpointId))
+
+  if (priorRow?.status === 'disabled') {
+    logJson({ severity: 'INFO', message: 'webhook_dlq_duplicate', endpointId })
+  } else {
+    logJson({ severity: 'WARNING', message: 'webhook_endpoint_disabled', endpointId })
+  }
 })
 
 #### Step 5: Delivery Observability
@@ -453,15 +499,21 @@ Run both systems in parallel during transition:
 
 ### Dependencies
 
-- `google-auth-library` package (for OIDC verification and access token generation — avoids the heavy `@google-cloud/tasks` gRPC SDK)
+- `google-auth-library` package (for OIDC verification, access token generation for Cloud Tasks enqueue, and access token generation for Pub/Sub publish — avoids the heavy `@google-cloud/tasks` and `@google-cloud/pubsub` gRPC SDKs)
 - Cloud Tasks API enabled in GCP project
-- Pub/Sub API enabled in GCP project (for dead-letter queue)
-- Service account with Cloud Tasks Enqueuer role
-- OIDC authentication for task-to-service calls
+- Pub/Sub API enabled in GCP project (for dead-letter topic + push subscription)
+- Service accounts:
+  - **Runtime SA** (the Cloud Run service identity): `roles/cloudtasks.enqueuer` on the queue, `roles/pubsub.publisher` on the DLQ topic, `roles/iam.serviceAccountUser` on the invoker SA below.
+  - **Invoker SA** (the OIDC subject Cloud Tasks/Pub/Sub use to call back): `roles/run.invoker` on the Cloud Run service.
+- OIDC authentication on both Cloud Tasks → service and Pub/Sub push → service calls. Audience set to `SERVICE_URL`; the receiver verifies both audience and the SA email.
+
+### Known limitations
+
+- A customer endpoint that is briefly unavailable across all three retry attempts (≤2 min covering attempts 1, 2, and 3) and then recovers will be disabled until an admin re-enables it via the portal. This is the same property the original in-process worker had — Cloud Tasks does not improve or worsen it. At <1000 webhook deliveries/day this is acceptable. A high-volume system should replace the handler-side DLQ publish with an Eventarc bridge driven by Cloud Tasks audit logs, which fires only after Cloud Tasks itself gives up.
 
 ### Cost
 
-Cloud Tasks pricing: first 1 million operations/month free. At current scale (< 1000 webhook deliveries/day), cost is effectively $0.
+Cloud Tasks pricing: first 1 million operations/month free. Pub/Sub pricing: first 10 GB/month free. At current scale (< 1000 webhook deliveries/day), cost is effectively $0.
 
 ---
 
@@ -496,9 +548,12 @@ SSR (step 1) and Cloud Tasks (steps 2-6) are independent and can be done in para
 
 | File | Change |
 |------|--------|
-| `infra/cloud-tasks.tf` | New: Cloud Tasks queue + Pub/Sub dead-letter topic/subscription |
-| `apps/api/src/routes/internal.ts` | New: webhook delivery endpoint + DLQ handler, with OIDC verification |
+| `infra/cloud-tasks.tf` | New: Cloud Tasks queue + Pub/Sub DLQ topic + push subscription + IAM bindings (runtime SA: enqueuer + publisher; invoker SA: run.invoker) |
+| `infra/cloud-run.tf` | Inject `CLOUD_TASKS_QUEUE`, `CLOUD_TASKS_LOCATION`, `CLOUD_TASKS_SA_EMAIL`, `SERVICE_URL`, `GCP_PROJECT_ID`, `WEBHOOK_DLQ_TOPIC` env vars |
+| `apps/api/src/routes/internal.ts` | New: `/webhook-delivery` and `/webhook-dlq` handlers with OIDC verification, structured logging, idempotent disable |
+| `apps/api/src/services/cloud-tasks-client.ts` | New: REST-only Cloud Tasks enqueue + Pub/Sub publish helpers (no `@google-cloud/*` SDKs) |
+| `apps/api/src/services/oidc-verifier.ts` | New: shared Google OIDC token verifier (audience + issuer + email checks) |
 | `apps/api/src/index.ts` | Register internal routes, remove `startWebhookDeliveryWorker()` |
 | `apps/api/src/services/webhook-dispatcher.ts` | Enqueue via Cloud Tasks REST API instead of DB insert |
-| `apps/api/src/services/webhook-delivery-worker.ts` | Remove (after drain) |
-| `apps/api/package.json` | Add `google-auth-library` dependency |
+| `apps/api/src/services/webhook-delivery-worker.ts` | Delete (production drains via deploy runbook, not parallel-run) |
+| `apps/api/package.json` | `google-auth-library` (already present prior to this spec — no install needed) |

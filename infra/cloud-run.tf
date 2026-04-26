@@ -50,6 +50,32 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         value = var.sheets_personal_email_tab
       }
 
+      # ── Cloud Tasks (webhook delivery) ──────────────────────────
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "CLOUD_TASKS_LOCATION"
+        value = var.region
+      }
+      env {
+        name  = "CLOUD_TASKS_QUEUE"
+        value = google_cloud_tasks_queue.webhook_delivery.name
+      }
+      env {
+        name  = "CLOUD_TASKS_SA_EMAIL"
+        value = google_service_account.cloud_tasks_invoker.email
+      }
+      env {
+        name  = "WEBHOOK_DLQ_TOPIC"
+        value = google_pubsub_topic.webhook_dlq.name
+      }
+      env {
+        name  = "SERVICE_URL"
+        value = var.service_url
+      }
+
       # ── Secrets ─────────────────────────────────────────────────
       env {
         name = "DATABASE_URL"

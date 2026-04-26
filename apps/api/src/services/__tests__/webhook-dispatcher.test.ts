@@ -24,18 +24,22 @@ const appRegistry = {
   slug: 'app_registry.slug',
 }
 
-const webhookDeliveryJobs = {
-  id: 'webhook_delivery_jobs.id',
-  endpointId: 'webhook_delivery_jobs.endpoint_id',
-  event: 'webhook_delivery_jobs.event',
-  eventId: 'webhook_delivery_jobs.event_id',
-  jsonBody: 'webhook_delivery_jobs.json_body',
-  occurredAt: 'webhook_delivery_jobs.occurred_at',
-  attemptCount: 'webhook_delivery_jobs.attempt_count',
-  nextAttemptAt: 'webhook_delivery_jobs.next_attempt_at',
-  status: 'webhook_delivery_jobs.status',
-  lastError: 'webhook_delivery_jobs.last_error',
-}
+// ---------------------------------------------------------------------------
+// Cloud Tasks enqueue mock — spied on in the failure-path test below
+// ---------------------------------------------------------------------------
+
+const enqueueWebhookDeliveryMock = mock(async () => {})
+
+// Pull the real publishToWebhookDlq out of the module BEFORE we replace it
+// with a mock — the publishToWebhookDlq tests below exercise the real REST
+// helper against a stubbed fetch, while the dispatcher tests still want the
+// enqueue side mocked.
+const { publishToWebhookDlq: realPublishToWebhookDlq } = await import('../cloud-tasks-client')
+
+mock.module('../cloud-tasks-client', () => ({
+  enqueueWebhookDelivery: enqueueWebhookDeliveryMock,
+  publishToWebhookDlq: realPublishToWebhookDlq,
+}))
 
 // ---------------------------------------------------------------------------
 // In-memory DB simulation
@@ -57,21 +61,8 @@ type EndpointRecord = {
   updatedAt: Date
 }
 
-type JobRecord = {
-  endpointId: string
-  event: string
-  eventId: string
-  jsonBody: string
-  occurredAt: Date
-  attemptCount: number
-  nextAttemptAt: Date
-  status: string
-  lastError: string | null
-}
-
 let endpointStore: EndpointRecord[] = []
 const dbUpdates: Array<Record<string, unknown>> = []
-let jobInserts: JobRecord[] = []
 
 // Tracks the WHERE condition values passed to update().where() so we can
 // identify which endpoint was updated.
@@ -115,16 +106,10 @@ const db = {
       }
     },
   }),
-  insert: (_table: unknown) => ({
-    values: async (record: JobRecord) => {
-      jobInserts.push(record)
-    },
-  }),
 }
 
 mock.module('~/db', () => ({ db }))
 mock.module('~/db/schema/app-webhook-endpoints', () => ({ appWebhookEndpoints }))
-mock.module('~/db/schema/webhook-delivery-jobs', () => ({ webhookDeliveryJobs }))
 mock.module('~/db/schema/apps', () => ({ appRegistry }))
 mock.module('drizzle-orm', () => ({
   eq: (left: unknown, right: unknown) => ({ type: 'eq', left, right }),
@@ -250,9 +235,9 @@ describe('dispatchPortalWebhook', () => {
   beforeEach(() => {
     endpointStore = []
     dbUpdates.length = 0
-    jobInserts = []
     lastUpdatePayload = {}
     lastUpdateWhereId = null
+    enqueueWebhookDeliveryMock.mockClear()
   })
 
   // Helper: build a fetch stub that always returns 2xx
@@ -365,12 +350,10 @@ describe('dispatchPortalWebhook', () => {
     expect(ep.lastFailureReason).toContain('503')
   })
 
-  // On first-attempt failure the dispatcher no longer drives retries internally
-  // (the old in-memory retry timer chain has been removed). Instead it inserts a
-  // durable webhook_delivery_jobs row for the worker to pick up.
-  // Full retry behavior (3 total attempts, disable on exhaustion) is tested in
-  // webhook-delivery-worker.test.ts.
-  test('on failure, inserts a webhook_delivery_jobs row with status=pending, attemptCount=1, nextAttemptAt ~= now+30s', async () => {
+  // On first-attempt failure the dispatcher hands retry off to Cloud Tasks
+  // instead of inserting a DB job. The queue config (max_attempts, backoff)
+  // owns the retry schedule; the DLQ handler owns endpoint disabling.
+  test('on failure, enqueues a Cloud Task with the original event payload', async () => {
     const ep = makeEndpoint({
       id: 'ep-enqueue',
       subscribedEvents: ['session.revoked'],
@@ -378,24 +361,29 @@ describe('dispatchPortalWebhook', () => {
     })
     endpointStore.push(ep)
 
-    const before = Date.now()
     await dispatchPortalWebhook('session.revoked', { userId: 'u-6' }, { fetchImpl: failFetch(500) })
     await new Promise((r) => setTimeout(r, 10))
-    const after = Date.now()
 
-    expect(jobInserts).toHaveLength(1)
-    const job = jobInserts[0]
-    expect(job.endpointId).toBe(ep.id)
-    expect(job.status).toBe('pending')
-    expect(job.attemptCount).toBe(1)
-
-    // nextAttemptAt should be approximately now + 30s
-    const nextMs = job.nextAttemptAt instanceof Date ? job.nextAttemptAt.getTime() : Number(job.nextAttemptAt)
-    expect(nextMs).toBeGreaterThanOrEqual(before + 29_000)
-    expect(nextMs).toBeLessThanOrEqual(after + 31_000)
+    expect(enqueueWebhookDeliveryMock).toHaveBeenCalledTimes(1)
+    const calls = (enqueueWebhookDeliveryMock as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    const payload = calls[0][0] as {
+      endpointId: string
+      event: string
+      eventId: string
+      jsonBody: string
+      occurredAt: string
+    }
+    expect(payload.endpointId).toBe(ep.id)
+    expect(payload.event).toBe('session.revoked')
+    expect(typeof payload.eventId).toBe('string')
+    expect(typeof payload.occurredAt).toBe('string')
+    // The jsonBody is the same envelope that was attempted inline — preserving
+    // it byte-for-byte is required for HMAC signature stability.
+    expect(payload.jsonBody).toContain('"event":"session.revoked"')
+    expect(payload.jsonBody).toContain('"userId":"u-6"')
   })
 
-  test('on failure, endpoint status remains active (disabling is the worker\'s job after max retries)', async () => {
+  test('on failure, endpoint status remains active (DLQ handler disables on exhausted retries)', async () => {
     const ep = makeEndpoint({
       id: 'ep-no-disable',
       subscribedEvents: ['session.revoked'],
@@ -406,7 +394,73 @@ describe('dispatchPortalWebhook', () => {
     await dispatchPortalWebhook('session.revoked', { userId: 'u-7' }, { fetchImpl: failFetch(500) })
     await new Promise((r) => setTimeout(r, 10))
 
-    // The dispatcher never disables the endpoint — that is the worker's responsibility
+    // The dispatcher never disables the endpoint — that lives in the DLQ handler.
     expect(ep.status).toBe('active')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 3. publishToWebhookDlq — the manual DLQ producer the delivery handler calls
+//    on the final retry (Cloud Tasks has no native Pub/Sub forwarder).
+// ---------------------------------------------------------------------------
+
+describe('publishToWebhookDlq', () => {
+  const publishToWebhookDlq = realPublishToWebhookDlq
+
+  test('POSTs a base64-encoded payload to the topic publish URL', async () => {
+    const fetchMock = mock(
+      async () =>
+        new Response(JSON.stringify({ messageIds: ['msg-123'] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    ) as unknown as typeof fetch
+
+    const messageId = await publishToWebhookDlq(
+      { endpointId: 'ep-final', event: 'session.revoked', eventId: 'evt-1' },
+      {
+        projectId: 'test-project',
+        topic: 'coms-portal-webhook-dlq',
+        fetchImpl: fetchMock,
+        getAccessToken: async () => 'fake-token',
+      },
+    )
+
+    expect(messageId).toBe('msg-123')
+    const calls = (fetchMock as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    expect(calls).toHaveLength(1)
+    const [url, init] = calls[0] as [string, RequestInit]
+    expect(url).toBe(
+      'https://pubsub.googleapis.com/v1/projects/test-project/topics/coms-portal-webhook-dlq:publish',
+    )
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-token')
+
+    const body = JSON.parse(init.body as string) as { messages: Array<{ data: string }> }
+    expect(body.messages).toHaveLength(1)
+    const decoded = JSON.parse(Buffer.from(body.messages[0].data, 'base64').toString('utf8'))
+    // Match the contract the DLQ handler expects: endpointId/event/eventId.
+    expect(decoded).toEqual({
+      endpointId: 'ep-final',
+      event: 'session.revoked',
+      eventId: 'evt-1',
+    })
+  })
+
+  test('throws on non-2xx so the caller can choose to swallow or rethrow', async () => {
+    const fetchMock = mock(
+      async () => new Response('PERMISSION_DENIED', { status: 403 }),
+    ) as unknown as typeof fetch
+
+    await expect(
+      publishToWebhookDlq(
+        { endpointId: 'ep-x', event: 'user.updated', eventId: 'evt-x' },
+        {
+          projectId: 'test-project',
+          topic: 'coms-portal-webhook-dlq',
+          fetchImpl: fetchMock,
+          getAccessToken: async () => 'fake-token',
+        },
+      ),
+    ).rejects.toThrow(/Pub\/Sub publish failed \(403\)/)
   })
 })
