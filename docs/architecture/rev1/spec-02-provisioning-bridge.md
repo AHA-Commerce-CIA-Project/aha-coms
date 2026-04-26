@@ -1,5 +1,11 @@
 # Spec 02 — Provisioning Bridge
 
+> **Status: IMPLEMENTED (2026-04-26)** — fully shipped in both portal and Heroes codebases. App roles in manifest, app_role storage, role resolution with explicit priority, enriched webhook payloads (`appRole`, `branch`), and Heroes `user.provisioned` / `user.updated` handlers all live.
+>
+> Verification:
+> - Portal: `apps/api/src/db/schema/apps.ts:31` `appRoles` JSONB column; `apps/api/src/services/employee-provisioning.ts` resolves `appRole` per recipient app
+> - Heroes: `packages/server/src/routes/portal-webhooks.ts:101-190` (provisioned + updated handlers); `portal.integration.json:76-81` (`appRoles` declared)
+
 > Priority: **2 (enables multi-service)**
 > Scope: Portal (primary) + Heroes (webhook handlers)
 > Prerequisites: None (independent of Spec 01)

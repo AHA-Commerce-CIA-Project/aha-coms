@@ -1,5 +1,7 @@
 # Spec 04 — Resilience
 
+> **Status: IMPLEMENTED, ONE GAP (2026-04-26)** — §1 stale-while-revalidate is shipped in Heroes (`packages/web/src/lib/server/portal-introspect.ts:15-19, 87-92, 113-120`). §2 health probe service and §3 dashboard degraded state are shipped in portal. The §1 alerting escalation (severity bump on threshold crossing + Cloud Monitoring alert policy) is **NOT** implemented and is tracked in Rev 2 spec-05.
+
 > Priority: **4 (availability)**
 > Scope: Portal (health checks, dashboard) + Heroes (introspect resilience)
 > Prerequisites: None

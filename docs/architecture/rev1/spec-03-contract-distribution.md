@@ -1,5 +1,7 @@
 # Spec 03 — Contract Distribution
 
+> **Status: IMPLEMENTED (2026-04-26)** — `@coms-portal/shared` published at `git+https://github.com/mrdoorba/coms-shared.git#v1.1.0`. Portal and Heroes both consume from the published package; local duplicate types removed in Heroes. Option A (Git dependency) was the chosen distribution path.
+
 > Priority: **3 (developer velocity)**
 > Scope: Portal (extract) + Heroes (consume)
 > Prerequisites: Spec 02 contracts should be finalized first so the extracted package includes app roles
