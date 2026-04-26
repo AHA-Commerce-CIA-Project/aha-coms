@@ -1,265 +1,67 @@
-# Heroes Team Handoff — Architecture Rev 1
+# Heroes Team Handoff — Architecture Rev 1 (Retrospective)
 
 > **From:** COMS Portal team
 > **To:** COMS Heroes team
-> **Date:** 2026-04-23
-> **Repo:** `coms_aha_heroes`
+> **Original Date:** 2026-04-23
+> **Retrospective Updated:** 2026-04-26
+> **Repo:** `coms-aha-heroes`
 
 ---
 
-## What's Happening
+## Status: COMPLETE
 
-The portal team is shipping a set of architecture improvements to make the platform ready for onboarding additional services. Most changes are portal-internal, but **four items require changes in the Heroes repo**. This document explains exactly what, why, and in what order.
+All four Heroes-side items from Rev 1 are shipped and verified against the codebase on 2026-04-26. This document is preserved as a retrospective record; for the current state of all Rev 1 work see `spec-00-implementation-timeline.md`. For the next round of cross-repo work see `../rev2/heroes-team-handoff.md`.
 
-All portal-side specs are in `coms_portal/docs/architecture/rev1/`.
-
----
-
-## Summary of Heroes Changes
-
-| # | Change | Spec | Blocking? | Effort |
-|---|--------|------|-----------|--------|
-| H1 | Implement `user.provisioned` webhook handler | Spec 02 | No — runs in parallel with portal work | Small |
-| H2 | Implement `user.updated` webhook handler | Spec 02 | No — same as above | Small |
-| H3 | Replace duplicated types with `@coms-portal/shared` | Spec 03 | Yes — portal publishes the package first | Small |
-| H4 | Add stale-while-revalidate to introspect client | Spec 04 | No — independent | Small |
-
-Total estimated effort: ~1 day.
+| # | Change | Spec | Status | Code reference |
+|---|--------|------|--------|----------------|
+| H1 | `user.provisioned` webhook handler | Spec 02 | **DONE** | `packages/server/src/routes/portal-webhooks.ts:101-159` |
+| H2 | `user.updated` webhook handler | Spec 02 | **DONE** | `packages/server/src/routes/portal-webhooks.ts:160-190` |
+| H3 | Replace duplicated types with `@coms-portal/shared` | Spec 03 | **DONE** | Consumes `@coms-portal/shared@v1.1.0`; `packages/shared/src/auth/session.ts` re-exports |
+| H4 | Stale-while-revalidate on introspect client | Spec 04 | **DONE** | `packages/web/src/lib/server/portal-introspect.ts:15-19, 87-92, 113-120` |
+| Manifest | Declare `appRoles` in `portal.integration.json` | Spec 02 | **DONE** | `portal.integration.json:76-81` |
 
 ---
 
-## H1: Implement `user.provisioned` Webhook Handler
+## What Was Delivered
 
-### Why
+### H1 — `user.provisioned`
 
-When a portal admin adds an employee and grants their team access to Heroes, the portal sends a `user.provisioned` webhook. Today Heroes logs and ignores it:
+Email-keyed lookup; updates name and role on existing users; creates new user with `branchId` resolved from `body.branch` against `branches.code` (with default-branch fallback when unmatched or null), `canSubmitPoints: false`, `mustChangePassword: false`, `isActive: true`. Role mapping passes through `toUserRole()` (validates against the `USER_ROLES` const) and defaults to `'employee'` when missing or unrecognized.
 
-```typescript
-// packages/server/src/routes/portal-webhooks.ts:89-93
-case 'user.provisioned':
-case 'user.updated': {
-  console.log(`[portal-webhook] ${event} — no-op`)
-  break
-}
-```
+### H2 — `user.updated`
 
-This means new employees can't access Heroes until someone manually creates their user record in the Heroes DB.
+Email-keyed update; applies `name` if provided, `role` if `appRole` provided and maps to a valid `UserRole`. No-op + log when no applicable fields. Logs missing-local-user for visibility.
 
-### What to Do
+### H3 — Shared package
 
-In `packages/server/src/routes/portal-webhooks.ts`, replace the `user.provisioned` no-op:
+Heroes consumes `@coms-portal/shared@v1.1.0` directly from the Git repo `mrdoorba/coms-shared`. Local `PortalSessionUser`, `PortalBrokerExchangePayload`, and `WireResponse` types removed in favor of shared imports. Branch types now ride along, eliminating the `string` vs. `PortalRole` drift the Rev 1 spec called out.
 
-1. Check if a user with this email already exists in the `users` table
-2. If exists: update name and role if `appRole` is provided in the payload
-3. If not exists: insert a new user with:
-   - `email` from payload
-   - `name` from payload
-   - `role` mapped from `appRole` (portal sends one of: `admin`, `hr`, `leader`, `employee`) — direct 1:1 match with Heroes' `UserRole` enum
-   - `branchId` — map from `branch` in the payload (e.g. `"Thailand"` → the Thai branch record). If no match or `branch` is null, fall back to a default branch
-   - `canSubmitPoints: false`
-   - `mustChangePassword: false` (portal handles auth)
-   - `isActive: true`
+### H4 — Stale-while-revalidate introspect
 
-### Payload Shape
+Two-tier cache (`freshUntil = now + 30s`, `staleUntil = now + 300s`). On retry exhaustion, if a stale cache entry exists within `staleUntil` the result is served with `console.warn`; otherwise `PortalIntrospectUnavailableError` is thrown (preserves original semantic for unknown sessions). Handles 401 (misconfig), 404 (unknown user → revoked), 503 (transient), and treats network errors as 503.
 
-The portal will send (after Spec 02 is shipped):
+### Manifest update
 
-```json
-{
-  "contractVersion": 1,
-  "event": "user.provisioned",
-  "eventId": "uuid",
-  "occurredAt": "2026-04-23T10:00:00Z",
-  "appSlug": "heroes",
-  "payload": {
-    "userId": "portal-user-uuid",
-    "gipUid": "firebase-uid",
-    "email": "alice@company.com",
-    "name": "Alice",
-    "portalRole": "employee",
-    "teamIds": ["team-uuid-1"],
-    "apps": ["heroes"],
-    "appRole": "leader",
-    "branch": "Thailand"
-  }
-}
-```
-
-The `appRole` field is new. Until the portal ships Spec 02, it will be `null`/absent — Heroes should default to `'employee'` when `appRole` is missing.
-
-### Type Update
-
-Update `PortalEventBody` in `packages/server/src/routes/portal-webhooks.ts`:
-
-```typescript
-type PortalEventBody = {
-  userId?: string
-  gipUid?: string
-  email?: string
-  name?: string
-  reason?: string
-  notBefore?: string
-  appRole?: string | null      // NEW
-  branch?: string | null       // NEW — office/country label (e.g. "Thailand")
-  changedFields?: string[]     // NEW
-}
-```
+`appRoles` array declares `employee` (default), `leader`, `hr`, `admin` with descriptions.
 
 ---
 
-## H2: Implement `user.updated` Webhook Handler
+## Known Gap (Tracked Separately)
 
-### Why
+The H4 stale-serve path emits `console.warn` only — Spec 04 §1 also calls for severity escalation to `severity: 'ERROR'` after N stale-serves in a window plus a Cloud Monitoring alert policy. Without that, a multi-minute portal outage is invisible unless someone tails logs manually.
 
-When the portal admin updates an employee's name, email, or role, Heroes' local user record should reflect the change. Without this, name/email changes in the portal silently diverge from what Heroes shows.
-
-### What to Do
-
-In `packages/server/src/routes/portal-webhooks.ts`, replace the `user.updated` no-op:
-
-1. Find the local user by email
-2. Update `name` if provided
-3. Update `role` if `appRole` is provided and maps to a valid `UserRole`
-4. Log the update
-
-### Payload Shape
-
-```json
-{
-  "payload": {
-    "userId": "portal-user-uuid",
-    "email": "alice@company.com",
-    "name": "Alice Updated",
-    "portalRole": "employee",
-    "teamIds": ["team-uuid-1"],
-    "apps": ["heroes"],
-    "appRole": "hr",
-    "branch": "Thailand",
-    "changedFields": ["name", "appRole"]
-  }
-}
-```
+This is tracked as Rev 2 spec-05 (`../rev2/spec-05-stale-serve-alerting.md`) — a small Heroes-only follow-up.
 
 ---
 
-## H3: Replace Duplicated Types with `@coms-portal/shared`
+## Resolved Questions
 
-### Why
-
-Heroes duplicates portal types locally. These are already drifting — `PortalSessionUser.portalRole` is typed as `string` in Heroes but as `PortalRole` (union type) in the portal.
-
-### Prerequisites
-
-The portal team has published `@coms-portal/shared` as a Git-based dependency (GitHub repo `mrdoorba/coms-shared`, public). This is ready to consume now.
-
-### What to Do
-
-1. Add the dependency:
-   ```bash
-   bun add @coms-portal/shared@git+https://github.com/mrdoorba/coms-shared.git#v1.1.0
-   ```
-
-2. Replace duplicated types:
-
-   **`packages/shared/src/auth/session.ts`** — replace local `PortalSessionUser` with import:
-   ```typescript
-   import type { PortalSessionUser } from '@coms-portal/shared/contracts/auth'
-   export type { PortalSessionUser }
-   ```
-
-   **`packages/web/src/lib/server/portal-broker.ts`** — replace local `PortalBrokerExchangePayload` and `WireResponse`:
-   ```typescript
-   import type { PortalBrokerExchangePayload, PortalBrokerHandoffResponse } from '@coms-portal/shared/contracts/auth'
-   ```
-
-3. Run `bun run typecheck` to verify.
-
-### When
-
-`@coms-portal/shared` v1.1.0 is published and ready — this can be done now.
+1. ~~What should the default `branchId` be for auto-provisioned users?~~ — Resolved. Portal sends `branch` (e.g. `"Thailand"`) in webhook payload; Heroes matches against `branches.code`, falls back to first branch on miss.
+2. ~~Should auto-provisioned users get `canSubmitPoints: false` by default?~~ — Yes; shipped that way.
+3. ~~Any concerns about the role mapping (`appRole` → `UserRole`) being 1:1?~~ — None; 1:1 confirmed in `toUserRole()`.
 
 ---
 
-## H4: Add Stale-While-Revalidate to Introspect Client
+## Next Round
 
-### Why
-
-If the portal goes down for > 30 seconds, Heroes' introspect client (`PortalIntrospectUnavailableError`) blocks all authenticated routes. Users who are already logged in and have valid local sessions get locked out.
-
-### What to Do
-
-Modify `packages/web/src/lib/server/portal-introspect.ts`:
-
-1. Change the cache entry to track two timestamps: `freshUntil` and `staleUntil`
-2. When the portal is reachable: serve fresh results (same as today, 30s TTL)
-3. When the portal is unreachable AND a stale cache entry exists (< 5 min old): serve the stale result with a warning log instead of throwing
-4. When the portal is unreachable AND no cache entry exists: still throw (can't validate an unknown session)
-
-```typescript
-// Current cache entry:
-type CacheEntry = { result: IntrospectResult; expiresAt: number }
-
-// New cache entry:
-type CacheEntry = {
-  result: IntrospectResult
-  freshUntil: number   // now + 30s
-  staleUntil: number   // now + 300s (5 min)
-}
-```
-
-The key behavioral change:
-
-```typescript
-// Current: portal down → throw PortalIntrospectUnavailableError
-// New:     portal down + stale cache → return stale cache + warn log
-// New:     portal down + no cache    → throw PortalIntrospectUnavailableError (unchanged)
-```
-
-### When
-
-This is independent of portal changes — can be done anytime.
-
----
-
-## Manifest Update (Optional, Spec 02)
-
-After the portal ships Spec 02 (app roles in the manifest), update `portal.integration.json` to declare Heroes' roles:
-
-```json
-{
-  "appRoles": [
-    { "key": "employee", "label": "Employee", "default": true, "description": "Standard user" },
-    { "key": "leader", "label": "Team Leader", "description": "Can submit points for team members" },
-    { "key": "hr", "label": "HR", "description": "Can manage users and view reports" },
-    { "key": "admin", "label": "Administrator", "description": "Full access including settings" }
-  ]
-}
-```
-
-This enables the portal admin UI to show a role picker when granting teams access to Heroes.
-
----
-
-## Coordination Timeline
-
-```
-Portal ships Spec 01 (security)        → No Heroes action needed
-Portal ships Spec 02 (provisioning)    → Heroes does H1, H2, manifest update
-Portal publishes @coms-portal/shared   → Heroes does H3 ✅ PUBLISHED
-Heroes does H4 (introspect resilience) → Independent, anytime
-Portal ships Spec 04 (health checks)   → No Heroes action needed
-Portal ships Spec 05 (SSR, tasks)      → No Heroes action needed
-```
-
-H1, H2, and H4 can start immediately — they don't depend on any portal changes. H3 depends on the shared package being published.
-
----
-
-## Questions / Blockers
-
-If you have questions or blockers:
-1. ~~What should the default `branchId` be for auto-provisioned users?~~ **Resolved:** the portal now sends `branch` (e.g. `"Thailand"`) in the webhook payload. Map it to a local branch via `branches.code`; fall back to a default branch if unmatched or null.
-2. Should auto-provisioned users get `canSubmitPoints: false` by default? (H1)
-3. Any concerns about the role mapping (`appRole` → `UserRole`) being 1:1?
-
-Reach out to the portal team with these answers or any other questions.
+See `../rev2/heroes-team-handoff.md` for Rev 2 cross-repo work. TL;DR: Rev 2 closes out the remaining shared-secret surfaces (broker tokens → RS256 + JWKS, webhook auth → Google OIDC, introspect auth → Google OIDC). Heroes will need to update verification code in three places, all small.

@@ -1,5 +1,13 @@
 # Spec 01 — Security Hardening
 
+> **Status: IMPLEMENTED (2026-04-26)** — sections §1, §2, §3 are shipped in the portal codebase. The env-var fallbacks in §4 remain enabled and §5 (dual-secret rotation) is not implemented; both are obviated by Rev 2 (RS256/JWKS removes the broker secret entirely; OIDC service-to-service for introspect removes that secret too). §6 (KMS envelope encryption) is deferred. The body is preserved as historical context.
+>
+> Verification:
+> - `apps/api/src/db/schema/apps.ts:26-27` — `broker_signing_secret` and `introspect_secret` columns
+> - `apps/api/src/services/auth-broker.ts:110-119` — per-app secret lookup with env fallback
+> - `apps/api/src/routes/auth.ts:271-279` — per-app introspect with `timingSafeEqual`
+> - `apps/api/src/routes/auth.ts` `/broker/launch/:appSlug` — POST-only, GET returns 405
+
 > Priority: **1 (do first)**
 > Scope: Portal only — no changes to relying-party apps
 > Prerequisites: None
