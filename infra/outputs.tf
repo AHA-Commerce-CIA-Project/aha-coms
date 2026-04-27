@@ -24,12 +24,6 @@ output "db_password" {
   sensitive   = true
 }
 
-output "portal_introspect_secret" {
-  description = "Shared secret for relying-party apps to call POST /api/auth/broker/introspect"
-  value       = random_password.portal_introspect_secret.result
-  sensitive   = true
-}
-
 output "portal_broker_signing_secret" {
   description = "HS256 shared secret for broker token_exchange JWS verification"
   value       = random_password.portal_broker_signing_secret.result

@@ -25,9 +25,21 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export const app = new Elysia({ prefix: '/api' })
-  .onError(({ error, path }) => {
+  // Elysia's validation errors and route-level handlers set their own status +
+  // message before the request reaches onError. This handler is the catch-all
+  // for unexpected exceptions (DB driver errors, dereference bugs, etc.). We
+  // log the full error internally but never echo `error.message` to the
+  // client — Drizzle / Postgres errors include the failing SQL + parameters,
+  // which is an information-disclosure footgun on a public endpoint.
+  .onError(({ error, code, path, set }) => {
     console.error(`[API Error] ${path}:`, error)
-    return { message: error instanceof Error ? error.message : 'Internal error' }
+    if (code === 'VALIDATION') {
+      // Elysia's typebox validation errors are safe to surface — they describe
+      // the request shape, not internal state.
+      return { message: error instanceof Error ? error.message : 'Bad request' }
+    }
+    set.status = 500
+    return { message: 'Internal error' }
   })
   .get('/health', () => ({ status: 'ok' }))
   // Public, unauthenticated — JWKS + OIDC discovery (Rev 2 §01 + §02)
