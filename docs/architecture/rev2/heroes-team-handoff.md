@@ -2,10 +2,10 @@
 
 > **From:** COMS Portal team
 > **To:** COMS Heroes team
-> **Date:** 2026-04-26 (handoff issued); 2026-04-27 (Heroes implementation merged, deployed & verified end-to-end)
+> **Date:** 2026-04-26 (handoff issued); 2026-04-27 (Heroes implementation merged, deployed, verified, and Day-30 cleanup landed)
 > **Repo:** `coms-aha-heroes`
 > **Rev 1 retrospective:** `../rev1/heroes-team-handoff.md` (all done)
-> **Rev 2 status:** all four items closed; H3 confirmed live on portal side via synthetic introspect — see "Implementation status & deferred follow-ups" at the bottom.
+> **Rev 2 status:** all four items closed; H3 confirmed live on portal side via synthetic introspect; Day-30 cleanup (legacy HMAC + introspect-secret paths removed) merged 2026-04-27 — see "Implementation status & deferred follow-ups" at the bottom.
 
 ---
 
@@ -23,10 +23,10 @@ All portal-side specs are in `coms-portal/docs/architecture/rev2/`. Mirror copie
 
 | # | Change | Spec | Status | Effort | Removes env var |
 |---|--------|------|--------|--------|-----------------|
-| H1 | Verify broker tokens via JWKS (RS256/ES256) | Rev 2 Spec 01 + 02 | **closed (no code change)** — broker-JWT path retired by commit `0dbab9c` before this mission; original objective preserved (no shared HMAC secret on broker tokens) | n/a | `PORTAL_BROKER_SIGNING_SECRET` (already absent from source) |
+| H1 | Verify broker tokens via JWKS (RS256/ES256) | Rev 2 Spec 01 + 02 | **closed (no code change)** — broker-JWT path retired by commit `0dbab9c` before this mission; original objective preserved (no shared HMAC secret on broker tokens) | n/a | `PORTAL_BROKER_SIGNING_SECRET` removed from deploy workflow 2026-04-27 |
 | H1' | OIDC bearer on the exchange call (opportunistic) | new — see §H1' below | **merged 2026-04-27** (`821ec0f`) — caller auth on `exchangePortalCode` reusing H3's helper | ~10 min on top of H3 | n/a |
-| H2 | Verify webhook auth via Google OIDC | Rev 2 Spec 03 | **merged 2026-04-27** (`20a9cff`) | Small (~2h) | `PORTAL_WEBHOOK_SIGNING_SECRET` (Day-30) |
-| H3 | Send introspect requests with Google OIDC | Rev 2 Spec 04 | **closed 2026-04-27** (`821ec0f`) — synthetic introspect at 07:47:20 UTC logged `[introspect] via:oidc app:heroes` on portal side, no legacy-secret warning | Small (~1h) | `PORTAL_INTROSPECT_SECRET` (Day-30) |
+| H2 | Verify webhook auth via Google OIDC | Rev 2 Spec 03 | **merged 2026-04-27** (`20a9cff`); HMAC fallback removed Day-30 cleanup 2026-04-27 | Small (~2h) | `PORTAL_WEBHOOK_SIGNING_SECRET` removed from deploy workflow 2026-04-27 |
+| H3 | Send introspect requests with Google OIDC | Rev 2 Spec 04 | **closed 2026-04-27** (`821ec0f`) — synthetic introspect at 07:47:20 UTC logged `[introspect] via:oidc app:heroes` on portal side, no legacy-secret warning; legacy header removed Day-30 cleanup 2026-04-27 | Small (~1h) | `PORTAL_INTROSPECT_SECRET` removed from deploy workflow 2026-04-27 |
 | H4 | Stale-serve alerting escalation | Rev 2 Spec 05 | **merged 2026-04-27** (`40309d2`) | Small (~2h) | n/a |
 
 Total estimated effort: ~1 day. Each item is independent and can ship at Heroes' pace because the portal ships in dual-mode every time.
@@ -279,7 +279,7 @@ grep -r "PORTAL_.*_SECRET" --include="*.ts" --include="*.tf" --include="*.json" 
 
 Expected: no matches in source after the dual-mode periods complete. The only remaining `PORTAL_*` references should be `PORTAL_ORIGIN`, `PORTAL_APP_SLUG`, `PORTAL_SERVICE_ACCOUNT_EMAIL`, `SELF_PUBLIC_URL`. (`PORTAL_TOKEN_AUDIENCE` was associated with the retired broker-JWT path and is no longer needed; verify it is unset.)
 
-**Today (2026-04-27, post-merge):** `PORTAL_*_SECRET` references still exist in tree because the dual-mode period is open. The audit grep should be re-run as part of the Day-30 cleanup mission below, not now.
+**Today (2026-04-27, post Day-30 cleanup):** Day-30 cleanup landed the same day H3 closed (portal team had already retired acceptance, soak window waived by mission lead). Audit grep has been re-run and returns zero `PORTAL_*_SECRET`, `PORTAL_TOKEN_AUDIENCE`, `verifyPortalSignature`, `X-Portal-Signature`, or `x-portal-introspect-secret` matches in source.
 
 ---
 
@@ -307,22 +307,26 @@ Historical procedure (kept for reference / future apps):
 
 ### Deferred follow-ups
 
-Each item below is filed in this doc rather than deleted from the captain's log so the cleanup mission inherits an explicit list.
+Each item below is filed in this doc rather than deleted from the captain's log so future operators inherit an explicit list. Day-30 items completed inline on 2026-04-27 once the portal team confirmed legacy acceptance was retired; soak window was deliberately waived by the mission lead.
 
-#### Pre-Day-30 (do these *before* the portal team retires HMAC/legacy-secret acceptance)
+#### Pre-Day-30 — partially superseded by early cleanup
 
-1. **Structured-log key + alert on OIDC→HMAC silent fallback (webhook receiver).** `packages/server/src/routes/portal-webhooks.ts` currently emits a single `console.log` line on the OIDC failure path. Promote it to a stable `message` key (e.g. `portal-webhook-oidc-fallback`) using the same Cloud Run structured-logging pattern as H4, and add a `google_monitoring_alert_policy` in `infra/modules/monitoring/main.tf` keyed off it. Without this, an OIDC misconfiguration (e.g. `aud` drift after a domain change) silently routes everything via HMAC and we don't notice until HMAC retires.
-2. **`notification_rate_limit` on the two H4 alert policies.** `condition_matched_log` does not self-throttle the way `condition_threshold` does; during a sustained outage with ≥2 replicas, the existing policies could page repeatedly. Add `alert_strategy { notification_rate_limit { period = "300s" } }` to both new policies.
-3. **Re-key the dedupe Set in `google-oidc.ts`.** Today keyed by audience only, collapsing distinct failure modes (no creds vs. transient gaxios error vs. IAM revocation) into a single one-shot warning per process. Re-key by `${audience}|${error.code ?? error.name}` or add a TTL.
+1. ~~**Structured-log key + alert on OIDC→HMAC silent fallback (webhook receiver).**~~ **Moot post-cleanup** — there is no longer an HMAC fallback path to silently route to. OIDC verification failure now returns 401 directly. If equivalent observability is still wanted on OIDC verification *failure* (without fallback), promote the `console.warn` line at `packages/server/src/routes/portal-webhooks.ts` to a stable `message` key (e.g. `portal-webhook-oidc-failed`) and alert on it.
+2. **`notification_rate_limit` on the two H4 alert policies.** `condition_matched_log` does not self-throttle the way `condition_threshold` does; during a sustained outage with ≥2 replicas, the existing policies could page repeatedly. Add `alert_strategy { notification_rate_limit { period = "300s" } }` to both new policies. **Still valid — independent of cleanup.**
+3. **Re-key the dedupe Set in `google-oidc.ts`.** Today keyed by audience only, collapsing distinct failure modes (no creds vs. transient gaxios error vs. IAM revocation) into a single one-shot warning per process. Re-key by `${audience}|${error.code ?? error.name}` or add a TTL. **Still valid — independent of cleanup.**
 
-#### Day-30 cleanup mission (after portal logs show 100% OIDC traffic for ≥7 days)
+#### Day-30 cleanup mission — **completed 2026-04-27**
 
-4. Drop the HMAC fallback branch in `packages/server/src/routes/portal-webhooks.ts` along with `verifyPortalSignature`, the `X-Portal-Signature`/`X-Portal-Timestamp` validation, and the 5-min skew check. Delete `PORTAL_WEBHOOK_SIGNING_SECRET` from Cloud Run env and Secret Manager.
-5. Drop `x-portal-introspect-secret` from `fetchIntrospect` and the `secret` field from `requireEnv()` in `packages/web/src/lib/server/portal-introspect.ts`. Delete `PORTAL_INTROSPECT_SECRET` from Cloud Run env and Secret Manager.
-6. Tighten the legacy 401 message at `packages/web/src/lib/server/portal-introspect.ts` (currently says "PORTAL_INTROSPECT_SECRET misconfigured" — will mislead operators after the legacy path retires).
-7. Replace the literal `SELF_PUBLIC_URL` value in `infra/modules/cloud-run/main.tf` with a reference to a custom-domain output once one exists. Today the value is `https://coms-aha-heroes-app-45tyczfska-et.a.run.app`; if the auto-generated suffix changes, OIDC verification will silently fall through to HMAC until updated.
-8. Confirm with the portal team that the `PORTAL_SERVICE_ACCOUNT_EMAIL` literal in the same file (`coms-portal-run-sa@coms-portal-prod.iam.gserviceaccount.com`) still matches the SA the portal Cloud Run runs as. Promote to a Terraform variable if rotation is on the roadmap.
-9. Re-run the audit grep at the top of "Verification After All Items Ship". Expect zero `PORTAL_*_SECRET` matches in source. `PORTAL_TOKEN_AUDIENCE` should also be zero.
+4. ✅ **Done.** HMAC fallback branch removed from `packages/server/src/routes/portal-webhooks.ts` along with `verifyPortalSignature`, `createHmac`/`timingSafeEqual` imports, the `X-Portal-Signature`/`X-Portal-Timestamp` validation, and the 5-min skew check. `PORTAL_WEBHOOK_SIGNING_SECRET` and `PORTAL_BROKER_SIGNING_SECRET` removed from `.github/workflows/deploy.yml --set-secrets` (both staging and production deploys); Secret Manager secrets `portal-webhook-signing-secret` and `portal-broker-signing-secret` left in place pending one final ops cleanup pass.
+5. ✅ **Done.** `x-portal-introspect-secret` header dropped from `fetchIntrospect` and `secret` field removed from `requireEnv()` in `packages/web/src/lib/server/portal-introspect.ts`. `PORTAL_INTROSPECT_SECRET` removed from `.github/workflows/deploy.yml`; Secret Manager secret `portal-introspect-secret` left in place pending ops cleanup pass.
+6. ✅ **Done.** 401 error message in `portal-introspect.ts` rewritten to reference OIDC failure: "Portal introspection auth rejected (401) — verify Heroes Cloud Run SA matches portal app_registry.service_account_email".
+7. **Deferred — no custom domain yet.** Replace the literal `SELF_PUBLIC_URL` value in `infra/modules/cloud-run/main.tf` (and the deploy workflow) with a reference to a custom-domain output once one exists. Today the value is `https://coms-aha-heroes-app-45tyczfska-et.a.run.app`; if the auto-generated suffix changes, OIDC verification will start 401-ing every webhook until updated.
+8. **Deferred — no rotation planned.** Confirm with the portal team that the `PORTAL_SERVICE_ACCOUNT_EMAIL` literal in the deploy workflow (`coms-portal-run-sa@coms-portal-prod.iam.gserviceaccount.com`) still matches the SA the portal Cloud Run runs as. Promote to a Terraform variable / repo variable if rotation is on the roadmap.
+9. ✅ **Done.** Audit grep returns zero matches across `*.ts`, `*.tf`, `*.json`, `*.yml`, `.env*` for `PORTAL_*_SECRET`, `PORTAL_TOKEN_AUDIENCE`, `verifyPortalSignature`, `X-Portal-Signature`, and `x-portal-introspect-secret`. The only remaining `PORTAL_*` references are `PORTAL_ORIGIN`, `PORTAL_APP_SLUG`, and `PORTAL_SERVICE_ACCOUNT_EMAIL` — exactly the expected end state.
+
+#### One-off ops cleanup (out of repo)
+
+10. Delete the now-unused Secret Manager secrets `portal-introspect-secret`, `portal-webhook-signing-secret`, and `portal-broker-signing-secret` from project `fbi-dev-484410`. The Cloud Run service no longer references them, but the secret resources still exist and can be removed via `gcloud secrets delete` once the portal team confirms they are likewise unused on the portal side. Do this only after one full deploy with the new workflow has succeeded — that proves the service starts cleanly without the secrets bound.
 
 #### Portal-side hygiene flags raised by Heroes during H3 verification (filed on portal's Day-30 list)
 
