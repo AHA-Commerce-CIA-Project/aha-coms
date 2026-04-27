@@ -2,10 +2,10 @@
 
 > **From:** COMS Portal team
 > **To:** COMS Heroes team
-> **Date:** 2026-04-26 (handoff issued); 2026-04-27 (Heroes implementation merged & deployed)
+> **Date:** 2026-04-26 (handoff issued); 2026-04-27 (Heroes implementation merged, deployed & verified end-to-end)
 > **Repo:** `coms-aha-heroes`
 > **Rev 1 retrospective:** `../rev1/heroes-team-handoff.md` (all done)
-> **Rev 2 status:** all four items closed in tree — see "Implementation status & deferred follow-ups" at the bottom.
+> **Rev 2 status:** all four items closed; H3 confirmed live on portal side via synthetic introspect — see "Implementation status & deferred follow-ups" at the bottom.
 
 ---
 
@@ -26,7 +26,7 @@ All portal-side specs are in `coms-portal/docs/architecture/rev2/`. Mirror copie
 | H1 | Verify broker tokens via JWKS (RS256/ES256) | Rev 2 Spec 01 + 02 | **closed (no code change)** — broker-JWT path retired by commit `0dbab9c` before this mission; original objective preserved (no shared HMAC secret on broker tokens) | n/a | `PORTAL_BROKER_SIGNING_SECRET` (already absent from source) |
 | H1' | OIDC bearer on the exchange call (opportunistic) | new — see §H1' below | **merged 2026-04-27** (`821ec0f`) — caller auth on `exchangePortalCode` reusing H3's helper | ~10 min on top of H3 | n/a |
 | H2 | Verify webhook auth via Google OIDC | Rev 2 Spec 03 | **merged 2026-04-27** (`20a9cff`) | Small (~2h) | `PORTAL_WEBHOOK_SIGNING_SECRET` (Day-30) |
-| H3 | Send introspect requests with Google OIDC | Rev 2 Spec 04 | **merged 2026-04-27** (`821ec0f`) | Small (~1h) | `PORTAL_INTROSPECT_SECRET` (Day-30) |
+| H3 | Send introspect requests with Google OIDC | Rev 2 Spec 04 | **closed 2026-04-27** (`821ec0f`) — synthetic introspect at 07:47:20 UTC logged `[introspect] via:oidc app:heroes` on portal side, no legacy-secret warning | Small (~1h) | `PORTAL_INTROSPECT_SECRET` (Day-30) |
 | H4 | Stale-serve alerting escalation | Rev 2 Spec 05 | **merged 2026-04-27** (`40309d2`) | Small (~2h) | n/a |
 
 Total estimated effort: ~1 day. Each item is independent and can ship at Heroes' pace because the portal ships in dual-mode every time.
@@ -292,17 +292,17 @@ Expected: no matches in source after the dual-mode periods complete. The only re
 | H1 (closed in tree, no code change) | `0dbab9c` (pre-mission) | `jwtVerify` and `createRemoteJWKSet` appear zero times in source; `PORTAL_BROKER_SIGNING_SECRET` and `PORTAL_TOKEN_AUDIENCE` appear zero times in source |
 | H1' (opportunistic exchange OIDC) | `821ec0f` | `bun run typecheck` (packages/web) clean |
 | H2 (webhook OIDC verifier) | `20a9cff` | `bun run typecheck` (packages/server) clean |
-| H3 (introspect OIDC sender) | `821ec0f` | `bun run typecheck` (packages/web) clean |
+| H3 (introspect OIDC sender) | `821ec0f` | `bun run typecheck` (packages/web) clean; portal-side log confirmation 2026-04-27 07:47:20 UTC (`[introspect] via:oidc app:heroes`) |
 | H4 (stale-serve alerting + monitoring TF) | `40309d2` | `bun run typecheck` clean; `tofu validate` (infra/modules/monitoring) clean |
 | CI/CD perf (bun cache + buildx GHA cache) | `8e10b79` | exercised on next push |
 
-### Operational gate before H3 fully exercises the OIDC path
+### Operational gate before H3 fully exercises the OIDC path — **closed 2026-04-27**
 
-Heroes' Cloud Run SA email is **`coms-aha-heroes-run-sa@fbi-dev-484410.iam.gserviceaccount.com`** (derived from `infra/modules/cloud-run/main.tf:4` × `infra/variables.tf` `project_id` default). The portal admin must populate `app_registry.service_account_email` for the `heroes` row before portal logs will show `via: oidc` for Heroes introspect calls. Until then, portal silently falls through to the legacy `x-portal-introspect-secret` path — operationally fine, but the OIDC migration is not actually exercised yet.
+Heroes' Cloud Run SA email is **`coms-aha-heroes-run-sa@fbi-dev-484410.iam.gserviceaccount.com`** (derived from `infra/modules/cloud-run/main.tf:4` × `infra/variables.tf` `project_id` default). The portal admin populated `app_registry.service_account_email` for the `heroes` row on 2026-04-27. A synthetic introspect call (impersonated SA, ID token minted with `--include-email`) at 07:47:20.962 UTC was confirmed by the portal team to log `[introspect] via:oidc app:heroes` with no legacy-secret warning — H3 is officially closed.
 
-Two-step procedure mirrors the runbook in `spec-04-introspect-oidc-auth.md`:
+Historical procedure (kept for reference / future apps):
 
-1. Heroes team — share the SA email above with the portal admin (see "Heroes notification" in `spec-00-implementation-timeline.md`).
+1. Heroes team — share the SA email with the portal admin.
 2. Portal admin — set the value via the admin UI or SQL: `UPDATE app_registry SET service_account_email = 'coms-aha-heroes-run-sa@fbi-dev-484410.iam.gserviceaccount.com' WHERE slug = 'heroes';`
 
 ### Deferred follow-ups
@@ -323,6 +323,13 @@ Each item below is filed in this doc rather than deleted from the captain's log 
 7. Replace the literal `SELF_PUBLIC_URL` value in `infra/modules/cloud-run/main.tf` with a reference to a custom-domain output once one exists. Today the value is `https://coms-aha-heroes-app-45tyczfska-et.a.run.app`; if the auto-generated suffix changes, OIDC verification will silently fall through to HMAC until updated.
 8. Confirm with the portal team that the `PORTAL_SERVICE_ACCOUNT_EMAIL` literal in the same file (`coms-portal-run-sa@coms-portal-prod.iam.gserviceaccount.com`) still matches the SA the portal Cloud Run runs as. Promote to a Terraform variable if rotation is on the roadmap.
 9. Re-run the audit grep at the top of "Verification After All Items Ship". Expect zero `PORTAL_*_SECRET` matches in source. `PORTAL_TOKEN_AUDIENCE` should also be zero.
+
+#### Portal-side hygiene flags raised by Heroes during H3 verification (filed on portal's Day-30 list)
+
+These are *not* Heroes work — listed here for traceability of the H3 closure conversation. Portal team confirmed both will be addressed in their Day-30 cleanup alongside dropping `PORTAL_*_SECRET` env vars and the legacy-header acceptance branch.
+
+12. **SQL schema leak in introspect 500 response.** When `userId` does not match an `identity_users` row, the portal currently surfaces the raw SQL error in the 500 body. Portal will map unknown-user lookups to a generic 404. (Discovered via the synthetic H3 verification call.)
+13. **Portal 401 ambiguity.** The portal returns the same 401 status for "OIDC verify failed" vs "missing auth header entirely". Portal will distinguish these in structured logs (and possibly in error codes) so future operator triage can tell them apart without log archaeology.
 
 #### Deferred design (no deadline)
 
