@@ -12,7 +12,7 @@
  *    to the SDK's IdTokenClient across repeated calls for the same audience).
  */
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 // ---------------------------------------------------------------------------
 // Schema stubs (mirrors what webhook-dispatcher.test.ts sets up)
@@ -56,6 +56,13 @@ let getIdTokenClientImpl: (audience: string) => Promise<{
 }>
 
 const mockGetIdTokenClient = mock(async (audience: string) => getIdTokenClientImpl(audience))
+
+// Capture the real google-auth-library module BEFORE applying our stub so
+// afterAll can restore it. Bun's mock.module is process-global and survives
+// across test files; without restoration, downstream files that touch
+// signing-keys (which imports GoogleAuth) inherit our class with a fixed
+// getIdTokenClient field, breaking their assumptions.
+const realGoogleAuthLibrary = await import('google-auth-library')
 
 mock.module('google-auth-library', () => ({
   GoogleAuth: class {
@@ -172,6 +179,12 @@ function okFetch(): typeof fetch {
 // ---------------------------------------------------------------------------
 
 describe('webhook-dispatcher OIDC dual-mode (Rev 2 §03)', () => {
+  // Restore the real google-auth-library after this file's tests so its
+  // GoogleAuth stub does not leak into sibling files. Order-independent.
+  afterAll(() => {
+    mock.module('google-auth-library', () => realGoogleAuthLibrary)
+  })
+
   beforeEach(() => {
     endpointStore = []
     enqueueWebhookDeliveryMock.mockClear()

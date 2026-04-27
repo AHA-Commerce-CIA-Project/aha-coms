@@ -6,7 +6,7 @@
  * ES256 sibling (`portal_token_es256` query param, new). Both must be
  * verifiable with their respective keys.
  */
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 const handoffStore: Array<Record<string, unknown>> = []
 const appRegistryStore: Record<string, Record<string, unknown>> = {}
@@ -67,6 +67,13 @@ const { privateKey: testPrivateKey, publicKey: testPublicKey } = await generateK
 const testKid = 'bk-test-1'
 const testPublicJwk = await exportJWK(testPublicKey)
 
+// Capture the real signing-keys module BEFORE applying the stub, so afterAll
+// can restore it. Bun's mock.module is process-global and survives across
+// test files; without restoration, 01-signing-keys.test.ts (which exercises
+// the real module) inherits these stubs and crashes with "stubbed in
+// dual-mode tests" on whatever Ubuntu's discovery order produces.
+const realSigningKeys = await import('../signing-keys')
+
 mock.module('../signing-keys', () => ({
   loadActiveSigningKey: async () => ({ kid: testKid, privateKey: testPrivateKey }),
   generateAndStoreNewKey: async () => {
@@ -81,6 +88,12 @@ mock.module('../signing-keys', () => ({
 const { createBrokerHandoff } = await import('../auth-broker')
 
 describe('auth-broker dual-mode (Rev 2 §01)', () => {
+  // Restore the real signing-keys module after this file's tests, so the
+  // stubs above don't bleed into sibling test files. Order-independent.
+  afterAll(() => {
+    mock.module('../signing-keys', () => realSigningKeys)
+  })
+
   beforeEach(() => {
     handoffStore.length = 0
     for (const k of Object.keys(appRegistryStore)) delete appRegistryStore[k]
