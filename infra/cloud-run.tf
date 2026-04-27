@@ -79,6 +79,10 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         name  = "SERVICE_URL"
         value = var.service_url
       }
+      env {
+        name  = "PORTAL_PUBLIC_ORIGIN"
+        value = var.service_url
+      }
 
       # ── Secrets ─────────────────────────────────────────────────
       env {
