@@ -80,6 +80,8 @@ Even with H1' in place, the exchange *response* is unsigned. To restore the inte
 
 ## H2: Verify Webhook Auth via Google OIDC
 
+> **Historical / dual-mode rollout.** The "What to Do" section below describes the *original* dual-mode rollout (OIDC primary + HMAC fallback). The live code is now **single-mode OIDC-only** — Day-30 cleanup landed 2026-04-27. See the status table at the top of this doc and item #4 in "Implementation status & deferred follow-ups" for the current state. The snippets below are kept verbatim as a record of how the rollout was sequenced.
+
 ### Why
 
 Today `packages/server/src/routes/portal-webhooks.ts:22-37` computes an HMAC-SHA256 with `PORTAL_WEBHOOK_SIGNING_SECRET` and compares with the `X-Portal-Signature` header. Rev 2 Spec 03 swaps this for Google ID token verification, eliminating the shared secret.
@@ -175,6 +177,8 @@ Portal ships dual-mode dispatch first. From then on Heroes can ship H2; portal c
 ---
 
 ## H3: Send Introspect Requests with Google OIDC
+
+> **Historical / dual-mode rollout.** The "What to Do" section below describes the *original* dual-mode rollout (OIDC bearer + legacy `x-portal-introspect-secret` header). The live code is now **single-mode OIDC-only** — Day-30 cleanup landed 2026-04-27. See the status table at the top of this doc and item #5 in "Implementation status & deferred follow-ups" for the current state. The snippets below are kept verbatim as a record of how the rollout was sequenced.
 
 ### Why
 
