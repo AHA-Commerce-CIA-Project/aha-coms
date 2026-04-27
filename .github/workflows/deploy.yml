@@ -4,8 +4,13 @@ name: CI — Provision infra, build, migrate, deploy
 # deploy waits on both. This serializes infra mutations ahead of code deploys
 # so the new image never starts against unprovisioned env vars / resources.
 #
-# Manual dispatch is supported. Add "[skip infra]" anywhere in the commit
-# message to skip the OpenTofu job for a doc-only change inside infra/.
+# Manual dispatch is supported. Commit-message escape hatches:
+#   [skip infra]   — skip only the OpenTofu job (for a doc-only change inside infra/)
+#   [skip ci]      — skip all three jobs (test, infra, deploy). Useful for pure docs commits.
+#   [docs-only]    — alias for [skip ci]; clearer intent for documentation-only changes.
+#
+# Skipping `test` cascades: deploy depends on `needs.test.result == 'success'`,
+# so a skipped test job automatically skips deploy with no extra gating logic.
 
 on:
   push:
@@ -28,6 +33,11 @@ env:
 jobs:
   test:
     name: Typecheck & Unit Tests
+    if: >-
+      ${{
+        !contains(github.event.head_commit.message, '[skip ci]')
+        && !contains(github.event.head_commit.message, '[docs-only]')
+      }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -38,7 +48,12 @@ jobs:
 
   infra:
     name: Provision infra (OpenTofu)
-    if: ${{ !contains(github.event.head_commit.message, '[skip infra]') }}
+    if: >-
+      ${{
+        !contains(github.event.head_commit.message, '[skip infra]')
+        && !contains(github.event.head_commit.message, '[skip ci]')
+        && !contains(github.event.head_commit.message, '[docs-only]')
+      }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
