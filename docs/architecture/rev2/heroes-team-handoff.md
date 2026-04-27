@@ -2,9 +2,10 @@
 
 > **From:** COMS Portal team
 > **To:** COMS Heroes team
-> **Date:** 2026-04-26
+> **Date:** 2026-04-26 (handoff issued); 2026-04-27 (Heroes implementation merged & deployed)
 > **Repo:** `coms-aha-heroes`
 > **Rev 1 retrospective:** `../rev1/heroes-team-handoff.md` (all done)
+> **Rev 2 status:** all four items closed in tree — see "Implementation status & deferred follow-ups" at the bottom.
 
 ---
 
@@ -20,78 +21,60 @@ All portal-side specs are in `coms-portal/docs/architecture/rev2/`. Mirror copie
 
 ## Summary of Heroes Changes
 
-| # | Change | Spec | Blocking? | Effort | Removes env var |
-|---|--------|------|-----------|--------|-----------------|
-| H1 | Verify broker tokens via JWKS (RS256/ES256) | Rev 2 Spec 01 + 02 | Portal must ship JWKS first | Small (~2h) | `PORTAL_BROKER_SIGNING_SECRET` |
-| H2 | Verify webhook auth via Google OIDC | Rev 2 Spec 03 | Portal must ship dual-mode dispatcher first | Small (~2h) | `PORTAL_WEBHOOK_SIGNING_SECRET` |
-| H3 | Send introspect requests with Google OIDC | Rev 2 Spec 04 | Portal must ship dual-mode introspect first | Small (~1h) | `PORTAL_INTROSPECT_SECRET` |
-| H4 | Stale-serve alerting escalation | Rev 2 Spec 05 | None — independent | Small (~2h) | n/a |
+| # | Change | Spec | Status | Effort | Removes env var |
+|---|--------|------|--------|--------|-----------------|
+| H1 | Verify broker tokens via JWKS (RS256/ES256) | Rev 2 Spec 01 + 02 | **closed (no code change)** — broker-JWT path retired by commit `0dbab9c` before this mission; original objective preserved (no shared HMAC secret on broker tokens) | n/a | `PORTAL_BROKER_SIGNING_SECRET` (already absent from source) |
+| H1' | OIDC bearer on the exchange call (opportunistic) | new — see §H1' below | **merged 2026-04-27** (`821ec0f`) — caller auth on `exchangePortalCode` reusing H3's helper | ~10 min on top of H3 | n/a |
+| H2 | Verify webhook auth via Google OIDC | Rev 2 Spec 03 | **merged 2026-04-27** (`20a9cff`) | Small (~2h) | `PORTAL_WEBHOOK_SIGNING_SECRET` (Day-30) |
+| H3 | Send introspect requests with Google OIDC | Rev 2 Spec 04 | **merged 2026-04-27** (`821ec0f`) | Small (~1h) | `PORTAL_INTROSPECT_SECRET` (Day-30) |
+| H4 | Stale-serve alerting escalation | Rev 2 Spec 05 | **merged 2026-04-27** (`40309d2`) | Small (~2h) | n/a |
 
 Total estimated effort: ~1 day. Each item is independent and can ship at Heroes' pace because the portal ships in dual-mode every time.
 
 ---
 
-## H1: Verify Broker Tokens via JWKS
+## H1: Verify Broker Tokens via JWKS — **closed in tree (no code change)**
+
+### What changed in the meantime
+
+The handoff was drafted on the assumption that `packages/web/src/lib/server/portal-broker.ts` still called `jwtVerify(token, HMACsecret)` against a broker-minted JWT. That path was retired by commit `0dbab9c` ("Fix broker exchange to use portal response directly, not JWT") **before** this Rev 2 mission began.
+
+Today's `exchangePortalCode` (`packages/web/src/lib/server/portal-broker.ts:74-95`) just POSTs the one-time `portal_code` to `${PORTAL_ORIGIN}/api/auth/broker/exchange` and accepts the verified session payload as plain JSON over HTTPS. There is no JWT for Heroes to verify, in either HMAC or JWKS form.
+
+### What this means
+
+- **Original objective preserved.** A leaked Heroes env var no longer forges sessions — there is no broker secret to leak.
+- **Trust model.** TLS for transport + one-time `portal_code` bound to `appSlug` and `redirect_uri` for authorization. This is OAuth-authorization-code-grant security, the same baseline a public OIDC client uses.
+- **What was lost.** The prior broker-JWT design gave Heroes asymmetric verification of the *response payload*. Even if portal-side emitted bad session data, signature check would have caught it. The current design trusts whatever JSON arrives over TLS. This is a real defense-in-depth regression but not a blocker — see "Deferred follow-ups → Remediation #2" at the bottom of this doc.
+- **What we did instead.** Caller-side OIDC was added to the exchange call (see §H1' below) using H3's helper. It does not restore response-payload integrity but it does tighten caller authentication beyond "whoever holds the code."
+
+### Day-30 cleanup carryover
+
+- Confirm `PORTAL_BROKER_SIGNING_SECRET` and `PORTAL_TOKEN_AUDIENCE` are not set in any deployment surface (Cloud Run env, Secret Manager, `.env` files). Already absent from source — verify the runtime configuration matches.
+
+---
+
+## H1' (opportunistic): OIDC Bearer on the Exchange Call
 
 ### Why
 
-Today the Heroes web layer verifies broker tokens with `jwtVerify(token, HMACsecret)`. The shared secret means a leaked Heroes env var lets an attacker forge tokens for Heroes. Rev 2 Spec 01 switches the portal to ES256 with public-key verification — Heroes verifies against a public key fetched from `https://coms.ahacommerce.net/.well-known/jwks.json`. No shared secret.
+The exchange call (`exchangePortalCode` in `packages/web/src/lib/server/portal-broker.ts:74-95`) historically carried no caller-auth header — the one-time `portal_code` was the entire trust anchor. While that satisfies the OAuth code-grant model, attaching a Google ID token costs nothing extra (the helper already exists for H3, the audience is the same `PORTAL_ORIGIN`, the SA is the same Heroes Cloud Run SA), and it gives the portal a future option to enforce caller identity on the exchange endpoint without another Heroes deploy.
 
-### What to Do
+### What shipped (commit `821ec0f`)
 
-In `packages/web/src/lib/server/portal-broker.ts` (or wherever `jwtVerify` is called for broker tokens):
+`exchangePortalCode` reuses the shared `getOidcAuthHeader` helper from `packages/web/src/lib/server/google-oidc.ts` and attaches `Authorization: Bearer <google-id-token>` opportunistically:
 
-```typescript
-import { createRemoteJWKSet, jwtVerify, decodeProtectedHeader } from 'jose'
+- When token mint succeeds, the bearer header is added.
+- When mint fails (no ADC, network error, etc.), the call is sent without the bearer header — preserving today's unauthenticated-call behaviour on the portal side. A single `[google-oidc]` warning is logged per audience (deduped by Set).
+- No legacy header is sent or required (the exchange endpoint never had one).
 
-const JWKS = createRemoteJWKSet(
-  new URL(`${env.PORTAL_ORIGIN}/.well-known/jwks.json`),
-  { cooldownDuration: 30_000, cacheMaxAge: 600_000 },
-)
+### Status
 
-const ACCEPTED_ISSUERS = [
-  'coms-portal-broker',                          // legacy (Rev 1)
-  `${env.PORTAL_ORIGIN}/broker`,                 // new (Rev 2 Spec 02)
-]
+Live as of `821ec0f`. Will be silently exercised whenever ADC is available; harmless when not.
 
-async function verifyBrokerToken(token: string) {
-  const { alg } = decodeProtectedHeader(token)
+### Future work (deferred — see "Remediation #2" below)
 
-  if (alg === 'ES256') {
-    return jwtVerify(token, JWKS, {
-      issuer: ACCEPTED_ISSUERS,
-      audience: env.PORTAL_TOKEN_AUDIENCE,
-      algorithms: ['ES256'],
-      clockTolerance: '30s',
-    })
-  }
-
-  if (alg === 'HS256') {
-    // Legacy path; remove after portal drops HS256 minting.
-    const secret = new TextEncoder().encode(env.PORTAL_BROKER_SIGNING_SECRET)
-    return jwtVerify(token, secret, {
-      issuer: ACCEPTED_ISSUERS,
-      audience: env.PORTAL_TOKEN_AUDIENCE,
-      algorithms: ['HS256'],
-      clockTolerance: '30s',
-    })
-  }
-
-  throw new Error(`Unsupported alg: ${alg}`)
-}
-```
-
-### When
-
-Portal will publish a "JWKS endpoint live" notification when Spec 01 deploys. From that moment Heroes can ship H1 — the portal will be emitting both ES256 and HS256 tokens during dual-mode, so existing verification continues to work and the new path is exercised on every login.
-
-### After
-
-Once `[broker-verify] alg=ES256` shows up in 100% of Heroes logs, the portal team will drop HS256 minting (Day 7 in the migration timeline). At that point Heroes can:
-
-- Remove the HS256 branch from `verifyBrokerToken`.
-- Remove `PORTAL_BROKER_SIGNING_SECRET` from Cloud Run env and Secret Manager.
-- Remove the `coms-portal-broker` legacy issuer from `ACCEPTED_ISSUERS` (Day 30).
+Even with H1' in place, the exchange *response* is unsigned. To restore the integrity property the original broker-JWT design had, the portal would need to wrap the session payload as a JWS using the JWKS keys and Heroes would verify with `createRemoteJWKSet`. That is portal-side work coordinated separately; tracked under deferred follow-ups.
 
 ---
 
@@ -294,7 +277,60 @@ Run from the Heroes repo root:
 grep -r "PORTAL_.*_SECRET" --include="*.ts" --include="*.tf" --include="*.json" .
 ```
 
-Expected: no matches in source after the dual-mode periods complete. The only remaining `PORTAL_*` references should be `PORTAL_ORIGIN`, `PORTAL_APP_SLUG`, `PORTAL_TOKEN_AUDIENCE`, `PORTAL_SERVICE_ACCOUNT_EMAIL`, `SELF_PUBLIC_URL`.
+Expected: no matches in source after the dual-mode periods complete. The only remaining `PORTAL_*` references should be `PORTAL_ORIGIN`, `PORTAL_APP_SLUG`, `PORTAL_SERVICE_ACCOUNT_EMAIL`, `SELF_PUBLIC_URL`. (`PORTAL_TOKEN_AUDIENCE` was associated with the retired broker-JWT path and is no longer needed; verify it is unset.)
+
+**Today (2026-04-27, post-merge):** `PORTAL_*_SECRET` references still exist in tree because the dual-mode period is open. The audit grep should be re-run as part of the Day-30 cleanup mission below, not now.
+
+---
+
+## Implementation status & deferred follow-ups
+
+### Status as of 2026-04-27
+
+| Item | Commit | Validation |
+|------|--------|------------|
+| H1 (closed in tree, no code change) | `0dbab9c` (pre-mission) | `jwtVerify` and `createRemoteJWKSet` appear zero times in source; `PORTAL_BROKER_SIGNING_SECRET` and `PORTAL_TOKEN_AUDIENCE` appear zero times in source |
+| H1' (opportunistic exchange OIDC) | `821ec0f` | `bun run typecheck` (packages/web) clean |
+| H2 (webhook OIDC verifier) | `20a9cff` | `bun run typecheck` (packages/server) clean |
+| H3 (introspect OIDC sender) | `821ec0f` | `bun run typecheck` (packages/web) clean |
+| H4 (stale-serve alerting + monitoring TF) | `40309d2` | `bun run typecheck` clean; `tofu validate` (infra/modules/monitoring) clean |
+| CI/CD perf (bun cache + buildx GHA cache) | `8e10b79` | exercised on next push |
+
+### Operational gate before H3 fully exercises the OIDC path
+
+Heroes' Cloud Run SA email is **`coms-aha-heroes-run-sa@fbi-dev-484410.iam.gserviceaccount.com`** (derived from `infra/modules/cloud-run/main.tf:4` × `infra/variables.tf` `project_id` default). The portal admin must populate `app_registry.service_account_email` for the `heroes` row before portal logs will show `via: oidc` for Heroes introspect calls. Until then, portal silently falls through to the legacy `x-portal-introspect-secret` path — operationally fine, but the OIDC migration is not actually exercised yet.
+
+Two-step procedure mirrors the runbook in `spec-04-introspect-oidc-auth.md`:
+
+1. Heroes team — share the SA email above with the portal admin (see "Heroes notification" in `spec-00-implementation-timeline.md`).
+2. Portal admin — set the value via the admin UI or SQL: `UPDATE app_registry SET service_account_email = 'coms-aha-heroes-run-sa@fbi-dev-484410.iam.gserviceaccount.com' WHERE slug = 'heroes';`
+
+### Deferred follow-ups
+
+Each item below is filed in this doc rather than deleted from the captain's log so the cleanup mission inherits an explicit list.
+
+#### Pre-Day-30 (do these *before* the portal team retires HMAC/legacy-secret acceptance)
+
+1. **Structured-log key + alert on OIDC→HMAC silent fallback (webhook receiver).** `packages/server/src/routes/portal-webhooks.ts` currently emits a single `console.log` line on the OIDC failure path. Promote it to a stable `message` key (e.g. `portal-webhook-oidc-fallback`) using the same Cloud Run structured-logging pattern as H4, and add a `google_monitoring_alert_policy` in `infra/modules/monitoring/main.tf` keyed off it. Without this, an OIDC misconfiguration (e.g. `aud` drift after a domain change) silently routes everything via HMAC and we don't notice until HMAC retires.
+2. **`notification_rate_limit` on the two H4 alert policies.** `condition_matched_log` does not self-throttle the way `condition_threshold` does; during a sustained outage with ≥2 replicas, the existing policies could page repeatedly. Add `alert_strategy { notification_rate_limit { period = "300s" } }` to both new policies.
+3. **Re-key the dedupe Set in `google-oidc.ts`.** Today keyed by audience only, collapsing distinct failure modes (no creds vs. transient gaxios error vs. IAM revocation) into a single one-shot warning per process. Re-key by `${audience}|${error.code ?? error.name}` or add a TTL.
+
+#### Day-30 cleanup mission (after portal logs show 100% OIDC traffic for ≥7 days)
+
+4. Drop the HMAC fallback branch in `packages/server/src/routes/portal-webhooks.ts` along with `verifyPortalSignature`, the `X-Portal-Signature`/`X-Portal-Timestamp` validation, and the 5-min skew check. Delete `PORTAL_WEBHOOK_SIGNING_SECRET` from Cloud Run env and Secret Manager.
+5. Drop `x-portal-introspect-secret` from `fetchIntrospect` and the `secret` field from `requireEnv()` in `packages/web/src/lib/server/portal-introspect.ts`. Delete `PORTAL_INTROSPECT_SECRET` from Cloud Run env and Secret Manager.
+6. Tighten the legacy 401 message at `packages/web/src/lib/server/portal-introspect.ts` (currently says "PORTAL_INTROSPECT_SECRET misconfigured" — will mislead operators after the legacy path retires).
+7. Replace the literal `SELF_PUBLIC_URL` value in `infra/modules/cloud-run/main.tf` with a reference to a custom-domain output once one exists. Today the value is `https://coms-aha-heroes-app-45tyczfska-et.a.run.app`; if the auto-generated suffix changes, OIDC verification will silently fall through to HMAC until updated.
+8. Confirm with the portal team that the `PORTAL_SERVICE_ACCOUNT_EMAIL` literal in the same file (`coms-portal-run-sa@coms-portal-prod.iam.gserviceaccount.com`) still matches the SA the portal Cloud Run runs as. Promote to a Terraform variable if rotation is on the roadmap.
+9. Re-run the audit grep at the top of "Verification After All Items Ship". Expect zero `PORTAL_*_SECRET` matches in source. `PORTAL_TOKEN_AUDIENCE` should also be zero.
+
+#### Deferred design (no deadline)
+
+10. **Remediation #2 — signed exchange response.** Portal wraps the session payload returned from `/api/auth/broker/exchange` as a JWS using the JWKS keys; Heroes verifies via `createRemoteJWKSet`. Restores the asymmetric response-payload integrity property the original broker-JWT design had, and that the current TLS-only model lacks. Lower priority because (a) caller-side OIDC (H1') is already in place and (b) TLS+CA is the industry-standard trust anchor for OAuth code-grant flows; only worth the cost if defense-in-depth requirements rise. Requires a portal-side change too — coordinate as a separate spec.
+
+#### Pre-existing nits (low priority, out of scope this mission)
+
+11. `tofu fmt` alignment drift in the pre-existing `locals.auth_secrets` block of `infra/modules/cloud-run/main.tf`. Predates Rev 2; pick up alongside any other TF cleanup.
 
 ---
 
