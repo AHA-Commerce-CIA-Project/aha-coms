@@ -28,6 +28,8 @@ LABEL org.opencontainers.image.title="COMS Portal" \
       org.opencontainers.image.description="COMS Portal — SvelteKit SSR + Elysia on Bun"
 WORKDIR /app
 COPY --from=deps /app/node_modules/ node_modules/
+COPY --from=deps /app/apps/api/node_modules/ apps/api/node_modules/
+COPY --from=deps /app/apps/web/node_modules/ apps/web/node_modules/
 COPY apps/api/ apps/api/
 # server.ts imports the SSR handler from ../web/build/handler.js — preserve
 # that relative path so no env-var indirection is needed.
