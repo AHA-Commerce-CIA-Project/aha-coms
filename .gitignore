@@ -45,8 +45,9 @@ infra/*.tfstate
 infra/*.tfstate.backup
 infra/*.tfvars
 !infra/*.tfvars.example
-infra/.terraform.lock.hcl
 infra/tfplan
+# Note: infra/.terraform.lock.hcl IS tracked. CI runs
+# `tofu init -lockfile=readonly` against it for reproducible providers.
 
 # Personal folders
 my-document/
