@@ -72,7 +72,12 @@ const testPublicJwk = await exportJWK(testPublicKey)
 // test files; without restoration, 01-signing-keys.test.ts (which exercises
 // the real module) inherits these stubs and crashes with "stubbed in
 // dual-mode tests" on whatever Ubuntu's discovery order produces.
-const realSigningKeys = await import('../signing-keys')
+//
+// Spread INTO a fresh object: bun's mock.module mutates the live namespace
+// in place, so a captured namespace reference would itself become the stub
+// the instant `mock.module` runs. Spreading copies the real function
+// references out before the rebind happens.
+const realSigningKeys = { ...(await import('../signing-keys')) }
 
 mock.module('../signing-keys', () => ({
   loadActiveSigningKey: async () => ({ kid: testKid, privateKey: testPrivateKey }),

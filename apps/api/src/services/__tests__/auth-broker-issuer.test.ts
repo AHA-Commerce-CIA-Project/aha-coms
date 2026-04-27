@@ -81,11 +81,15 @@ mock.module('drizzle-orm', () => ({
 }))
 
 // Stub signing-keys service — not needed for verifier tests.
-// Capture the real module BEFORE mocking, so we can restore it in afterAll
-// and avoid leaking the stub into other test files (bun's mock.module is
-// process-global; without restoration, downstream files that exercise the
-// real signing-keys module — e.g. 01-signing-keys.test.ts — get the stub).
-const realSigningKeys = await import('../signing-keys')
+//
+// Capture the real exports BEFORE mocking. We must SPREAD into a fresh
+// object: bun's `mock.module` updates live bindings on the namespace
+// object itself, so a captured namespace ref (`const ns = await import(...)`)
+// would see its `ns.loadActiveSigningKey` flip to the stub the moment
+// `mock.module` runs. Spreading copies function REFERENCES out before
+// they are rebound, preserving access to the real implementation for
+// the afterAll restore.
+const realSigningKeys = { ...(await import('../signing-keys')) }
 
 mock.module('../signing-keys', () => ({
   loadActiveSigningKey: async () => { throw new Error('not needed in verifier tests') },
