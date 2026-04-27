@@ -1,7 +1,7 @@
 /**
- * Internal HTTP endpoints invoked by Cloud Tasks and Pub/Sub push subscriptions.
+ * Internal HTTP endpoints invoked by Cloud Tasks.
  *
- * Both endpoints require a Google-issued OIDC ID token whose audience matches
+ * The endpoint requires a Google-issued OIDC ID token whose audience matches
  * SERVICE_URL and whose `email` claim matches CLOUD_TASKS_SA_EMAIL.
  */
 import { Elysia, t } from 'elysia'
@@ -9,13 +9,13 @@ import { eq } from 'drizzle-orm'
 import { db } from '~/db'
 import { appWebhookEndpoints } from '~/db/schema/app-webhook-endpoints'
 import { deliverWebhook } from '~/services/webhook-dispatcher'
-import { publishToWebhookDlq } from '~/services/cloud-tasks-client'
 import { verifyGoogleOidcToken } from '~/services/oidc-verifier'
 import type { PortalWebhookEvent } from '@coms-portal/shared'
 
-// Must match `retry_config.max_attempts` in infra/cloud-tasks.tf. Cloud Tasks
-// does not publish to Pub/Sub on its own when the budget is exhausted, so on
-// the final attempt the handler fans the signal out to the DLQ topic itself.
+// Must match `retry_config.max_attempts` in infra/cloud-tasks.tf. On the final
+// attempt the handler disables the endpoint directly — Cloud Tasks has no
+// native dead-letter forwarder, so without this the task would be silently
+// dropped and the broken endpoint would keep being selected on every event.
 const MAX_ATTEMPTS = 3
 
 interface DeliveryPayload {
@@ -26,26 +26,11 @@ interface DeliveryPayload {
   occurredAt: string
 }
 
-interface PubSubPushBody {
-  message?: {
-    data?: string
-    messageId?: string
-    publishTime?: string
-    attributes?: Record<string, string>
-  }
-  subscription?: string
-}
-
 function logJson(fields: Record<string, unknown>): void {
   // Cloud Logging ingests structured JSON from stdout automatically.
   console.log(JSON.stringify(fields))
 }
 
-/**
- * Verify the Authorization header against the expected SA email and audience.
- * Returns null on success, or a `{status, message}` object that the caller
- * should surface as the response.
- */
 async function authenticateOidcRequest(
   authHeader: string | null,
   expectedAudience: string,
@@ -71,6 +56,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
    * Invoked by Cloud Tasks. Delivers the payload to the registered endpoint.
    * On 2xx → updates endpoint stats and returns 200.
    * On non-2xx or thrown → returns 5xx so Cloud Tasks retries.
+   * On the final attempt, also disables the endpoint before returning 5xx.
    */
   .post(
     '/webhook-delivery',
@@ -155,33 +141,47 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
           durationMs: Date.now() - start,
         })
 
-        // On the final attempt (retry count is 0-indexed), publish to the DLQ
-        // topic ourselves — Cloud Tasks has no native forwarder. Do this BEFORE
-        // returning 502 so we don't lose the signal if the task gets dropped
-        // between our response and Cloud Tasks incrementing its counter.
+        // On the final attempt (retry count is 0-indexed), disable the endpoint
+        // so we stop selecting it on future events. Postgres makes the UPDATE
+        // idempotent, so a Cloud-Tasks-redispatch race produces a no-op.
         const retryCountNum = Number.parseInt(retryCount, 10)
         if (Number.isFinite(retryCountNum) && retryCountNum === MAX_ATTEMPTS - 1) {
+          const now = new Date()
           try {
-            await publishToWebhookDlq({
+            await db
+              .update(appWebhookEndpoints)
+              .set({
+                status: 'disabled',
+                lastFailureAt: now,
+                lastFailureReason: 'Cloud Tasks retries exhausted',
+                updatedAt: now,
+              })
+              .where(eq(appWebhookEndpoints.id, payload.endpointId))
+
+            logJson({
+              severity: 'WARNING',
+              message: 'webhook_endpoint_disabled',
               endpointId: payload.endpointId,
-              event: payload.event,
               eventId: payload.eventId,
+              event: payload.event,
             })
-          } catch (dlqErr) {
-            const dlqReason = dlqErr instanceof Error ? dlqErr.message : String(dlqErr)
+          } catch (disableErr) {
+            const disableReason =
+              disableErr instanceof Error ? disableErr.message : String(disableErr)
             logJson({
               severity: 'ERROR',
-              message: 'webhook_dlq_publish_failed',
+              message: 'webhook_endpoint_disable_failed',
               endpointId: payload.endpointId,
               eventId: payload.eventId,
               event: payload.event,
-              error: dlqReason.slice(0, 500),
+              error: disableReason.slice(0, 500),
             })
-            // Swallow — Cloud Tasks still retries naturally via the 502 below.
+            // Swallow — we still want to return 502 so Cloud Tasks records the
+            // failure in its own metrics, even if the disable UPDATE failed.
           }
         }
 
-        // Return a 5xx so Cloud Tasks retries (or eventually dead-letters).
+        // Return a 5xx so Cloud Tasks retries (or, on the final attempt, drops).
         set.status = 502
         return { message: 'Delivery failed', error: reason.slice(0, 200) }
       }
@@ -193,120 +193,6 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
         eventId: t.String({ minLength: 1 }),
         jsonBody: t.String(),
         occurredAt: t.String({ minLength: 1 }),
-      }),
-    },
-  )
-
-  /**
-   * POST /api/internal/webhook-dlq
-   * Invoked by the Pub/Sub push subscription on the dead-letter topic.
-   * Cloud Tasks publishes to this topic after exhausting retries on a task.
-   * We disable the endpoint so we stop sending to a known-broken URL.
-   */
-  .post(
-    '/webhook-dlq',
-    async ({ body, request, set }) => {
-      const serviceUrl = process.env.SERVICE_URL ?? ''
-      const taskSaEmail = process.env.CLOUD_TASKS_SA_EMAIL ?? ''
-
-      const authResult = await authenticateOidcRequest(
-        request.headers.get('authorization'),
-        serviceUrl,
-        taskSaEmail,
-      )
-      if (authResult) {
-        set.status = authResult.status
-        return { message: authResult.message }
-      }
-
-      const envelope = body as PubSubPushBody
-      const dataB64 = envelope.message?.data
-      if (!dataB64) {
-        set.status = 400
-        return { message: 'Pub/Sub message missing data' }
-      }
-
-      let originalPayload: Partial<DeliveryPayload>
-      try {
-        const decoded = Buffer.from(dataB64, 'base64').toString('utf8')
-        originalPayload = JSON.parse(decoded) as Partial<DeliveryPayload>
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err)
-        logJson({
-          severity: 'ERROR',
-          message: 'webhook_dlq_decode_failed',
-          error: reason,
-          messageId: envelope.message?.messageId,
-        })
-        // Return 200 to acknowledge — there is nothing useful Pub/Sub can do by
-        // retrying an undecodable message.
-        return { ok: true, skipped: 'decode_failed' }
-      }
-
-      const endpointId = originalPayload.endpointId
-      if (!endpointId) {
-        logJson({
-          severity: 'ERROR',
-          message: 'webhook_dlq_missing_endpoint_id',
-          messageId: envelope.message?.messageId,
-        })
-        return { ok: true, skipped: 'no_endpoint_id' }
-      }
-
-      // Read prior status BEFORE the update so we can distinguish first-time
-      // disable from a duplicate DLQ publish (the handler now publishes from
-      // /webhook-delivery on the final attempt, so two messages for the same
-      // endpoint within a Cloud-Tasks-retry window is possible). Postgres
-      // makes the update itself idempotent; we just need observability.
-      const [priorRow] = await db
-        .select({ status: appWebhookEndpoints.status })
-        .from(appWebhookEndpoints)
-        .where(eq(appWebhookEndpoints.id, endpointId))
-
-      const now = new Date()
-      await db
-        .update(appWebhookEndpoints)
-        .set({
-          status: 'disabled',
-          lastFailureAt: now,
-          lastFailureReason: 'Cloud Tasks dead-letter: max retries exhausted',
-          updatedAt: now,
-        })
-        .where(eq(appWebhookEndpoints.id, endpointId))
-
-      if (priorRow?.status === 'disabled') {
-        logJson({
-          severity: 'INFO',
-          message: 'webhook_dlq_duplicate',
-          endpointId,
-          eventId: originalPayload.eventId,
-          event: originalPayload.event,
-          messageId: envelope.message?.messageId,
-        })
-      } else {
-        logJson({
-          severity: 'WARNING',
-          message: 'webhook_endpoint_disabled_via_dlq',
-          endpointId,
-          eventId: originalPayload.eventId,
-          event: originalPayload.event,
-          messageId: envelope.message?.messageId,
-        })
-      }
-
-      return { ok: true }
-    },
-    {
-      // Pub/Sub push body shape — we can't validate `data` strictly because it's
-      // base64 of an arbitrary payload.
-      body: t.Object({
-        message: t.Object({
-          data: t.Optional(t.String()),
-          messageId: t.Optional(t.String()),
-          publishTime: t.Optional(t.String()),
-          attributes: t.Optional(t.Record(t.String(), t.String())),
-        }),
-        subscription: t.Optional(t.String()),
       }),
     },
   )

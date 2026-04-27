@@ -1,12 +1,10 @@
 /**
- * Cloud Tasks + Pub/Sub REST client — enqueues webhook delivery tasks and
- * publishes to the dead-letter Pub/Sub topic on retry exhaustion.
+ * Cloud Tasks REST client — enqueues webhook delivery tasks.
  *
- * We deliberately avoid `@google-cloud/tasks` and `@google-cloud/pubsub` (they
- * pull in google-gax + grpc-js, ~20 MB of native deps that Bun handles
- * awkwardly). A single REST call is sufficient to create a task or publish a
- * message, and we already use `google-auth-library` for access-token minting
- * elsewhere.
+ * We deliberately avoid `@google-cloud/tasks` (it pulls in google-gax +
+ * grpc-js, ~20 MB of native deps that Bun handles awkwardly). A single REST
+ * call is sufficient to create a task, and we already use
+ * `google-auth-library` for access-token minting elsewhere.
  */
 import { GoogleAuth } from 'google-auth-library'
 
@@ -57,8 +55,9 @@ function requireEnv(name: string, override: string | undefined): string {
  * Create a Cloud Task that POSTs the given payload to /api/internal/webhook-delivery.
  *
  * Cloud Tasks owns the retry schedule (max 3 attempts, 30s/2min backoff per the
- * queue config). After max attempts the dead-letter Pub/Sub topic fires and a
- * separate handler disables the endpoint.
+ * queue config). On the final attempt the delivery handler disables the
+ * endpoint inline before returning 502 — Cloud Tasks has no native dead-letter
+ * forwarder, so the handler is the only place we can detect terminal failure.
  */
 export async function enqueueWebhookDelivery(
   payload: WebhookDeliveryTaskPayload,
@@ -117,69 +116,4 @@ export async function enqueueWebhookDelivery(
     const text = await res.text().catch(() => '')
     throw new Error(`Cloud Tasks enqueue failed (${res.status}): ${text.slice(0, 300)}`)
   }
-}
-
-// ---------------------------------------------------------------------------
-// Pub/Sub DLQ publisher
-// ---------------------------------------------------------------------------
-
-export interface WebhookDlqPayload {
-  endpointId: string
-  event: string
-  eventId: string
-}
-
-export interface PublishToWebhookDlqOptions {
-  /** GCP project id. Defaults to process.env.GCP_PROJECT_ID. */
-  projectId?: string
-  /** Pub/Sub topic name. Defaults to process.env.WEBHOOK_DLQ_TOPIC. */
-  topic?: string
-  /** Override fetch (testing). */
-  fetchImpl?: typeof fetch
-  /** Override the auth token getter (testing). */
-  getAccessToken?: () => Promise<string>
-}
-
-/**
- * Publish a single message to the webhook DLQ Pub/Sub topic. Cloud Tasks does
- * not natively forward to Pub/Sub on retry exhaustion, so the delivery handler
- * fires this on the final failed attempt to feed the existing DLQ subscriber.
- *
- * Throws on non-2xx — callers decide whether to swallow (fire-and-forget) or
- * rethrow. Returns the published Pub/Sub message ID on success.
- */
-export async function publishToWebhookDlq(
-  payload: WebhookDlqPayload,
-  opts: PublishToWebhookDlqOptions = {},
-): Promise<string> {
-  const projectId = requireEnv('GCP_PROJECT_ID', opts.projectId)
-  const topic = requireEnv('WEBHOOK_DLQ_TOPIC', opts.topic)
-
-  const fetchImpl = opts.fetchImpl ?? fetch
-  const accessToken = opts.getAccessToken
-    ? await opts.getAccessToken()
-    : await auth.getAccessToken()
-  if (!accessToken) throw new Error('Failed to obtain GCP access token for Pub/Sub')
-
-  const url = `https://pubsub.googleapis.com/v1/projects/${projectId}/topics/${topic}:publish`
-  // Pub/Sub expects message data as base64. Match the contract the DLQ handler
-  // already decodes: `envelope.message.data` → JSON with endpointId/event/eventId.
-  const dataB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')
-
-  const res = await fetchImpl(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ messages: [{ data: dataB64 }] }),
-  })
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Pub/Sub publish failed (${res.status}): ${text.slice(0, 300)}`)
-  }
-
-  const json = (await res.json().catch(() => ({}))) as { messageIds?: string[] }
-  return json.messageIds?.[0] ?? ''
 }
