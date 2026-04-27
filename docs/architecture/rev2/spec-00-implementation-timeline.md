@@ -107,7 +107,31 @@ This keeps the rollout deploy-order-independent: portal can deploy first, Heroes
 
 ### Heroes notification (sample message)
 
-> Rev 2 portal-side §01–§04 merged on 2026-04-27. Once portal CI deploys, Heroes can begin all four handoff items in any order — every spec is dual-mode on the portal side, so existing HS256 broker tokens, HMAC webhooks, and shared-secret introspect calls continue to work. Read `docs/architecture/rev2/heroes-team-handoff.md` (mirror in coms-aha-heroes/docs/architecture/rev2/) for H1/H2/H3/H4. JWKS endpoint: `https://coms.ahacommerce.net/.well-known/jwks.json`. Discovery: `/.well-known/openid-configuration`. Coordinate the Heroes SA email population in `app_registry.service_account_email` with the portal admin before H3 deploy.
+> Rev 2 portal-side §01–§04 is **deployed** to production as of 2026-04-27 (CI run `24977680477`). All four Heroes-side items — **H1, H2, H3, and H4** — are now unblocked and can ship in any order at your team's pace. Every portal-side spec is dual-mode, so existing HS256 broker tokens, HMAC webhooks, and shared-secret introspect calls continue to work unchanged.
+>
+> Read `docs/architecture/rev2/heroes-team-handoff.md` (a mirror copy is in `coms-aha-heroes/docs/architecture/rev2/`) for the per-item briefs, code snippets, and effort estimates. Quick references:
+>
+> | Item | Spec | Effort | Independent? |
+> |---|---|---|---|
+> | **H1** — Verify broker tokens via JWKS (ES256 + dual-issuer accept) | Rev 2 §01+§02 | ~2h | unblocked now |
+> | **H2** — Verify webhook auth via Google OIDC | Rev 2 §03 | ~2h | unblocked now |
+> | **H3** — Send introspect requests with Google OIDC | Rev 2 §04 | ~1h | **blocked on a one-time data step — see below** |
+> | **H4** — Stale-serve alerting escalation | Rev 2 §05 | ~2h | always independent of portal; can ship anytime |
+>
+> Live endpoints to point your verifier at:
+> - JWKS: `https://coms.ahacommerce.net/.well-known/jwks.json`
+> - OIDC discovery: `https://coms.ahacommerce.net/.well-known/openid-configuration`
+> - Issuer (URL-form, ES256 path): `https://coms.ahacommerce.net/broker`
+> - Issuer (legacy, HS256 path during dual-mode): `coms-portal-broker` — accept both via the array form per `heroes-team-handoff.md` §H1.
+>
+> **One operational gate before H3 deploys (not before H1/H2/H4).** Heroes introspect calls authenticated via OIDC need a matching `app_registry.service_account_email` row on the portal side, otherwise the portal silently falls through to the legacy secret path and your OIDC migration is never exercised. Two-step procedure:
+>
+> 1. **Heroes team:** look up your Cloud Run service account email — find `service_account_email = "..."` in `coms-aha-heroes/infra/modules/cloud-run/main.tf`, OR run `gcloud run services describe coms-aha-heroes-app --region=<region> --format='value(spec.template.spec.serviceAccountName)'`. Send the value to the portal admin.
+> 2. **Portal admin:** populate `app_registry.service_account_email` for the Heroes row via the admin UI (`/admin/apps/<heroes-id>` → "Service Account Email" field) or SQL (`UPDATE app_registry SET service_account_email = '<sa>' WHERE slug = 'heroes';`). Confirm with the Heroes team that the value is set before they deploy H3.
+>
+> Full runbook (including verification via portal logs and the rotation procedure) is in `spec-04-introspect-oidc-auth.md` §"Runbook — Heroes service account email population".
+>
+> When all four items have shipped and portal logs show 100% OIDC traffic for ≥7 days, the Day-30 cleanup mission begins on the portal side: drop legacy HS256 minting, drop the legacy issuer string, drop `broker_signing_secret` and `introspect_secret` columns, unset all `PORTAL_*_SECRET` env vars on both sides. We'll coordinate that as a separate handoff.
 
 ---
 
