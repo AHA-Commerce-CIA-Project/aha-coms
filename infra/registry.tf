@@ -17,8 +17,10 @@ resource "google_artifact_registry_repository" "coms_portal" {
     id     = "delete-old"
     action = "DELETE"
 
+    # GCP normalizes `older_than = "0s"` away (it's a no-op time condition);
+    # declaring tag_state = "ANY" keeps config aligned with API response.
     condition {
-      older_than = "0s"
+      tag_state = "ANY"
     }
   }
 

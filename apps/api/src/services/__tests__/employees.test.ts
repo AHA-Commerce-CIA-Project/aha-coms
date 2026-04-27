@@ -62,8 +62,16 @@ const tx = {
   },
 }
 
+// Chainable select stub: .select(...).from(...).where(...) → []
+// Lets fire-and-forget callers (emitUserProvisioned, etc.) run to a no-op
+// without exercising real DB logic.
+const emptySelect = () => ({
+  from: () => ({ where: async () => [] }),
+})
+
 const db = {
   transaction: async (callback: (trx: typeof tx) => Promise<unknown>) => callback(tx),
+  select: emptySelect,
   query: {
     identityUsers: {
       findFirst: async () => currentUser,
@@ -116,17 +124,10 @@ mock.module('drizzle-orm', () => {
   }
 })
 mock.module('../claims', () => ({ resolveAndSyncClaims }))
-// New dependencies added to employees.ts in the SSO upgrade.
-// session-revocation and provisioning-events are fire-and-forget;
-// mock them so their transitive imports (gip-admin, webhook-dispatcher) don't load.
-mock.module('./session-revocation', () => ({
-  revokePortalSession: mock(async () => ({ revokedAt: new Date() })),
-}))
-mock.module('./provisioning-events', () => ({
-  emitUserProvisioned: mock(async () => undefined),
-  emitUserOffboarded: mock(async () => undefined),
-  emitUserUpdated: mock(async () => undefined),
-}))
+// We intentionally do NOT mock.module ../session-revocation or
+// ../provisioning-events: Bun's mock.module is process-global and the mock
+// would leak into their own test files. The db stub above returns empty
+// selects, so the real fire-and-forget code paths run to a no-op.
 mock.module('../../gip-admin', () => ({
   createGipUser,
   setGipUserDisabled,

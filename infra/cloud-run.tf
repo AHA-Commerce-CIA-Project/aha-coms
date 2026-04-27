@@ -24,6 +24,14 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         }
       }
 
+      # Cloud Run mounts the cloudsql volume at /cloudsql automatically when
+      # the volumes block below is present; declaring the mount explicitly
+      # keeps Tofu state aligned with the v2 API surface.
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
+      }
+
       # ── Plain env vars ──────────────────────────────────────────
       env {
         name  = "GIP_PROJECT_ID"
@@ -66,10 +74,6 @@ resource "google_cloud_run_v2_service" "coms_portal" {
       env {
         name  = "CLOUD_TASKS_SA_EMAIL"
         value = google_service_account.cloud_tasks_invoker.email
-      }
-      env {
-        name  = "WEBHOOK_DLQ_TOPIC"
-        value = google_pubsub_topic.webhook_dlq.name
       }
       env {
         name  = "SERVICE_URL"
@@ -129,6 +133,21 @@ resource "google_cloud_run_v2_service" "coms_portal" {
     google_secret_manager_secret_version.portal_introspect_secret,
     google_secret_manager_secret_version.portal_broker_signing_secret,
   ]
+
+  lifecycle {
+    # GCP returns a default resource-level `scaling { manual_instance_count = 0,
+    # min_instance_count = 0 }` block for services using template-level
+    # auto-scaling. Setting it in config would force manual scaling mode, so we
+    # ignore the perma-diff instead.
+    #
+    # The image tag is owned by deploy.yml's google-github-actions/deploy-cloudrun
+    # step, which pushes :<sha>. Tofu sets the image once at creation (to :latest)
+    # and ignores subsequent updates so it doesn't fight the deploy workflow.
+    ignore_changes = [
+      scaling,
+      template[0].containers[0].image,
+    ]
+  }
 }
 
 # Allow unauthenticated access (public portal, auth handled by app)

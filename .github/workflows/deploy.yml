@@ -1,9 +1,21 @@
-name: Build & Deploy to Cloud Run
+name: CI — Provision infra, build, migrate, deploy
+
+# Single workflow on push to main: tests run in parallel with infra apply, then
+# deploy waits on both. This serializes infra mutations ahead of code deploys
+# so the new image never starts against unprovisioned env vars / resources.
+#
+# Manual dispatch is supported. Add "[skip infra]" anywhere in the commit
+# message to skip the OpenTofu job for a doc-only change inside infra/.
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   PROJECT_ID: fbi-dev-484410
@@ -24,9 +36,62 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
 
+  infra:
+    name: Provision infra (OpenTofu)
+    if: ${{ !contains(github.event.head_commit.message, '[skip infra]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.11.6
+          tofu_wrapper: false
+
+      - name: tofu fmt -check
+        run: tofu fmt -check -recursive
+
+      - name: tofu init
+        run: tofu init -input=false -lockfile=readonly
+
+      - name: tofu validate
+        run: tofu validate
+
+      - name: tofu apply
+        run: |
+          tofu apply \
+            -auto-approve \
+            -input=false \
+            -lock-timeout=5m \
+            -no-color \
+            -var="service_url=${{ vars.SERVICE_URL }}"
+
   deploy:
     name: Build, Migrate & Deploy
-    needs: test
+    needs: [test, infra]
+    # Run when test passed AND infra either passed or was skipped via
+    # [skip infra]. The default `needs` semantics would skip deploy whenever
+    # any upstream skipped, so we use always() + an explicit result check.
+    if: >-
+      ${{
+        always()
+        && needs.test.result == 'success'
+        && (needs.infra.result == 'success' || needs.infra.result == 'skipped')
+      }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
