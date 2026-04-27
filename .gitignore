@@ -45,6 +45,11 @@ infra/*.tfstate
 infra/*.tfstate.backup
 infra/*.tfvars
 !infra/*.tfvars.example
+# infra/terraform.tfvars holds non-secret config (project ID, region, public
+# domain, github repo, public sheet ID). Real secrets live in Secret Manager
+# and are not referenced from tfvars. Tracked so CI can run `tofu apply`
+# without re-injecting these values from repo vars.
+!infra/terraform.tfvars
 infra/tfplan
 # Note: infra/.terraform.lock.hcl IS tracked. CI runs
 # `tofu init -lockfile=readonly` against it for reproducible providers.
