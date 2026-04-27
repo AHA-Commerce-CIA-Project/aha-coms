@@ -25,6 +25,30 @@ const appRegistry = {
 }
 
 // ---------------------------------------------------------------------------
+// google-auth-library mock — GoogleAuth used by webhook-dispatcher (Rev 2 §03)
+// The default stub returns a fake OIDC token so existing tests are unaffected.
+// ---------------------------------------------------------------------------
+
+// getRequestHeaders returns a Headers-like object; stub with .get() method
+// to match the implementation's headers.get('Authorization') call.
+const mockGetRequestHeaders = mock(async () => ({
+  get: (name: string) =>
+    name.toLowerCase() === 'authorization' ? 'Bearer fake-oidc-token-for-existing-tests' : null,
+}))
+const mockGetIdTokenClient = mock(async (_audience: string) => ({
+  getRequestHeaders: mockGetRequestHeaders,
+}))
+
+mock.module('google-auth-library', () => ({
+  GoogleAuth: class {
+    getIdTokenClient = mockGetIdTokenClient
+  },
+  OAuth2Client: class {
+    verifyIdToken() {}
+  },
+}))
+
+// ---------------------------------------------------------------------------
 // Cloud Tasks enqueue mock — spied on in the failure-path test below
 // ---------------------------------------------------------------------------
 

@@ -12,8 +12,23 @@ mock.module('~/db/schema/apps', () => ({
 mock.module('~/db/schema/auth-handoffs', () => ({
   authHandoffs: { id: 'auth_handoffs.id', codeHash: 'auth_handoffs.code_hash' },
 }))
+mock.module('~/db/schema/signing-keys', () => ({
+  portalBrokerSigningKeys: { kid: 'kid', publicJwk: 'public_jwk', status: 'status' },
+  SIGNING_KEY_STATUS: {
+    CREATED: 'created',
+    ACTIVE: 'active',
+    RETIRING: 'retiring',
+    RETIRED: 'retired',
+  },
+}))
+// Deliberately do NOT mock `../signing-keys`: bun's process-global
+// `mock.module` would bleed into 01-signing-keys.test.ts. The audience
+// tests only exercise sanitizeRedirectTo + brokerAudienceFor; they do
+// not invoke signBrokerToken, so the real signing-keys module is loaded
+// but never called.
 mock.module('drizzle-orm', () => ({
   eq: (left: unknown, right: unknown) => ({ left, right }),
+  inArray: (left: unknown, values: unknown[]) => ({ left, values }),
   // sql and relations needed by the ~/db/schema barrel's new re-exports
   sql: new Proxy(
     (strings: TemplateStringsArray) => strings.join(''),

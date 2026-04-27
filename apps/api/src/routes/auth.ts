@@ -28,6 +28,72 @@ import {
   listAppSlugsForUser,
   type RevocationReason,
 } from '../services/session-revocation'
+import { verifyGoogleIdToken } from '../services/oidc-verifier'
+
+const SELF_AUDIENCE =
+  process.env.PORTAL_PUBLIC_ORIGIN ?? 'https://coms.ahacommerce.net'
+
+/**
+ * Dual-mode authenticator for the broker/introspect endpoint.
+ *
+ * 1. Tries OIDC first: if `Authorization: Bearer <token>` header is present
+ *    and the app has a `serviceAccountEmail` configured, verify the Google ID
+ *    token against that SA email. On success → { via: 'oidc', ok: true }.
+ *    On failure → fall through (dual-mode).
+ *
+ * 2. Falls back to legacy shared-secret header (`x-portal-introspect-secret`).
+ *    On match → { via: 'secret', ok: true } with a migration warning.
+ *
+ * 3. Neither succeeds → { via: 'oidc', ok: false }.
+ *
+ * The caller is responsible for 401 handling. App lookup happens once here.
+ * Returns { via: 'oidc', ok: false } if the app slug is not found so the
+ * caller sees a clean 401 rather than leaking whether a slug exists.
+ */
+async function authenticateIntrospectCaller(
+  request: Request,
+  appSlug: string,
+): Promise<{ via: 'oidc' | 'secret'; ok: boolean }> {
+  const app = await db.query.appRegistry.findFirst({
+    where: eq(appRegistry.slug, appSlug),
+    columns: { introspectSecret: true, serviceAccountEmail: true },
+  })
+
+  if (!app) return { via: 'oidc', ok: false }
+
+  const authHeader = request.headers.get('authorization')
+
+  // --- Try OIDC first ---
+  if (authHeader?.startsWith('Bearer ') && app.serviceAccountEmail) {
+    try {
+      await verifyGoogleIdToken({
+        idToken: authHeader.slice(7),
+        expectedAudience: SELF_AUDIENCE,
+        expectedSAEmail: app.serviceAccountEmail,
+      })
+      return { via: 'oidc', ok: true }
+    } catch {
+      // fall through during dual-mode
+    }
+  }
+
+  // --- Fall back to legacy shared-secret header ---
+  const expectedSecret = app.introspectSecret ?? process.env.PORTAL_INTROSPECT_SECRET
+  if (expectedSecret) {
+    const provided = request.headers.get('x-portal-introspect-secret') ?? ''
+    if (
+      provided.length === expectedSecret.length &&
+      timingSafeEqual(Buffer.from(provided), Buffer.from(expectedSecret))
+    ) {
+      console.warn(
+        `[introspect] app "${appSlug}" used legacy secret auth — migrate to OIDC`,
+      )
+      return { via: 'secret', ok: true }
+    }
+  }
+
+  return { via: 'oidc', ok: false }
+}
 
 async function resolveSessionUser(request: Request): Promise<PortalSessionUser> {
   const cookieHeader = request.headers.get('cookie') ?? ''
@@ -265,31 +331,13 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     async ({ body, set, request }) => {
       const { userId, sessionIssuedAt, appSlug } = body
 
-      // Look up the app to get its per-app introspect secret
-      const targetApp = await db.query.appRegistry.findFirst({
-        where: eq(appRegistry.slug, appSlug),
-        columns: { introspectSecret: true },
-      })
-
-      if (!targetApp) {
-        set.status = 404
-        return { message: 'App not found' }
-      }
-
-      const expectedSecret = targetApp.introspectSecret ?? process.env.PORTAL_INTROSPECT_SECRET
-      if (!expectedSecret) {
-        set.status = 503
-        return { message: 'Introspection is not configured for this app' }
-      }
-
-      const provided = request.headers.get('x-portal-introspect-secret') ?? ''
-      if (
-        provided.length !== expectedSecret.length ||
-        !timingSafeEqual(Buffer.from(provided), Buffer.from(expectedSecret))
-      ) {
+      const auth = await authenticateIntrospectCaller(request, appSlug)
+      if (!auth.ok) {
         set.status = 401
         return { message: 'Unauthorized' }
       }
+      console.log(`[introspect] via:${auth.via} app:${appSlug}`)
+
       const issuedAt = new Date(sessionIssuedAt)
 
       // 1. Look up the user

@@ -93,7 +93,9 @@ describe('app integration metadata validation', () => {
       transportMode: 'portable_token',
       handoffMode: 'one_time_code',
       complianceStatus: 'draft',
-      contractVersion: 1,
+      // Defaults are sourced from PLATFORM_AUTH_CONTRACT_VERSION,
+      // bumped to 2 in shared v1.2.0 (Rev 2 §02 widened response shape).
+      contractVersion: 2,
     })
   })
 

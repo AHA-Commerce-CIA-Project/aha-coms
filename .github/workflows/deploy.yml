@@ -144,6 +144,18 @@ jobs:
 
           kill $PROXY_PID
 
+      - name: Bootstrap broker signing key (idempotent)
+        run: |
+          ./cloud-sql-proxy ${{ env.CLOUD_SQL_CONNECTION }} --port 5432 &
+          PROXY_PID=$!
+          sleep 3
+
+          DATABASE_URL="postgresql://coms_portal_app:${{ secrets.DB_PASSWORD }}@localhost:5432/coms_portal" \
+            GCP_PROJECT_ID="${{ vars.GCP_PROJECT_ID }}" \
+            bun run --cwd apps/api scripts/bootstrap-signing-key.ts
+
+          kill $PROXY_PID
+
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v3
         with:

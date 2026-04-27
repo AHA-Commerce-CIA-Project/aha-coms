@@ -31,7 +31,9 @@ describe('integration manifest contract', () => {
     expect(PORTAL_INTEGRATION_MANIFEST_FILE).toBe('portal.integration.json')
     expect(manifest.manifestVersion).toBe(1)
     expect(manifest.compliance.status).toBe('draft')
-    expect(manifest.compliance.contractVersion).toBe(1)
+    // contractVersion default is sourced from PLATFORM_AUTH_CONTRACT_VERSION,
+    // bumped to 2 in shared v1.2.0 (Rev 2 §02 widened response shape).
+    expect(manifest.compliance.contractVersion).toBe(2)
     expect(validatePortalIntegrationManifest(manifest)).toEqual([])
   })
 

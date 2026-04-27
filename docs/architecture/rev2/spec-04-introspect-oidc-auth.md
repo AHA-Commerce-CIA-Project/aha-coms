@@ -195,6 +195,31 @@ Document this in the Heroes README during H3 rollout.
 
 ---
 
+## Runbook — Heroes service account email population
+
+**Required action:** before Heroes' H3 deploys, populate `app_registry.service_account_email` for the Heroes app row. Without this value, the portal's introspect handler **silently skips OIDC** and only checks the legacy `x-portal-introspect-secret` header — Heroes' migration completes but its OIDC call path is never exercised.
+
+**Where the value comes from:** the Heroes Cloud Run service account email. Look it up by either:
+
+1. **From Heroes' Terraform** — `coms_aha_heroes/infra/modules/cloud-run/main.tf` (look for `service_account_email = ...`).
+2. **From `gcloud`** — `gcloud run services describe coms-aha-heroes-app --region=<region> --format='value(spec.template.spec.serviceAccountName)'`.
+3. **Ask the Heroes team directly.** Their handoff doc (`heroes-team-handoff.md` §H2) reminds them to confirm this value when wiring `PORTAL_SERVICE_ACCOUNT_EMAIL` on their side — it's the symmetric counterpart.
+
+The expected shape is `coms-aha-heroes-run-sa@<heroes-project-id>.iam.gserviceaccount.com` (or whatever name the Heroes Cloud Run service runs as).
+
+**How to set it:**
+
+| Option | When to use |
+|---|---|
+| **Admin UI** — `/admin/apps/<heroes-id>` page, "Service Account Email" field, save. | Default. Visible audit trail. |
+| **SQL** — `UPDATE app_registry SET service_account_email = '<heroes-sa-email>' WHERE slug = 'heroes';` | Faster for ops; use when admin UI is unavailable. |
+
+**How to verify:** after the value is set, hit `POST /api/auth/broker/introspect` from a Heroes Cloud Run instance with `Authorization: Bearer <google-id-token>` (no `x-portal-introspect-secret`). Portal logs should show `[introspect] via:oidc app:heroes`. If logs show `via:secret` despite Heroes sending a Bearer token, the column value is missing or doesn't match Heroes' actual SA.
+
+**Rotation:** if the Heroes SA email ever changes (rare, but possible if the Heroes Cloud Run service is recreated), update this column **first**, then redeploy Heroes with the new SA. During dual-mode the legacy secret path keeps the system working through the gap; after dual-mode retires, treat this as a coordinated rotation per the runbook.
+
+---
+
 ## Migration Plan
 
 ```

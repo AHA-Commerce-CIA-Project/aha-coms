@@ -20,8 +20,10 @@ describe('shared auth contract', () => {
     expect(hasPortalRole('employee', ['admin'])).toBe(false)
   })
 
-  test('publishes the first version of the portable contract defaults', () => {
-    expect(PORTAL_CLAIMS_VERSION).toBe(1)
+  test('publishes the current version of the portable contract defaults', () => {
+    // Bumped to 2 in coms-shared v1.2.0 — Rev 2 widened
+    // PortalBrokerHandoffResponse with tokenHs256 / tokenEs256 siblings.
+    expect(PORTAL_CLAIMS_VERSION).toBe(2)
     expect(DEFAULT_AUTH_TRANSPORT_MODE).toBe('portable_token')
   })
 })
