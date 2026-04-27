@@ -324,9 +324,9 @@ Each item below is filed in this doc rather than deleted from the captain's log 
 8. **Deferred — no rotation planned.** Confirm with the portal team that the `PORTAL_SERVICE_ACCOUNT_EMAIL` literal in the deploy workflow (`coms-portal-run-sa@coms-portal-prod.iam.gserviceaccount.com`) still matches the SA the portal Cloud Run runs as. Promote to a Terraform variable / repo variable if rotation is on the roadmap.
 9. ✅ **Done.** Audit grep returns zero matches across `*.ts`, `*.tf`, `*.json`, `*.yml`, `.env*` for `PORTAL_*_SECRET`, `PORTAL_TOKEN_AUDIENCE`, `verifyPortalSignature`, `X-Portal-Signature`, and `x-portal-introspect-secret`. The only remaining `PORTAL_*` references are `PORTAL_ORIGIN`, `PORTAL_APP_SLUG`, and `PORTAL_SERVICE_ACCOUNT_EMAIL` — exactly the expected end state.
 
-#### One-off ops cleanup (out of repo)
+#### One-off ops cleanup (out of repo) — **completed 2026-04-27**
 
-10. Delete the now-unused Secret Manager secrets `portal-introspect-secret`, `portal-webhook-signing-secret`, and `portal-broker-signing-secret` from project `fbi-dev-484410`. The Cloud Run service no longer references them, but the secret resources still exist and can be removed via `gcloud secrets delete` once the portal team confirms they are likewise unused on the portal side. Do this only after one full deploy with the new workflow has succeeded — that proves the service starts cleanly without the secrets bound.
+10. ✅ **Done.** Secret Manager secrets `portal-introspect-secret`, `portal-webhook-signing-secret`, and `portal-broker-signing-secret` deleted from project `fbi-dev-484410`. Cloud Run revision `coms-aha-heroes-app` now serves traffic with only the auth/sheets secrets bound — verified via `gcloud run services describe`. (Note: `portal-introspect-secret` had already been deleted out-of-band before this mission, which is what caused the earlier failed deploy on commit `1eb76a0`; the cleanup commit `b01023a` resolved that by removing the stale binding from the deploy workflow.)
 
 #### Portal-side hygiene flags raised by Heroes during H3 verification (filed on portal's Day-30 list)
 
