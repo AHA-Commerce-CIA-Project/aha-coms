@@ -64,8 +64,27 @@ mock.module('~/db/schema/apps', () => ({
 mock.module('~/db/schema/auth-handoffs', () => ({
   authHandoffs,
 }))
+// Rev 2 §01: auth-broker now imports the signing-keys schema (for ES256
+// JWKS lookup during exchange). Stub it — these tests exercise the HS256
+// legacy path; ES256-specific behavior is covered in signing-keys.test.ts.
+mock.module('~/db/schema/signing-keys', () => ({
+  portalBrokerSigningKeys: { kid: 'kid', publicJwk: 'public_jwk', status: 'status' },
+  SIGNING_KEY_STATUS: {
+    CREATED: 'created',
+    ACTIVE: 'active',
+    RETIRING: 'retiring',
+    RETIRED: 'retired',
+  },
+}))
+// Note: we deliberately do NOT mock `../signing-keys` here. Bun's
+// `mock.module` is process-global, and stubbing this module would bleed
+// into 01-signing-keys.test.ts. Instead, the real signing-keys service
+// throws "no active signing key" when the (mocked) DB has no rows — and
+// signBrokerToken catches that and degrades gracefully to HS256-only,
+// which is exactly the behavior these legacy tests assert.
 mock.module('drizzle-orm', () => ({
   eq: (left: unknown, right: unknown) => ({ type: 'eq', left, right }),
+  inArray: (left: unknown, values: unknown[]) => ({ type: 'inArray', left, values }),
   // sql and relations needed by the ~/db/schema barrel's new re-exports
   // (session-revocations.ts and app-webhook-endpoints.ts added in SSO upgrade)
   sql: new Proxy(

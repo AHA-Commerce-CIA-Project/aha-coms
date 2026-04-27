@@ -128,6 +128,7 @@ export interface AppRecord {
   transportMode: AuthTransportMode
   handoffMode: PortalHandoffMode
   brokerOrigin: string | null
+  serviceAccountEmail: string | null
   contractVersion: number
   complianceStatus: PortalComplianceStatus
   manifestPath: string | null
@@ -331,6 +332,7 @@ export const adminApi = {
       transportMode?: AuthTransportMode
       handoffMode?: PortalHandoffMode
       brokerOrigin?: string
+      serviceAccountEmail?: string
       contractVersion?: number
       complianceStatus?: PortalComplianceStatus
       manifestPath?: string

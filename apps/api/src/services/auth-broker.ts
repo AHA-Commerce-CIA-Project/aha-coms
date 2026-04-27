@@ -1,9 +1,14 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { SignJWT, jwtVerify } from 'jose'
-import { eq } from 'drizzle-orm'
+import { SignJWT, jwtVerify, decodeProtectedHeader, importJWK } from 'jose'
+import { eq, inArray } from 'drizzle-orm'
 import { db } from '~/db'
 import { appRegistry } from '~/db/schema/apps'
 import { authHandoffs } from '~/db/schema/auth-handoffs'
+import {
+  portalBrokerSigningKeys,
+  SIGNING_KEY_STATUS,
+} from '~/db/schema/signing-keys'
+import { loadActiveSigningKey } from './signing-keys'
 import type { AppRegistry } from '~/db/schema/apps'
 import type {
   PortalBrokerExchangePayload,
@@ -11,7 +16,39 @@ import type {
   PortalSessionUser,
 } from '@coms-portal/shared'
 
-const PORTAL_BROKER_ISSUER = 'coms-portal-broker'
+/**
+ * Issuer values for broker tokens (Rev 2 §02 dual-mode).
+ *
+ * **Mint side — split by alg, dual-mode safety (red-cell C2):**
+ *   - HS256 tokens are minted with the LEGACY bare-string issuer
+ *     (`coms-portal-broker`) so today's Heroes — which verifies HS256 with
+ *     `issuer: 'coms-portal-broker'` (single string, no array) — keeps
+ *     working. Switching the mint-side issuer to URL-form before Heroes
+ *     ships H1 would break every login.
+ *   - ES256 tokens are minted with the NEW URL-form issuer
+ *     (`${PORTAL_PUBLIC_ORIGIN}/broker`). This matches the OIDC discovery
+ *     document and is what stock OIDC client libraries expect.
+ *
+ * **Verifier side — accept both:** every `jwtVerify` call uses an array
+ * `[PORTAL_BROKER_ISSUER, LEGACY_PORTAL_BROKER_ISSUER]` so tokens minted on
+ * either issuer (including pre-Rev-2 tokens still in flight) keep verifying.
+ *
+ * **Discovery document — advertise URL-form only:** the JWKS-fronted
+ * canonical issuer for OIDC clients is the URL-form. The legacy bare-string
+ * is purely a tokens-in-flight transition artefact.
+ *
+ * Day-30 cleanup (see spec-01 §"Migration Plan"): drop HS256 minting,
+ * delete `signHS256BrokerToken` + `LEGACY_PORTAL_BROKER_ISSUER`, and
+ * collapse the verifier `issuer` array to a single string.
+ */
+const PORTAL_PUBLIC_ORIGIN = process.env.PORTAL_PUBLIC_ORIGIN ?? 'https://coms.ahacommerce.net'
+
+/** URL-form issuer — used by ES256 minting + discovery document. */
+export const PORTAL_BROKER_ISSUER = `${PORTAL_PUBLIC_ORIGIN}/broker`
+
+/** Bare-string issuer — used by HS256 minting during dual-mode for Heroes compat. */
+const LEGACY_PORTAL_BROKER_ISSUER = 'coms-portal-broker'
+
 const BROKER_CODE_TTL_SECONDS = 300
 const BROKER_TOKEN_TTL_SECONDS = 300
 
@@ -146,15 +183,76 @@ function assertAppAccess(app: BrokerCapableApp, authUser: PortalSessionUser): vo
   }
 }
 
-async function signBrokerToken(payload: BrokerTokenPayload, app: BrokerCapableApp): Promise<string> {
+/**
+ * Sign a broker token with the legacy HS256 path (per-app symmetric secret).
+ *
+ * Preserved verbatim during dual-mode (Rev 2 §01 migration). Will be
+ * removed once Heroes ships ES256-only verification (Day 30 — see spec-01
+ * §"Migration Plan"). The function shape and the per-app `app` argument
+ * are unchanged so existing callers continue to compile.
+ *
+ * Issuer: LEGACY bare-string `'coms-portal-broker'` — Heroes today verifies
+ * HS256 with this exact value (single string, not an array). Until Heroes
+ * ships H1 dual-issuer-accept, keeping HS256 on the legacy issuer is what
+ * makes portal deploy independent of Heroes deploy (red-cell finding C2).
+ */
+async function signHS256BrokerToken(
+  payload: BrokerTokenPayload,
+  app: BrokerCapableApp,
+): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
-    .setIssuer(PORTAL_BROKER_ISSUER)
+    .setIssuer(LEGACY_PORTAL_BROKER_ISSUER)
     .setAudience(brokerAudienceFor(payload.appSlug))
     .setIssuedAt(now)
     .setExpirationTime(now + BROKER_TOKEN_TTL_SECONDS)
     .sign(getBrokerSecretForApp(app))
+}
+
+/**
+ * Sign a broker token with ES256 using the global active signing key
+ * (Rev 2 §01). The `kid` header lets verifiers fetch the matching public
+ * JWK from `/.well-known/jwks.json`. No per-app secret needed.
+ */
+async function signES256BrokerToken(payload: BrokerTokenPayload): Promise<string> {
+  const { kid, privateKey } = await loadActiveSigningKey()
+  const now = Math.floor(Date.now() / 1000)
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: 'ES256', kid, typ: 'JWT' })
+    .setIssuer(PORTAL_BROKER_ISSUER)
+    .setAudience(brokerAudienceFor(payload.appSlug))
+    .setIssuedAt(now)
+    .setExpirationTime(now + BROKER_TOKEN_TTL_SECONDS)
+    .sign(privateKey)
+}
+
+/**
+ * Mint both an HS256 (legacy) and an ES256 (new) broker token for the
+ * same payload. During the dual-mode transition the launch redirect
+ * carries both as siblings so Heroes can verify whichever it knows how
+ * to. After Heroes ships ES256 verification we drop HS256.
+ *
+ * If ES256 minting fails (e.g. no active key bootstrapped, Secret Manager
+ * outage), we log and degrade gracefully to HS256-only — better than
+ * blocking every login on a key-rotation issue. The legacy path is the
+ * safety net during dual-mode by definition.
+ */
+async function signBrokerToken(
+  payload: BrokerTokenPayload,
+  app: BrokerCapableApp,
+): Promise<{ hs256: string; es256: string | null }> {
+  const hs256 = await signHS256BrokerToken(payload, app)
+  let es256: string | null = null
+  try {
+    es256 = await signES256BrokerToken(payload)
+  } catch (err) {
+    console.warn(
+      '[auth-broker] ES256 minting failed, falling back to HS256-only for this token:',
+      err instanceof Error ? err.message : err,
+    )
+  }
+  return { hs256, es256 }
 }
 
 function payloadToExchangeResponse(
@@ -217,7 +315,7 @@ export async function createBrokerHandoff(
 
   if (app.handoffMode === 'token_exchange') {
     const expiresAt = new Date(Date.now() + BROKER_TOKEN_TTL_SECONDS * 1000)
-    const token = await signBrokerToken({
+    const { hs256, es256 } = await signBrokerToken({
       appSlug: app.slug,
       userId: authUser.id,
       gipUid: authUser.gipUid,
@@ -229,13 +327,26 @@ export async function createBrokerHandoff(
       redirectTo,
     }, app)
 
+    // Dual-mode (Rev 2 §01 + §02): emit both tokens on both surfaces.
+    //
+    // Response payload fields (v1.2 contract):
+    //   tokenHs256 — the HS256 sibling (new canonical field)
+    //   tokenEs256 — the ES256 sibling (preferred; null if key not bootstrapped)
+    //   token      — deprecated alias for tokenHs256; kept until Heroes drops HS256
+    //
+    // Redirect URL query params (unchanged surface, Heroes v1 reads portal_token):
+    //   portal_token      — HS256 (legacy Heroes reads this)
+    //   portal_token_es256 — ES256 (Heroes v2+ reads this)
     return {
       appSlug: app.slug,
       handoffMode: 'token_exchange',
-      token,
+      tokenHs256: hs256,
+      tokenEs256: es256,
+      token: hs256,
       expiresAt: expiresAt.toISOString(),
       redirectUrl: buildRedirectUrl(app.url, {
-        portal_token: token,
+        portal_token: hs256,
+        portal_token_es256: es256 ?? undefined,
         portal_app: app.slug,
         portal_redirect_to: redirectTo,
       }),
@@ -317,11 +428,31 @@ export async function exchangeBrokerHandoff(input: {
     columns: { slug: true, url: true, transportMode: true, handoffMode: true, brokerOrigin: true, status: true, brokerSigningSecret: true },
   })
   if (!app) throw new BrokerValidationError('App not found')
-  const secret = getBrokerSecretForApp(app)
-  const { payload } = await jwtVerify<BrokerTokenPayload>(input.token!, secret, {
-    issuer: PORTAL_BROKER_ISSUER,
-    audience: brokerAudienceFor(input.appSlug),
-  })
+
+  // Discriminate verification by the JWT's `alg` header (Rev 2 §01
+  // dual-mode). HS256 → legacy per-app symmetric secret. ES256 → fetch
+  // the matching public JWK by `kid` from `portal_broker_signing_keys`
+  // (active + retiring rows). Anything else → reject.
+  let header
+  try {
+    header = decodeProtectedHeader(input.token!)
+  } catch {
+    throw new BrokerValidationError('Malformed broker token header')
+  }
+
+  let payload: BrokerTokenPayload & { exp?: number }
+  if (header.alg === 'ES256') {
+    payload = await verifyES256BrokerToken(input.token!, input.appSlug)
+  } else if (header.alg === 'HS256') {
+    const secret = getBrokerSecretForApp(app)
+    const verified = await jwtVerify<BrokerTokenPayload>(input.token!, secret, {
+      issuer: [PORTAL_BROKER_ISSUER, LEGACY_PORTAL_BROKER_ISSUER],
+      audience: brokerAudienceFor(input.appSlug),
+    })
+    payload = verified.payload
+  } else {
+    throw new BrokerValidationError(`Unsupported token alg: ${header.alg ?? 'unknown'}`)
+  }
 
   if (payload.appSlug !== input.appSlug) {
     throw new BrokerValidationError('Token audience does not match requested app')
@@ -331,4 +462,50 @@ export async function exchangeBrokerHandoff(input: {
     payload,
     new Date((payload.exp ?? Math.floor(Date.now() / 1000)) * 1000),
   )
+}
+
+/**
+ * Verify an ES256 broker token by looking up its `kid` in the local
+ * signing-keys table. Only `active` and `retiring` keys are accepted
+ * (the same set the JWKS endpoint will publish in T2) — `retired` keys
+ * have aged past the max token TTL and any token signed with one is
+ * already expired by definition.
+ */
+async function verifyES256BrokerToken(
+  token: string,
+  appSlug: string,
+): Promise<BrokerTokenPayload & { exp?: number }> {
+  const header = decodeProtectedHeader(token)
+  if (!header.kid) {
+    throw new BrokerValidationError('ES256 broker token missing kid header')
+  }
+
+  const rows = await db
+    .select({
+      kid: portalBrokerSigningKeys.kid,
+      publicJwk: portalBrokerSigningKeys.publicJwk,
+    })
+    .from(portalBrokerSigningKeys)
+    .where(
+      inArray(portalBrokerSigningKeys.status, [
+        SIGNING_KEY_STATUS.ACTIVE,
+        SIGNING_KEY_STATUS.RETIRING,
+      ]),
+    )
+
+  const match = rows.find((r) => r.kid === header.kid)
+  if (!match) {
+    throw new BrokerValidationError(`Unknown signing kid: ${header.kid}`)
+  }
+
+  const publicKey = await importJWK(match.publicJwk, 'ES256')
+  const { payload } = await jwtVerify<BrokerTokenPayload>(token, publicKey, {
+    // Accept both the URL-form issuer (Rev 2+) and the legacy bare-string issuer
+    // (pre-Rev-2 tokens) during the dual-mode transition window. Drop
+    // LEGACY_PORTAL_BROKER_ISSUER from this array after Day-30 cleanup.
+    issuer: [PORTAL_BROKER_ISSUER, LEGACY_PORTAL_BROKER_ISSUER],
+    audience: brokerAudienceFor(appSlug),
+    algorithms: ['ES256'],
+  })
+  return payload
 }

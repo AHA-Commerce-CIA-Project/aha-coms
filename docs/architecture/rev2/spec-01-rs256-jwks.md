@@ -378,7 +378,7 @@ Cloud Monitoring log-based metric on `signing_key_rotated` with severity escalat
 | `infra/main.tf` (or new file) | Cloud Scheduler job for 90-day rotation |
 | `infra/cloud-run.tf` | SA permission `roles/secretmanager.admin` scoped to `portal-broker-signing-key-*` secrets |
 | New migration (`drizzle-kit generate`) | `portal_broker_signing_keys` table |
-| Bootstrap script | One-shot to generate first ES256 key before flipping to dual-mode |
+| Bootstrap script | Idempotent CLI (`apps/api/scripts/bootstrap-signing-key.ts`) that mints the first ES256 key. Wired into `.github/workflows/deploy.yml` immediately after `db:migrate`, so it runs on every push to `main` — first run inserts the active key, subsequent runs detect it and exit early. Manual invocation: `bun run --cwd apps/api scripts/bootstrap-signing-key.ts` with `DATABASE_URL` and `GCP_PROJECT_ID` env vars. |
 
 ### Heroes (see Rev 2 handoff)
 

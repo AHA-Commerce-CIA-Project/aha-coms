@@ -14,6 +14,7 @@
 
 import { createHmac } from 'node:crypto'
 import { eq, and, sql } from 'drizzle-orm'
+import { GoogleAuth } from 'google-auth-library'
 import { db } from '~/db'
 import { appWebhookEndpoints } from '~/db/schema/app-webhook-endpoints'
 import { appRegistry } from '~/db/schema/apps'
@@ -29,6 +30,43 @@ import {
   PORTAL_WEBHOOK_EVENT_ID_HEADER,
   PORTAL_WEBHOOK_TIMESTAMP_HEADER,
 } from '@coms-portal/shared'
+
+// ---------------------------------------------------------------------------
+// OIDC token minting (Rev 2 §03 dual-mode)
+// ---------------------------------------------------------------------------
+
+// Module-scoped GoogleAuth instance — getIdTokenClient caches tokens internally
+// (~55 min validity). A single instance reuses cached clients across calls.
+const auth = new GoogleAuth()
+
+/**
+ * Mint a Google OIDC ID token for the given audience using the runtime's
+ * service-account identity (metadata server on Cloud Run; ADC locally).
+ *
+ * Returns the raw JWT string (no "Bearer " prefix), or `null` when the
+ * metadata server is unreachable (local dev without ADC / missing GCP env).
+ * Callers fall back to HMAC-only when null is returned.
+ */
+export async function mintWebhookAudienceToken(audience: string): Promise<string | null> {
+  try {
+    const client = await auth.getIdTokenClient(audience)
+    const headers = await client.getRequestHeaders()
+    // getRequestHeaders returns a Headers instance (Web fetch API); use .get()
+    const authHeader = headers.get('Authorization') ?? ''
+    if (!authHeader.startsWith('Bearer ')) {
+      console.warn('[webhook-dispatcher] OIDC: unexpected Authorization header format — falling back to HMAC-only')
+      return null
+    }
+    return authHeader.slice('Bearer '.length)
+  } catch (err) {
+    console.warn(
+      '[webhook-dispatcher] OIDC token minting failed (metadata server unavailable or missing ADC); ' +
+        'proceeding with HMAC-only. Error:',
+      err instanceof Error ? err.message : String(err),
+    )
+    return null
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Signing helpers
@@ -81,6 +119,11 @@ type EndpointRow = typeof appWebhookEndpoints.$inferSelect & { appSlug: string }
 /**
  * Perform a single HTTP delivery attempt. Throws on non-2xx or network error.
  * Exported for re-use by the internal /webhook-delivery route.
+ *
+ * Dual-mode (Rev 2 §03): when `oidcToken` is non-null the request carries both
+ * `Authorization: Bearer <token>` (OIDC) and `X-Portal-Signature` (HMAC).
+ * Receivers that understand OIDC verify the bearer token; legacy receivers
+ * continue to use HMAC. Both headers are dropped together on Day-30 cleanup.
  */
 export async function deliverWebhook(
   endpointUrl: string,
@@ -90,8 +133,14 @@ export async function deliverWebhook(
   eventId: string,
   occurredAt: string,
   fetchImpl: typeof fetch,
+  oidcToken?: string | null,
 ): Promise<void> {
   const signature = computeSignature(endpointSecret, occurredAt, jsonBody)
+
+  const extraHeaders: Record<string, string> = {}
+  if (oidcToken) {
+    extraHeaders['Authorization'] = `Bearer ${oidcToken}`
+  }
 
   const response = await fetchImpl(endpointUrl, {
     method: 'POST',
@@ -101,6 +150,7 @@ export async function deliverWebhook(
       [PORTAL_WEBHOOK_EVENT_HEADER]: event,
       [PORTAL_WEBHOOK_EVENT_ID_HEADER]: eventId,
       [PORTAL_WEBHOOK_TIMESTAMP_HEADER]: occurredAt,
+      ...extraHeaders,
     },
     body: jsonBody,
   })
@@ -212,8 +262,21 @@ async function inlineAttempt(
   fetchImpl: typeof fetch,
 ): Promise<void> {
   const now = new Date()
+
+  // Rev 2 §03: mint an OIDC token for this endpoint's origin (audience).
+  // Falls back to null on local dev / metadata-server unavailability — the
+  // dispatcher continues with HMAC-only in that case.
+  const audience = new URL(endpoint.url).origin
+  const oidcToken = await mintWebhookAudienceToken(audience)
+
+  if (!oidcToken) {
+    console.warn(
+      `[webhook-dispatcher] OIDC degraded path: no token for ${audience} — sending HMAC-only to endpoint ${endpoint.id}`,
+    )
+  }
+
   try {
-    await deliverWebhook(endpoint.url, endpoint.secret, event, jsonBody, eventId, occurredAt, fetchImpl)
+    await deliverWebhook(endpoint.url, endpoint.secret, event, jsonBody, eventId, occurredAt, fetchImpl, oidcToken)
 
     // Success — reset failure state
     await db

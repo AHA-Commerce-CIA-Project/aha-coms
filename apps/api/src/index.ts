@@ -12,6 +12,8 @@ import { authPlugin } from './middleware/auth'
 import { initGip } from './gip'
 import { startHealthProbeInterval } from './services/health-probe'
 import { adminRoutes } from './routes/admin'
+import { wellKnownRoutes } from './routes/well-known'
+import { adminSigningKeyRoutes } from './routes/admin/signing-keys'
 
 initGip()
 
@@ -28,6 +30,8 @@ export const app = new Elysia({ prefix: '/api' })
     return { message: error instanceof Error ? error.message : 'Internal error' }
   })
   .get('/health', () => ({ status: 'ok' }))
+  // Public, unauthenticated — JWKS + OIDC discovery (Rev 2 §01 + §02)
+  .use(wellKnownRoutes)
   .use(authRoutes)
   .use(internalRoutes)
   .group('/v1', (app) =>
@@ -40,7 +44,11 @@ export const app = new Elysia({ prefix: '/api' })
       .use(dashboardRoutes)
       .use(employeeInfoSyncRoutes)
       .use(appWebhookRoutes)
-      .use(adminRoutes),
+      .use(adminRoutes)
+      // Signing-key rotation admin endpoint (Rev 2 §01). Mounted under /admin
+      // by combining the adminRoutes prefix (/admin) implicitly via the group
+      // path /admin/signing-keys.
+      .group('/admin', (adminGroup) => adminGroup.use(adminSigningKeyRoutes)),
   )
 
 export type App = typeof app

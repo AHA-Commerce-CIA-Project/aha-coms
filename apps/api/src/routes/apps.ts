@@ -49,6 +49,7 @@ const appBody = t.Object({
   status: t.Optional(
     t.Union([t.Literal('active'), t.Literal('maintenance'), t.Literal('deprecated')]),
   ),
+  serviceAccountEmail: t.Optional(t.String()),
 })
 
 export const appRoutes = new Elysia({ prefix: '/apps' })

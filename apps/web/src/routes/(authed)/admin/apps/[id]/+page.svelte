@@ -36,6 +36,7 @@
   let editContractVersion = $state(1)
   let editComplianceStatus = $state<PortalComplianceStatus>('draft')
   let editManifestPath = $state('')
+  let editServiceAccountEmail = $state('')
   let editStatus = $state('active')
   let editError = $state<string | null>(null)
   let editPending = $state(false)
@@ -56,6 +57,7 @@
     editContractVersion = app.contractVersion
     editComplianceStatus = app.complianceStatus
     editManifestPath = app.manifestPath ?? ''
+    editServiceAccountEmail = app.serviceAccountEmail ?? ''
     editStatus = app.status
     editError = null
     editing = true
@@ -77,6 +79,7 @@
         contractVersion: editContractVersion,
         complianceStatus: editComplianceStatus,
         manifestPath: editManifestPath || undefined,
+        serviceAccountEmail: editServiceAccountEmail || undefined,
         status: editStatus as 'active' | 'maintenance' | 'deprecated',
       })
       queryClient.invalidateQueries({ queryKey: ['apps', id] })
@@ -367,6 +370,17 @@
                 />
               </div>
             </div>
+            <div>
+              <label for="app-sa-email" class="mb-1 block text-xs text-muted-foreground">Service Account Email (Google OIDC caller identity)</label>
+              <input
+                id="app-sa-email"
+                type="email"
+                bind:value={editServiceAccountEmail}
+                placeholder="service-account@project.iam.gserviceaccount.com"
+                class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
+              />
+              <p class="mt-1 text-xs text-muted-foreground">Google service account email of this app's Cloud Run runtime — used to authenticate the app when it calls portal endpoints (introspect) via OIDC. Leave blank to require legacy secret auth.</p>
+            </div>
             {#if editError}
               <p class="text-xs text-destructive">{editError}</p>
             {/if}
@@ -460,6 +474,10 @@
         <div class="flex justify-between border-b border-border pb-2">
           <span class="text-xs text-muted-foreground">Manifest Path</span>
           <span class="text-sm">{app.manifestPath ?? '-'}</span>
+        </div>
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Service Account Email</span>
+          <span class="text-sm font-mono">{app.serviceAccountEmail ?? '-'}</span>
         </div>
         <div class="flex justify-between border-b border-border pb-2">
           <span class="text-xs text-muted-foreground">Last Verified</span>
