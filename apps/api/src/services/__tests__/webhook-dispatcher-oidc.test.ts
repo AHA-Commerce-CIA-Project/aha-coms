@@ -62,7 +62,12 @@ const mockGetIdTokenClient = mock(async (audience: string) => getIdTokenClientIm
 // across test files; without restoration, downstream files that touch
 // signing-keys (which imports GoogleAuth) inherit our class with a fixed
 // getIdTokenClient field, breaking their assumptions.
-const realGoogleAuthLibrary = await import('google-auth-library')
+//
+// Spread INTO a fresh object: bun's mock.module rebinds the live namespace
+// in place, so a captured namespace reference would itself become the stub
+// the instant `mock.module` runs. Spreading copies the real export
+// references out before the rebind happens.
+const realGoogleAuthLibrary = { ...(await import('google-auth-library')) }
 
 mock.module('google-auth-library', () => ({
   GoogleAuth: class {
