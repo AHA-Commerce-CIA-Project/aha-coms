@@ -144,7 +144,23 @@ mock.module('@coms-portal/shared', () => ({
 
 // ---------------------------------------------------------------------------
 // Import the module under test
+//
+// webhook-dispatcher.ts captures `auth = new GoogleAuth()` at module load.
+// If a sibling test file (webhook-dispatcher.test.ts) loaded webhook-dispatcher
+// first, `auth` was constructed against THAT file's mocked GoogleAuth class —
+// so our `mockGetIdTokenClient` here would never be invoked. Bust the require
+// cache for '../webhook-dispatcher' to force a fresh evaluation under the
+// google-auth-library mock we just installed; this is the only way (without
+// modifying production code or the sibling test) to guarantee `auth` is
+// constructed against OUR class on Ubuntu where bun's discovery order
+// loaded the sibling first.
+//
+// We also bust the cache in afterAll so the next test file re-evaluates
+// webhook-dispatcher under the genuine google-auth-library we restore.
 // ---------------------------------------------------------------------------
+
+const webhookDispatcherPath = Bun.resolveSync('../webhook-dispatcher', import.meta.dir)
+delete (require.cache as Record<string, unknown> | undefined)?.[webhookDispatcherPath]
 
 const { dispatchPortalWebhook, mintWebhookAudienceToken } = await import('../webhook-dispatcher')
 
@@ -184,10 +200,13 @@ function okFetch(): typeof fetch {
 // ---------------------------------------------------------------------------
 
 describe('webhook-dispatcher OIDC dual-mode (Rev 2 §03)', () => {
-  // Restore the real google-auth-library after this file's tests so its
-  // GoogleAuth stub does not leak into sibling files. Order-independent.
+  // Restore the real google-auth-library after this file's tests, then
+  // also evict webhook-dispatcher from the require cache so any later
+  // file that imports it gets a freshly-instantiated `auth` against the
+  // real (or its own re-mocked) GoogleAuth class.
   afterAll(() => {
     mock.module('google-auth-library', () => realGoogleAuthLibrary)
+    delete (require.cache as Record<string, unknown> | undefined)?.[webhookDispatcherPath]
   })
 
   beforeEach(() => {
