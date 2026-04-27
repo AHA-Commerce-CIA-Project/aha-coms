@@ -2,7 +2,7 @@
 
 > Coordination plan for Rev 2 specs. Rev 2 is **Spec 05 of Rev 1, plus a four-part federation hardening pass** that closes the remaining shared-secret surfaces between portal and relying-party apps.
 >
-> **Last updated:** 2026-04-27 (H3 closed end-to-end; portal team confirmed `via:oidc` traffic for `app:heroes`)
+> **Last updated:** 2026-04-27 (H3 closed end-to-end; portal team confirmed `via:oidc` traffic for `app:heroes`; Heroes Day-30 cleanup landed same day)
 > **Prerequisites:** Rev 1 complete (it is, except Rev 1 Spec 05 — see below).
 
 ---
@@ -107,7 +107,7 @@ This keeps the rollout deploy-order-independent: portal can deploy first, Heroes
 | §04 portal deployed | Heroes can begin H3. | pending — awaiting CI deploy + Heroes SA email population in `app_registry`. **Runbook:** see `spec-04-introspect-oidc-auth.md` §"Runbook — Heroes service account email population" for the exact admin-UI / SQL steps and how to look up the Heroes SA email value. |
 | Heroes H3 deployed (introspect OIDC sender) | Portal can drop legacy `x-portal-introspect-secret` acceptance on the §04 Day-30 schedule. | **closed 2026-04-27** (Heroes commit `821ec0f`) — `packages/web/src/lib/server/google-oidc.ts` shared singleton; `fetchIntrospect` carries both bearer and legacy secret during dual-mode. Portal admin populated `app_registry.service_account_email = 'coms-aha-heroes-run-sa@fbi-dev-484410.iam.gserviceaccount.com'`. Synthetic introspect call at 07:47:20.962 UTC confirmed by portal team: `[introspect] via:oidc app:heroes` with no legacy-secret warning. Day-30 countdown for `PORTAL_INTROSPECT_SECRET` retirement starts now. |
 | Heroes H4 deployed (stale-serve alerting) | n/a — Heroes-only operational hardening | **merged 2026-04-27** (Heroes commit `40309d2`) — 2-min ring buffer + structured WARNING/ERROR severity in `portal-introspect.ts`; two new `google_monitoring_alert_policy` resources in `infra/modules/monitoring/main.tf`. |
-| All specs deployed | Final audit: confirm all `PORTAL_*_SECRET` env vars unset on both sides. | pending — Day-30 follow-up. Heroes-side checklist tracked in `coms-aha-heroes/docs/architecture/rev2/heroes-team-handoff.md` §"Implementation status & deferred follow-ups". |
+| All specs deployed | Final audit: confirm all `PORTAL_*_SECRET` env vars unset on both sides. | **Heroes side complete 2026-04-27** — Day-30 cleanup mission merged same day H3 closed (soak window waived by mission lead). Audit grep zero matches across `*.ts`/`*.tf`/`*.json`/`*.yml`/`.env*`. `PORTAL_INTROSPECT_SECRET`, `PORTAL_WEBHOOK_SIGNING_SECRET`, `PORTAL_BROKER_SIGNING_SECRET` and `PORTAL_TOKEN_AUDIENCE` removed from `.github/workflows/deploy.yml`. Secret Manager secret deletion is the only out-of-repo step left on Heroes side. Portal-side audit pending portal team's own Day-30 mission. |
 
 ### Heroes notification (sample message)
 
