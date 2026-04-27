@@ -1,4 +1,4 @@
-import type { Handle } from '@sveltejs/kit'
+import type { Handle, HandleServerError } from '@sveltejs/kit'
 import { SESSION_COOKIE_NAME } from '@coms-portal/shared'
 import { validateSession } from '~/services/auth'
 
@@ -46,4 +46,19 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   return resolve(event)
+}
+
+export const handleError: HandleServerError = ({ error, status, message, event }) => {
+  const err = error as Error | undefined
+  console.error('[handleError]', {
+    status,
+    message,
+    route: event.route.id,
+    url: event.url.pathname,
+    name: err?.name,
+    errorMessage: err?.message,
+    stack: err?.stack,
+    raw: error,
+  })
+  return { message: 'Internal error' }
 }
