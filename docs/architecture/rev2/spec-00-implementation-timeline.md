@@ -105,14 +105,19 @@ This keeps the rollout deploy-order-independent: portal can deploy first, Heroes
 
 ## Rev 1 Carryover
 
-Rev 1 Spec 05 is not yet started:
+Rev 1 Spec 05 is **partially landed** as of 2026-04-27:
 
-- SSR migration (`adapter-static` → `adapter-node`)
-- Cloud Tasks for webhook delivery
-- Cloud Scheduler-driven health probe
-- Remove in-process worker + health probe interval
+**Done (in `apps/api/src/services/`):**
+- `oidc-verifier.ts` — Google OIDC ID-token verifier for Cloud Tasks / Pub/Sub callbacks
+- `cloud-tasks-client.ts` — REST client for enqueueing webhook delivery tasks
+- `health-probe.ts` — per-app health probe service
 
-This is portal-only and independent of Rev 2 specs — but Rev 2 §03 builds on the OIDC verifier code that Rev 1 §05 introduces for Cloud Tasks. Sequence Rev 1 Spec 05 → Rev 2 Spec 03.
+**Outstanding:**
+- SSR migration on `apps/web` (`adapter-static` → `adapter-node`)
+- Cloud Scheduler trigger wiring for the health probe
+- Removal of in-process worker + interval-driven health probe
+
+This is portal-only and independent of Rev 2 §01/§02. Rev 2 §03 reuses the already-landed `oidc-verifier.ts` — its prerequisite is therefore already satisfied in code, even before the SSR/Scheduler work finishes. Sequence still recommends finishing Rev 1 §05 first for operational reasons (Cloud Tasks delivery semantics) but it is no longer a hard code-level blocker for §03.
 
 ---
 
@@ -127,10 +132,14 @@ This is portal-only and independent of Rev 2 specs — but Rev 2 §03 builds on 
 | `apps/api/src/services/auth-broker.ts` | 01 |
 | `apps/api/src/routes/well-known.ts` (new) | 01, 02 |
 | `apps/api/src/services/webhook-dispatcher.ts` | 03 |
-| `apps/api/src/services/oidc-verifier.ts` (new — shared) | 03, 04 |
+| `apps/api/src/services/oidc-verifier.ts` (already landed via Rev 1 §05; extend if needed) | 03, 04 |
+| `apps/api/src/db/schema/apps.ts` (add `service_account_email`) | 04 |
 | `apps/api/src/routes/auth.ts` | 04 |
 | `infra/secrets.tf` | 01 |
-| New migrations | 01 |
+| Migration: `portal_broker_signing_keys` table | 01 |
+| Migration: add `app_registry.service_account_email` | 04 |
+| Migration: drop `app_registry.broker_signing_secret` (post dual-mode, ~Day 30) | 01 |
+| Migration: drop `app_registry.introspect_secret` (post dual-mode, §04 Day 7) | 04 |
 
 ### Heroes
 
