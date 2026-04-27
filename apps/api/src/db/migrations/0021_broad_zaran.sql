@@ -1,0 +1,1 @@
+ALTER TABLE "app_registry" DROP COLUMN "introspect_secret";

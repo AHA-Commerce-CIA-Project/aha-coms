@@ -148,6 +148,13 @@
       "when": 1777264312388,
       "tag": "0020_bitter_polaris",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1777276650920,
+      "tag": "0021_broad_zaran",
+      "breakpoints": true
     }
   ]
 }

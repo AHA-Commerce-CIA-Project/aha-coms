@@ -104,15 +104,6 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         }
       }
       env {
-        name = "PORTAL_INTROSPECT_SECRET"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.portal_introspect_secret.secret_id
-            version = "latest"
-          }
-        }
-      }
-      env {
         name = "PORTAL_BROKER_SIGNING_SECRET"
         value_source {
           secret_key_ref {
@@ -134,7 +125,6 @@ resource "google_cloud_run_v2_service" "coms_portal" {
 
   depends_on = [
     google_secret_manager_secret_version.database_url,
-    google_secret_manager_secret_version.portal_introspect_secret,
     google_secret_manager_secret_version.portal_broker_signing_secret,
   ]
 
@@ -173,12 +163,6 @@ resource "google_secret_manager_secret_iam_member" "compute_sa_database_url" {
 
 resource "google_secret_manager_secret_iam_member" "compute_sa_gip_api_key" {
   secret_id = google_secret_manager_secret.gip_api_key.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
-}
-
-resource "google_secret_manager_secret_iam_member" "compute_sa_portal_introspect_secret" {
-  secret_id = google_secret_manager_secret.portal_introspect_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
 }

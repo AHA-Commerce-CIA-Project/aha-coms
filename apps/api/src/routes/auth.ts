@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'node:crypto'
 import { Elysia, t } from 'elysia'
 import {
   verifyIdToken,
@@ -33,66 +32,54 @@ import { verifyGoogleIdToken } from '../services/oidc-verifier'
 const SELF_AUDIENCE =
   process.env.PORTAL_PUBLIC_ORIGIN ?? 'https://coms.ahacommerce.net'
 
+type IntrospectAuthFailure =
+  | 'app_not_found'
+  | 'sa_not_configured'
+  | 'missing_bearer'
+  | 'verify_failed'
+
 /**
- * Dual-mode authenticator for the broker/introspect endpoint.
+ * OIDC-only authenticator for the broker/introspect endpoint.
  *
- * 1. Tries OIDC first: if `Authorization: Bearer <token>` header is present
- *    and the app has a `serviceAccountEmail` configured, verify the Google ID
- *    token against that SA email. On success → { via: 'oidc', ok: true }.
- *    On failure → fall through (dual-mode).
+ * Requires `Authorization: Bearer <google-id-token>` and the calling app's
+ * `serviceAccountEmail` to be configured in `app_registry`. Verifies the
+ * token's signature, audience, and email claim against the configured SA.
  *
- * 2. Falls back to legacy shared-secret header (`x-portal-introspect-secret`).
- *    On match → { via: 'secret', ok: true } with a migration warning.
- *
- * 3. Neither succeeds → { via: 'oidc', ok: false }.
- *
- * The caller is responsible for 401 handling. App lookup happens once here.
- * Returns { via: 'oidc', ok: false } if the app slug is not found so the
- * caller sees a clean 401 rather than leaking whether a slug exists.
+ * The caller is responsible for 401 handling. The failure reason is returned
+ * separately for structured logging only — it is never exposed to the client.
  */
 async function authenticateIntrospectCaller(
   request: Request,
   appSlug: string,
-): Promise<{ via: 'oidc' | 'secret'; ok: boolean }> {
+): Promise<
+  | { ok: true }
+  | { ok: false; reason: IntrospectAuthFailure }
+> {
   const app = await db.query.appRegistry.findFirst({
     where: eq(appRegistry.slug, appSlug),
-    columns: { introspectSecret: true, serviceAccountEmail: true },
+    columns: { serviceAccountEmail: true },
   })
 
-  if (!app) return { via: 'oidc', ok: false }
+  if (!app) return { ok: false, reason: 'app_not_found' }
+  if (!app.serviceAccountEmail) {
+    return { ok: false, reason: 'sa_not_configured' }
+  }
 
   const authHeader = request.headers.get('authorization')
-
-  // --- Try OIDC first ---
-  if (authHeader?.startsWith('Bearer ') && app.serviceAccountEmail) {
-    try {
-      await verifyGoogleIdToken({
-        idToken: authHeader.slice(7),
-        expectedAudience: SELF_AUDIENCE,
-        expectedSAEmail: app.serviceAccountEmail,
-      })
-      return { via: 'oidc', ok: true }
-    } catch {
-      // fall through during dual-mode
-    }
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { ok: false, reason: 'missing_bearer' }
   }
 
-  // --- Fall back to legacy shared-secret header ---
-  const expectedSecret = app.introspectSecret ?? process.env.PORTAL_INTROSPECT_SECRET
-  if (expectedSecret) {
-    const provided = request.headers.get('x-portal-introspect-secret') ?? ''
-    if (
-      provided.length === expectedSecret.length &&
-      timingSafeEqual(Buffer.from(provided), Buffer.from(expectedSecret))
-    ) {
-      console.warn(
-        `[introspect] app "${appSlug}" used legacy secret auth — migrate to OIDC`,
-      )
-      return { via: 'secret', ok: true }
-    }
+  try {
+    await verifyGoogleIdToken({
+      idToken: authHeader.slice(7),
+      expectedAudience: SELF_AUDIENCE,
+      expectedSAEmail: app.serviceAccountEmail,
+    })
+    return { ok: true }
+  } catch {
+    return { ok: false, reason: 'verify_failed' }
   }
-
-  return { via: 'oidc', ok: false }
 }
 
 async function resolveSessionUser(request: Request): Promise<PortalSessionUser> {
@@ -320,7 +307,9 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   /**
    * POST /api/auth/broker/introspect
    * Machine-to-machine session introspection endpoint for relying-party apps.
-   * Protected by the PORTAL_INTROSPECT_SECRET shared secret.
+   * Protected by Google OIDC ID-token verification — caller must present a
+   * Bearer token whose `email` claim matches the app's configured
+   * `service_account_email`.
    *
    * Returns { active: false } if the session has been revoked, the user is
    * inactive, or the app no longer has access. Returns { active: true, user }
@@ -333,10 +322,13 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
       const auth = await authenticateIntrospectCaller(request, appSlug)
       if (!auth.ok) {
+        // Reason is logged but never returned to the client to avoid leaking
+        // whether the app exists / is OIDC-configured.
+        console.warn(`[introspect] auth_failed app:${appSlug} reason:${auth.reason}`)
         set.status = 401
         return { message: 'Unauthorized' }
       }
-      console.log(`[introspect] via:${auth.via} app:${appSlug}`)
+      console.log(`[introspect] via:oidc app:${appSlug}`)
 
       const issuedAt = new Date(sessionIssuedAt)
 
