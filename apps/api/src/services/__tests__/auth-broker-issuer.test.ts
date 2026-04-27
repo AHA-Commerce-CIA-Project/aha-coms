@@ -9,7 +9,7 @@
  * instance running HS256 verification with the old issuer can still exchange
  * tokens, while a new Heroes instance using ES256 + URL-form issuer also works.
  */
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { SignJWT, generateKeyPair, exportJWK, importJWK } from 'jose'
 
 // ---------------------------------------------------------------------------
@@ -80,7 +80,13 @@ mock.module('drizzle-orm', () => ({
   relations: () => ({}),
 }))
 
-// Stub signing-keys service — not needed for verifier tests
+// Stub signing-keys service — not needed for verifier tests.
+// Capture the real module BEFORE mocking, so we can restore it in afterAll
+// and avoid leaking the stub into other test files (bun's mock.module is
+// process-global; without restoration, downstream files that exercise the
+// real signing-keys module — e.g. 01-signing-keys.test.ts — get the stub).
+const realSigningKeys = await import('../signing-keys')
+
 mock.module('../signing-keys', () => ({
   loadActiveSigningKey: async () => { throw new Error('not needed in verifier tests') },
 }))
@@ -139,6 +145,13 @@ async function mintES256(issuer: string): Promise<string> {
 describe('dual-issuer verifier (Rev 2 §02)', () => {
   beforeEach(() => {
     process.env.PORTAL_BROKER_SIGNING_SECRET = 'test-broker-secret'
+  })
+
+  // Restore the real signing-keys module so other test files (which run in
+  // the same bun process) see the genuine implementation, not our verifier
+  // stub. Order-independent: works regardless of which file bun discovers next.
+  afterAll(() => {
+    mock.module('../signing-keys', () => realSigningKeys)
   })
 
   // HS256 path -----------------------------------------------------------
