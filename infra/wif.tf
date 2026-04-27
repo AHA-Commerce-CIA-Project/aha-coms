@@ -106,11 +106,14 @@ resource "google_project_iam_member" "sa_user" {
 }
 
 # ── Tofu state bucket access ──────────────────────────────────────
-# The GCS backend reads/writes the state object and uses GCS atomic write
-# semantics for the lock. objectAdmin on the bucket covers all of that
-# without granting bucket-level config permissions.
+# The GCS backend needs to read/write the state object, use GCS atomic write
+# for the lock, AND read its own IAM policy back during refresh (Tofu fetches
+# the policy when it reads this binding's state). storage.objectAdmin alone
+# omits storage.buckets.getIamPolicy, so the binding refresh fails. We use
+# storage.admin scoped to this single bucket — broad on the bucket, but the
+# bucket holds only Tofu state.
 resource "google_storage_bucket_iam_member" "tofu_state" {
   bucket = "coms-portal-tofu-state"
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.admin"
   member = "serviceAccount:${google_service_account.github_actions.email}"
 }
