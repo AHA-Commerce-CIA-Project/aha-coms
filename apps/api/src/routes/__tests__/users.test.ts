@@ -92,7 +92,9 @@ function makeApp() {
   return new Elysia().use(userRoutes)
 }
 
-async function get(app: Elysia, path: string, headers: Record<string, string> = {}) {
+type TestApp = ReturnType<typeof makeApp>
+
+async function get(app: TestApp, path: string, headers: Record<string, string> = {}) {
   return app.handle(new Request(`http://localhost${path}`, { headers }))
 }
 
