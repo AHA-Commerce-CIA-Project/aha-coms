@@ -12,7 +12,7 @@
       "name": "@coms-portal/api",
       "version": "0.1.0",
       "dependencies": {
-        "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.2.0",
+        "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.4.0",
         "@elysiajs/static": "^1.2",
         "@googleapis/sheets": "^13.0.1",
         "drizzle-orm": "^0.45.0",
@@ -65,7 +65,7 @@
 
     "@coms-portal/design-tokens": ["@coms-portal/design-tokens@github:mrdoorba/coms-design-tokens#1962238", {}, "mrdoorba-coms-design-tokens-1962238", "sha512-FgXKEum6qZ8zUybyN7Uun2DXvSBAU7iykZDwhT9Atx5e7J4iB5u+OpdjpCwtRSVEKTXCh3dHAiy6B4w3wqRd0g=="],
 
-    "@coms-portal/shared": ["@coms-portal/shared@github:mrdoorba/coms-shared#4b44af6", {}, "mrdoorba-coms-shared-4b44af6", "sha512-iKRtNe24MVTUrbdMRcxwVURGQ7pf424pvLq9k0lA0k3XbmDhWNwY4BX2GQ4y7vScZryj8/IYiMWmWLFUsoUfmg=="],
+    "@coms-portal/shared": ["@coms-portal/shared@github:mrdoorba/coms-shared#f2f1497", {}, "mrdoorba-coms-shared-f2f1497", "sha512-DgtWVq4wNVVKO6dgxjOK8CkTKOKPKry086CZQ4j/lf3fx9kVPQFxxaBKRm9vP6eG6NAyD3LPfOkSIZ1MkD6Pgw=="],
 
     "@coms-portal/ui": ["@coms-portal/ui@github:mrdoorba/coms-ui#0d94675", { "peerDependencies": { "svelte": "^5.0.0" } }, "mrdoorba-coms-ui-0d94675", "sha512-pUSnohccEe6VRmUwP7clO7G53ggen9BTe+LiTV8I6oQfoo1OLN4vM4ggqA0Veg5NFWsh/x3sD4zkr2NmyJTyxA=="],
 
