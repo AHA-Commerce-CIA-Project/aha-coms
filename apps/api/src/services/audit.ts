@@ -27,8 +27,10 @@ export type AuditAction =
   | 'create_webhook_endpoint'
   | 'rotate_webhook_secret'
   | 'delete_webhook_endpoint'
+  | 'alias_queue_resolve'
+  | 'alias_queue_reject'
 
-export type AuditTargetType = 'user' | 'team' | 'app' | 'personal_email_sync' | 'employee_info_sync'
+export type AuditTargetType = 'user' | 'team' | 'app' | 'personal_email_sync' | 'employee_info_sync' | 'alias_collision_queue'
 
 export async function logAudit(params: {
   actorId: string

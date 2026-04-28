@@ -146,6 +146,27 @@ export interface AppDetail extends AppRecord {
   }>
 }
 
+export interface AliasQueueItem {
+  id: string
+  rawName: string
+  rawNameNormalized: string
+  suggestedIdentityUserId: string | null
+  source: string
+  context: Record<string, unknown>
+  createdAt: string
+}
+
+export interface AliasQueueGroup {
+  rawNameNormalized: string
+  count: number
+  oldestAt: string
+  items: AliasQueueItem[]
+}
+
+export interface AliasQueueResponse {
+  groups: AliasQueueGroup[]
+}
+
 interface ApiErrorBody {
   message?: string
 }
@@ -424,6 +445,26 @@ export const adminApi = {
     }>('/api/v1/employee-info-sync/trigger', {
       method: 'POST',
       body: JSON.stringify({}),
+    })
+  },
+
+  // ---------------------------------------------------------------------------
+  // Alias collision queue
+  // ---------------------------------------------------------------------------
+
+  listAliasQueue() {
+    return requestJson<AliasQueueResponse>('/api/v1/admin/alias-queue')
+  },
+  resolveAliasQueue(id: string, body: { identityUserId: string }) {
+    return requestJson<{ aliasId: string }>(`/api/v1/admin/alias-queue/${id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+  rejectAliasQueue(id: string, body: { reason: string }) {
+    return requestJson<{ ok: true }>(`/api/v1/admin/alias-queue/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     })
   },
 }
