@@ -1,5 +1,6 @@
 import { db } from '~/db'
-import { appManifests, appRegistry } from '~/db/schema'
+import { appManifests } from '~/db/schema/app-manifests'
+import { appRegistry } from '~/db/schema/apps'
 import { eq, sql } from 'drizzle-orm'
 
 // ---------------------------------------------------------------------------

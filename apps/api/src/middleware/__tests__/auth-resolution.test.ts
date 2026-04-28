@@ -61,6 +61,15 @@ mock.module('~/db/schema', () => {
     sessionRevocations: { userId: 'sessionRevocations.userId' },
     appWebhookEndpoints: { id: 'appWebhookEndpoints.id' },
     memberAppRole: { userId: 'memberAppRole.userId', appId: 'memberAppRole.appId', appRole: 'memberAppRole.appRole' },
+    // Rev 3 additions — included so this mock doesn't break downstream test files
+    appUserConfig: { portalSub: 'auc.portalSub', appId: 'auc.appId', config: 'auc.config', schemaVersion: 'auc.schemaVersion', updatedAt: 'auc.updatedAt', updatedBy: 'auc.updatedBy' },
+    appManifests: { appId: 'am.appId', displayName: 'am.displayName', schemaVersion: 'am.schemaVersion', configSchema: 'am.configSchema' },
+    bulkEditLocks: { appId: 'bel.appId', acquiredBy: 'bel.acquiredBy', acquiredAt: 'bel.acquiredAt' },
+    aliasCollisionQueue: { id: 'acq.id', rawName: 'acq.rawName', rawNameNormalized: 'acq.rawNameNormalized', status: 'acq.status', createdAt: 'acq.createdAt' },
+    userAliases: { id: 'ua.id', identityUserId: 'ua.identityUserId', alias: 'ua.alias', aliasNormalized: 'ua.aliasNormalized', isPrimary: 'ua.isPrimary', source: 'ua.source', tombstoned: 'ua.tombstoned', createdAt: 'ua.createdAt' },
+    signingKeys: { kid: 'sk.kid', publicKey: 'sk.publicKey', privateKey: 'sk.privateKey', algorithm: 'sk.algorithm', status: 'sk.status', createdAt: 'sk.createdAt' },
+    authHandoffs: { id: 'ah.id', nonce: 'ah.nonce', state: 'ah.state', expiresAt: 'ah.expiresAt' },
+    webhookDeliveryJobs: { id: 'wdj.id', endpointId: 'wdj.endpointId', payload: 'wdj.payload', status: 'wdj.status', scheduledAt: 'wdj.scheduledAt' },
   }
 })
 

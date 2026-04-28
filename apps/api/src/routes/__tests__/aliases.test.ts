@@ -48,8 +48,8 @@ const mockResolveAliases = mock(
     names.map((name) => ({ name, match: null })),
 )
 
-mock.module('~/services/aliases', () => ({ resolveAliases: mockResolveAliases }))
-mock.module('../services/aliases', () => ({ resolveAliases: mockResolveAliases }))
+mock.module('~/services/aliases', () => ({ resolveAliases: mockResolveAliases, createAlias: mock(async () => {}), renamePrimaryAlias: mock(async () => {}), detectCollision: mock(async () => ({ collision: false })), enqueueCollision: mock(async () => {}) }))
+mock.module('../services/aliases', () => ({ resolveAliases: mockResolveAliases, createAlias: mock(async () => {}), renamePrimaryAlias: mock(async () => {}), detectCollision: mock(async () => ({ collision: false })), enqueueCollision: mock(async () => {}) }))
 
 // ---------------------------------------------------------------------------
 // Import route after mocks are set
