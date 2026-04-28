@@ -1,23 +1,30 @@
-# Rev 3 — Spec 03: User Identity Ownership & Alias Layer
+# Rev 3 — Spec 03: User Identity Ownership, Alias Layer & Per-App Config
 
 > Priority: **Critical-path. Must land before Heroes (or any H-app) takes real users.**
-> Scope: Portal (alias table, resolve API, webhook fan-out, admin UI, DB-role lockdown) + every H-app (drop user-creation paths, add ingestion queue, consume webhook).
-> Prerequisites: Rev 2 closed (portal owns identity end-to-end). Rev 3 Spec 01 in flight (the account widget surfaces identity; this spec hardens the writer side of identity).
+> Scope: Portal (alias table, per-app config, app manifests, resolve API, provisioning + config webhooks, admin UI for single + bulk config edits, DB-role lockdown) + every H-app (drop user-creation paths, drop role/eligibility columns, add ingestion + provisioning + config webhook consumers, add caches).
+> Prerequisites: Rev 2 closed (portal owns identity end-to-end). Rev 3 Spec 01 in flight (the account widget surfaces identity; this spec hardens the writer side of identity and extends portal to own per-app config).
+
+---
+
+## Migration note (2026-04-28)
+
+An earlier draft of this spec preserved Heroes' existing user data via a one-shot alias backfill from `identity_users.name` ∪ Heroes' production `users.name` export. Heroes signed off on that approach on 2026-04-28; later the same day the team pivoted to **wipe Heroes' data and reprovision from portal**, because Heroes is pre-real-users and the disposability of current data turns the most fragile step (alias backfill reconciliation) into a no-op. The rewrite below reflects the new direction. The alias layer itself, the identity-vs-projection framing, and the DB-role REVOKE remain unchanged.
+
+The pivot also widened scope: portal now owns **per-app configuration** (Heroes role, leaderboard eligibility, future-app analogues) in addition to identity. Apps become pure projections.
 
 ---
 
 ## Overview
 
-Rev 2 made the portal the **sole authenticator** of users. This spec makes the portal the **sole writer** of users.
+Rev 2 made the portal the **sole authenticator** of users. This spec makes the portal the **sole writer** of users **and** the **sole owner of per-app configuration**.
 
-Today, Heroes' Google Sheet ingestion can implicitly create user records when it encounters an unfamiliar name. That is fine pre-real-users. The moment real customers arrive, name typos, "Jane Smith" vs "Jane S.", marriages, and duplicates will silently mint duplicate users that the portal never authorized — and reconciliation gets exponentially harder the longer it runs.
+Today, Heroes' Google Sheet ingestion can implicitly create user records when it encounters an unfamiliar name, and Heroes' own `users` table carries role + eligibility columns that are really *identity-shaped* config. Both are fine pre-real-users. The moment real customers arrive, name typos and duplicate identities silently mint, and per-app config sprawl across H-apps becomes a reconciliation nightmare.
 
-The fix is two layers:
+The fix is three layers:
 
 1. **Lock down user creation** — only the portal mints `identity_users` rows. Every other service's DB role loses `INSERT/UPDATE/DELETE` on that table. Application discipline is advisory; the database enforces.
 2. **Alias layer** — portal owns a `user_aliases` table mapping display-name strings (and historical variants) to a stable `identity_users.id`. Apps' batch ingestion (sheets, CSVs, etc.) resolves names through this table instead of creating users.
-
-Heroes proposed this; the architectural bones are theirs. The decisions and contract below come out of a portal/Heroes thread, with Heroes' migration plan attached as Appendix A.
+3. **Per-app config in portal** — portal owns `app_user_config`, a generic `(portal_sub, app_id, config jsonb)` table, and each app declares its config schema + defaults via an **app manifest** at registration time. Portal admin UI renders single + bulk editors from the manifest. Apps subscribe to provisioning + config webhooks and materialize projection rows; they never write identity or config.
 
 ---
 
@@ -26,9 +33,10 @@ Heroes proposed this; the architectural bones are theirs. The decisions and cont
 This spec only works if both teams hold the same mental model:
 
 - **Portal owns identity.** `identity_users` rows are *who someone is*: `id`, `gip_uid`, `email`, canonical `name`, `portal_role`, lifecycle status. Aliases are an attribute of identity.
-- **Each H-app owns its domain projection.** Heroes has a row per user with points, rank, leaderboard position. That row is *not* a user — it is Heroes' projection of a user. The link is `portal_sub` (= `identity_users.id`), used as a foreign key.
+- **Portal owns per-app config.** `app_user_config` rows are *what a user is configured as in app X*: Heroes role, leaderboard eligibility, etc. Edited via portal admin UI; fanned out to apps via webhook.
+- **Each H-app owns its domain projection.** Heroes has a row per user with points, rank, leaderboard position. That row is *not* a user, and it does *not* carry role or eligibility — it is Heroes' projection of a user, materialized from portal-pushed events. The link is `portal_sub` (= `identity_users.id`), used as a foreign key.
 
-Today Heroes happens to call its projection table `users`. That naming is the leak — it makes the table look like an identity table when it isn't, which is exactly why ingestion code felt entitled to `INSERT INTO users`. The rename to `heroes_profiles` (or similar) is part of this spec's deliverables on the Heroes side. Same applies to every future H-app.
+Today Heroes happens to call its projection table `users`, and that table carries role + eligibility columns. Both are leaks — the table looks like an identity table when it isn't, which is exactly why ingestion code felt entitled to `INSERT INTO users`, and the columns look like domain attributes when they're really portal-owned config. The rename to `heroes_profiles` (or similar) plus the strip of role/eligibility columns is part of this spec's deliverables on the Heroes side. Same applies to every future H-app.
 
 Concretely:
 
@@ -36,11 +44,13 @@ Concretely:
 |---------|-------|-------|
 | Who someone is | Portal | `identity_users` |
 | Names a user is known by | Portal | `user_aliases` |
-| Heroes points / rank / leaderboard | Heroes | `heroes_profiles` (renamed from `users`) |
+| Per-app config (Heroes role, leaderboard eligibility, future-app keys) | Portal | `app_user_config` |
+| Per-app config schema declaration | Portal | `app_manifests` |
+| Heroes points / rank / leaderboard | Heroes | `heroes_profiles` (renamed from `users`, role/eligibility columns dropped) |
 | Pending sheet rows awaiting alias | Heroes | `pending_alias_resolution` |
 | Ingestion of rows belonging to deactivated users | Heroes | `deactivated_user_ingest_audit` |
 
-Portal never sees Heroes' rank data; Heroes never writes portal identity. The only crossing point is the alias-resolve API call and the `alias.resolved` webhook.
+Portal never sees Heroes' rank data; Heroes never writes portal identity or per-app config. Crossing points are the alias-resolve API, the provisioning/config webhooks, and a read endpoint for cache-miss config lookups.
 
 ---
 
@@ -53,6 +63,41 @@ The alias table itself (`user_aliases`) lives in the portal. Aliases are an iden
 The **unresolved-name queue**, however, stays app-side. Each app's batch ingestion has app-specific context (sheet IDs, row numbers, retry semantics, source files) that does not belong in portal. Heroes' queue is `pending_alias_resolution` in Heroes' DB. Future apps add their own. Portal does not maintain a global queue — that would make portal a chokepoint and force every queue evolution to ship in lockstep with portal.
 
 The handoff is async: portal exposes a `POST /webhooks/portal/alias-resolved` event that each app subscribes to. When ops resolves an alias in portal admin, portal fires the webhook, every app drains its own queue independently.
+
+### Portal owns per-app config; apps declare schema via manifest
+
+`app_user_config` is a generic `(portal_sub, app_id, config jsonb, updated_at)` table with `UNIQUE (portal_sub, app_id)`. Portal does not model any specific app's config shape — that would put Heroes' domain back in portal, exactly the leak this spec is undoing.
+
+Each app, at registration time, ships an **app manifest** declaring the config keys it cares about: type, allowed values, default. Portal admin UI reads the manifest and renders editors from it (dropdowns for enums, toggles for booleans, number inputs for integers, etc.). Onboarding a new H-app does not require a portal schema migration — the app ships a manifest update.
+
+**Defaults are load-bearing.** When a user is created, portal seeds `app_user_config` rows for every registered app using manifest defaults. The `user.created` webhook payload includes the seeded config so apps can materialize projections immediately, without a follow-up read. If an app needs config that has no safe default, the manifest declares a placeholder like `unconfigured` and the app refuses to materialize until admin sets a real value — never extend CSV columns to capture per-app config at create-time.
+
+### User creation is identity-only; per-app config is edited separately
+
+Portal's existing user-creation flows (CSV upload, Google Sheet sync, manual create from Rev 2) **create identity only**. They do not carry per-app config columns. They:
+
+1. Create the `identity_users` row.
+2. Seed the `user_aliases` row (with the supplied name).
+3. Seed `app_user_config` rows for every registered app from manifest defaults.
+4. Fire `user.created` webhook to all subscribed apps.
+
+Per-app config — for Heroes role, leaderboard eligibility, etc. — is edited in a **separate admin surface** ("App Configuration"), supporting both single-user and bulk operations. This keeps the bulk-create path simple (uploading 500 CSV rows doesn't force admin to know each user's Heroes role on day one) and gives a clean audit trail (creation events and config-change events are distinct, with distinct actors and timestamps).
+
+### Bulk per-app config editing is a first-class admin feature
+
+Two flows:
+
+1. **Selection-based bulk edit.** Admin filters/searches users in the app's config panel (e.g., "all Heroes users where role=member"), multi-selects, opens the manifest-rendered editor, applies to all selected.
+2. **CSV-based bulk edit.** Admin downloads a CSV of current config for an app (`portal_sub, name, <config keys>`), edits in spreadsheet, re-uploads. Portal diffs against current state, validates against manifest, applies. **This CSV does not create users** — rows with unknown `portal_sub` are rejected, not auto-created. Keeps the user-creation / config-editing boundary clean.
+
+Safety rails for bulk:
+
+- **Manifest validation runs per-row before any fan-out.** If 3 of 500 rows fail validation, the whole batch is rejected with a per-row error report. No partial application.
+- **Diff preview before commit.** Portal shows "47 users will change role from `member` to `captain`" before firing webhooks. Avoids the "I meant the other column" disaster.
+- **Audit log captures the full diff.** Who, when, manifest schema version, before/after for every affected user. Searchable. Reversible by re-running the inverse.
+- **Per-app concurrency lock.** Only one bulk edit per app in flight at a time, to prevent two admins racing on overlapping user sets. Single-user edits unaffected.
+
+Bulk fan-out shape: N individual `app_config.updated` events sharing a `batchId` field. Apps' webhook handlers stay simple (same shape as single-user updates); apps can debounce projection writes if they want — that's an app-side optimization, not a portal contract.
 
 ### Alias-update behavior: append, with `is_primary`
 
@@ -105,6 +150,7 @@ When portal deactivates a user (offboarding, account closure, etc.):
 - Aliases stay alive but the user they point at is tombstoned (`status = 'deactivated'`, `deactivated_at` set).
 - The resolve API returns `{ portal_sub, alias_id, is_primary, tombstoned: true, deactivated_at }` — explicit field, **not a 404**, so apps can distinguish "no such alias" from "alias resolves to a deactivated user."
 - Apps route tombstoned-resolution rows to an audit log (`deactivated_user_ingest_audit` on the Heroes side) instead of either silently ingesting (wrong: data on departed staff) or silently dropping (wrong: ops doesn't know the row was skipped).
+- `user.deactivated` webhook fires so apps can also flag the projection row as inactive (e.g., suppress from leaderboards).
 
 **Tombstoned aliases retain their `alias_normalized` uniqueness slot.** A new signup with the same normalized name does not auto-resolve — it lands in the portal admin collision queue, exactly as it would for a live alias. Portal admin then chooses: reactivate the existing identity (most common case — same person returning), merge as same person, or reject. Releasing the slot on tombstone would let two real-but-historical "Janes" coexist in the index and silently break the domain invariant.
 
@@ -115,26 +161,33 @@ Hard-delete is wrong here for the same reason hard-replace on name update is wro
 Application code that says "only portal creates users" rots within two quarters. The next intern wires up an admin endpoint that touches `identity_users` directly and we are back where we started. The real lockdown is at the database role level:
 
 ```sql
-REVOKE INSERT, UPDATE, DELETE ON identity_users FROM heroes_app_role;
-REVOKE INSERT, UPDATE, DELETE ON user_aliases   FROM heroes_app_role;
+REVOKE INSERT, UPDATE, DELETE ON identity_users    FROM heroes_app_role;
+REVOKE INSERT, UPDATE, DELETE ON user_aliases      FROM heroes_app_role;
+REVOKE INSERT, UPDATE, DELETE ON app_user_config   FROM heroes_app_role;
+REVOKE INSERT, UPDATE, DELETE ON app_manifests     FROM heroes_app_role;
 -- repeat for every H-app role
 ```
 
-After cutover, only the **portal API service account** has write access to `identity_users` and `user_aliases`. Any other code that attempts a write fails at the database, not at code review.
+After cutover, only the **portal API service account** has write access to `identity_users`, `user_aliases`, `app_user_config`, and `app_manifests`. Any other code that attempts a write fails at the database, not at code review.
 
 This applies to every H-app today and forms a precondition for onboarding any future H-app.
 
-### Three-deploy cutover, freeze sheet uploads during seed
+### Wipe-and-reprovision cutover
 
-The cutover is sequenced across portal and Heroes:
+Heroes is pre-real-users; its current `users` rows, points data, and rank state are disposable. That collapses the cutover dramatically — there is no alias backfill, no freeze window, no dual-path period.
 
-1. **Deploy A (Heroes):** Ship ingestion code that supports both old (name-matching) and new (alias-resolve) paths, gated behind feature flag `INGESTION_USE_ALIAS_API=false`. Old path active. Verify in staging.
-2. **Freeze sheet uploads** (target window <2h). Communicate to ops.
-3. **Portal seed:** Portal runs the one-shot alias backfill from the **union of `identity_users.name` and Heroes' export of distinct production `users.name` strings** (CSV provided ahead of the freeze). Both sources flow through the same `alias_normalized` pipeline; collisions land as additional aliases on the same identity (first one wins `is_primary = true`). Heroes verifies via reconciliation query that every `heroes_profiles.portal_sub` resolves through the new API.
-4. **Deploy B (Heroes):** Flip `INGESTION_USE_ALIAS_API=true`. Sheet uploads resume. Old path removed in this deploy or the next — do not leave dual paths around as permanent state.
-5. **Deploy C (Portal):** `REVOKE` Heroes' DB role from writing to `identity_users` and `user_aliases`. Verify with a forced `INSERT` from Heroes' service account in staging — must fail.
+Sequence:
 
-Freezing during seed (step 2) is required, not optional. A fallback "if alias miss, fall through to old path" would defeat the purpose of the spec.
+1. **Heroes ships projection-only schema (Deploy A).** New ingestion code uses `POST /api/aliases/resolve-batch`. `heroes_profiles` exists alongside legacy `users` for the deploy; role/eligibility columns are dropped or moved to `app_user_config` reads. New code is dormant until cutover.
+2. **Portal ships per-app config + provisioning webhooks (Deploy B).** `app_user_config`, `app_manifests`, admin UI for single + bulk config edits, `user.created` / `user.updated` / `user.deactivated` / `app_config.updated` webhooks. Heroes' manifest registered.
+3. **Cutover window (target <30min):**
+   - Heroes truncates `users`, points tables, rank tables, leaderboard tables — every table that depends on the old identity rows. Verified empty.
+   - Portal admin provisions users via existing flows (CSV / Sheet / manual). Each create fires `user.created`; Heroes materializes empty `heroes_profiles` rows with default config.
+   - Portal admin sets per-app config (single or bulk) where defaults aren't right.
+   - Heroes ops re-runs sheet ingestion for points data. Sheet rows resolve names via `POST /api/aliases/resolve-batch`; resolved rows write points into `heroes_profiles`-keyed tables; unresolved rows land in `pending_alias_resolution`.
+4. **Deploy C (Portal):** `REVOKE INSERT/UPDATE/DELETE` on `identity_users`, `user_aliases`, `app_user_config`, `app_manifests` from Heroes' DB role. Verify with a forced `INSERT` from Heroes' service account in staging — must fail.
+
+No fallback to old name-matching path. No `INGESTION_USE_ALIAS_API` flag. Heroes' legacy user-create code is deleted in Deploy A, not gated.
 
 ---
 
@@ -152,7 +205,7 @@ export const userAliases = pgTable('user_aliases', {
   aliasNormalized: varchar('alias_normalized', { length: 255 }).notNull(),
   isPrimary: boolean('is_primary').notNull().default(false),
   source: varchar('source', { length: 20 }).notNull().default('auto_seed'),
-    // 'auto_seed' | 'manual' | 'name_update' | 'backfill'
+    // 'auto_seed' | 'manual' | 'name_update'
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   createdBy: uuid('created_by').references(() => identityUsers.id),
 }, (t) => ({
@@ -168,10 +221,61 @@ Notes:
 - `alias_normalized` is `LOWER(TRIM(REGEXP_REPLACE(alias, '\s+', ' ', 'g')))` — populated by trigger or app code on insert/update. Used for collision detection and resolve lookup.
 - Unique on `alias_normalized` enforces "one alias string maps to at most one user globally" — collision detection is automatic at the DB layer.
 - Partial unique on `(identity_user_id) WHERE is_primary = true` enforces "at most one primary per user."
+- Two-step write on rename: `UPDATE` old primary to `is_primary = false`, commit, then `INSERT/UPDATE` new primary. Keeps the partial-unique check eager. Read paths must tolerate the gap (`SELECT ... WHERE is_primary = true LIMIT 1` may return zero rows mid-rename); fall back to `ORDER BY created_at DESC LIMIT 1` when primary returns empty. Account widget (Spec 01) and any other display-name reader follows this rule.
 
-### Heroes: rename `users` → `heroes_profiles`
+### Portal: `app_manifests`
 
-Pure rename. `portal_sub` (→ `identity_users.id`) stays the FK. No column changes. All consuming code updated.
+```ts
+export const appManifests = pgTable('app_manifests', {
+  appId: varchar('app_id', { length: 64 }).primaryKey(),
+  displayName: varchar('display_name', { length: 128 }).notNull(),
+  configSchema: jsonb('config_schema').notNull(),
+    // {
+    //   "role": { "type": "enum", "values": ["member", "captain", "admin"], "default": "member" },
+    //   "leaderboard_eligible": { "type": "boolean", "default": true },
+    //   "starting_points": { "type": "integer", "default": 0 }
+    // }
+  schemaVersion: integer('schema_version').notNull().default(1),
+  webhookUrl: text('webhook_url').notNull(),
+  webhookSecret: text('webhook_secret').notNull(),
+  registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+```
+
+- `configSchema` declares each config key's type, allowed values (for enums), and **default**. Portal admin UI renders editors from this declaration.
+- `schemaVersion` increments on manifest update; webhook payloads carry the version so apps can detect drift.
+- Supported types in v1: `enum`, `boolean`, `integer`, `string`. Validation runs portal-side before any write to `app_user_config` and before any webhook fan-out.
+
+### Portal: `app_user_config`
+
+```ts
+export const appUserConfig = pgTable('app_user_config', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  portalSub: uuid('portal_sub')
+    .notNull()
+    .references(() => identityUsers.id, { onDelete: 'cascade' }),
+  appId: varchar('app_id', { length: 64 })
+    .notNull()
+    .references(() => appManifests.appId),
+  config: jsonb('config').notNull(),
+  schemaVersion: integer('schema_version').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid('updated_by').references(() => identityUsers.id),
+}, (t) => ({
+  uniqUserApp: uniqueIndex('app_user_config_portal_sub_app_id_uniq').on(t.portalSub, t.appId),
+  byApp: index('app_user_config_app_id_idx').on(t.appId),
+}))
+```
+
+- One row per (user, app). Seeded on `user.created` from manifest defaults; updated by single + bulk admin edits.
+- `schemaVersion` snapshotted from `app_manifests.schemaVersion` at write time so audits can reconstruct what schema the row was written against.
+
+### Heroes: rename `users` → `heroes_profiles`, drop role/eligibility
+
+- Pure rename for the table. `portal_sub` (→ `identity_users.id`) stays the FK.
+- **Drop columns:** `role`, `leaderboard_eligible`, any other column that is per-app config rather than domain projection. Those move to `app_user_config` reads.
+- All consuming code updated. Read paths that referenced `users.role` now consume the cached webhook payload (or pull from `GET /api/users/:portalSub/config/heroes`).
 
 ### Heroes: `pending_alias_resolution`
 
@@ -229,6 +333,23 @@ export const aliasCache = pgTable('alias_cache', {
 - Invalidation: webhook handlers DELETE by `aliasNormalized` on `alias.updated` / `alias.deleted` and re-resolve on next hit, OR upsert directly from the webhook payload when it carries a full row. Either is fine — pick one in the migration PR.
 - Read path: `SELECT ... FROM alias_cache WHERE alias_normalized = $1 AND cached_at > now() - interval '24 hours'`. Miss → batch resolve API.
 
+### Heroes: `user_config_cache`
+
+Mirrors the per-app config payload pushed via `user.created` / `app_config.updated`. Same push-plus-pull-on-miss pattern as `alias_cache`.
+
+```ts
+export const userConfigCache = pgTable('user_config_cache', {
+  portalSub: uuid('portal_sub').primaryKey(),
+  config: jsonb('config').notNull(),
+  schemaVersion: integer('schema_version').notNull(),
+  cachedAt: timestamp('cached_at', { withTimezone: true }).notNull().defaultNow(),
+})
+```
+
+- TTL: 24h. Miss or expiry → `GET /api/users/:portalSub/config/heroes`.
+- Webhook handlers (`user.created`, `app_config.updated`) upsert directly from the payload.
+- `user.deactivated` does not delete — the projection row may need to render historical state. Apps mark inactive via the projection row, not the config cache.
+
 ---
 
 ## API contract (portal-side)
@@ -269,10 +390,28 @@ Response:
 ```
 
 - Latency budget: p95 < 200ms for batches up to 500.
+- Rate limit: 20 RPS per app SA token (token bucket, burst 40); up to 4 parallel batches per app instance — lands a 5000-row sheet in two round-trips. Soft-fail with HTTP 429 + `Retry-After` on overage; clients honor the header.
 - Auth: app-to-portal service token (existing pattern from Rev 2 Spec 04).
 - Normalization is portal-side — apps send raw names, portal normalizes and looks up.
 
-A single-name `GET /api/aliases/resolve?name=...` is **not** in scope for v1; sheet ingestion is batch-shaped, on-demand single-resolve UIs can be added later if needed.
+A single-name `GET /api/aliases/resolve?name=...` is **not** in scope for v1.
+
+### `GET /api/users/:portalSub/config/:appId`
+
+Pull-side of the config push+pull cache. Returns the current `app_user_config` row for one (user, app):
+
+```json
+{
+  "portalSub": "uuid",
+  "appId": "heroes",
+  "config": { "role": "captain", "leaderboard_eligible": true, "starting_points": 0 },
+  "schemaVersion": 3,
+  "updatedAt": "2026-04-28T..."
+}
+```
+
+- Auth: app SA token.
+- 404 if the user has no config row for the app (should not happen in normal operation — `user.created` seeds defaults — but apps should handle defensively).
 
 ### `POST /webhooks/portal/alias-resolved`
 
@@ -318,57 +457,105 @@ User deactivation does **not** fire `alias.deleted`. Aliases stay alive pointing
 
 Consumer behavior: invalidate cache for the affected `alias_normalized`; do **not** assume the underlying user is gone — only the name binding is gone.
 
-All three events (`alias.resolved`, `alias.updated`, `alias.deleted`) ride the existing Rev 2 Spec 03 webhook delivery + DLQ. At-least-once delivery; consumers idempotent on `eventId`.
+### `POST /webhooks/portal/user-created`
+
+Fires on every new `identity_users` row (from CSV upload, Sheet sync, or manual create).
+
+Payload:
+```json
+{
+  "eventId": "uuid",
+  "type": "user.created",
+  "occurredAt": "2026-04-28T...",
+  "user": {
+    "portalSub": "uuid",
+    "email": "jane@example.com",
+    "name": "Jane Smith",
+    "primaryAliasId": "uuid"
+  },
+  "appConfig": {
+    "config": { "role": "member", "leaderboard_eligible": true, "starting_points": 0 },
+    "schemaVersion": 3
+  }
+}
+```
+
+- `appConfig` is **per-recipient** — portal sends each app only its own config slice (filtered by `app_id`).
+- Consumers materialize the projection row immediately using `user` + `appConfig`. No follow-up read required.
+- Idempotent on `eventId`.
+
+### `POST /webhooks/portal/user-updated`
+
+Fires when identity-level fields change (email, name). Display-name changes also fire `alias.updated` — apps consume whichever they care about. Most apps will only need `user.updated` for email; name changes are usually downstream of alias events.
+
+Same envelope as `user.created`, with only changed fields populated under `user`. No `appConfig` block (config changes use `app_config.updated`).
+
+### `POST /webhooks/portal/user-deactivated`
+
+Fires when a user is tombstoned (status = 'deactivated').
+
+Payload:
+```json
+{
+  "eventId": "uuid",
+  "type": "user.deactivated",
+  "occurredAt": "2026-04-28T...",
+  "user": {
+    "portalSub": "uuid",
+    "deactivatedAt": "2026-04-28T..."
+  }
+}
+```
+
+Consumer behavior: mark the projection row inactive (suppress from leaderboards, etc.). Do not delete — historical points / rank state must remain queryable. Aliases continue to resolve with `tombstoned: true`.
+
+### `POST /webhooks/portal/app-config-updated`
+
+Fires when portal admin edits a user's per-app config (single edit OR each row of a bulk edit).
+
+Payload:
+```json
+{
+  "eventId": "uuid",
+  "type": "app_config.updated",
+  "occurredAt": "2026-04-28T...",
+  "batchId": "uuid-or-null",
+  "user": {
+    "portalSub": "uuid"
+  },
+  "config": { "role": "captain", "leaderboard_eligible": true, "starting_points": 0 },
+  "previousConfig": { "role": "member", "leaderboard_eligible": true, "starting_points": 0 },
+  "schemaVersion": 3
+}
+```
+
+- `batchId` is non-null when the change came from a bulk edit; consumers may correlate / dedupe / report on bulk operations using it. Null for single-user edits.
+- Portal sends each app only its own config slice — Heroes never sees a future App-X's config.
+- Consumers update the cache and adjust projection rows as needed (e.g., toggle leaderboard suppression based on `leaderboard_eligible`).
+- Apps may debounce projection writes for high-volume `batchId`s — that's an app-side optimization, not a portal contract.
+
+All webhook events ride the existing Rev 2 Spec 03 webhook delivery + DLQ. At-least-once delivery; consumers idempotent on `eventId`.
 
 ---
 
-## Open Questions
+## Migration-PR notes
 
-These are contract details, not architecture disagreements. Resolved between portal and Heroes before either side starts implementation.
+Captured here so they aren't lost between spec finalization and implementation:
 
-1. **Resolve API: confirm batch-only.** Is `POST /aliases/resolve-batch` sufficient, or is there a sync single-name use case (admin tooling, on-demand lookups) that needs `GET /aliases/resolve?name=...`? Default: batch-only for v1.
-2. **Local caching policy.** Can H-apps cache `name → portal_sub` locally with TTL? If yes, how is invalidation signaled — `alias.resolved` only, or also `alias.updated` and `alias.deleted`? Default proposal: caching allowed, invalidation via all three events; ship cache-related webhooks lazily when first consumer needs them.
-3. **Webhook delivery semantics for `alias.resolved`.** Does it ride the existing Rev 2 Spec 03 webhook delivery + DLQ, or is identity-layer fan-out important enough to warrant its own delivery channel? Default: reuse existing infra.
-4. **Tombstone signal in resolve API.** Confirm `{ tombstoned: true, deactivatedAt }` field — vs returning a special status code or a separate endpoint. Default: explicit fields in the same response shape (proposed above).
-5. **Backfill cutover window.** Confirm sheet uploads are frozen for the duration of the seed (no fallback to old behavior). Default: freeze, target <2h.
-6. **Collision-on-provision UX.** When auto-seed refuses due to collision, who gets paged — portal admin only, or also the H-app ops who's about to upload a sheet that depends on the new alias landing? Default: portal admin only at provisioning; Heroes ops sees the row in their own queue when it fails to resolve, which is a sufficient signal.
-
-### Heroes review response — 2026-04-28
-
-Heroes read the spec end-to-end and aligned on the framing + core decisions. Six concerns raised; portal-team resolutions inline. **All six closed; Heroes is unblocked to commit to Phase 0–4 (~2 weeks engineering + portal cutover coordination).**
-
-| # | Heroes concern | Resolution |
-|---|---------------|------------|
-| 1 | Two-real-Janes: global unique on `alias_normalized` means a second Jane Smith never auto-resolves from sheet data; discriminator only lives in portal admin. Make the trade-off explicit in §Out of Scope, or design an escape hatch. | **Resolved by domain invariant.** AHA Commerce dataset enforces "one normalized name = one person" upstream; there is no second real Jane Smith. New §Decision "Names are unique per person" + collision handling rewritten so exact match means re-provisioning, not distinct-person collision. No discriminator path needed. |
-| 2 | Backfill source: seeding from `identity_users.name` may not match what sheets actually contain. | **Decided: union seed.** Backfill seeds from `identity_users.name` ∪ Heroes' one-time export of distinct production `users.name` strings (CSV: `user_id, name`, where `name` is the verbatim string ever written to that row, deduped). Both sources flow through the same `alias_normalized` pipeline; the `identity_users.name` row wins `is_primary = true`, divergent sheet-side strings land as additional aliases on the same identity. Heroes' export blocks Phase 1 — provide it before the freeze window. Codified in §Three-deploy cutover, step 3. |
-| 3 | Tombstone alias reuse: confirm tombstoned aliases keep the uniqueness slot. | **Decided: tombstones retain the slot.** Codified in §Soft-delete on deactivation. A re-signup with the same normalized name surfaces to portal admin (case: probable reactivation of existing identity); admin chooses reactivate / merge / reject. Releasing the slot would let historical Janes coexist in the index and silently break the domain invariant. |
-| 4 | Caching webhooks: Heroes is the first consumer — ship `alias.updated` + `alias.deleted` with v1, or commit no-cache and absorb round-trip load? | **Decided: ship cache invalidation webhooks in v1.** `POST /webhooks/portal/alias-resolved`, `alias-updated`, `alias-deleted` all GA with the spec, ride the existing Rev 2 Spec 03 webhook delivery + DLQ. Heroes maintains a local `name → portal_sub` cache (TTL belt-and-suspenders, e.g. 24h) and invalidates on the three events. Round-tripping every batch was a non-starter at sheet sizes Heroes quoted (>5000 rows routine). |
-| 5 | Batch size / parallelism: rate limits + concurrency for >5000-row sheets. | **Decided: per-batch and per-app limits.** `POST /aliases/resolve-batch` accepts up to **1000 names per request** (request body cap ~256 KB). Per-app rate limit: **20 RPS** (token bucket, burst 40) on the SA token. Up to **4 parallel batches** per Heroes instance — that lands a 5000-row sheet in two round-trips (5 requests, ~250ms each at p50). Soft-fail with HTTP 429 + `Retry-After` header on overage; clients honor the header. Numbers will be reviewed after first month of production traffic; spec author owns capacity tuning. |
-| 6 | Ops queue surfacing: portal admin vs Heroes ops view. | **Decided: two queues, two ownerships, one cross-link.** Portal admin owns the **collision queue** (`alias_collision_queue`) — new-user provisioning collisions, fuzzy-match reviews, tombstone-vs-new-signup conflicts. Heroes ops owns the **per-app pending queue** (`pending_alias_resolution`) — sheet rows that didn't resolve. Cross-link: portal admin UI surfaces a `blocked_app_rows` count per pending provisioning (sourced from a portal endpoint that aggregates per-app queue depth by alias), so portal admin sees which collision is blocking the most H-app work and prioritizes accordingly. Heroes ops UI shows row-level "submitted to portal admin" status when a row was escalated to a portal-admin collision. |
-
-**Implementation flag (Heroes):** `is_primary` partial unique index needs `DEFERRABLE INITIALLY DEFERRED` or a two-step UPDATE on rename (set old row to `is_primary = false`, commit, then UPDATE/INSERT new primary). Spec author concurs — schema sketch will be amended in the migration PR; capturing here so it isn't lost. Two-step is preferred over `DEFERRABLE` because it keeps the constraint check eager during normal writes.
-
-### Heroes follow-up review — 2026-04-28 (post-resolution pass)
-
-Heroes signed off on the six resolutions above ("domain invariant on #1 is the clean simplification"). Three follow-ups (A–C) requested as spec amendments + three nits (D–F) for the migration PR.
-
-| # | Heroes follow-up | Resolution |
-|---|------------------|------------|
-| A | Invariant confidence — upstream-enforced or just observed? Want a one-line unwind path. | **Pinned in §Names are unique per person → Confidence + unwind path.** Invariant is enforced at the *provisioning gate* (collision review by portal admin), not at HR / signup form. Single-migration unwind: add `name_discriminator` column + replace global unique with `(alias_normalized, COALESCE(name_discriminator, ''))`. No resolve-API rewrite needed. |
-| B | Cache shape — must store full resolve response, not just `portal_sub`. Pin in §Schema. | **Pinned in §Schema → Heroes: `alias_cache`.** Cache mirrors the full resolve response (`tombstoned`, `deactivated_at` included), TTL 24h, invalidation via `alias.updated` / `alias.deleted` webhooks. Skipping `tombstoned` would let cache hits bypass audit-log routing — exactly the failure the audit log exists to prevent. |
-| C | `alias.deleted` semantics — when does it fire? Document trigger + consumer behavior. | **Pinned in §API contract → `POST /webhooks/portal/alias-deleted`.** Fires only on explicit admin alias-row removal (typo correction, collision rejection). User deactivation does **not** fire `alias.deleted` — the `tombstoned` flag in resolve handles that path. `alias.updated` semantics also expanded (rename / `is_primary` flip / merge re-point) so consumers know which event to expect on each portal-side action. |
-| D | CSV contract — confirm `user_id = portal_sub`; behavior on duplicate `alias_normalized` across different portal_subs. Heroes prefers erroring. | **Migration-PR note.** `user_id = portal_sub` confirmed (matches §Three-deploy cutover step 3). On duplicate `alias_normalized` across distinct `portal_sub`s in the seed: **error and require Heroes to clean up the export** — silent merges are invisible bugs. Seed script aborts with a per-row report; Heroes deduplicates upstream before re-submitting. Codify in the seed script's pre-flight validation. |
-| E | `blocked_app_rows` mechanism — portal polls Heroes' queue, or Heroes pushes counts? | **Migration-PR note.** Portal polls. Heroes exposes `GET /internal/alias-resolution/queue-stats` (auth: existing OIDC SA path from Rev 2 Spec 04); portal admin UI calls it on collision-queue render. Portal polling avoids a Heroes→portal push pipeline that would only ever serve this one UI; staleness on the order of seconds is acceptable (admin is reading, not driving an alarm). |
-| F | Two-step primary update — confirm no read path 500s during the demote-commit-promote gap (account widget, etc.). | **Migration-PR note.** Read paths must tolerate the gap: `SELECT alias FROM user_aliases WHERE identity_user_id = $1 AND is_primary = true LIMIT 1` can return zero rows mid-rename. Account widget + any other display-name reader falls back to `ORDER BY created_at DESC LIMIT 1` when the primary query returns empty. The fallback is the rule for any consumer of `is_primary`, not a special case. Spec author owns the widget-side fix in Rev 3 Spec 01. |
+- **Two-step primary update on rename.** Read paths that filter `is_primary = true` must tolerate a zero-row gap during the demote → commit → promote sequence. Fall back to `ORDER BY created_at DESC LIMIT 1` when the primary query returns empty. Applies to the account widget (Spec 01) and any other display-name reader. The fallback is the rule for any consumer of `is_primary`, not a special case.
+- **Per-app config CSV upload (bulk edit).** Rows with unknown `portal_sub` are rejected with a per-row error report; no auto-create. Rows where any config value fails manifest validation also reject the entire batch, not just the offending row — partial application is forbidden. Pre-flight runs the full diff before any write or webhook fires.
+- **Manifest schema version bumps.** When an app updates its manifest (adds a new key, narrows an enum), portal does not retroactively rewrite existing `app_user_config` rows. They keep their snapshotted `schemaVersion`; on next read or edit, portal upgrades them by filling new keys with manifest defaults. Webhook payloads always carry `schemaVersion` so apps can detect drift if they care.
+- **Bulk concurrency lock.** Per-app — only one bulk edit per `app_id` in flight. Implemented as a row in a `bulk_edit_locks` table with `app_id` PK and `acquired_at` / `acquired_by`; admin UI shows "another bulk edit is in progress" if locked. Single-user edits bypass the lock.
 
 ---
 
 ## Out of Scope
 
-- **Portal admin UI for alias resolution.** Functional API + minimal admin route lands in this spec; rich UI (search, bulk operations, audit timeline) is a follow-up.
 - **Cross-app dedup of identities.** If a person exists in two H-apps under different portal subs, that is a portal-side identity merge problem, not an alias problem. Out of scope here.
 - **Email-based resolution.** Aliases resolve names. Email is already a unique key on `identity_users`. Apps with email available should use email; this layer is specifically for the name-only case sheet ingestion is stuck with.
 - **Real-time ingestion.** This spec assumes batch (sheets). Streaming ingestion (a hypothetical real-time event source) needs its own design — likely event-sourced and not alias-shaped.
+- **Self-service per-app config (user-facing).** Users do not edit their own per-app config in v1. Admin-only. Self-service is a future spec if it's ever needed.
+- **Manifest type system beyond v1.** v1 supports `enum`, `boolean`, `integer`, `string`. Compound types (lists, nested objects), conditional defaults, cross-key validation rules — all out of scope; add when an app actually needs them.
 
 ---
 
@@ -376,82 +563,81 @@ Heroes signed off on the six resolutions above ("domain invariant on #1 is the c
 
 Spec 03 is done when:
 
-1. `identity_users` rows can only be written by the portal API service account. Heroes' DB role attempts to `INSERT` and the database refuses.
-2. `user_aliases` exists, is populated for every active `identity_users` row, and uniqueness on `alias_normalized` is enforced.
-3. Heroes has renamed `users` → `heroes_profiles`, dropped all user-creation code paths, and ingests sheet rows via `POST /api/aliases/resolve-batch`.
-4. Unresolved sheet rows land in `pending_alias_resolution`; resolved aliases trigger `alias.resolved` webhook delivery; Heroes' webhook consumer drains the queue automatically.
-5. Tombstoned-user resolution routes to `deactivated_user_ingest_audit`, not silently ingested or dropped.
-6. A future H-app onboarding follows this same pattern by default — alias resolve API + per-app queue + webhook consumer + DB-role REVOKE.
+1. `identity_users`, `user_aliases`, `app_user_config`, and `app_manifests` rows can only be written by the portal API service account. Heroes' DB role attempts to `INSERT` and the database refuses.
+2. `user_aliases` exists, is populated for every active `identity_users` row (one primary per user), and uniqueness on `alias_normalized` is enforced.
+3. `app_manifests` registers Heroes' config schema; portal admin UI renders single + bulk editors from the manifest.
+4. `app_user_config` carries every Heroes user's role + eligibility (and any future-app keys); Heroes' `heroes_profiles` table no longer carries role or eligibility columns.
+5. Heroes has renamed `users` → `heroes_profiles`, dropped all user-creation code paths, dropped role/eligibility columns, and ingests sheet rows via `POST /api/aliases/resolve-batch`.
+6. Portal user-create flows (CSV / Sheet / manual) fire `user.created` with seeded default config; Heroes materializes projection rows from the webhook without follow-up reads.
+7. Single + bulk per-app config edits fire `app_config.updated` (with `batchId` for bulk); Heroes updates its cache and projection rows accordingly.
+8. Unresolved sheet rows land in `pending_alias_resolution`; resolved aliases trigger `alias.resolved` webhook delivery; Heroes' webhook consumer drains the queue automatically.
+9. Tombstoned-user resolution routes to `deactivated_user_ingest_audit`, not silently ingested or dropped. `user.deactivated` webhook flips the projection row to inactive.
+10. A future H-app onboarding follows this same pattern by default — register manifest, subscribe to webhooks, build projection table, alias resolve API + per-app queue + DB-role REVOKE. Zero portal schema changes required.
 
 ---
 
 ## Appendix A — Heroes-Side Migration Plan
 
-Authored by Heroes team and attached for reference. Sequenced to align with the three-deploy cutover above.
+Sequenced to align with the wipe-and-reprovision cutover above.
 
-### Phase 0 — Pre-cutover (Heroes-internal cleanup, can land before portal spec is finalized)
+### Phase 0 — Pre-cutover (Heroes-internal cleanup)
 
-1. **Rename `users` → `heroes_profiles`.** Migration: rename table + all FK references. `portal_sub` stays as the key. Update all repository/service/route code. No behavior change.
-2. **Audit user-creation paths.** Grep every `INSERT INTO users` / ORM equivalent. Build a list — sheet ingestion is the known one, but check for forgotten admin endpoints, seed scripts, test fixtures that hit prod-shaped DBs.
-3. **Add structured logging on every user-create path.** So we can verify zero non-portal creates in staging before locking writes.
+1. **Rename `users` → `heroes_profiles`.** Migration: rename table + all FK references. `portal_sub` stays as the key. Update all repository/service/route code. No behavior change yet.
+2. **Drop role/eligibility columns from `heroes_profiles`.** Replace reads with calls to the (forthcoming) `user_config_cache` + `GET /api/users/:portalSub/config/heroes` fallback. Behind a feature flag if needed for staged rollout, but the flag is removed in Phase 4 — no permanent dual paths.
+3. **Audit user-creation paths.** Grep every `INSERT INTO users` / ORM equivalent. Build a list — sheet ingestion is the known one, but check for forgotten admin endpoints, seed scripts, test fixtures that hit prod-shaped DBs. **Delete them all in Phase 4.**
+4. **Add structured logging on every user-create path.** So we can verify zero non-portal creates in staging before locking writes.
 
-### Phase 1 — Portal alias backfill (portal-driven)
+### Phase 1 — Heroes ingestion + projection rewrite (Deploy A)
 
-4. **Verification step.** Heroes runs a reconciliation query: every `heroes_profiles.portal_sub` should have at least one alias in portal. Mismatches → portal investigates before proceeding.
-
-### Phase 2 — Heroes ingestion rewrite
-
-5. **Add `pending_alias_resolution` table** (schema in §Heroes above).
-6. **Add `alias_cache` table** (only if portal greenlights local caching per §Open Question 2).
+5. **Add `pending_alias_resolution` table.**
+6. **Add `alias_cache` and `user_config_cache` tables.**
 7. **Rewrite ingestion lookup.** New flow per sheet row:
    - Normalize name (lowercase + collapse whitespace).
-   - Check `alias_cache` (if enabled) → fall through on miss/expiry.
+   - Check `alias_cache` → fall through on miss/expiry.
    - Call portal `POST /aliases/resolve-batch` (one call per sheet upload, not per row).
    - **Resolved & not tombstoned →** upsert into `heroes_profiles`-keyed domain rows.
    - **Resolved & tombstoned →** write to `deactivated_user_ingest_audit`, do not ingest.
    - **Unresolved →** insert into `pending_alias_resolution`, do not create user.
-8. **Webhook consumer for `alias.resolved`** at `/webhooks/portal/alias-resolved`:
-   - Idempotent on `(eventId)`.
-   - Looks up `pending_alias_resolution` rows matching the resolved name (by `raw_name_normalized`).
-   - Re-runs ingestion for those rows.
-   - Marks queue rows `resolved`, deletes after configurable retention (default 30d).
-   - Reuses Rev 2 Spec 03 DLQ pattern.
-9. **Webhook consumer for `alias.updated` / `alias.deleted`** if portal exposes these. Invalidates `alias_cache`.
-10. **Admin/ops view.** Read-only endpoint listing `pending_alias_resolution` rows grouped by `raw_name_normalized`, with counts and oldest-first ordering. Ops uses this to know what to ask portal admin to map. CLI command acceptable if no UI budget.
-11. **`deactivated_user_ingest_audit` table** (schema in §Heroes above).
+8. **Webhook consumer for `alias.resolved`** at `/webhooks/portal/alias-resolved`. Idempotent on `eventId`. Looks up `pending_alias_resolution` rows by `raw_name_normalized`, re-runs ingestion, marks rows resolved, deletes after configurable retention (default 30d). Reuses Rev 2 Spec 03 DLQ pattern.
+9. **Webhook consumers for `alias.updated` / `alias.deleted`.** Invalidate `alias_cache`.
+10. **Webhook consumers for `user.created` / `user.updated` / `user.deactivated` / `app_config.updated`.** Materialize / update / mark-inactive `heroes_profiles` rows; upsert `user_config_cache` from payload.
+11. **`deactivated_user_ingest_audit` table.**
+12. **Admin/ops view.** Read-only endpoint listing `pending_alias_resolution` rows grouped by `raw_name_normalized`, with counts and oldest-first ordering. Ops uses this to know what to ask portal admin to map. CLI command acceptable if no UI budget.
 
-### Phase 3 — Cutover (coordinated with portal)
+### Phase 2 — Portal preparation (Deploy B, portal-driven)
 
-12. **Deploy A (Heroes):** Ship Phase 2 code with feature flag `INGESTION_USE_ALIAS_API=false`. Old name-matching path still active. Verify in staging.
-13. **Freeze sheet uploads.** Communicate to ops; brief window (target <2h).
-14. **Portal runs alias backfill** (Phase 1).
-15. **Deploy B (Heroes):** Flip `INGESTION_USE_ALIAS_API=true`. Sheet uploads resume. Old code path removed in same deploy or next — don't leave dual paths around as permanent state.
-16. **Deploy C (portal):** `REVOKE INSERT/UPDATE/DELETE` on `identity_users` and `user_aliases` from Heroes' DB role.
-17. **Verification:** Heroes attempts a forced `INSERT INTO identity_users` from its service account in staging — must fail. Document this as a periodic regression test.
+Portal ships per-app config infrastructure:
+
+13. `app_manifests` and `app_user_config` tables.
+14. Manifest registration for Heroes (config schema in §Schema).
+15. Admin UI: single-user config edit (manifest-rendered editor).
+16. Admin UI: bulk config edit (selection-based + CSV upload).
+17. `bulk_edit_locks` table + per-app concurrency lock.
+18. Webhooks: `user.created`, `user.updated`, `user.deactivated`, `app_config.updated`. Heroes' manifest declares the webhook URL + secret; portal fires per-app slices.
+19. `GET /api/users/:portalSub/config/:appId` read endpoint.
+
+### Phase 3 — Cutover (coordinated)
+
+20. **Truncate Heroes data.** `TRUNCATE heroes_profiles, heroes_points, heroes_rank, heroes_leaderboard, ...` — every table that depends on the old identity rows. Verified empty by reconciliation query.
+21. **Portal admin provisions users.** Existing flows (CSV / Sheet / manual). Each create fires `user.created`; Heroes materializes empty `heroes_profiles` rows with default config from the webhook payload.
+22. **Portal admin sets per-app config** (single + bulk) where defaults aren't right. `app_config.updated` events fan out; Heroes updates cache + projection rows.
+23. **Heroes ops re-runs sheet ingestion for points data.** Sheet rows resolve via `POST /api/aliases/resolve-batch`; points land in `heroes_profiles`-keyed tables.
+24. **Deploy C (portal):** `REVOKE INSERT/UPDATE/DELETE` on `identity_users`, `user_aliases`, `app_user_config`, `app_manifests` from Heroes' DB role.
+25. **Verification:** Heroes attempts a forced `INSERT INTO identity_users` from its service account in staging — must fail. Document this as a periodic regression test.
 
 ### Phase 4 — Cleanup
 
-18. **Remove legacy user-create code** identified in Phase 0 audit. Delete, don't comment-out.
-19. **Update CLAUDE.md / spec docs.** `heroes_profiles` is the domain table, identity comes from portal, sheet ingestion never creates users.
-20. **Add CI guard.** Static check that fails the build if `INSERT INTO identity_users` (or, on Heroes' side, any user-creation pattern) appears outside the portal-webhook-consumer module. Cheap, prevents the next-intern footgun at the app layer (DB-role REVOKE is the real fence; this is belt-and-suspenders).
+26. **Remove legacy user-create code** identified in Phase 0 audit. Delete, don't comment-out.
+27. **Remove the role/eligibility-column feature flag** from Phase 0 step 2. The cache + portal pull is the only path.
+28. **Update CLAUDE.md / spec docs.** `heroes_profiles` is the domain table, identity comes from portal, per-app config comes from portal, sheet ingestion never creates users.
+29. **Add CI guard.** Static check that fails the build if `INSERT INTO identity_users` (or, on Heroes' side, any user-creation pattern) appears outside the portal-webhook-consumer module. Cheap, prevents the next-intern footgun at the app layer (DB-role REVOKE is the real fence; this is belt-and-suspenders).
 
 ### Estimated scope
 
-- Phase 0: 1–2 days (mostly mechanical rename + audit).
-- Phase 2: 5–8 days (new tables, ingestion rewrite, webhook consumer, audit log, ops view).
-- Phase 3: half-day cutover, requires portal-side coordination.
+- Phase 0: 1–2 days (mechanical rename + column drop + audit + logging).
+- Phase 1: 5–8 days (new tables, ingestion rewrite, six webhook consumers, two caches, audit log, ops view).
+- Phase 2: 4–6 days portal-side (manifest infra, admin UI for single + bulk, webhook fan-out, config read endpoint).
+- Phase 3: cutover window <30min, requires portal-side coordination.
 - Phase 4: 1–2 days.
 
-Total: ~2 weeks Heroes engineering, gated on portal spec finalization and backfill readiness.
-
-### Open dependencies on portal contract
-
-| Step | Depends on §Open Question |
-|------|---------------------------|
-| 7 (batch resolve) | Q1 — batch endpoint shape |
-| 6, 9 (cache) | Q2 — caching allowed + invalidation events |
-| 8 (webhook consumer) | Q3 — delivery semantics + DLQ |
-| 7 (tombstone branch) | Q4 — explicit tombstone field |
-| 13 (freeze window) | Q5 — freeze vs fallback |
-
-If portal answers differ from defaults, the affected steps adjust — overall sequence holds.
+Total: ~2 weeks Heroes engineering + ~1 week portal engineering, parallelizable on Phase 1 / Phase 2. Cutover is a brief coordinated window, not a multi-hour freeze.
