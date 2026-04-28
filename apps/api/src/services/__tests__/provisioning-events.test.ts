@@ -76,6 +76,12 @@ mock.module('~/db/schema', () => ({
   teamAppAccess,
   appRegistry,
   memberAppRole,
+  appUserConfig: {
+    appId: 'appUserConfig.appId',
+    portalSub: 'appUserConfig.portalSub',
+    config: 'appUserConfig.config',
+    schemaVersion: 'appUserConfig.schemaVersion',
+  },
 }))
 mock.module('drizzle-orm', () => ({
   eq: (left: unknown, right: unknown) => ({ left, right }),
