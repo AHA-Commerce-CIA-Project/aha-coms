@@ -1,6 +1,6 @@
 {
   "name": "@coms-portal/design-tokens",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "COMS design tokens — colors, typography, spacing, radii, shadows, motion. Single source for the COMS suite.",
   "type": "module",
   "license": "UNLICENSED",
@@ -20,10 +20,12 @@
     "README.md"
   ],
   "scripts": {
-    "build": "echo 'TODO: yaml -> css/tailwind/ts pipeline'",
+    "build": "bun scripts/build.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "typescript": "^5.5.0"
+    "@types/bun": "latest",
+    "typescript": "^5.5.0",
+    "yaml": "^2.5.1"
   }
 }

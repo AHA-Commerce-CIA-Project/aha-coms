@@ -1,11 +1,9 @@
-// @coms-portal/design-tokens
-//
-// Token values are sourced from coms_portal/docs/design-system/DESIGN.md frontmatter.
-// Phase 2 of Rev 3 Spec 02 will replace these stubs with values generated from that yaml.
+/*
+ * @coms-portal/design-tokens — re-exports for typed token consumers.
+ *
+ * CSS consumers should import "./tokens.css" via the package's "./css"
+ * export. Tailwind v3 consumers should consume the preset via the "./tailwind"
+ * export. This module is the entry point for runtime token access.
+ */
 
-export const colors = {} as const
-export const spacing = {} as const
-export const radii = {} as const
-export const typography = {} as const
-export const shadows = {} as const
-export const motion = {} as const
+export * from './tokens'
