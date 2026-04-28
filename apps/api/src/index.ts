@@ -15,7 +15,9 @@ import { startHealthProbeInterval } from './services/health-probe'
 import { adminRoutes } from './routes/admin'
 import { wellKnownRoutes } from './routes/well-known'
 import { adminSigningKeyRoutes } from './routes/admin/signing-keys'
+import { aliasQueueRoutes } from './routes/admin/alias-queue'
 import { aliasesRoutes } from './routes/aliases'
+import { userRoutes } from './routes/users'
 import { registerManifest } from './services/manifests'
 import heroesManifest from './services/manifests/heroes.json'
 import type { ManifestDefinition } from './services/manifests'
@@ -57,6 +59,7 @@ export const app = new Elysia({ prefix: '/api' })
   .use(userinfoRoutes)
   .use(internalRoutes)
   .use(aliasesRoutes)
+  .use(userRoutes)
   .group('/v1', (app) =>
     app
       .use(authPlugin)
@@ -71,7 +74,9 @@ export const app = new Elysia({ prefix: '/api' })
       // Signing-key rotation admin endpoint (Rev 2 §01). Mounted under /admin
       // by combining the adminRoutes prefix (/admin) implicitly via the group
       // path /admin/signing-keys.
-      .group('/admin', (adminGroup) => adminGroup.use(adminSigningKeyRoutes)),
+      .group('/admin', (adminGroup) =>
+        adminGroup.use(adminSigningKeyRoutes).use(aliasQueueRoutes),
+      ),
   )
 
 export type App = typeof app
