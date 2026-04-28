@@ -1,10 +1,15 @@
 import { LayoutDashboard, Users, Building2, AppWindow, FileText, GitMerge, Settings2 } from 'lucide-svelte'
-import type { Component } from 'svelte'
+
+// lucide-svelte ships Svelte-4-flavored classes; the @coms-portal/ui consumer
+// types `icon` as Svelte 5 `Component`. The two are runtime-compatible via
+// Svelte 5's legacy mode but not assignable at the type level. Widen here so
+// portal's NavItem assignments pass.
+type IconComponent = unknown
 
 export interface NavItem {
   href: string
   label: string
-  icon: Component
+  icon: IconComponent
 }
 
 /** Always-visible items in desktop Sidebar / mobile MobileBottomNav. */
