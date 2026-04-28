@@ -6,6 +6,14 @@
 
 ---
 
+## Status — 2026-04-28
+
+**Portal-side: shipped.** `@coms-portal/account-widget` v0.1.0 published at https://github.com/mrdoorba/coms-account-widget. Portal `apps/web` mounts the widget in the chrome's right slot. Portal `apps/api` serves `GET /api/userinfo` and OIDC RP-initiated logout via `GET /api/auth/logout` (origin allowlist against `app_registry.url` excluding deprecated rows; per-path post-logout URIs supported per §Sign-out).
+
+**Heroes-side: pending.** Adoption checklist + install lines + mount snippets in `heroes-integration-handoff.md`. Widget API is v0.1.0 (not v1.0.0) — Heroes adoption validates the prop API before v1; surface breaking changes back to portal team and they ship on a major bump.
+
+---
+
 ## Overview
 
 Today the portal owns identity (correctly, post-Rev 2), but the user-facing surface for that identity exists only on the portal. A user inside Heroes:
