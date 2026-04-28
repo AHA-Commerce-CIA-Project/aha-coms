@@ -7,6 +7,7 @@ import { setGipUserDisabled } from '../gip-admin'
 import { processEmployeeProvisioning } from './employee-provisioning'
 import { revokePortalSession } from './session-revocation'
 import { emitUserProvisioned, emitUserOffboarded, emitUserUpdated } from './provisioning-events'
+import { seedAppUserConfigForUser } from './app-user-config'
 
 export async function createEmployee(data: {
   email: string
@@ -51,6 +52,8 @@ export async function createEmployee(data: {
     if (data.teamId) {
       await tx.insert(teamMembers).values({ teamId: data.teamId, userId: insertedUser.id })
     }
+
+    await seedAppUserConfigForUser(tx, insertedUser.id)
 
     return insertedUsers
   })

@@ -10,7 +10,7 @@
 
 import { eq, inArray, and } from 'drizzle-orm'
 import { db } from '~/db'
-import { identityUsers, teamMembers, teamAppAccess, appRegistry, memberAppRole } from '~/db/schema'
+import { identityUsers, teamMembers, teamAppAccess, appRegistry, memberAppRole, appUserConfig } from '~/db/schema'
 import { dispatchPortalWebhook } from './portal-webhook-fanout'
 import type {
   UserProvisionedPayload,
@@ -40,6 +40,7 @@ interface ResolvedAppContext {
   slug: string
   appRoles: PortalAppRole[]
   memberRole: string | null
+  appConfig: { config: Record<string, unknown>; schemaVersion: number } | null
 }
 
 async function resolveUserState(userId: string): Promise<ResolvedUserState | null> {
@@ -132,11 +133,34 @@ async function resolvePerAppContext(userId: string, teamIds: string[]): Promise<
 
   const roleByApp = new Map(userRoles.map((r) => [r.appId, r.appRole]))
 
+  // Load per-user per-app config slices from app_user_config
+  const configRows = await db
+    .select({
+      appId: appUserConfig.appId,
+      config: appUserConfig.config,
+      schemaVersion: appUserConfig.schemaVersion,
+    })
+    .from(appUserConfig)
+    .where(
+      and(
+        eq(appUserConfig.portalSub, userId),
+        inArray(appUserConfig.appId, appIds),
+      ),
+    )
+
+  const configByApp = new Map(
+    configRows.map((r) => [
+      r.appId,
+      { config: r.config as Record<string, unknown>, schemaVersion: r.schemaVersion },
+    ]),
+  )
+
   return apps.map((app) => ({
     appId: app.id,
     slug: app.slug,
     appRoles: app.appRoles ?? [],
     memberRole: roleByApp.get(app.id) ?? null,
+    appConfig: configByApp.get(app.id) ?? null,
   }))
 }
 
@@ -190,7 +214,9 @@ export async function emitUserProvisioned(userId: string): Promise<void> {
   for (const app of perApp) {
     const appRole = resolveAppRoleForUser(app.memberRole, app.appRoles)
 
-    const payload: UserProvisionedPayload = {
+    // appConfig is additive — present once shared@v1.4.0 lands (Task 1).
+    // Cast extends the base type rather than broadening it to unknown.
+    const payload = {
       userId: state.id,
       gipUid: state.gipUid,
       email: state.email,
@@ -200,7 +226,8 @@ export async function emitUserProvisioned(userId: string): Promise<void> {
       apps: state.appSlugs,
       appRole,
       branch: state.branch,
-    }
+      appConfig: app.appConfig,
+    } as UserProvisionedPayload & { appConfig: typeof app.appConfig }
 
     await dispatchPortalWebhook('user.provisioned', payload, {
       appSlugs: [app.slug],
