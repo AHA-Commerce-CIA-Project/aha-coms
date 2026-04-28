@@ -107,7 +107,8 @@ mock.module('~/db/schema', () => ({
   identityUsers: { id: 'iu.id', status: 'iu.status', updatedAt: 'iu.updated_at' },
 }))
 
-import { resolveAliases, renamePrimaryAlias, detectCollision } from '../aliases'
+const { resolveAliases, renamePrimaryAlias, detectCollision } =
+  await import('../aliases')
 
 beforeEach(() => {
   mockDbSelect.mockReset()
