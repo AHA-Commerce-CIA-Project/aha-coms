@@ -29,8 +29,9 @@ export type AuditAction =
   | 'delete_webhook_endpoint'
   | 'alias_queue_resolve'
   | 'alias_queue_reject'
+  | 'update_app_user_config'
 
-export type AuditTargetType = 'user' | 'team' | 'app' | 'personal_email_sync' | 'employee_info_sync' | 'alias_collision_queue'
+export type AuditTargetType = 'user' | 'team' | 'app' | 'personal_email_sync' | 'employee_info_sync' | 'alias_collision_queue' | 'app_user_config'
 
 export async function logAudit(params: {
   actorId: string
