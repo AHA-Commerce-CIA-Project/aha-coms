@@ -11,12 +11,22 @@ mock.module('~/middleware/rbac', () => ({
   requireRole: (..._roles: string[]) =>
     new Elysia({ name: 'mock-require-role' }).derive({ as: 'scoped' }, async ({ status }) => {
       if (!isAdmin) throw status(403, { message: 'Insufficient portal role' })
-      return { authUser: { id: 'admin-user-uuid', email: 'admin@test.com', name: 'Admin', portalRole: 'admin', gipUid: 'gip-admin', teamIds: [], apps: [] } }
+      return {
+        authUser: {
+          id: 'admin-user-uuid',
+          email: 'admin@test.com',
+          name: 'Admin',
+          portalRole: 'admin',
+          gipUid: 'gip-admin',
+          teamIds: [],
+          apps: [],
+        },
+      }
     }),
 }))
 
 // ---------------------------------------------------------------------------
-// Mock db
+// Queue row fixture
 // ---------------------------------------------------------------------------
 
 type QueueRow = {
@@ -75,20 +85,26 @@ const queueRows: QueueRow[] = [
   },
 ]
 
+// ---------------------------------------------------------------------------
+// Mock db
+// ---------------------------------------------------------------------------
+
 let findFirstResult: QueueRow | undefined = undefined
-let updateCalled = false
-let updatedValues: Record<string, unknown> = {}
+
+const mockUpdateChain = {
+  set: () => mockUpdateChain,
+  where: async () => undefined,
+}
+
+const mockSelectChain = {
+  from: () => mockSelectChain,
+  where: () => mockSelectChain,
+  orderBy: async () => queueRows.filter((r) => r.status === 'pending'),
+}
 
 const mockDb = {
-  select: () => mockDb,
-  from: () => mockDb,
-  where: () => mockDb,
-  orderBy: () => Promise.resolve(queueRows.filter((r) => r.status === 'pending')),
-  update: () => mockDb,
-  set: (values: Record<string, unknown>) => {
-    updatedValues = values
-    return mockDb
-  },
+  select: () => mockSelectChain,
+  update: () => mockUpdateChain,
   query: {
     aliasCollisionQueue: {
       findFirst: async (_opts: unknown) => findFirstResult,
@@ -113,9 +129,7 @@ const mockCreateAlias = mock(async (_params: unknown) => ({
   createdBy: 'admin-user-uuid',
 }))
 
-mock.module('~/services/aliases', () => ({
-  createAlias: mockCreateAlias,
-}))
+mock.module('~/services/aliases', () => ({ createAlias: mockCreateAlias }))
 
 // ---------------------------------------------------------------------------
 // Mock audit service
@@ -123,24 +137,6 @@ mock.module('~/services/aliases', () => ({
 
 const mockLogAudit = mock(async (_params: unknown) => {})
 mock.module('~/services/audit', () => ({ logAudit: mockLogAudit }))
-
-// ---------------------------------------------------------------------------
-// Mock schema (needed for db.query reference)
-// ---------------------------------------------------------------------------
-
-mock.module('~/db/schema', () => ({
-  aliasCollisionQueue: { id: 'id', status: 'status', rawNameNormalized: 'rawNameNormalized', createdAt: 'createdAt' },
-  userAliases: {},
-  identityUsers: {},
-}))
-
-mock.module('drizzle-orm', () => ({
-  eq: (_a: unknown, _b: unknown) => 'mock-eq',
-  asc: (_a: unknown) => 'mock-asc',
-  and: (..._args: unknown[]) => 'mock-and',
-  count: (_a: unknown) => 'mock-count',
-  sql: new Proxy({}, { get: () => () => 'mock-sql' }),
-}))
 
 // ---------------------------------------------------------------------------
 // Import route after all mocks
@@ -156,11 +152,13 @@ function makeApp() {
   return new Elysia().use(aliasQueueRoutes)
 }
 
-async function getQueue(app: Elysia) {
+type TestApp = ReturnType<typeof makeApp>
+
+async function getQueue(app: TestApp) {
   return app.handle(new Request('http://localhost/alias-queue'))
 }
 
-async function postResolve(app: Elysia, id: string, body: unknown) {
+async function postResolve(app: TestApp, id: string, body: unknown) {
   return app.handle(
     new Request(`http://localhost/alias-queue/${id}/resolve`, {
       method: 'POST',
@@ -170,7 +168,7 @@ async function postResolve(app: Elysia, id: string, body: unknown) {
   )
 }
 
-async function postReject(app: Elysia, id: string, body: unknown) {
+async function postReject(app: TestApp, id: string, body: unknown) {
   return app.handle(
     new Request(`http://localhost/alias-queue/${id}/reject`, {
       method: 'POST',
@@ -193,7 +191,9 @@ describe('GET /alias-queue', () => {
     const app = makeApp()
     const res = await getQueue(app)
     expect(res.status).toBe(200)
-    const body = await res.json() as { groups: Array<{ rawNameNormalized: string; count: number; items: unknown[] }> }
+    const body = (await res.json()) as {
+      groups: Array<{ rawNameNormalized: string; count: number; items: unknown[] }>
+    }
     expect(body.groups).toBeDefined()
     expect(body.groups.length).toBeGreaterThan(0)
     const janeGroup = body.groups.find((g) => g.rawNameNormalized === 'jane smith')
@@ -216,8 +216,6 @@ describe('POST /alias-queue/:id/resolve', () => {
     findFirstResult = queueRows[0]
     mockCreateAlias.mockReset()
     mockLogAudit.mockReset()
-    updateCalled = false
-    updatedValues = {}
     mockCreateAlias.mockImplementation(async (_p: unknown) => ({
       id: 'new-alias-uuid',
       identityUserId: 'user-uuid-123',
@@ -235,7 +233,7 @@ describe('POST /alias-queue/:id/resolve', () => {
     const app = makeApp()
     const res = await postResolve(app, 'queue-row-1', { identityUserId: 'user-uuid-123' })
     expect(res.status).toBe(200)
-    const body = await res.json() as { aliasId: string }
+    const body = (await res.json()) as { aliasId: string }
     expect(body.aliasId).toBe('new-alias-uuid')
     expect(mockCreateAlias).toHaveBeenCalledTimes(1)
     expect(mockLogAudit).toHaveBeenCalledTimes(1)
@@ -268,7 +266,6 @@ describe('POST /alias-queue/:id/reject', () => {
     isAdmin = true
     findFirstResult = queueRows[0]
     mockLogAudit.mockReset()
-    updatedValues = {}
     mockLogAudit.mockImplementation(async () => {})
   })
 
@@ -276,7 +273,7 @@ describe('POST /alias-queue/:id/reject', () => {
     const app = makeApp()
     const res = await postReject(app, 'queue-row-1', { reason: 'Duplicate entry' })
     expect(res.status).toBe(200)
-    const body = await res.json() as { ok: boolean }
+    const body = (await res.json()) as { ok: boolean }
     expect(body.ok).toBe(true)
     expect(mockLogAudit).toHaveBeenCalledTimes(1)
   })
