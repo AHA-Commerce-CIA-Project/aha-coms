@@ -1,5 +1,5 @@
 import { db } from '~/db'
-import { appUserConfig } from '~/db/schema'
+import { appUserConfig } from '~/db/schema/app-user-config'
 import { loadAllManifests, seedDefaults } from './manifests'
 import type { ManifestDefinition } from './manifests'
 

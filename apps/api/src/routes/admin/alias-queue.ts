@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
-import { aliasCollisionQueue } from '~/db/schema'
+import { aliasCollisionQueue } from '~/db/schema/alias-collision-queue'
 import { eq, asc } from 'drizzle-orm'
 import { requireRole } from '~/middleware/rbac'
 import { createAlias } from '~/services/aliases'

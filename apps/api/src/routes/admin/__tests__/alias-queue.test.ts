@@ -114,6 +114,46 @@ const mockDb = {
 
 mock.module('~/db', () => ({ db: mockDb }))
 
+// Mock individual schema modules + drizzle-orm so the barrel can safely re-export them
+// without evaluating real drizzle-orm column helpers.
+const schemaPlaceholder = (prefix: string, ...fields: string[]) =>
+  Object.fromEntries(fields.map((f) => [f, `${prefix}.${f}`]))
+
+mock.module('~/db/schema/alias-collision-queue', () => ({
+  aliasCollisionQueue: schemaPlaceholder('acq', 'id', 'rawName', 'rawNameNormalized', 'suggestedIdentityUserId', 'source', 'context', 'status', 'createdAt', 'resolvedAt', 'resolvedBy', 'resolutionAction'),
+}))
+mock.module('~/db/schema/app-user-config', () => ({
+  appUserConfig: schemaPlaceholder('auc', 'portalSub', 'appId', 'config', 'schemaVersion', 'updatedAt'),
+}))
+mock.module('~/db/schema/identity-users', () => ({
+  identityUsers: schemaPlaceholder('iu', 'id', 'name', 'email', 'status', 'portalSub', 'gipUid', 'createdAt', 'updatedAt'),
+}))
+mock.module('~/db/schema/bulk-edit-locks', () => ({
+  bulkEditLocks: schemaPlaceholder('bel', 'appId', 'acquiredBy', 'acquiredAt'),
+}))
+mock.module('drizzle-orm', () => ({
+  eq: (_l: unknown, _r: unknown) => ({}),
+  and: (..._args: unknown[]) => ({}),
+  asc: (_col: unknown) => ({}),
+  desc: (_col: unknown) => ({}),
+  sql: new Proxy((_s: TemplateStringsArray) => '', { get: (_t, p) => (_: unknown) => p }),
+  relations: () => ({}),
+  uniqueIndex: () => ({ on: () => ({ where: () => ({}) }) }),
+  index: () => ({ on: () => ({}) }),
+  unique: () => ({ on: () => ({}) }),
+  inArray: (_l: unknown, _r: unknown) => ({}),
+  ilike: (_col: unknown, _val: unknown) => ({}),
+  or: (..._args: unknown[]) => ({}),
+  pgTable: (_name: string, cols: unknown) => cols,
+  uuid: () => ({ primaryKey: () => ({}) }),
+  text: () => ({ notNull: () => ({ default: () => ({}) }) }),
+  boolean: () => ({ notNull: () => ({ default: () => ({}) }) }),
+  integer: () => ({ notNull: () => ({ default: () => ({}) }) }),
+  jsonb: () => ({ notNull: () => ({ default: () => ({}) }) }),
+  timestamp: () => ({ notNull: () => ({ defaultNow: () => ({}) }) }),
+  foreignKey: () => ({ references: () => ({}) }),
+}))
+
 // ---------------------------------------------------------------------------
 // Mock aliases service
 // ---------------------------------------------------------------------------
@@ -129,7 +169,7 @@ const mockCreateAlias = mock(async (_params: unknown) => ({
   createdBy: 'admin-user-uuid',
 }))
 
-mock.module('~/services/aliases', () => ({ createAlias: mockCreateAlias }))
+mock.module('~/services/aliases', () => ({ createAlias: mockCreateAlias, resolveAliases: mock(async () => []), renamePrimaryAlias: mock(async () => {}), detectCollision: mock(async () => ({ collision: false })), enqueueCollision: mock(async () => {}) }))
 
 // ---------------------------------------------------------------------------
 // Mock audit service

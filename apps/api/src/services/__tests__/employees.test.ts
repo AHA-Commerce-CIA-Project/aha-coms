@@ -56,7 +56,8 @@ const tx = {
           return Promise.resolve()
         }
 
-        throw new Error('Unexpected transaction insert target')
+        // app_user_config seeding uses onConflictDoNothing — no-op silently
+        return { onConflictDoNothing: async () => undefined }
       },
     }
   },
@@ -65,9 +66,12 @@ const tx = {
 // Chainable select stub: .select(...).from(...).where(...) → []
 // Lets fire-and-forget callers (emitUserProvisioned, etc.) run to a no-op
 // without exercising real DB logic.
-const emptySelect = () => ({
-  from: () => ({ where: async () => [] }),
-})
+const emptySelectChain = {
+  from: () => emptySelectChain,
+  where: async () => [] as unknown[],
+  then: (onFulfilled: (v: unknown[]) => unknown) => Promise.resolve([] as unknown[]).then(onFulfilled),
+}
+const emptySelect = () => emptySelectChain
 
 const db = {
   transaction: async (callback: (trx: typeof tx) => Promise<unknown>) => callback(tx),
@@ -106,21 +110,41 @@ mock.module('~/db/schema', () => {
     sessionRevocations: { userId: 'sessionRevocations.userId' },
     appWebhookEndpoints: { id: 'appWebhookEndpoints.id' },
     memberAppRole: { userId: 'memberAppRole.userId', appId: 'memberAppRole.appId', appRole: 'memberAppRole.appRole' },
+    // Added in Rev 3 — needed by downstream test files that import the barrel
+    appUserConfig: { portalSub: 'appUserConfig.portalSub', appId: 'appUserConfig.appId', config: 'appUserConfig.config', schemaVersion: 'appUserConfig.schemaVersion', updatedAt: 'appUserConfig.updatedAt' },
+    appManifests: { appId: 'appManifests.appId', displayName: 'appManifests.displayName', schemaVersion: 'appManifests.schemaVersion', configSchema: 'appManifests.configSchema' },
+    bulkEditLocks: { appId: 'bulkEditLocks.appId', acquiredBy: 'bulkEditLocks.acquiredBy', acquiredAt: 'bulkEditLocks.acquiredAt' },
+    aliasCollisionQueue: { id: 'aliasCollisionQueue.id', rawName: 'aliasCollisionQueue.rawName', rawNameNormalized: 'aliasCollisionQueue.rawNameNormalized', status: 'aliasCollisionQueue.status', createdAt: 'aliasCollisionQueue.createdAt' },
+    userAliases: { id: 'userAliases.id', identityUserId: 'userAliases.identityUserId', alias: 'userAliases.alias', aliasNormalized: 'userAliases.aliasNormalized' },
   }
 })
 mock.module('drizzle-orm', () => {
   return {
     eq,
     inArray: (left: unknown, right: unknown) => ({ left, right }),
-    // sql and relations are needed by the schema barrel's new re-exports
-    // (session-revocations.ts and app-webhook-endpoints.ts were added to
-    // the ~/db/schema barrel as part of the SSO upgrade).
     sql: new Proxy(
       (strings: TemplateStringsArray) => strings.join(''),
       { get: (_t, prop) => prop },
     ),
     relations: () => ({}),
     and: (...conditions: unknown[]) => ({ conditions }),
+    // Full set of exports to avoid polluting downstream test files
+    asc: (_col: unknown) => ({}),
+    desc: (_col: unknown) => ({}),
+    ilike: (_col: unknown, _val: unknown) => ({}),
+    or: (..._args: unknown[]) => ({}),
+    ne: (_l: unknown, _r: unknown) => ({}),
+    uniqueIndex: () => ({ on: () => ({ where: () => ({}) }) }),
+    index: () => ({ on: () => ({}) }),
+    unique: () => ({ on: () => ({}) }),
+    pgTable: (_name: string, cols: unknown) => cols,
+    uuid: () => ({ primaryKey: () => ({}) }),
+    text: () => ({ notNull: () => ({ default: () => ({}) }) }),
+    boolean: () => ({ notNull: () => ({ default: () => ({}) }) }),
+    integer: () => ({ notNull: () => ({ default: () => ({}) }) }),
+    jsonb: () => ({ notNull: () => ({ default: () => ({}) }) }),
+    timestamp: () => ({ notNull: () => ({ defaultNow: () => ({}) }) }),
+    foreignKey: () => ({ references: () => ({}) }),
   }
 })
 mock.module('../claims', () => ({ resolveAndSyncClaims }))

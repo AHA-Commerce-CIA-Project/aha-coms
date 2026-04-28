@@ -67,17 +67,6 @@ const db = {
 mock.module('~/db', () => ({ db }))
 mock.module('~/db/schema/apps', () => ({ appRegistry }))
 mock.module('~/db/schema/app-user-config', () => ({ appUserConfig }))
-mock.module('drizzle-orm', () => ({
-  eq: (l: unknown, r: unknown) => ({ l, r }),
-  and: (...args: unknown[]) => ({ args }),
-  sql: new Proxy((s: TemplateStringsArray) => s.join(''), { get: (_t, p) => p }),
-  relations: () => ({}),
-  uniqueIndex: () => ({ on: () => ({ where: () => ({}) }) }),
-  index: () => ({ on: () => ({}) }),
-  unique: () => ({ on: () => ({}) }),
-  inArray: (l: unknown, r: unknown) => ({ l, r }),
-}))
-
 // ---------------------------------------------------------------------------
 // Import route after mocks
 // ---------------------------------------------------------------------------

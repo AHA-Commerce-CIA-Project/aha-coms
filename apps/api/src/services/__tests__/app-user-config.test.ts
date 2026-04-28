@@ -45,20 +45,30 @@ const mockLoadAllManifests = mock(async () => [
   },
 ])
 
+const mockSeedDefaults = (manifest: { configSchema: Record<string, { default: unknown }> }) => {
+  const result: Record<string, unknown> = {}
+  for (const [key, field] of Object.entries(manifest.configSchema)) {
+    result[key] = field.default
+  }
+  return result
+}
+
 mock.module('../manifests', () => ({
   loadAllManifests: mockLoadAllManifests,
-  seedDefaults: (manifest: { configSchema: Record<string, { default: unknown }> }) => {
-    const result: Record<string, unknown> = {}
-    for (const [key, field] of Object.entries(manifest.configSchema)) {
-      result[key] = field.default
-    }
-    return result
-  },
+  seedDefaults: mockSeedDefaults,
+  validateConfig: mock(() => ({ valid: true })),
+  registerManifest: mock(async () => {}),
+}))
+mock.module('~/services/manifests', () => ({
+  loadAllManifests: mockLoadAllManifests,
+  seedDefaults: mockSeedDefaults,
+  validateConfig: mock(() => ({ valid: true })),
+  registerManifest: mock(async () => {}),
 }))
 
 // db mock (not used directly — tx is passed in)
 mock.module('~/db', () => ({ db: { transaction: mock(async (fn: (tx: unknown) => unknown) => fn(fakeTx)) } }))
-mock.module('~/db/schema', () => ({ appUserConfig: { name: 'app_user_config' } }))
+mock.module('~/db/schema/app-user-config', () => ({ appUserConfig: { name: 'app_user_config' } }))
 
 const { seedAppUserConfigForUser } = await import('../app-user-config')
 
