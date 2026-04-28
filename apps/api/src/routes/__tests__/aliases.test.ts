@@ -34,8 +34,18 @@ mock.module('../middleware/app-token', () => ({
 // Mock resolveAliases
 // ---------------------------------------------------------------------------
 
-const mockResolveAliases = mock(async (names: string[]) =>
-  names.map((name) => ({ name, match: null })),
+type ResolveMatch = {
+  identityUserId: string
+  alias: string
+  aliasNormalized: string
+  isPrimary: boolean
+  tombstoned: boolean
+  deactivatedAt: string | null
+}
+
+const mockResolveAliases = mock(
+  async (names: string[]): Promise<Array<{ name: string; match: ResolveMatch | null }>> =>
+    names.map((name) => ({ name, match: null })),
 )
 
 mock.module('~/services/aliases', () => ({ resolveAliases: mockResolveAliases }))
@@ -55,8 +65,10 @@ function makeApp() {
   return new Elysia().use(aliasesRoutes)
 }
 
+type TestApp = ReturnType<typeof makeApp>
+
 async function post(
-  app: Elysia,
+  app: TestApp,
   body: unknown,
   headers: Record<string, string> = { authorization: 'Bearer token', 'content-type': 'application/json' },
 ) {

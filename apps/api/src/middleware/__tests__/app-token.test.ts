@@ -79,7 +79,9 @@ function makeApp() {
     .get('/test', ({ app }) => ({ ok: true, app }))
 }
 
-async function request(app: Elysia, headers: Record<string, string> = {}) {
+type TestApp = ReturnType<typeof makeApp>
+
+async function request(app: TestApp, headers: Record<string, string> = {}) {
   return app.handle(
     new Request('http://localhost/test', { headers }),
   )
