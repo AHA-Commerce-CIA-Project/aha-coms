@@ -16,6 +16,7 @@ import { adminRoutes } from './routes/admin'
 import { wellKnownRoutes } from './routes/well-known'
 import { adminSigningKeyRoutes } from './routes/admin/signing-keys'
 import { aliasQueueRoutes } from './routes/admin/alias-queue'
+import { adminAppConfigRoutes } from './routes/admin/app-config'
 import { aliasesRoutes } from './routes/aliases'
 import { userRoutes } from './routes/users'
 import { registerManifest } from './services/manifests'
@@ -75,7 +76,7 @@ export const app = new Elysia({ prefix: '/api' })
       // by combining the adminRoutes prefix (/admin) implicitly via the group
       // path /admin/signing-keys.
       .group('/admin', (adminGroup) =>
-        adminGroup.use(adminSigningKeyRoutes).use(aliasQueueRoutes),
+        adminGroup.use(adminSigningKeyRoutes).use(aliasQueueRoutes).use(adminAppConfigRoutes),
       ),
   )
 

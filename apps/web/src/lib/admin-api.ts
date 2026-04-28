@@ -167,6 +167,44 @@ export interface AliasQueueResponse {
   groups: AliasQueueGroup[]
 }
 
+export interface AppConfigManifest {
+  appId: string
+  displayName: string
+  schemaVersion: number
+  configSchema: Record<string, { type: string; values?: string[]; default: unknown }>
+}
+
+export interface AppConfigRow {
+  portalSub: string
+  name: string
+  email: string
+  config: Record<string, unknown>
+  schemaVersion: number
+  updatedAt: string
+}
+
+export interface AppConfigListResponse {
+  manifests: AppConfigManifest[]
+  rows: AppConfigRow[]
+}
+
+export interface BulkPreviewChange {
+  portalSub: string
+  previousConfig: Record<string, unknown>
+  newConfig: Record<string, unknown>
+}
+
+export interface BulkPreviewResponse {
+  changes: BulkPreviewChange[]
+  totalRows: number
+}
+
+export interface BulkCommitResponse {
+  ok: true
+  batchId: string
+  updatedCount: number
+}
+
 interface ApiErrorBody {
   message?: string
 }
@@ -466,5 +504,37 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify(body),
     })
+  },
+
+  // ---------------------------------------------------------------------------
+  // App config
+  // ---------------------------------------------------------------------------
+
+  listAppConfig(appId: string, filter: string) {
+    const params = new URLSearchParams()
+    if (appId) params.set('appId', appId)
+    if (filter) params.set('filter', filter)
+    return requestJson<AppConfigListResponse>(`/api/v1/admin/app-config?${params.toString()}`)
+  },
+  updateSingleAppConfig(body: { appId: string; portalSub: string; config: Record<string, unknown> }) {
+    return requestJson<{ ok: true }>('/api/v1/admin/app-config/single', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+  bulkPreviewAppConfig(body: { appId: string; rows: Array<{ portalSub: string; config: Record<string, unknown> }> }) {
+    return requestJson<BulkPreviewResponse>('/api/v1/admin/app-config/bulk-preview', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+  bulkCommitAppConfig(body: { appId: string; rows: Array<{ portalSub: string; config: Record<string, unknown> }> }) {
+    return requestJson<BulkCommitResponse>('/api/v1/admin/app-config/bulk-commit', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+  downloadAppConfigCsv(appId: string) {
+    return fetch(`/api/v1/admin/app-config/csv?appId=${encodeURIComponent(appId)}`)
   },
 }
