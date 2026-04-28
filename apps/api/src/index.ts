@@ -15,6 +15,7 @@ import { startHealthProbeInterval } from './services/health-probe'
 import { adminRoutes } from './routes/admin'
 import { wellKnownRoutes } from './routes/well-known'
 import { adminSigningKeyRoutes } from './routes/admin/signing-keys'
+import { aliasesRoutes } from './routes/aliases'
 import { registerManifest } from './services/manifests'
 import heroesManifest from './services/manifests/heroes.json'
 import type { ManifestDefinition } from './services/manifests'
@@ -55,6 +56,7 @@ export const app = new Elysia({ prefix: '/api' })
   .use(authRoutes)
   .use(userinfoRoutes)
   .use(internalRoutes)
+  .use(aliasesRoutes)
   .group('/v1', (app) =>
     app
       .use(authPlugin)
