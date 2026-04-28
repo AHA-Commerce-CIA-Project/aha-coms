@@ -84,7 +84,7 @@ describe('seedAppUserConfigForUser', () => {
 
   test('seeds correct defaults for Heroes manifest', async () => {
     await seedAppUserConfigForUser(fakeTx as never, 'user-42')
-    const heroesRow = (insertedRows as Array<{ appId: string; config: Record<string, unknown> }>).find(
+    const heroesRow = (insertedRows as Array<{ appId: string; config: Record<string, unknown>; schemaVersion: number; portalSub: string }>).find(
       (r) => r.appId === 'uuid-heroes',
     )
     expect(heroesRow).toBeDefined()
