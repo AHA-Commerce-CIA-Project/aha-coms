@@ -6,6 +6,33 @@
 
 ---
 
+## Status (2026-04-28) — portal-side shipped on `main`
+
+All twelve portal-side effects of this spec landed in a single coordinated session on 2026-04-28 and are merged to `main`. The schema migrations, services, routes, webhooks, admin UIs, and the gated REVOKE migration are all in place; the merge ships as commits `b6e3bd1` through `e296ab5` plus follow-up `b407682` (svelte-check fix). The `@coms-portal/shared` package is at `v1.4.0` with new event types and the additive `appConfig` payload extension.
+
+**What ships portal-side:**
+
+- `user_aliases` table with Postgres `GENERATED ALWAYS AS` for `alias_normalized`; partial unique on `is_primary`; backfill seeded for every active `identity_users` row.
+- `alias_collision_queue` table + admin UI at `/admin/aliases` for resolve / reject actions.
+- Alias service (`apps/api/src/services/aliases.ts`): `resolveAliases`, `createAlias`, `renamePrimaryAlias` (transactional demote → promote), `detectCollision` (Levenshtein ≤ 2 OR token-set match per spec).
+- `POST /api/aliases/resolve-batch` — body cap 1000 names / 256 KB; auth via inbound app SA token middleware (Google OIDC ID token → `app_registry.serviceAccountEmail` lookup); per-app token bucket (20 RPS, burst 40, in-memory single-instance — multi-instance limitation documented in source).
+- Webhooks: `alias.resolved` / `alias.updated` / `alias.deleted` riding the existing Rev 2 Spec 03 dispatcher + Cloud Tasks retries + DLQ.
+- `app_manifests` (config_schema only — webhook URL/secret remain on `app_webhook_endpoints`), `app_user_config`, `bulk_edit_locks`. Heroes manifest registered at boot from `apps/api/src/services/manifests/heroes.json`.
+- `app_user_config` seeded inside the `createEmployee` transaction for every CSV/Sheet/manual create path; sheet-sync `emitUserProvisioned` gap fix; `user.provisioned` payload extended with optional per-recipient `appConfig` slice.
+- `app_config.updated` webhook with `batchId` for bulk; `GET /api/users/:portalSub/config/:appId` (auth via `requireAppToken`, 403 on app-slug mismatch).
+- Admin app config UI at `/admin/app-config` — manifest-rendered single edit, selection-bulk via `BatchToolbar`, CSV-bulk preview-then-commit with diff display and `bulk_edit_locks` enforcement.
+- `apps/api/src/db/migrations/cutover/0001_revoke_heroes_writes.sql` is staged (NOT auto-applied) with cutover runbook in `cutover/README.md`. Apply at Deploy C.
+
+**Naming reconciliation (vs. spec prose):** the spec calls webhook events `user.created` / `user.updated` / `user.deactivated`. Reconnaissance found Rev 2 already publishes `user.provisioned` / `user.updated` / `user.offboarded`. The implementation reuses the Rev 2 names (additive `appConfig` extension on `user.provisioned`); the spec's prose names should be read as synonyms.
+
+**Known debt — see Spec 03b.** CI's test gate is red on `main` (typecheck green; tests fail across pre-existing `main` failures + a few new `requireAppToken` CI mock setups + barrel-mock contamination). The deploy job skips until cleared. Three small PRs prescribed in `spec-03b-test-gate-cleanup.md`.
+
+**What remains — Heroes-side (out of portal scope):** the Heroes-side adoption work in §Appendix A — rename `users` → `heroes_profiles`, drop role/eligibility columns, ingestion rewrite via the new `POST /api/aliases/resolve-batch`, alias + user-config caches, webhook consumers, audit log routing. The Phase 3 cutover (truncate + reprovision + apply the gated REVOKE) is a coordinated <30-minute window with portal.
+
+Mission artefacts (red-cell review, captain's log, lessons): `.nelson/missions/2026-04-28_050010_1b5c498e/`.
+
+---
+
 ## Migration note (2026-04-28)
 
 An earlier draft of this spec preserved Heroes' existing user data via a one-shot alias backfill from `identity_users.name` ∪ Heroes' production `users.name` export. Heroes signed off on that approach on 2026-04-28; later the same day the team pivoted to **wipe Heroes' data and reprovision from portal**, because Heroes is pre-real-users and the disposability of current data turns the most fragile step (alias backfill reconciliation) into a no-op. The rewrite below reflects the new direction. The alias layer itself, the identity-vs-projection framing, and the DB-role REVOKE remain unchanged.

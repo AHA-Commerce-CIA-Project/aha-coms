@@ -7,9 +7,9 @@
 
 ---
 
-## Status — 2026-04-28 (portal-side shipped; Heroes adoption pending)
+## Status — 2026-04-28 (Specs 01 + 02 + 03 portal-side shipped; Heroes adoption pending)
 
-Portal/COMS team landed Specs 01 + 02 (Phases 2 + 3) end-to-end on 2026-04-28. Spec 03 remains scheduled but un-started.
+Portal/COMS team landed Specs 01 + 02 (Phases 2 + 3) + 03 (portal-side, all twelve effects) end-to-end on 2026-04-28. The Spec 03 merge is on `main`; the deploy gate is currently red on tests (see Spec 03b).
 
 **Shipped (public GitHub repos, consumed via `git+url`):**
 
@@ -18,13 +18,17 @@ Portal/COMS team landed Specs 01 + 02 (Phases 2 + 3) end-to-end on 2026-04-28. S
 | `@coms-portal/design-tokens` | v1.0.0 | https://github.com/mrdoorba/coms-design-tokens |
 | `@coms-portal/ui` (chrome only) | v1.0.0 | https://github.com/mrdoorba/coms-ui |
 | `@coms-portal/account-widget` | v0.1.0 | https://github.com/mrdoorba/coms-account-widget |
-| `@coms-portal/shared` (+ APP_LAUNCHER) | v1.3.0 | https://github.com/mrdoorba/coms-shared |
+| `@coms-portal/shared` (+ Spec 03 event types) | v1.4.0 | https://github.com/mrdoorba/coms-shared |
 
 Portal `apps/web` is migrated and dogfooding all four (consuming via `git+https://...#vX.Y.Z`); portal `apps/api` exposes `GET /api/userinfo` and OIDC RP-initiated logout (`GET /api/auth/logout`), both with `app_registry.url` origin allowlist (post-deprecation filter, post red-cell sweep).
 
-**Heroes-side work pending** — see `heroes-integration-handoff.md` (mirrored into this folder) for the install lines, mount snippets, file-deletion list, and verification checklist. Spec 01 widget adoption + Spec 02 Phase 2 token consumption are unblocked; Phase 3 chrome adoption can land at the same time or later.
+**Spec 03 portal-side shipped (2026-04-28):** alias layer (`user_aliases` with Postgres `GENERATED ALWAYS AS` for `alias_normalized`, `alias_collision_queue`, alias service with two-step rename and Levenshtein-or-token-set collision detection, `POST /api/aliases/resolve-batch` with per-app token-bucket rate limiting, `alias.resolved` / `alias.updated` / `alias.deleted` webhooks, admin collision queue UI at `/admin/aliases`); per-app config (`app_manifests`, `app_user_config`, `bulk_edit_locks`, manifest validation service with Heroes seed registered at boot, default config seeded inside the `createEmployee` transaction, `app_config.updated` webhook with per-app slice filtering, `GET /api/users/:portalSub/config/:appId`, admin app-config UI at `/admin/app-config` with single edit + selection-bulk + CSV-bulk preview-then-commit + `bulk_edit_locks` enforcement); inbound app SA token middleware (`requireAppToken`); gated `REVOKE` migration prepared at `apps/api/src/db/migrations/cutover/0001_revoke_heroes_writes.sql` with cutover runbook, NOT auto-applied. `user.provisioned` payload extended with optional per-recipient `appConfig` slice — additive, no consumer breakage. Mission artefacts at `.nelson/missions/2026-04-28_050010_1b5c498e/`.
 
-**Spec 03 status:** un-started. Heroes signed off on the design 2026-04-28; both teams can sequence the three-deploy cutover whenever capacity opens. Specs 02 (Phases 4+5), 04, 05 remain deferred until their triggers fire — see each spec's §Why this is deferred.
+**Known debt — Spec 03b:** CI's `Typecheck & Unit Tests` job is red on `main` (typecheck green, tests fail). Pre-existing `main` failures + a few new `requireAppToken` CI mock setups + barrel-mock contamination on `appUserConfig`. Deploy step skips until cleared. See `spec-03b-test-gate-cleanup.md` for the catalog and three-PR phasing.
+
+**Heroes-side work pending** — see `heroes-integration-handoff.md` for install lines, mount snippets, file-deletion list, and verification checklist (Specs 01 + 02). For Spec 03, Heroes-side adoption follows §Appendix A of `spec-03-user-identity-alias-layer.md` (rename `users` → `heroes_profiles`, drop role/eligibility columns, ingestion rewrite via `POST /api/aliases/resolve-batch`, alias + user-config caches, webhook consumers, audit log).
+
+Specs 02 (Phases 4+5), 04, 05 remain deferred until their triggers fire — see each spec's §Why this is deferred.
 
 ---
 
@@ -46,7 +50,8 @@ After Rev 3, identity is *centrally owned* (Rev 2), *centrally surfaced* (Spec 0
 | 00 | Implementation Timeline (this doc) | Portal | — | — | — |
 | 01 | Shared Account Widget | Portal | Medium | Yes — H1 (adoption) | Yes — UX surface |
 | 02 | Design System (skeleton + spec) | Portal | Phases 1+2+3 done portal-side (2026-04-28); Phase 4+5 deferred | Phase 2 token consumption + Phase 3 chrome adoption | No — deferred until trigger |
-| 03 | User Identity Ownership & Alias Layer | Portal + Heroes | Large | Yes — H1 (rename, ingestion rewrite) | **Yes — must land before real users** |
+| 03 | User Identity Ownership & Alias Layer | Portal + Heroes | Portal-side shipped 2026-04-28 (twelve effects on `main`); test-gate debt tracked in 03b | Yes — H1 (rename, ingestion rewrite, caches, webhook consumers) | **Yes — must land before real users** |
+| 03b | Spec 03 Test-Gate Cleanup | Portal | Small (~1–2 days, three small PRs) | No | High — blocks deploy |
 | 04 | Unified User Preferences (theme + locale) | Portal + every H-app | Small per phase | Yes — Phase 3 (preference consumption) | No — deferred until trigger |
 | 05 | Suite Search / Command Palette | Portal + every H-app | Medium per phase | Optional — Phase 3 (search provider) | No — deferred until trigger |
 
@@ -66,10 +71,12 @@ Every Rev 3 spec touches Heroes eventually, but only Specs 01 + 03 are scheduled
 | 04 | Read `coms_prefs` claim from ID token; apply theme + locale on render; remove Heroes' standalone theme toggle (widget popover from Spec 01 owns it) | ~½ day | **Deferred** | 3rd H-app onboards, drift report, or Spec 02 Phase 2+ ships |
 | 05 | Register Heroes searchables (heroes, courses, cohorts) with portal search registry; expose `POST /search/provider` endpoint | ~1 day | **Deferred (optional)** | N > 6 apps, first cross-app search request, or Heroes ops asks |
 
-**Wall-clock for the scheduled work** (Specs 01 + 03 in parallel):
+**Wall-clock — what shipped and what remains:**
 
-- **Weeks 0–2:** Spec 01 widget package built portal-side + Heroes pilot adoption. In parallel, Spec 03 portal alias-layer API + Heroes Phase 0 prep (rename, ingestion-path scaffolding behind feature flag).
-- **Weeks 2–4:** Spec 03 three-deploy cutover (Deploy A → freeze + seed → Deploy B → Deploy C). Spec 01 ships to production in Heroes.
+- **2026-04-28 (single session):** Spec 03 portal-side built end-to-end — twelve effects across alias layer, per-app config, admin UIs, webhooks, gated REVOKE migration. Merged to `main` as commits `b6e3bd1` through `e296ab5` (Mr. Door commit format), with a follow-up svelte-check fix at `b407682` and Spec 03b doc at `7f059fa`.
+- **Now — Spec 03b:** clear the CI test gate so the deploy job runs. Three small PRs (Class A pre-existing, Class B Spec 03 introductions, Class C residuals). ~1–2 days portal engineering, single captain. **Until 03b lands, staging stays on the pre-Spec-03 release** even though `main`'s source is current.
+- **Now — Spec 01 Heroes adoption:** Heroes mounts `@coms-portal/account-widget` per `heroes-integration-handoff.md`. Independent of the test gate; ships on Heroes' deploy pipeline.
+- **Soon — Spec 03 Heroes adoption (after 03b clears):** Heroes Phase 0 prep + Phase 1 ingestion rewrite per spec-03 §Appendix A. ~2 weeks Heroes engineering. Cutover (Phase 3) is a coordinated <30-minute window with portal — truncate Heroes' projection tables, portal admin reprovisions users via existing CSV/Sheet/manual flows, Heroes ops re-runs sheet ingestion for points data, Deploy C applies the gated REVOKE.
 - **Rev 3 closes** when spec-00 §Success Criteria are green: widget renders identically in portal + Heroes from one package version; Heroes' DB role cannot write `identity_users`; sheet ingestion mints zero new user rows.
 
 No fixed dates — gated by team capacity, not calendar. Specs 02 / 04 / 05 sit on the shelf with full architecture pre-baked; spinning one up is a "trigger fires → start phase plan" decision, not a re-design.
