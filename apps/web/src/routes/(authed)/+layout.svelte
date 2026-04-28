@@ -145,7 +145,7 @@
     </MobileTopBar>
 
     <Sidebar
-      sections={sidebarSections}
+      sections={sidebarSections as never}
       currentPath={$page.url.pathname}
       collapsed={sidebarCollapsed}
       onCollapsedChange={(v) => (sidebarCollapsed = v)}
@@ -169,6 +169,6 @@
       </main>
     </div>
 
-    <MobileBottomNav items={mobileNavItems} currentPath={$page.url.pathname} />
+    <MobileBottomNav items={mobileNavItems as never} currentPath={$page.url.pathname} />
   </div>
 {/if}
