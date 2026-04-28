@@ -15,6 +15,9 @@ import { startHealthProbeInterval } from './services/health-probe'
 import { adminRoutes } from './routes/admin'
 import { wellKnownRoutes } from './routes/well-known'
 import { adminSigningKeyRoutes } from './routes/admin/signing-keys'
+import { registerManifest } from './services/manifests'
+import heroesManifest from './services/manifests/heroes.json'
+import type { ManifestDefinition } from './services/manifests'
 
 initGip()
 
@@ -23,6 +26,10 @@ initGip()
 // runs in-process for the moment; spec-04 covers moving it to Cloud Scheduler.
 if (process.env.NODE_ENV !== 'test') {
   startHealthProbeInterval()
+  // Idempotent boot-time registration of all static app manifests.
+  registerManifest(heroesManifest as ManifestDefinition).catch((err) => {
+    console.error('[boot] manifest registration failed:', err)
+  })
 }
 
 export const app = new Elysia({ prefix: '/api' })

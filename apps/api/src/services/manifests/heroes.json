@@ -1,0 +1,10 @@
+{
+  "appId": "heroes",
+  "displayName": "Heroes",
+  "schemaVersion": 1,
+  "configSchema": {
+    "role": { "type": "enum", "values": ["member", "captain", "admin"], "default": "member" },
+    "leaderboard_eligible": { "type": "boolean", "default": true },
+    "starting_points": { "type": "integer", "default": 0 }
+  }
+}
