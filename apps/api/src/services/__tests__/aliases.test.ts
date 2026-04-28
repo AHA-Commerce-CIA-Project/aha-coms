@@ -330,4 +330,76 @@ describe('detectCollision', () => {
     expect(result.fuzzyMatches.length).toBeGreaterThan(0)
     expect(result.fuzzyMatches[0]!.distance).toBeLessThanOrEqual(2)
   })
+
+  test('returns fuzzy match on token-set match even when Levenshtein > 2 (spec OR-condition)', async () => {
+    // Candidates the OR-condition catches that pure Lev<=2 misses:
+    // "Jane Smith" vs "Jane Smith Jr" — Lev=3 but last+first share, token-set match.
+    const candidate = {
+      id: 'alias-existing',
+      identityUserId: 'uid-jane',
+      alias: 'Jane Smith',
+      aliasNormalized: 'jane smith',
+      isPrimary: true,
+      source: 'auto_seed',
+      createdAt: new Date(),
+      createdBy: null,
+    }
+
+    mockDbSelect.mockReset()
+    let selectCall = 0
+    mockDbSelect.mockImplementation(() => {
+      selectCall++
+      if (selectCall === 1) {
+        const c: Record<string, unknown> = {}
+        c.from = () => c
+        c.where = () => c
+        c.limit = async () => []
+        return c
+      }
+      const c: Record<string, unknown> = {}
+      c.from = async () => [candidate]
+      return c
+    })
+
+    const result = await detectCollision('Jane Smith Jr')
+    // Levenshtein('jane smith jr', 'jane smith') = 3, but token-set matches on first+last.
+    expect(result.exactMatch).toBeNull()
+    expect(result.fuzzyMatches.length).toBeGreaterThan(0)
+    expect(result.fuzzyMatches[0]!.tokenMatch).toBe(true)
+  })
+
+  test('returns fuzzy match on token-set match for middle-token insertion (Mary Lee vs Mary Ann Lee)', async () => {
+    const candidate = {
+      id: 'alias-mary',
+      identityUserId: 'uid-mary',
+      alias: 'Mary Lee',
+      aliasNormalized: 'mary lee',
+      isPrimary: true,
+      source: 'auto_seed',
+      createdAt: new Date(),
+      createdBy: null,
+    }
+
+    mockDbSelect.mockReset()
+    let selectCall = 0
+    mockDbSelect.mockImplementation(() => {
+      selectCall++
+      if (selectCall === 1) {
+        const c: Record<string, unknown> = {}
+        c.from = () => c
+        c.where = () => c
+        c.limit = async () => []
+        return c
+      }
+      const c: Record<string, unknown> = {}
+      c.from = async () => [candidate]
+      return c
+    })
+
+    const result = await detectCollision('Mary Ann Lee')
+    // Levenshtein = 4, but first ('mary') and last ('lee') tokens both align — token-set match.
+    expect(result.exactMatch).toBeNull()
+    expect(result.fuzzyMatches.length).toBeGreaterThan(0)
+    expect(result.fuzzyMatches[0]!.tokenMatch).toBe(true)
+  })
 })

@@ -175,12 +175,16 @@ export async function detectCollision(name: string): Promise<CollisionResult> {
 
   for (const row of all) {
     const dist = levenshtein(normalized, row.aliasNormalized)
-    if (dist <= 2) {
-      const candidateTokens = nameTokens(row.alias)
-      const tokenMatch =
-        (queryTokens.first === candidateTokens.first ||
-          queryTokens.last === candidateTokens.last) &&
-        queryTokens.full !== candidateTokens.full
+    const candidateTokens = nameTokens(row.alias)
+    const tokenMatch =
+      (queryTokens.first === candidateTokens.first ||
+        queryTokens.last === candidateTokens.last) &&
+      queryTokens.full !== candidateTokens.full
+    // Spec §"Confidence + unwind path": fuzzy match is "Levenshtein ≤ 2 OR token-set match".
+    // Token-set catches name extensions (Jane Smith vs Jane Smith Jr) where Lev > 2 but the
+    // first or last token still aligns — exactly the silent-duplication class we want admins
+    // to review. Distance gate alone misses these.
+    if (dist <= 2 || tokenMatch) {
       fuzzyMatches.push({ alias: row, distance: dist, tokenMatch })
     }
   }
