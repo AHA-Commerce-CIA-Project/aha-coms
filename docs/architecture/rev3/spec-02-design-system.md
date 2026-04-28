@@ -6,6 +6,18 @@
 
 ---
 
+## Status — 2026-04-28
+
+**Phase 1 (lift docs + cut standalone repos): done** — see §Migration / Rollout.
+
+**Phase 2 (token package): shipped portal-side.** `@coms-portal/design-tokens` v1.0.0 published at https://github.com/mrdoorba/coms-design-tokens. `tokens.yaml` extracted from DESIGN.md frontmatter as canonical source; build pipeline emits `tokens.css`, `tailwind-preset.js` (v3 stub), `tokens.ts`. Portal `apps/web` consumes `@coms-portal/design-tokens/css` via `@import` (Tailwind v4 `@theme` block); old inline tokens removed.
+
+**Phase 3 (chrome package): shipped portal-side.** `@coms-portal/ui` v1.0.0 published at https://github.com/mrdoorba/coms-ui. `src/chrome/{ServiceBar,Sidebar,MobileTopBar,MobileBottomNav}.svelte` lifted from Heroes' canonical layout, refactored to be host-agnostic (props for `navItems` / `services` / `user` / `theme` / `currentPath` + `right` snippet for widget mount). `Header.svelte` deliberately excluded — app-level concern (search/notifications/i18n), not chrome. Portal `apps/web` consumes the package; old local layout files deleted.
+
+**Phases 4 + 5: still deferred.** Triggers (second consumer for Phase 4 primitives; real third H-app onboarding for Phase 5 onboarding exercise) have not fired. Heroes-side adoption of Phases 2 + 3 is the right next step — see `heroes-integration-handoff.md` for install lines and mount snippets.
+
+---
+
 ## Overview
 
 Heroes' repo currently hosts `my-design-guideline/DESIGN.md`, a comprehensive COMS Design System spec covering tokens, typography, chrome, and components. The content is solid but the **location is wrong** for a multi-app system: the design language lives inside one consumer rather than at the federation hub.

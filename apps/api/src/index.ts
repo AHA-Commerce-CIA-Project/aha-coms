@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia'
 import { authRoutes } from './routes/auth'
+import { userinfoRoutes } from './routes/userinfo'
 import { employeeRoutes } from './routes/employees'
 import { teamRoutes } from './routes/teams'
 import { appRoutes } from './routes/apps'
@@ -45,6 +46,7 @@ export const app = new Elysia({ prefix: '/api' })
   // Public, unauthenticated — JWKS + OIDC discovery (Rev 2 §01 + §02)
   .use(wellKnownRoutes)
   .use(authRoutes)
+  .use(userinfoRoutes)
   .use(internalRoutes)
   .group('/v1', (app) =>
     app

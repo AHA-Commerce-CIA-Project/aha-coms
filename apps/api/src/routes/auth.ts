@@ -6,7 +6,7 @@ import {
 } from '../gip-admin'
 import { db } from '~/db'
 import { identityUsers, sessionRevocations, teamMembers, appRegistry } from '~/db/schema'
-import { eq, and, gte } from 'drizzle-orm'
+import { eq, and, gte, ne } from 'drizzle-orm'
 import {
   type PortalBrokerExchangePayload,
   type PortalSessionUser,
@@ -80,6 +80,53 @@ async function authenticateIntrospectCaller(
   } catch {
     return { ok: false, reason: 'verify_failed' }
   }
+}
+
+/**
+ * Validate `post_logout_redirect_uri` against the active app_registry.url
+ * allowlist. Comparison is by `URL.origin`, which lets H-apps pass branded
+ * post-logout paths (e.g. `https://heroes.ahacommerce.net/logged-out`) under
+ * any registered origin — see spec-01 line 91 and the Heroes integration
+ * handoff. Returns the canonical candidate URL on success, null on failure.
+ *
+ * Allowlist source: `app_registry.url` for non-deprecated apps. The portal's
+ * own origin (`PORTAL_PUBLIC_ORIGIN`) is always implicitly allowed so that
+ * portal → portal logout returns the user to the landing page.
+ */
+async function validatePostLogoutRedirectUri(uri: string): Promise<string | null> {
+  let candidate: URL
+  try {
+    candidate = new URL(uri)
+  } catch {
+    return null
+  }
+  if (candidate.protocol !== 'https:' && candidate.protocol !== 'http:') {
+    return null
+  }
+
+  const portalOrigin = process.env.PORTAL_PUBLIC_ORIGIN ?? SELF_AUDIENCE
+  try {
+    if (new URL(portalOrigin).origin === candidate.origin) {
+      return candidate.toString()
+    }
+  } catch {
+    // Misconfigured PORTAL_PUBLIC_ORIGIN — fall through to registry check.
+  }
+
+  const apps = await db
+    .select({ url: appRegistry.url })
+    .from(appRegistry)
+    .where(ne(appRegistry.status, 'deprecated'))
+  for (const a of apps) {
+    try {
+      if (new URL(a.url).origin === candidate.origin) {
+        return candidate.toString()
+      }
+    } catch {
+      // Skip malformed registry rows so one bad record doesn't break logout.
+    }
+  }
+  return null
 }
 
 async function resolveSessionUser(request: Request): Promise<PortalSessionUser> {
@@ -158,36 +205,135 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   /**
    * POST /api/auth/logout
    * Clear the session cookie and revoke the GIP session.
-   * Also fans out session.revoked webhooks to all apps the user has access to.
+   * Fans out session.revoked webhooks to all apps the user has access to.
+   *
+   * Optional `post_logout_redirect_uri` body field (OIDC RP-initiated logout
+   * adjunct): when present and allowlisted against `app_registry.url`, the
+   * response includes a `redirect_to` field so the same-origin client can
+   * navigate after sign-out. When present and NOT allowlisted, returns 400
+   * (never silently fall through — open-redirect vector).
    */
-  .post('/logout', async ({ request, cookie }) => {
-    const cookieHeader = request.headers.get('cookie') ?? ''
-    const sessionCookie = getSessionCookieValue(cookieHeader)
+  .post(
+    '/logout',
+    async ({ request, body, cookie, set }) => {
+      const postLogoutRedirectUri = body?.post_logout_redirect_uri
 
-    if (sessionCookie) {
-      try {
-        const decoded = await verifySessionCookie(sessionCookie)
-        // Resolve portal userId from GIP uid
-        const user = await db.query.identityUsers.findFirst({
-          where: eq(identityUsers.gipUid, decoded.uid),
-          columns: { id: true },
-        })
-        if (user) {
-          await revokePortalSession({ userId: user.id, reason: 'logout' })
+      let validatedRedirect: string | null = null
+      if (postLogoutRedirectUri) {
+        validatedRedirect = await validatePostLogoutRedirectUri(postLogoutRedirectUri)
+        if (!validatedRedirect) {
+          console.warn(
+            `[logout] rejected post_logout_redirect_uri (not in allowlist): ${postLogoutRedirectUri}`,
+          )
+          set.status = 400
+          return { message: 'post_logout_redirect_uri not allowlisted' }
         }
-      } catch {
-        // Already invalid or user not found — clear the cookie anyway
       }
-    }
 
-    cookie[SESSION_COOKIE_OPTIONS.name].set({
-      value: '',
-      maxAge: 0,
-      path: '/',
-    })
+      const cookieHeader = request.headers.get('cookie') ?? ''
+      const sessionCookie = getSessionCookieValue(cookieHeader)
 
-    return { ok: true }
-  })
+      if (sessionCookie) {
+        try {
+          const decoded = await verifySessionCookie(sessionCookie)
+          const user = await db.query.identityUsers.findFirst({
+            where: eq(identityUsers.gipUid, decoded.uid),
+            columns: { id: true },
+          })
+          if (user) {
+            await revokePortalSession({ userId: user.id, reason: 'logout' })
+          }
+        } catch {
+          // Already invalid or user not found — clear the cookie anyway
+        }
+      }
+
+      cookie[SESSION_COOKIE_OPTIONS.name].set({
+        value: '',
+        maxAge: 0,
+        path: '/',
+      })
+
+      if (validatedRedirect) {
+        return { ok: true, redirect_to: validatedRedirect }
+      }
+      return { ok: true }
+    },
+    {
+      body: t.Optional(
+        t.Object({
+          post_logout_redirect_uri: t.Optional(t.String()),
+        }),
+      ),
+    },
+  )
+
+  /**
+   * GET /api/auth/logout
+   *
+   * OIDC RP-initiated logout entry point. Top-level browser navigation from a
+   * relying-party app (e.g. Heroes' account widget) carrying:
+   *   - `id_token_hint` (optional today; reserved for future cross-IdP exits)
+   *   - `post_logout_redirect_uri` (required for the redirect; must be allowlisted)
+   *
+   * Clears the portal session cookie, revokes the GIP session (same as POST),
+   * then 303-redirects to the validated URI. If the URI is missing or not
+   * allowlisted, returns 400.
+   */
+  .get(
+    '/logout',
+    async ({ request, query, cookie, set }) => {
+      const postLogoutRedirectUri = query.post_logout_redirect_uri
+
+      if (!postLogoutRedirectUri) {
+        set.status = 400
+        return { message: 'post_logout_redirect_uri is required for RP-initiated logout' }
+      }
+
+      const validatedRedirect = await validatePostLogoutRedirectUri(postLogoutRedirectUri)
+      if (!validatedRedirect) {
+        console.warn(
+          `[logout-rp] rejected post_logout_redirect_uri (not in allowlist): ${postLogoutRedirectUri}`,
+        )
+        set.status = 400
+        return { message: 'post_logout_redirect_uri not allowlisted' }
+      }
+
+      const cookieHeader = request.headers.get('cookie') ?? ''
+      const sessionCookie = getSessionCookieValue(cookieHeader)
+
+      if (sessionCookie) {
+        try {
+          const decoded = await verifySessionCookie(sessionCookie)
+          const user = await db.query.identityUsers.findFirst({
+            where: eq(identityUsers.gipUid, decoded.uid),
+            columns: { id: true },
+          })
+          if (user) {
+            await revokePortalSession({ userId: user.id, reason: 'logout' })
+          }
+        } catch {
+          // Already invalid or user not found — clear the cookie anyway
+        }
+      }
+
+      cookie[SESSION_COOKIE_OPTIONS.name].set({
+        value: '',
+        maxAge: 0,
+        path: '/',
+      })
+
+      set.status = 303
+      set.headers.location = validatedRedirect
+      return ''
+    },
+    {
+      query: t.Object({
+        post_logout_redirect_uri: t.String(),
+        id_token_hint: t.Optional(t.String()),
+      }),
+    },
+  )
 
   .post(
     '/broker/handoff',

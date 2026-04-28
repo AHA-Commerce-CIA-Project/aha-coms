@@ -7,6 +7,27 @@
 
 ---
 
+## Status — 2026-04-28 (portal-side shipped; Heroes adoption pending)
+
+Portal/COMS team landed Specs 01 + 02 (Phases 2 + 3) end-to-end on 2026-04-28. Spec 03 remains scheduled but un-started.
+
+**Shipped (public GitHub repos, consumed via `git+url`):**
+
+| Package | Version | Repo |
+|---------|---------|------|
+| `@coms-portal/design-tokens` | v1.0.0 | https://github.com/mrdoorba/coms-design-tokens |
+| `@coms-portal/ui` (chrome only) | v1.0.0 | https://github.com/mrdoorba/coms-ui |
+| `@coms-portal/account-widget` | v0.1.0 | https://github.com/mrdoorba/coms-account-widget |
+| `@coms-portal/shared` (+ APP_LAUNCHER) | v1.3.0 | https://github.com/mrdoorba/coms-shared |
+
+Portal `apps/web` is migrated and dogfooding all four (consuming via `git+https://...#vX.Y.Z`); portal `apps/api` exposes `GET /api/userinfo` and OIDC RP-initiated logout (`GET /api/auth/logout`), both with `app_registry.url` origin allowlist (post-deprecation filter, post red-cell sweep).
+
+**Heroes-side work pending** — see `heroes-integration-handoff.md` (mirrored into this folder) for the install lines, mount snippets, file-deletion list, and verification checklist. Spec 01 widget adoption + Spec 02 Phase 2 token consumption are unblocked; Phase 3 chrome adoption can land at the same time or later.
+
+**Spec 03 status:** un-started. Heroes signed off on the design 2026-04-28; both teams can sequence the three-deploy cutover whenever capacity opens. Specs 02 (Phases 4+5), 04, 05 remain deferred until their triggers fire — see each spec's §Why this is deferred.
+
+---
+
 ## Theme of Rev 3
 
 Rev 1 hardened the federation. Rev 2 removed shared secrets. Rev 3 closes two gaps that follow from a working SSO:
@@ -24,7 +45,7 @@ After Rev 3, identity is *centrally owned* (Rev 2), *centrally surfaced* (Spec 0
 |------|-------|-------|--------|-------------------|----------------|
 | 00 | Implementation Timeline (this doc) | Portal | — | — | — |
 | 01 | Shared Account Widget | Portal | Medium | Yes — H1 (adoption) | Yes — UX surface |
-| 02 | Design System (skeleton + spec) | Portal | Phase 1 done; Phase 2+ deferred | Eventually (Phase 3 adoption) | No — deferred until trigger |
+| 02 | Design System (skeleton + spec) | Portal | Phases 1+2+3 done portal-side (2026-04-28); Phase 4+5 deferred | Phase 2 token consumption + Phase 3 chrome adoption | No — deferred until trigger |
 | 03 | User Identity Ownership & Alias Layer | Portal + Heroes | Large | Yes — H1 (rename, ingestion rewrite) | **Yes — must land before real users** |
 | 04 | Unified User Preferences (theme + locale) | Portal + every H-app | Small per phase | Yes — Phase 3 (preference consumption) | No — deferred until trigger |
 | 05 | Suite Search / Command Palette | Portal + every H-app | Medium per phase | Optional — Phase 3 (search provider) | No — deferred until trigger |
