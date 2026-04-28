@@ -1,0 +1,14 @@
+/*
+ * @coms-portal/design-tokens
+ *
+ * Skeleton — Phase 2 of Rev 3 Spec 02 will populate this from
+ * coms_portal/docs/design-system/DESIGN.md frontmatter via a build step.
+ */
+
+:root {
+  /* TODO: generated from DESIGN.md `colors` block (light mode) */
+}
+
+.dark {
+  /* TODO: generated from DESIGN.md `colors` block (dark mode) */
+}
