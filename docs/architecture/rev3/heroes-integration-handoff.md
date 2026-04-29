@@ -2,6 +2,8 @@
 
 > Audience: the Heroes team. You have read spec-01 and spec-02; this document tells you what to do in `coms_aha_heroes/` to adopt the three packages we just shipped portal-side.
 >
+> **Scope note (added 2026-04-29):** This document is **Heroes-specific** by design — it speaks Heroes' Svelte stack, Heroes' file paths (`ServiceBar`, `Sidebar`, `TopBar`, `MobileNav`, `MobileBottomNav`), and Heroes' Tailwind setup. A generic, framework-neutral `@coms-portal/sdk` + integrator quickstart is queued as part of **Spec 03c (pre-Spec-4 hardening)**. Future tenants (tenant #3 onward, especially non-Svelte stacks) should follow that path. This doc remains the canonical reference for Heroes' Rev 3 adoption; it does not need to be re-genericized.
+>
 > **Prepared:** 2026-04-28 (post-portal-implementation pass). **Portal status:** all three packages exist on disk in sibling repos; portal `apps/web` consumes them; the widget is mounted in the chrome's right slot and dogfooded in the portal layout. Tests + builds green.
 
 ---

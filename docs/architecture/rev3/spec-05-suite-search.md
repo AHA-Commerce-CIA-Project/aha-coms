@@ -2,7 +2,7 @@
 
 > Priority: **Deferred. Not critical-path; ships when N > 6 apps or first cross-app search request lands.**
 > Scope: Portal (search registry, ranker, federation endpoint) + every H-app (search provider plugin, optional).
-> Prerequisites: Rev 3 Spec 01 (account widget — launcher entry point lives in chrome).
+> Prerequisites: Rev 3 Spec 01 (account widget — launcher entry point lives in chrome); Rev 3 Spec 03c (pre-Spec-4 hardening — federated `/api/search` calls fan out across providers with a 500ms per-provider timeout; without request-ID propagation and structured logging, debugging which provider was skipped and why is impractical. Each provider also benefits from `@coms-portal/sdk` for verifying the inbound service token).
 
 ---
 

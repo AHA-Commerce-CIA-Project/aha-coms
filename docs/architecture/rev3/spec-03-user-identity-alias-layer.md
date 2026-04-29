@@ -588,6 +588,22 @@ Captured here so they aren't lost between spec finalization and implementation:
 
 ---
 
+## Known limitations (post-shipping verification)
+
+Captured 2026-04-29 from a verification pass against the shipped Spec 03 codebase. None of these block Heroes adoption; they are documented so future readers don't mistake them for bugs and so Spec 03c (pre-Spec-4 hardening) has a clean punch list.
+
+- **Webhook DLQ implementation drift.** `apps/api/src/services/webhook-dispatcher.ts:12` — the design comment refers to `/api/internal/webhook-dlq` as the dead-letter handler. That route does not exist. Terminal-attempt logic is inline in `/api/internal/webhook-delivery` at `apps/api/src/routes/internal.ts:144–182` (sets the endpoint to `disabled` when `retryCountNum === MAX_ATTEMPTS - 1`). Functionally correct; the abstraction in the comment is aspirational. **Spec 03c** either builds the standalone route as a Pub/Sub-triggered handler or corrects the comment (recommend the latter).
+
+- **Webhook secret storage is plaintext.** `apps/api/src/db/schema/app-webhook-endpoints.ts:14` stores `secret` as `text(...)` with the explicit comment "stored as-is (not hashed) — portal needs to sign outbound payloads with it". Accepted because a one-way hash would make the portal unable to mint HMAC signatures at delivery time. Migration path = envelope-encrypt with KMS, decrypt at delivery. Not blocking today; promote when an external tenant requires per-secret trust isolation.
+
+- **Single global broker signing key.** `apps/api/src/services/signing-keys.ts` enforces a single ACTIVE row in `portal_broker_signing_keys` (unique partial index on `status='active'`); `apps/api/src/services/auth-broker.ts:218–228` (`signES256BrokerToken`) loads it without per-app derivation. The HS256 path retains a per-app fallback (`auth-broker.ts:148`) but that is the legacy mode. Per-tenant signing key derivation is deferred until tenant #3 (external) requires cryptographic trust isolation — at that point, derive a per-app `kid` via HKDF from the global root and rotate per-app independently.
+
+- **`compliance_status` enforced at registration only.** `apps/api/src/services/apps.ts:46–79` (`validateAppIntegrationMetadata`) enforces manifest path + `lastVerifiedAt` at registration time; `apps/api/src/services/auth-broker.ts:296–384` (`createBrokerHandoff`) does not check `compliance_status` during token issuance — only `app.status !== 'active'` and the user→app access list. So the field is decorative for the broker flow today. Promote to enforcement at token issuance when compliance gating is required (likely when an external tenant is onboarded under SOC 2 / ISO 27001 obligations).
+
+- **Audit log gaps.** `apps/api/src/db/schema/audit.ts:5–15` defines `access_audit_log` with columns `id, actor_id, action, target_type, target_id, details, created_at`. Missing: `actor_ip`, `request_id`, failure events (the `AuditAction` enum only contains success-side actions), Cloud Logging sink, retention policy. **Spec 03c** adds the `actor_ip` and `request_id` columns (Drizzle migration via `drizzle-kit generate` per the project's standing rule) and wires the columns into all audit-write call sites. The Cloud Logging sink and retention policy stay deferred until a compliance review forces them.
+
+---
+
 ## Success Criteria
 
 Spec 03 is done when:
