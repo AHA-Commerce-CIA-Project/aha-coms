@@ -1,8 +1,9 @@
-  <script lang="ts">
+<script lang="ts">
   import { employeesQuery, batchUpdateEmployeesMutation, importEmployeesCsvMutation, upgradeWorkspaceMutation } from '$lib/queries/employees'
   import BatchToolbar from '$lib/components/batch-toolbar.svelte'
   import { PORTAL_ROLE_LABELS, PORTAL_ROLES } from '@coms-portal/shared'
   import { adminApi } from '$lib/admin-api'
+  import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Input, Button, Badge } from '@coms-portal/ui/primitives'
 
   const MAX_EMPLOYEE_IMPORT_CSV_BYTES = 2 * 1024 * 1024
 
@@ -181,7 +182,7 @@
 <div class="p-8">
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold">Employees</h1>
-    <a href="/admin/employees/new" class="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90">Add Employee</a>
+    <Button href="/admin/employees/new">Add Employee</Button>
   </div>
 
   <div class="mb-6 rounded-xl border border-border bg-card p-5">
@@ -191,14 +192,13 @@
         <p class="text-sm text-muted-foreground">Sinkronisasi data karyawan (HP, tanggal lahir, jabatan, tim, penilai) dari Google Sheet. Karyawan yang belum terdaftar tapi punya email pribadi akan otomatis dibuat. Data yang kosong di sheet tidak akan menimpa data yang sudah ada.</p>
       </div>
       <div class="flex flex-col gap-3 lg:min-w-64">
-        <button
+        <Button
           type="button"
           onclick={handleSyncEmployeeInfo}
           disabled={syncPending}
-          class="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
         >
           {syncPending ? 'Syncing…' : 'Sync Employee Info'}
-        </button>
+        </Button>
         {#if syncError}
           <p class="text-sm text-destructive">{syncError}</p>
         {/if}
@@ -253,22 +253,22 @@
           class="block w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:text-foreground"
         />
         <div class="flex gap-3">
-          <button
+          <Button
             type="button"
+            variant="outline"
             onclick={handlePreviewCsv}
             disabled={!csvFile || $importMutation.isPending}
-            class="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
           >
             {$importMutation.isPending && !previewReady ? 'Previewing…' : 'Preview CSV'}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="secondary"
             onclick={handleImportCsv}
             disabled={!csvFile || !previewReady || $importMutation.isPending}
-            class="rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50"
           >
             {$importMutation.isPending && previewReady ? 'Importing…' : 'Import CSV'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -351,14 +351,15 @@
             <div class="mb-2 flex items-center justify-between">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-status-pending">Needs Review</h3>
               {#if importResult.flagged.some((f) => f.existingId && !mergedIds.has(f.existingId))}
-                <button
+                <Button
                   type="button"
+                  variant="destructive"
+                  size="sm"
                   onclick={handleMergeAll}
                   disabled={mergingAll || $upgradeMutation.isPending}
-                  class="rounded-md bg-orange-600 px-3 py-1 text-xs font-medium hover:bg-orange-500 disabled:opacity-50"
                 >
                   {mergingAll ? 'Merging…' : 'Merge All'}
-                </button>
+                </Button>
               {/if}
             </div>
             <p class="mb-2 text-xs text-muted-foreground">These CSV rows match a non-workspace user by name. Merge to upgrade the existing employee with their workspace email.</p>
@@ -370,14 +371,16 @@
                   <div class="flex items-start justify-between gap-3">
                     <p>Row {row.rowNumber} — <span class="text-foreground">{row.csvName}</span> ({row.csvEmail}) matches existing: <span class="text-primary">{row.existingName}</span> ({row.existingEmail})</p>
                     {#if row.existingId}
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
                         onclick={() => handleMergeOne(row)}
                         disabled={$upgradeMutation.isPending}
-                        class="shrink-0 rounded-md border border-orange-600 px-3 py-1 text-xs font-medium text-status-pending hover:bg-orange-600 hover:text-foreground disabled:opacity-50"
+                        class="shrink-0"
                       >
                         Merge
-                      </button>
+                      </Button>
                     {:else}
                       <span class="shrink-0 text-xs text-muted-foreground">Ambiguous</span>
                     {/if}
@@ -405,7 +408,14 @@
     {/if}
   </div>
 
-  <input type="text" placeholder="Search by email..." bind:value={search} class="mb-4 w-full max-w-sm rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
+  <label class="sr-only" for="employee-search">Search employees</label>
+  <Input
+    id="employee-search"
+    type="text"
+    placeholder="Search by email..."
+    bind:value={search}
+    class="mb-4 w-full max-w-sm"
+  />
 
   <div class="mb-3">
     <BatchToolbar
@@ -424,32 +434,42 @@
       {/each}
     </div>
   {:else if $query.data}
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b border-border text-left text-xs text-muted-foreground">
-          <th class="pb-2 w-8">
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead class="w-8">
             <input type="checkbox" checked={allSelected} onchange={toggleAll} class="rounded border-border" />
-          </th>
-          <th class="pb-2 font-medium">Name</th>
-          <th class="pb-2 font-medium">Email</th>
-          <th class="pb-2 font-medium">Personal Email</th>
-          <th class="pb-2 font-medium">Role</th>
-          <th class="pb-2 font-medium">Status</th>
-          <th class="pb-2 font-medium">Provisioning</th>
-        </tr>
-      </thead>
-      <tbody>
+          </TableHead>
+          <TableHead>Name</TableHead>
+          <TableHead>Email</TableHead>
+          <TableHead>Personal Email</TableHead>
+          <TableHead>Role</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Provisioning</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {#each $query.data.data as employee}
-          <tr class="border-b border-border/50 hover:bg-accent">
-            <td class="py-2">
+          <TableRow>
+            <TableCell>
               <input type="checkbox" checked={selected.has(employee.id)} onchange={() => toggleOne(employee.id)} class="rounded border-border" />
-            </td>
-            <td class="py-2"><a href="/admin/employees/{employee.id}" class="text-primary hover:text-primary/80">{employee.name}</a></td>
-            <td class="py-2 text-muted-foreground">{employee.email}</td>
-            <td class="py-2 text-muted-foreground">{employee.personalEmail ?? '—'}</td>
-            <td class="py-2"><span class="rounded-full bg-muted px-2 py-0.5 text-xs">{employee.portalRole}</span></td>
-            <td class="py-2"><span class="text-xs" class:text-status-active={employee.status === 'active'} class:text-destructive={employee.status !== 'active'}>{employee.status}</span></td>
-            <td class="py-2">
+            </TableCell>
+            <TableCell>
+              <a href="/admin/employees/{employee.id}" class="text-primary hover:text-primary/80">{employee.name}</a>
+            </TableCell>
+            <TableCell class="text-muted-foreground">{employee.email}</TableCell>
+            <TableCell class="text-muted-foreground">{employee.personalEmail ?? '—'}</TableCell>
+            <TableCell>
+              <Badge variant="secondary">{employee.portalRole}</Badge>
+            </TableCell>
+            <TableCell>
+              <span
+                class="text-xs"
+                class:text-status-active={employee.status === 'active'}
+                class:text-destructive={employee.status !== 'active'}
+              >{employee.status}</span>
+            </TableCell>
+            <TableCell>
               <span
                 class="text-xs"
                 class:text-status-active={employee.provisioningStatus === 'ready'}
@@ -458,18 +478,18 @@
               >
                 {employee.provisioningStatus}
               </span>
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         {/each}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
 
     <div class="mt-4 flex items-center justify-between text-xs text-muted-foreground">
       <span>{$query.data.total} total</span>
       <div class="flex gap-2">
-        <button onclick={() => page = Math.max(1, page - 1)} disabled={page === 1} class="rounded px-2 py-1 hover:bg-accent disabled:opacity-30">Prev</button>
-        <span>Page {page}</span>
-        <button onclick={() => page++} disabled={$query.data.data.length < 20} class="rounded px-2 py-1 hover:bg-accent disabled:opacity-30">Next</button>
+        <Button variant="ghost" size="sm" onclick={() => page = Math.max(1, page - 1)} disabled={page === 1}>Prev</Button>
+        <span class="flex items-center px-2">Page {page}</span>
+        <Button variant="ghost" size="sm" onclick={() => page++} disabled={$query.data.data.length < 20}>Next</Button>
       </div>
     </div>
   {/if}
