@@ -11,6 +11,13 @@
 
 @import "tailwindcss";
 
+/* Tailwind v4 excludes node_modules from auto-discovery. Each shared package
+   ships its own styles.css with an @source directive (relative to the package),
+   so the host imports them here to opt the package's components into the
+   class scanner. Order: tailwindcss → package source registrations → tokens. */
+@import "@coms-portal/ui/styles.css";
+@import "@coms-portal/account-widget/styles.css";
+
 @custom-variant dark (&:is(.dark *));
 
 /* Brand + status colors, fonts, spacing, radii, shadows, and the @theme inline
