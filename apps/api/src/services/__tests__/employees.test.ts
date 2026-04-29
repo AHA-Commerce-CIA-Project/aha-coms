@@ -1,5 +1,11 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
+
+// Snapshot the real `gip-admin` module before mocking. The override below
+// stubs only the four functions this file exercises; restoring real exports
+// in afterAll keeps the rest of the surface (verifySessionCookie, verifyIdToken,
+// setCustomUserClaims, etc.) available to sibling test files.
+const realGipAdmin = { ...(await import('../../gip-admin')) }
 
 const identityUsers = { id: 'identityUsers.id' }
 const teamMembers = { teamId: 'teamMembers.teamId', userId: 'teamMembers.userId' }
@@ -112,6 +118,7 @@ mock.module('../claims', () => ({ resolveAndSyncClaims }))
 // would leak into their own test files. The db stub above returns empty
 // selects, so the real fire-and-forget code paths run to a no-op.
 mock.module('../../gip-admin', () => ({
+  ...realGipAdmin,
   createGipUser,
   setGipUserDisabled,
   generatePasswordResetLink,
@@ -120,6 +127,10 @@ mock.module('../../gip-admin', () => ({
 }))
 
 const { createEmployee } = await import('../employees')
+
+afterAll(() => {
+  mock.module('../../gip-admin', () => realGipAdmin)
+})
 
 describe('createEmployee', () => {
   beforeEach(() => {

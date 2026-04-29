@@ -1,5 +1,9 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
+
+// Snapshot the real `gip-admin` module before mocking. We only stub
+// revokeRefreshTokens; spreading the real surface keeps the rest available.
+const realGipAdmin = { ...(await import('../../gip-admin')) }
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing the module under test.
@@ -75,7 +79,11 @@ mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 // Mock GIP revokeRefreshTokens
 // Path is relative to the TEST FILE: '../../gip-admin' resolves to src/gip-admin.ts
 const revokeRefreshTokens = mock(async (_uid: string) => undefined)
-mock.module('../../gip-admin', () => ({ revokeRefreshTokens }))
+mock.module('../../gip-admin', () => ({ ...realGipAdmin, revokeRefreshTokens }))
+
+afterAll(() => {
+  mock.module('../../gip-admin', () => realGipAdmin)
+})
 
 // Mock the webhook dispatcher via the dedicated re-export shim.
 // We must NOT mock '../webhook-dispatcher' directly: Bun's `mock.module` is
