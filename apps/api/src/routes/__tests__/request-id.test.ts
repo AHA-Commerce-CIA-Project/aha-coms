@@ -54,4 +54,16 @@ describe('request-ID middleware', () => {
     const unique = new Set(ids)
     expect(unique.size).toBe(5)
   })
+
+  test('F-1: non-UUID inbound X-Coms-Request-Id is rejected — response header is a fresh valid UUID', async () => {
+    const forged = 'not-a-uuid'
+    const res = await app.handle(
+      new Request('http://localhost/ping', {
+        headers: { 'x-coms-request-id': forged },
+      }),
+    )
+    const header = res.headers.get('x-coms-request-id')!
+    expect(header).not.toBe(forged)
+    expect(UUID_RE.test(header)).toBe(true)
+  })
 })
