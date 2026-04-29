@@ -5,6 +5,18 @@
   import { appsQuery } from '$lib/queries/apps'
   import { adminApi } from '$lib/admin-api'
   import { useQueryClient } from '@tanstack/svelte-query'
+  import {
+    Button,
+    Input,
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+    Select,
+    SelectTrigger,
+    SelectContent,
+    SelectItem,
+  } from '@coms-portal/ui/primitives'
 
   const id = $derived($page.params.id!)
   const query = $derived(teamQuery(id))
@@ -220,27 +232,26 @@
         {#if editing}
           <form onsubmit={handleSaveEdit} class="space-y-3">
             <div>
-              <input
+              <Input
                 type="text"
                 bind:value={editName}
                 required
-                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
+                class="rounded-lg"
               />
             </div>
             <div>
-              <input
+              <Input
                 type="text"
                 bind:value={editDescription}
                 placeholder="Description"
-                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
               />
             </div>
             {#if editError}
               <p class="text-xs text-destructive">{editError}</p>
             {/if}
             <div class="flex gap-2">
-              <button type="submit" disabled={editPending} class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50">Save</button>
-              <button type="button" onclick={() => editing = false} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">Cancel</button>
+              <Button type="submit" size="sm" disabled={editPending}>{editPending ? 'Saving…' : 'Save'}</Button>
+              <Button type="button" size="sm" variant="outline" onclick={() => editing = false}>Cancel</Button>
             </div>
           </form>
         {:else}
@@ -252,35 +263,38 @@
       </div>
       <div class="flex gap-2">
         {#if !editing}
-          <button onclick={startEdit} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">Edit</button>
+          <Button size="sm" variant="outline" onclick={startEdit}>Edit</Button>
         {/if}
         {#if confirmingDelete}
-          <button
+          <Button
+            size="sm"
+            variant="destructive"
             onclick={handleDeleteTeam}
             disabled={deletePending}
-            class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
           >
             {deletePending ? 'Deleting…' : 'Confirm Delete'}
-          </button>
-          <button
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             onclick={() => {
               confirmingDelete = false
               actionError = null
             }}
-            class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent"
           >
             Cancel
-          </button>
+          </Button>
         {:else}
-          <button
+          <Button
+            size="sm"
+            variant="destructive"
             onclick={() => {
               confirmingDelete = true
               actionError = null
             }}
-            class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10"
           >
             Delete
-          </button>
+          </Button>
         {/if}
       </div>
     </div>
@@ -291,206 +305,226 @@
 
     <div class="grid gap-6 lg:grid-cols-2">
       <!-- Members -->
-      <div class="rounded-xl border border-border bg-card p-5">
-        <h2 class="mb-4 text-sm font-semibold">Members</h2>
-
-        {#if team.members && team.members.length > 0}
-          <div class="mb-4 space-y-1">
-            {#each team.members as member}
-              <div class="rounded-lg px-2 py-1.5 hover:bg-accent">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <p class="text-sm">{member.name ?? member.userId}</p>
-                    <p class="text-xs text-muted-foreground">{member.email ?? ''} &middot; {member.roleInTeam}</p>
-                  </div>
-                  <button
-                    onclick={() => {
-                      if (confirmingMemberRemovalId === member.userId) {
-                        handleRemoveMember(member.userId)
-                      } else {
-                        confirmingMemberRemovalId = member.userId
-                        actionError = null
-                      }
-                    }}
-                    disabled={pendingMemberRemovalId === member.userId}
-                    class="rounded px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10"
-                  >
-                    {#if pendingMemberRemovalId === member.userId}
-                      Removing…
-                    {:else if confirmingMemberRemovalId === member.userId}
-                      Confirm Remove
-                    {:else}
-                      Remove
-                    {/if}
-                  </button>
-                </div>
-                {#if team.apps && team.apps.length > 0}
-                  <div class="mt-1 flex flex-wrap gap-1.5">
-                    {#each team.apps as app}
-                      {@const appDetail = $allAppsQuery.data?.find((a) => a.id === app.appId)}
-                      {@const declaredRoles = appDetail?.appRoles ?? []}
-                      {@const currentRole = member.appRoles?.find((r) => r.appId === app.appId)?.appRole ?? ''}
-                      {#if declaredRoles.length > 0}
-                        <div class="flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5">
-                          <span class="text-[10px] text-muted-foreground">{app.slug ?? app.name}:</span>
-                          <select
-                            value={currentRole}
-                            onchange={(e) => handleMemberRoleChange(member.userId, app.appId, e.currentTarget.value)}
-                            disabled={memberRolePending === `${member.userId}-${app.appId}`}
-                            class="rounded border-none bg-transparent px-0.5 py-0 text-[10px] focus:outline-none disabled:opacity-50"
-                          >
-                            <option value="">Default</option>
-                            {#each declaredRoles as role}
-                              <option value={role.key}>{role.label}</option>
-                            {/each}
-                          </select>
-                        </div>
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-sm font-semibold">Members</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {#if team.members && team.members.length > 0}
+            <div class="mb-4 space-y-1">
+              {#each team.members as member}
+                <div class="rounded-lg px-2 py-1.5 hover:bg-accent">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="text-sm">{member.name ?? member.userId}</p>
+                      <p class="text-xs text-muted-foreground">{member.email ?? ''} &middot; {member.roleInTeam}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onclick={() => {
+                        if (confirmingMemberRemovalId === member.userId) {
+                          handleRemoveMember(member.userId)
+                        } else {
+                          confirmingMemberRemovalId = member.userId
+                          actionError = null
+                        }
+                      }}
+                      disabled={pendingMemberRemovalId === member.userId}
+                    >
+                      {#if pendingMemberRemovalId === member.userId}
+                        Removing…
+                      {:else if confirmingMemberRemovalId === member.userId}
+                        Confirm Remove
+                      {:else}
+                        Remove
                       {/if}
-                    {/each}
+                    </Button>
                   </div>
-                {/if}
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <p class="mb-4 text-xs text-muted-foreground">No members yet.</p>
-        {/if}
-
-        <!-- Add member form -->
-        <form onsubmit={handleBatchAdd} class="space-y-2 border-t border-border pt-4">
-          <p class="text-xs font-medium text-muted-foreground">Add Member</p>
-          <div class="relative">
-            <input
-              type="text"
-              value={searchInput}
-              oninput={(e) => handleSearchInput(e.currentTarget.value)}
-              onfocus={() => { if (searchResults.length > 0) showDropdown = true }}
-              onblur={() => setTimeout(() => { showDropdown = false }, 200)}
-              placeholder="Search by name or email..."
-              class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
-            />
-            {#if searchLoading}
-              <div class="absolute right-3 top-2.5 text-xs text-muted-foreground">...</div>
-            {/if}
-            {#if showDropdown}
-              <div class="absolute z-10 mt-1 w-full rounded-lg border border-border bg-card shadow-lg">
-                {#each searchResults as user}
-                  <button
-                    type="button"
-                    onmousedown={() => stageUser(user)}
-                    class="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-lg last:rounded-b-lg"
-                  >
-                    <span class="font-medium">{user.name}</span>
-                    <span class="text-xs text-muted-foreground">{user.email}</span>
-                  </button>
-                {/each}
-              </div>
-            {/if}
-          </div>
-          {#if stagedMembers.length > 0}
-            <div class="space-y-1">
-              {#each stagedMembers as staged}
-                <div class="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm">
-                  <div class="min-w-0 flex-1">
-                    <span class="font-medium">{staged.name}</span>
-                    <span class="ml-1 text-xs text-muted-foreground">{staged.email}</span>
-                  </div>
-                  <select
-                    value={staged.roleInTeam}
-                    onchange={(e) => updateStagedRole(staged.id, e.currentTarget.value)}
-                    class="rounded border border-border bg-card px-1.5 py-0.5 text-xs focus:border-ring focus:outline-none"
-                  >
-                    <option value="member">Member</option>
-                    <option value="lead">Lead</option>
-                  </select>
-                  <button
-                    type="button"
-                    onclick={() => unstageMember(staged.id)}
-                    class="text-muted-foreground hover:text-foreground"
-                  >&times;</button>
+                  {#if team.apps && team.apps.length > 0}
+                    <div class="mt-1 flex flex-wrap gap-1.5">
+                      {#each team.apps as app}
+                        {@const appDetail = $allAppsQuery.data?.find((a) => a.id === app.appId)}
+                        {@const declaredRoles = appDetail?.appRoles ?? []}
+                        {@const currentRole = member.appRoles?.find((r) => r.appId === app.appId)?.appRole ?? ''}
+                        {#if declaredRoles.length > 0}
+                          <div class="flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5">
+                            <span class="text-[10px] text-muted-foreground">{app.slug ?? app.name}:</span>
+                            <select
+                              value={currentRole}
+                              onchange={(e) => handleMemberRoleChange(member.userId, app.appId, e.currentTarget.value)}
+                              disabled={memberRolePending === `${member.userId}-${app.appId}`}
+                              class="rounded border-none bg-transparent px-0.5 py-0 text-[10px] focus:outline-none disabled:opacity-50"
+                            >
+                              <option value="">Default</option>
+                              {#each declaredRoles as role}
+                                <option value={role.key}>{role.label}</option>
+                              {/each}
+                            </select>
+                          </div>
+                        {/if}
+                      {/each}
+                    </div>
+                  {/if}
                 </div>
               {/each}
             </div>
+          {:else}
+            <p class="mb-4 text-xs text-muted-foreground">No members yet.</p>
           {/if}
-          {#if batchError}
-            <p class="text-xs text-destructive">{batchError}</p>
-          {/if}
-          <button
-            type="submit"
-            disabled={batchPending || stagedMembers.length === 0}
-            class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-          >
-            {batchPending ? 'Adding…' : stagedMembers.length > 0 ? `Add ${stagedMembers.length} Member${stagedMembers.length === 1 ? '' : 's'}` : 'Add Members'}
-          </button>
-        </form>
-      </div>
+
+          <!-- Add member form -->
+          <form onsubmit={handleBatchAdd} class="space-y-2 border-t border-border pt-4">
+            <p class="text-xs font-medium text-muted-foreground">Add Member</p>
+            <div class="relative">
+              <Input
+                type="text"
+                value={searchInput}
+                oninput={(e) => handleSearchInput(e.currentTarget.value)}
+                onfocus={() => { if (searchResults.length > 0) showDropdown = true }}
+                onblur={() => setTimeout(() => { showDropdown = false }, 200)}
+                placeholder="Search by name or email..."
+                class="w-full"
+              />
+              {#if searchLoading}
+                <div class="absolute right-3 top-2.5 text-xs text-muted-foreground">...</div>
+              {/if}
+              {#if showDropdown}
+                <div class="absolute z-10 mt-1 w-full rounded-lg border border-border bg-card shadow-lg">
+                  {#each searchResults as user}
+                    <button
+                      type="button"
+                      onmousedown={() => stageUser(user)}
+                      class="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-lg last:rounded-b-lg"
+                    >
+                      <span class="font-medium">{user.name}</span>
+                      <span class="text-xs text-muted-foreground">{user.email}</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+            {#if stagedMembers.length > 0}
+              <div class="space-y-1">
+                {#each stagedMembers as staged}
+                  <div class="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm">
+                    <div class="min-w-0 flex-1">
+                      <span class="font-medium">{staged.name}</span>
+                      <span class="ml-1 text-xs text-muted-foreground">{staged.email}</span>
+                    </div>
+                    <Select
+                      type="single"
+                      value={staged.roleInTeam}
+                      onValueChange={(v) => { if (v) updateStagedRole(staged.id, v) }}
+                    >
+                      <SelectTrigger size="sm" class="w-24">
+                        <span>{staged.roleInTeam}</span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="member" label="Member" />
+                        <SelectItem value="lead" label="Lead" />
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onclick={() => unstageMember(staged.id)}
+                    >&times;</Button>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            {#if batchError}
+              <p class="text-xs text-destructive">{batchError}</p>
+            {/if}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={batchPending || stagedMembers.length === 0}
+            >
+              {batchPending ? 'Adding…' : stagedMembers.length > 0 ? `Add ${stagedMembers.length} Member${stagedMembers.length === 1 ? '' : 's'}` : 'Add Members'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       <!-- App Access -->
-      <div class="rounded-xl border border-border bg-card p-5">
-        <h2 class="mb-4 text-sm font-semibold">App Access</h2>
-
-        {#if team.apps && team.apps.length > 0}
-          <div class="mb-4 space-y-1">
-            {#each team.apps as app}
-              <div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-accent">
-                <div>
-                  <p class="text-sm">{app.name ?? app.appId}</p>
-                  <p class="text-xs text-muted-foreground">{app.slug ?? ''}</p>
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-sm font-semibold">App Access</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {#if team.apps && team.apps.length > 0}
+            <div class="mb-4 space-y-1">
+              {#each team.apps as app}
+                <div class="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-accent">
+                  <div>
+                    <p class="text-sm">{app.name ?? app.appId}</p>
+                    <p class="text-xs text-muted-foreground">{app.slug ?? ''}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onclick={() => {
+                      if (confirmingRevokeAppId === app.appId) {
+                        handleRevokeApp(app.appId)
+                      } else {
+                        confirmingRevokeAppId = app.appId
+                        actionError = null
+                      }
+                    }}
+                    disabled={pendingRevokeAppId === app.appId}
+                  >
+                    {#if pendingRevokeAppId === app.appId}
+                      Revoking…
+                    {:else if confirmingRevokeAppId === app.appId}
+                      Confirm Revoke
+                    {:else}
+                      Revoke
+                    {/if}
+                  </Button>
                 </div>
-                <button
-                  onclick={() => {
-                    if (confirmingRevokeAppId === app.appId) {
-                      handleRevokeApp(app.appId)
-                    } else {
-                      confirmingRevokeAppId = app.appId
-                      actionError = null
-                    }
-                  }}
-                  disabled={pendingRevokeAppId === app.appId}
-                  class="rounded px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10"
-                >
-                  {#if pendingRevokeAppId === app.appId}
-                    Revoking…
-                  {:else if confirmingRevokeAppId === app.appId}
-                    Confirm Revoke
-                  {:else}
-                    Revoke
-                  {/if}
-                </button>
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <p class="mb-4 text-xs text-muted-foreground">No app access granted.</p>
-        {/if}
-
-        <!-- Grant app form -->
-        <form onsubmit={handleGrantApp} class="space-y-2 border-t border-border pt-4">
-          <p class="text-xs font-medium text-muted-foreground">Grant App Access</p>
-          <select
-            bind:value={grantAppId}
-            required
-            class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
-          >
-            <option value="" disabled>Select an app</option>
-            {#if $allAppsQuery.data}
-              {#each $allAppsQuery.data.filter((a) => a.status !== 'deprecated') as app}
-                <option value={app.id}>{app.name} ({app.slug})</option>
               {/each}
-            {/if}
-          </select>
-          {#if grantAppError}
-            <p class="text-xs text-destructive">{grantAppError}</p>
+            </div>
+          {:else}
+            <p class="mb-4 text-xs text-muted-foreground">No app access granted.</p>
           {/if}
-          <button
-            type="submit"
-            disabled={grantAppPending}
-            class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-          >
-            Grant
-          </button>
-        </form>
-      </div>
+
+          <!-- Grant app form -->
+          <form onsubmit={handleGrantApp} class="space-y-2 border-t border-border pt-4">
+            <p class="text-xs font-medium text-muted-foreground">Grant App Access</p>
+            <Select
+              type="single"
+              value={grantAppId || undefined}
+              onValueChange={(v) => { grantAppId = v ?? '' }}
+            >
+              <SelectTrigger class="w-full">
+                <span>
+                  {#if grantAppId && $allAppsQuery.data}
+                    {$allAppsQuery.data.find((a) => a.id === grantAppId)?.name ?? 'Select an app'}
+                  {:else}
+                    Select an app
+                  {/if}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {#if $allAppsQuery.data}
+                  {#each $allAppsQuery.data.filter((a) => a.status !== 'deprecated') as app}
+                    <SelectItem value={app.id} label="{app.name} ({app.slug})" />
+                  {/each}
+                {/if}
+              </SelectContent>
+            </Select>
+            {#if grantAppError}
+              <p class="text-xs text-destructive">{grantAppError}</p>
+            {/if}
+            <Button type="submit" size="sm" disabled={grantAppPending || !grantAppId}>
+              {grantAppPending ? 'Granting…' : 'Grant'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   {:else if $query.error}
     <p class="text-sm text-destructive">Failed to load team.</p>

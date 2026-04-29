@@ -1,6 +1,7 @@
 <script lang="ts">
   import { sendPasswordResetEmail } from 'firebase/auth'
   import { clientAuth } from '$lib/firebase'
+  import { Input, Label, Button } from '@coms-portal/ui/primitives'
 
   let email = $state('')
   let sent = $state(false)
@@ -36,25 +37,25 @@
     {:else}
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>
-          <label for="forgot-password-email" class="mb-1 block text-xs text-neutral-400">Email</label>
-          <input
+          <Label for="forgot-password-email" class="mb-1 block text-xs text-neutral-400">Email</Label>
+          <Input
             id="forgot-password-email"
             type="email"
             bind:value={email}
             required
-            class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            class="w-full"
           />
         </div>
         {#if error}
           <p class="text-xs text-red-400">{error}</p>
         {/if}
-        <button
+        <Button
           type="submit"
           disabled={loading}
-          class="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
+          class="w-full"
         >
           Send reset link
-        </button>
+        </Button>
       </form>
     {/if}
 

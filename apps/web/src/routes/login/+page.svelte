@@ -13,6 +13,7 @@
   import { readHandoffIntent, stashIntent, popStashedIntent, navigateToLaunch } from '$lib/portal-handoff'
   import { onMount } from 'svelte'
   import StarField from '$lib/components/login/StarField.svelte'
+  import { Input, Label, Button } from '@coms-portal/ui/primitives'
 
   let email = $state('')
   let password = $state('')
@@ -117,10 +118,11 @@
         </div>
       {/if}
 
-      <button
+      <Button
         type="button"
         onclick={handleGoogle}
         disabled={loading}
+        variant="outline"
         class="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#3B68E5] focus:ring-offset-2 disabled:opacity-50"
       >
         <svg class="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -130,7 +132,7 @@
           <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
         </svg>
         Continue with Google
-      </button>
+      </Button>
 
       <div class="relative my-6">
         <div class="absolute inset-0 flex items-center">
@@ -143,10 +145,10 @@
 
       <form onsubmit={handleEmail} class="space-y-5">
         <div>
-          <label for="login-email" class="mb-1 block text-sm font-medium text-gray-700">
+          <Label for="login-email" class="mb-1 block text-sm font-medium text-gray-700">
             Email
-          </label>
-          <input
+          </Label>
+          <Input
             id="login-email"
             type="email"
             required
@@ -159,11 +161,11 @@
         </div>
 
         <div>
-          <label for="login-password" class="mb-1 block text-sm font-medium text-gray-700">
+          <Label for="login-password" class="mb-1 block text-sm font-medium text-gray-700">
             Password
-          </label>
+          </Label>
           <div class="relative">
-            <input
+            <Input
               id="login-password"
               type={showPassword ? 'text' : 'password'}
               required
@@ -173,8 +175,10 @@
               placeholder="••••••••"
               class="block w-full rounded-md border border-gray-300 px-4 py-3 pr-10 text-sm shadow-sm placeholder-gray-400 transition-all focus:border-[#3B68E5] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#3B68E5]/20"
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onclick={() => (showPassword = !showPassword)}
               class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
@@ -184,11 +188,11 @@
               {:else}
                 <Eye class="h-4 w-4" />
               {/if}
-            </button>
+            </Button>
           </div>
         </div>
 
-        <button
+        <Button
           type="submit"
           disabled={loading}
           class="btn-gradient-blue w-full rounded-lg px-4 py-3 text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#3B68E5] focus:ring-offset-2 disabled:opacity-50"
@@ -210,7 +214,7 @@
           {:else}
             Sign in
           {/if}
-        </button>
+        </Button>
       </form>
 
       <div class="mt-4 text-center">

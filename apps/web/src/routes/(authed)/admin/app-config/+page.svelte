@@ -4,6 +4,31 @@
   import BatchToolbar from '$lib/components/batch-toolbar.svelte'
   import { adminApi } from '$lib/admin-api'
   import type { AppConfigManifest, AppConfigRow, BulkPreviewChange } from '$lib/admin-api'
+  import {
+    Button,
+    Input,
+    Badge,
+    Table,
+    TableHeader,
+    TableBody,
+    TableRow,
+    TableHead,
+    TableCell,
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+    Select,
+    SelectTrigger,
+    SelectContent,
+    SelectItem,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+  } from '@coms-portal/ui/primitives'
 
   // ---------------------------------------------------------------------------
   // App selection
@@ -53,6 +78,7 @@
   // ---------------------------------------------------------------------------
   const singleMutation = createSingleAppConfigMutation()
   let editRow = $state<AppConfigRow | null>(null)
+  let editOpen = $state(false)
   let editConfig = $state<Record<string, unknown>>({})
   let singleError = $state<string | null>(null)
   let singleSuccess = $state<string | null>(null)
@@ -62,9 +88,11 @@
     editConfig = { ...row.config }
     singleError = null
     singleSuccess = null
+    editOpen = true
   }
 
   function closeSingleEdit() {
+    editOpen = false
     editRow = null
     editConfig = {}
     singleError = null
@@ -262,32 +290,43 @@
     <div class="h-10 w-64 animate-pulse rounded-lg bg-muted"></div>
   {:else if $manifestsQuery.data}
     <div class="mb-6 flex items-center gap-4">
-      <select
-        bind:value={selectedAppId}
-        onchange={() => { selected = new Set(); csvPreview = null; csvFile = null }}
-        class="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
+      <Select
+        type="single"
+        value={selectedAppId || undefined}
+        onValueChange={(v) => { selectedAppId = v ?? ''; selected = new Set(); csvPreview = null; csvFile = null }}
       >
-        <option value="">— select an app —</option>
-        {#each $manifestsQuery.data.manifests as manifest}
-          <option value={manifest.appId}>{manifest.displayName}</option>
-        {/each}
-      </select>
+        <SelectTrigger class="w-56">
+          <span>
+            {#if selectedAppId && $manifestsQuery.data}
+              {$manifestsQuery.data.manifests.find((m) => m.appId === selectedAppId)?.displayName ?? '— select an app —'}
+            {:else}
+              — select an app —
+            {/if}
+          </span>
+        </SelectTrigger>
+        <SelectContent>
+          {#each $manifestsQuery.data.manifests as manifest}
+            <SelectItem value={manifest.appId} label={manifest.displayName} />
+          {/each}
+        </SelectContent>
+      </Select>
 
       {#if selectedAppId}
-        <input
+        <Input
           type="text"
           placeholder="Search users…"
           bind:value={filter}
           oninput={onFilterInput}
-          class="w-56 rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
+          class="w-56"
         />
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onclick={downloadCsv}
-          class="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
         >
           Download CSV
-        </button>
+        </Button>
       {/if}
     </div>
   {/if}
@@ -323,125 +362,132 @@
       {#if $configQuery.data.rows.length === 0}
         <p class="text-sm text-muted-foreground">No users found.</p>
       {:else}
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border text-left text-xs text-muted-foreground">
-              <th class="pb-2 w-8">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-8">
                 <input type="checkbox" checked={allSelected} onchange={toggleAll} class="rounded border-border" />
-              </th>
-              <th class="pb-2 font-medium">Name</th>
-              <th class="pb-2 font-medium">Email</th>
+              </TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Email</TableHead>
               {#each Object.keys(selectedManifest.configSchema) as key}
-                <th class="pb-2 font-medium">{key}</th>
+                <TableHead>{key}</TableHead>
               {/each}
-              <th class="pb-2 font-medium">Updated</th>
-              <th class="pb-2 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
+              <TableHead>Updated</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {#each $configQuery.data.rows as row}
-              <tr class="border-b border-border/50 hover:bg-accent">
-                <td class="py-2">
+              <TableRow>
+                <TableCell>
                   <input type="checkbox" checked={selected.has(row.portalSub)} onchange={() => toggleOne(row.portalSub)} class="rounded border-border" />
-                </td>
-                <td class="py-2 font-medium">{row.name}</td>
-                <td class="py-2 text-muted-foreground">{row.email}</td>
+                </TableCell>
+                <TableCell class="font-medium">{row.name}</TableCell>
+                <TableCell class="text-muted-foreground">{row.email}</TableCell>
                 {#each Object.keys(selectedManifest.configSchema) as key}
-                  <td class="py-2">
-                    <span class="rounded-full bg-muted px-2 py-0.5 text-xs">{String(row.config[key] ?? '—')}</span>
-                  </td>
+                  <TableCell>
+                    <Badge variant="secondary">{String(row.config[key] ?? '—')}</Badge>
+                  </TableCell>
                 {/each}
-                <td class="py-2 text-xs text-muted-foreground">{new Date(row.updatedAt).toLocaleDateString()}</td>
-                <td class="py-2">
-                  <button
+                <TableCell class="text-xs text-muted-foreground">{new Date(row.updatedAt).toLocaleDateString()}</TableCell>
+                <TableCell>
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onclick={() => openSingleEdit(row)}
-                    class="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent"
                   >
                     Edit
-                  </button>
-                </td>
-              </tr>
+                  </Button>
+                </TableCell>
+              </TableRow>
             {/each}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       {/if}
     {:else if $configQuery.error}
       <p class="text-sm text-destructive">Failed to load: {$configQuery.error instanceof Error ? $configQuery.error.message : 'Unknown error'}</p>
     {/if}
 
     <!-- CSV bulk section -->
-    <div class="mt-8 rounded-lg border border-border bg-card p-4">
-      <h2 class="mb-3 text-sm font-semibold">CSV Bulk Edit</h2>
-      <p class="mb-3 text-xs text-muted-foreground">
-        Download the current config CSV, edit it, then upload for preview before committing.
-        Unknown portalSubs are rejected. Partial application is not allowed — any error rejects the whole batch.
-      </p>
+    <Card class="mt-8">
+      <CardHeader>
+        <CardTitle class="text-sm font-semibold">CSV Bulk Edit</CardTitle>
+      </CardHeader>
+      <CardContent class="space-y-3">
+        <p class="text-xs text-muted-foreground">
+          Download the current config CSV, edit it, then upload for preview before committing.
+          Unknown portalSubs are rejected. Partial application is not allowed — any error rejects the whole batch.
+        </p>
 
-      <div class="flex items-center gap-3">
-        <input
-          type="file"
-          accept=".csv"
-          onchange={(e) => { csvFile = (e.target as HTMLInputElement).files?.[0] ?? null; csvPreview = null; csvError = null; csvSuccess = null }}
-          class="text-sm text-muted-foreground file:mr-2 file:rounded-md file:border file:border-border file:bg-card file:px-3 file:py-1 file:text-xs file:font-medium"
-        />
-        <button
-          type="button"
-          onclick={handleCsvPreview}
-          disabled={!csvFile || $bulkPreview.isPending}
-          class="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
-        >
-          {$bulkPreview.isPending ? 'Previewing…' : 'Preview'}
-        </button>
-      </div>
-
-      {#if csvError}
-        <p class="mt-2 text-sm text-destructive">{csvError}</p>
-      {/if}
-      {#if csvSuccess}
-        <p class="mt-2 text-sm text-status-active">{csvSuccess}</p>
-      {/if}
-
-      {#if csvPreview}
-        <div class="mt-4 space-y-2 rounded-lg border border-border bg-muted p-3">
-          <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Diff Preview — {csvPreview.changes.length} of {csvPreview.totalRows} rows will change</p>
-          {#each diffSummary(csvPreview.changes, selectedManifest) as line}
-            <p class="text-sm">{line}</p>
-          {/each}
-          {#if csvPreview.changes.length === 0}
-            <p class="text-sm text-muted-foreground">No changes detected.</p>
-          {:else}
-            <div class="mt-3 flex gap-2">
-              <button
-                type="button"
-                onclick={handleCsvCommit}
-                disabled={csvCommitting}
-                class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary/80 disabled:opacity-50"
-              >
-                {csvCommitting ? 'Committing…' : `Commit ${csvPreview.changes.length} changes`}
-              </button>
-              <button
-                type="button"
-                onclick={() => { csvPreview = null; csvFile = null }}
-                class="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
-              >
-                Cancel
-              </button>
-            </div>
-          {/if}
+        <div class="flex items-center gap-3">
+          <input
+            type="file"
+            accept=".csv"
+            onchange={(e) => { csvFile = (e.target as HTMLInputElement).files?.[0] ?? null; csvPreview = null; csvError = null; csvSuccess = null }}
+            class="text-sm text-muted-foreground file:mr-2 file:rounded-md file:border file:border-border file:bg-card file:px-3 file:py-1 file:text-xs file:font-medium"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onclick={handleCsvPreview}
+            disabled={!csvFile || $bulkPreview.isPending}
+          >
+            {$bulkPreview.isPending ? 'Previewing…' : 'Preview'}
+          </Button>
         </div>
-      {/if}
-    </div>
+
+        {#if csvError}
+          <p class="text-sm text-destructive">{csvError}</p>
+        {/if}
+        {#if csvSuccess}
+          <p class="text-sm text-status-active">{csvSuccess}</p>
+        {/if}
+
+        {#if csvPreview}
+          <div class="space-y-2 rounded-lg border border-border bg-muted p-3">
+            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Diff Preview — {csvPreview.changes.length} of {csvPreview.totalRows} rows will change</p>
+            {#each diffSummary(csvPreview.changes, selectedManifest) as line}
+              <p class="text-sm">{line}</p>
+            {/each}
+            {#if csvPreview.changes.length === 0}
+              <p class="text-sm text-muted-foreground">No changes detected.</p>
+            {:else}
+              <div class="mt-3 flex gap-2">
+                <Button
+                  type="button"
+                  onclick={handleCsvCommit}
+                  disabled={csvCommitting}
+                >
+                  {csvCommitting ? 'Committing…' : `Commit ${csvPreview.changes.length} changes`}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onclick={() => { csvPreview = null; csvFile = null }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </CardContent>
+    </Card>
   {/if}
 </div>
 
 <!-- Single-edit modal -->
-{#if editRow && selectedManifest}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-    <div class="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-xl">
-      <h2 class="mb-1 text-base font-semibold">Edit config — {editRow.name}</h2>
-      <p class="mb-4 text-sm text-muted-foreground">{editRow.email}</p>
+<Dialog bind:open={editOpen}>
+  <DialogContent class="max-w-lg">
+    <DialogHeader>
+      <DialogTitle>Edit config — {editRow?.name}</DialogTitle>
+      <DialogDescription>{editRow?.email}</DialogDescription>
+    </DialogHeader>
 
+    {#if editRow && selectedManifest}
       <!-- configSchema from admin-api uses a loose string type; cast is safe since
            the backend always produces a valid discriminated union at runtime -->
       <ManifestEditor
@@ -449,31 +495,24 @@
         value={editConfig}
         onchange={(v) => editConfig = v}
       />
+    {/if}
 
-      {#if singleError}
-        <p class="mt-3 text-sm text-destructive">{singleError}</p>
-      {/if}
-      {#if singleSuccess}
-        <p class="mt-3 text-sm text-status-active">{singleSuccess}</p>
-      {/if}
+    {#if singleError}
+      <p class="text-sm text-destructive">{singleError}</p>
+    {/if}
+    {#if singleSuccess}
+      <p class="text-sm text-status-active">{singleSuccess}</p>
+    {/if}
 
-      <div class="mt-5 flex justify-end gap-2">
-        <button
-          type="button"
-          onclick={closeSingleEdit}
-          class="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onclick={submitSingleEdit}
-          disabled={$singleMutation.isPending}
-          class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary/80 disabled:opacity-50"
-        >
-          {$singleMutation.isPending ? 'Saving…' : 'Save'}
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
+    <DialogFooter>
+      <Button type="button" variant="outline" onclick={closeSingleEdit}>Cancel</Button>
+      <Button
+        type="button"
+        onclick={submitSingleEdit}
+        disabled={$singleMutation.isPending}
+      >
+        {$singleMutation.isPending ? 'Saving…' : 'Save'}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>

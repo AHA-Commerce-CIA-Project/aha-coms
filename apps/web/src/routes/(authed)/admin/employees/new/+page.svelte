@@ -3,6 +3,7 @@
   import { createEmployeeMutation } from '$lib/queries/employees'
   import { teamsQuery } from '$lib/queries/teams'
   import { PORTAL_ROLES, PORTAL_ROLE_LABELS, type PortalRole } from '@coms-portal/shared'
+  import { Card, CardHeader, CardTitle, CardContent, Button, Label, Input, Select, SelectTrigger, SelectContent, SelectItem } from '@coms-portal/ui/primitives'
 
   const mutation = createEmployeeMutation()
   const teams = teamsQuery()
@@ -55,73 +56,107 @@
 <div class="p-8">
   <h1 class="mb-6 text-xl font-semibold">New Employee</h1>
 
-  <form onsubmit={handleSubmit} class="max-w-lg space-y-4">
-    <div>
-      <label for="employee-email" class="mb-1 block text-xs text-muted-foreground">Email</label>
-      <input id="employee-email" type="email" bind:value={form.email} required class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
-    </div>
-    <div>
-      <label for="employee-name" class="mb-1 block text-xs text-muted-foreground">Name</label>
-      <input id="employee-name" type="text" bind:value={form.name} required class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
-    </div>
-    <div>
-      <label for="employee-personal-email" class="mb-1 block text-xs text-muted-foreground">Personal Email</label>
-      <input id="employee-personal-email" type="email" bind:value={form.personalEmail} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label for="employee-phone" class="mb-1 block text-xs text-muted-foreground">Phone</label>
-        <input id="employee-phone" type="text" bind:value={form.phone} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
-      </div>
-      <div>
-        <label for="employee-position" class="mb-1 block text-xs text-muted-foreground">Position</label>
-        <input id="employee-position" type="text" bind:value={form.position} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
-      </div>
-    </div>
-    <div>
-      <label for="employee-birth-date" class="mb-1 block text-xs text-muted-foreground">Birth Date</label>
-      <input id="employee-birth-date" type="date" bind:value={form.birthDate} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
-    </div>
-    <div>
-      <label for="employee-leader" class="mb-1 block text-xs text-muted-foreground">Leader</label>
-      <input id="employee-leader" type="text" bind:value={form.leaderName} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none" />
-    </div>
-    <div>
-      <label for="employee-branch" class="mb-1 block text-xs text-muted-foreground">Branch</label>
-      <select id="employee-branch" bind:value={form.branch} required class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none">
-        <option value="" disabled>Select branch</option>
-        <option value="Indonesia">Indonesia</option>
-        <option value="Thailand">Thailand</option>
-      </select>
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label for="employee-portal-role" class="mb-1 block text-xs text-muted-foreground">Portal Role</label>
-        <select id="employee-portal-role" bind:value={form.portalRole} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none">
-          {#each PORTAL_ROLES as role}
-            <option value={role}>{PORTAL_ROLE_LABELS[role]}</option>
-          {/each}
-        </select>
-      </div>
-      <div>
-        <label for="employee-team" class="mb-1 block text-xs text-muted-foreground">Team</label>
-        <select id="employee-team" bind:value={form.teamId} class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none">
-          <option value="">No team</option>
-          {#if $teams.data}
-            {#each $teams.data as team}
-              <option value={team.id}>{team.name}</option>
-            {/each}
-          {/if}
-        </select>
-      </div>
-    </div>
-    {#if error}
-      <p class="text-xs text-destructive">{error}</p>
-    {/if}
+  <Card class="max-w-lg">
+    <CardHeader>
+      <CardTitle>Employee Details</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <form onsubmit={handleSubmit} class="space-y-4">
+        <div>
+          <Label for="employee-email" class="mb-1 block text-xs text-muted-foreground">Email</Label>
+          <Input id="employee-email" type="email" bind:value={form.email} required class="w-full" />
+        </div>
+        <div>
+          <Label for="employee-name" class="mb-1 block text-xs text-muted-foreground">Name</Label>
+          <Input id="employee-name" type="text" bind:value={form.name} required class="w-full" />
+        </div>
+        <div>
+          <Label for="employee-personal-email" class="mb-1 block text-xs text-muted-foreground">Personal Email</Label>
+          <Input id="employee-personal-email" type="email" bind:value={form.personalEmail} class="w-full" />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <Label for="employee-phone" class="mb-1 block text-xs text-muted-foreground">Phone</Label>
+            <Input id="employee-phone" type="text" bind:value={form.phone} class="w-full" />
+          </div>
+          <div>
+            <Label for="employee-position" class="mb-1 block text-xs text-muted-foreground">Position</Label>
+            <Input id="employee-position" type="text" bind:value={form.position} class="w-full" />
+          </div>
+        </div>
+        <div>
+          <Label for="employee-birth-date" class="mb-1 block text-xs text-muted-foreground">Birth Date</Label>
+          <Input id="employee-birth-date" type="date" bind:value={form.birthDate} class="w-full" />
+        </div>
+        <div>
+          <Label for="employee-leader" class="mb-1 block text-xs text-muted-foreground">Leader</Label>
+          <Input id="employee-leader" type="text" bind:value={form.leaderName} class="w-full" />
+        </div>
+        <div>
+          <Label class="mb-1 block text-xs text-muted-foreground">Branch</Label>
+          <Select
+            type="single"
+            value={form.branch || undefined}
+            onValueChange={(v) => { form.branch = (v ?? '') as '' | 'Indonesia' | 'Thailand' }}
+            required
+          >
+            <SelectTrigger class="w-full">
+              <span>{form.branch || 'Select branch'}</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Indonesia" label="Indonesia" />
+              <SelectItem value="Thailand" label="Thailand" />
+            </SelectContent>
+          </Select>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <Label class="mb-1 block text-xs text-muted-foreground">Portal Role</Label>
+            <Select
+              type="single"
+              value={form.portalRole}
+              onValueChange={(v) => { if (v) form.portalRole = v as PortalRole }}
+            >
+              <SelectTrigger class="w-full">
+                <span>{PORTAL_ROLE_LABELS[form.portalRole]}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {#each PORTAL_ROLES as role}
+                  <SelectItem value={role} label={PORTAL_ROLE_LABELS[role]} />
+                {/each}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label class="mb-1 block text-xs text-muted-foreground">Team</Label>
+            <Select
+              type="single"
+              value={form.teamId || undefined}
+              onValueChange={(v) => { form.teamId = v ?? '' }}
+            >
+              <SelectTrigger class="w-full">
+                <span>{$teams.data?.find((t) => t.id === form.teamId)?.name ?? 'No team'}</span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="" label="No team" />
+                {#if $teams.data}
+                  {#each $teams.data as team}
+                    <SelectItem value={team.id} label={team.name} />
+                  {/each}
+                {/if}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        {#if error}
+          <p class="text-xs text-destructive">{error}</p>
+        {/if}
 
-    <div class="flex gap-3">
-      <button type="submit" disabled={$mutation.isPending} class="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50">Create</button>
-      <a href="/admin/employees" class="rounded-lg border border-border px-4 py-2 text-sm hover:bg-accent">Cancel</a>
-    </div>
-  </form>
+        <div class="flex gap-3">
+          <Button type="submit" disabled={$mutation.isPending}>Create</Button>
+          <Button href="/admin/employees" variant="outline">Cancel</Button>
+        </div>
+      </form>
+    </CardContent>
+  </Card>
 </div>

@@ -13,6 +13,20 @@
     type PortalComplianceStatus,
     type PortalHandoffMode,
   } from '@coms-portal/shared'
+  import {
+    Button,
+    Input,
+    Label,
+    Badge,
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+    Select,
+    SelectTrigger,
+    SelectContent,
+    SelectItem,
+  } from '@coms-portal/ui/primitives'
 
   const id = $derived($page.params.id!)
 
@@ -257,127 +271,147 @@
         {#if editing}
           <form onsubmit={handleSaveEdit} class="space-y-3">
             <div>
-              <label for="app-name" class="mb-1 block text-xs text-muted-foreground">Name</label>
-              <input
+              <Label for="app-name" class="mb-1 block text-xs text-muted-foreground">Name</Label>
+              <Input
                 id="app-name"
                 type="text"
                 bind:value={editName}
                 required
-                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
               />
             </div>
             <div>
-              <label for="app-url" class="mb-1 block text-xs text-muted-foreground">URL</label>
-              <input
+              <Label for="app-url" class="mb-1 block text-xs text-muted-foreground">URL</Label>
+              <Input
                 id="app-url"
                 type="url"
                 bind:value={editUrl}
                 required
-                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
               />
             </div>
             <div>
-              <label for="app-base-path" class="mb-1 block text-xs text-muted-foreground">Base Path</label>
-              <input
+              <Label for="app-base-path" class="mb-1 block text-xs text-muted-foreground">Base Path</Label>
+              <Input
                 id="app-base-path"
                 type="text"
                 bind:value={editBasePath}
                 placeholder="e.g. /app"
-                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
               />
             </div>
             <div>
-              <label for="app-status" class="mb-1 block text-xs text-muted-foreground">Status</label>
-              <select
-                id="app-status"
-                bind:value={editStatus}
-                class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
+              <Label class="mb-1 block text-xs text-muted-foreground">Status</Label>
+              <Select
+                type="single"
+                value={editStatus}
+                onValueChange={(v) => { if (v) editStatus = v }}
               >
-                <option value="active">Active</option>
-                <option value="maintenance">Maintenance</option>
-                <option value="deprecated">Deprecated</option>
-              </select>
+                <SelectTrigger class="w-full">
+                  <span>{editStatus}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active" label="Active" />
+                  <SelectItem value="maintenance" label="Maintenance" />
+                  <SelectItem value="deprecated" label="Deprecated" />
+                </SelectContent>
+              </Select>
             </div>
             <div class="grid gap-3 sm:grid-cols-2">
               <div>
-                <label for="app-adapter-type" class="mb-1 block text-xs text-muted-foreground">Adapter Type</label>
-                <select
-                  id="app-adapter-type"
-                  bind:value={editAdapterType}
-                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
+                <Label class="mb-1 block text-xs text-muted-foreground">Adapter Type</Label>
+                <Select
+                  type="single"
+                  value={editAdapterType}
+                  onValueChange={(v) => { if (v) editAdapterType = v as PortalAdapterType }}
                 >
-                  {#each PORTAL_ADAPTER_TYPES as adapterType}
-                    <option value={adapterType}>{adapterType}</option>
-                  {/each}
-                </select>
+                  <SelectTrigger class="w-full">
+                    <span>{editAdapterType}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {#each PORTAL_ADAPTER_TYPES as adapterType}
+                      <SelectItem value={adapterType} label={adapterType} />
+                    {/each}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
-                <label for="app-transport-mode" class="mb-1 block text-xs text-muted-foreground">Transport</label>
-                <select
-                  id="app-transport-mode"
-                  bind:value={editTransportMode}
-                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
+                <Label class="mb-1 block text-xs text-muted-foreground">Transport</Label>
+                <Select
+                  type="single"
+                  value={editTransportMode}
+                  onValueChange={(v) => { if (v) editTransportMode = v as 'same_host_cookie' | 'portable_token' }}
                 >
-                  <option value="portable_token">portal-brokered token</option>
-                  <option value="same_host_cookie">same-host cookie</option>
-                </select>
-              </div>
-            </div>
-            <div class="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label for="app-handoff-mode" class="mb-1 block text-xs text-muted-foreground">Handoff Mode</label>
-                <select
-                  id="app-handoff-mode"
-                  bind:value={editHandoffMode}
-                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
-                >
-                  {#each PORTAL_HANDOFF_MODES as handoffMode}
-                    <option value={handoffMode}>{handoffMode}</option>
-                  {/each}
-                </select>
-              </div>
-              <div>
-                <label for="app-compliance-status" class="mb-1 block text-xs text-muted-foreground">Compliance</label>
-                <select
-                  id="app-compliance-status"
-                  bind:value={editComplianceStatus}
-                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
-                >
-                  {#each PORTAL_COMPLIANCE_STATUSES as complianceStatus}
-                    <option value={complianceStatus}>{complianceStatus}</option>
-                  {/each}
-                </select>
+                  <SelectTrigger class="w-full">
+                    <span>{editTransportMode === 'portable_token' ? 'portal-brokered token' : 'same-host cookie'}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="portable_token" label="portal-brokered token" />
+                    <SelectItem value="same_host_cookie" label="same-host cookie" />
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div class="grid gap-3 sm:grid-cols-2">
               <div>
-                <label for="app-broker-origin" class="mb-1 block text-xs text-muted-foreground">Broker Origin</label>
-                <input
+                <Label class="mb-1 block text-xs text-muted-foreground">Handoff Mode</Label>
+                <Select
+                  type="single"
+                  value={editHandoffMode}
+                  onValueChange={(v) => { if (v) editHandoffMode = v as PortalHandoffMode }}
+                >
+                  <SelectTrigger class="w-full">
+                    <span>{editHandoffMode}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {#each PORTAL_HANDOFF_MODES as handoffMode}
+                      <SelectItem value={handoffMode} label={handoffMode} />
+                    {/each}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label class="mb-1 block text-xs text-muted-foreground">Compliance</Label>
+                <Select
+                  type="single"
+                  value={editComplianceStatus}
+                  onValueChange={(v) => { if (v) editComplianceStatus = v as PortalComplianceStatus }}
+                >
+                  <SelectTrigger class="w-full">
+                    <span>{editComplianceStatus}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {#each PORTAL_COMPLIANCE_STATUSES as complianceStatus}
+                      <SelectItem value={complianceStatus} label={complianceStatus} />
+                    {/each}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label for="app-broker-origin" class="mb-1 block text-xs text-muted-foreground">Broker Origin</Label>
+                <Input
                   id="app-broker-origin"
                   type="url"
                   bind:value={editBrokerOrigin}
                   disabled={editTransportMode !== 'portable_token'}
-                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
                 />
               </div>
               <div>
-                <label for="app-manifest-path" class="mb-1 block text-xs text-muted-foreground">Manifest Path</label>
-                <input
+                <Label for="app-manifest-path" class="mb-1 block text-xs text-muted-foreground">Manifest Path</Label>
+                <Input
                   id="app-manifest-path"
                   type="text"
                   bind:value={editManifestPath}
-                  class="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
                 />
               </div>
             </div>
             <div>
-              <label for="app-sa-email" class="mb-1 block text-xs text-muted-foreground">Service Account Email (Google OIDC caller identity)</label>
-              <input
+              <Label for="app-sa-email" class="mb-1 block text-xs text-muted-foreground">Service Account Email (Google OIDC caller identity)</Label>
+              <Input
                 id="app-sa-email"
                 type="email"
                 bind:value={editServiceAccountEmail}
                 placeholder="service-account@project.iam.gserviceaccount.com"
-                class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
+                class="w-full"
               />
               <p class="mt-1 text-xs text-muted-foreground">Google service account email of this app's Cloud Run runtime — used to authenticate the app when it calls portal endpoints (introspect) via OIDC. Leave blank to require legacy secret auth.</p>
             </div>
@@ -385,8 +419,10 @@
               <p class="text-xs text-destructive">{editError}</p>
             {/if}
             <div class="flex gap-2">
-              <button type="submit" disabled={editPending} class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50">Save</button>
-              <button type="button" onclick={() => editing = false} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">Cancel</button>
+              <Button type="submit" size="sm" disabled={editPending}>
+                {editPending ? 'Saving…' : 'Save'}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onclick={() => editing = false}>Cancel</Button>
             </div>
           </form>
         {:else}
@@ -396,34 +432,37 @@
       </div>
       {#if !editing}
         <div class="flex gap-2">
-          <button onclick={startEdit} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">Edit</button>
+          <Button size="sm" variant="outline" onclick={startEdit}>Edit</Button>
           {#if confirmingDelete}
-            <button
+            <Button
+              size="sm"
+              variant="destructive"
               onclick={handleDelete}
               disabled={deletePending}
-              class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
             >
               {deletePending ? 'Deleting…' : 'Confirm Delete'}
-            </button>
-            <button
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onclick={() => {
                 confirmingDelete = false
                 deleteError = null
               }}
-              class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent"
             >
               Cancel
-            </button>
+            </Button>
           {:else}
-            <button
+            <Button
+              size="sm"
+              variant="destructive"
               onclick={() => {
                 confirmingDelete = true
                 deleteError = null
               }}
-              class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10"
             >
               Delete
-            </button>
+            </Button>
           {/if}
         </div>
       {/if}
@@ -434,72 +473,78 @@
     {/if}
 
     {#if !editing}
-      <div class="max-w-lg space-y-3 rounded-xl border border-border bg-card p-6">
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Slug</span>
-          <span class="text-sm">{app.slug}</span>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">URL</span>
-          <a href={app.url} target="_blank" class="text-sm text-primary hover:text-primary/80">{app.url}</a>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Base Path</span>
-          <span class="text-sm">{app.basePath ?? '-'}</span>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Adapter Type</span>
-          <span class="text-sm">{app.adapterType}</span>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Transport</span>
-          <span class="text-sm">{app.transportMode}</span>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Handoff</span>
-          <span class="text-sm">{app.handoffMode}</span>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Broker Origin</span>
-          <span class="text-sm">{app.brokerOrigin ?? '-'}</span>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Contract Version</span>
-          <span class="text-sm">{app.contractVersion}</span>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Compliance</span>
-          <span class="text-sm">{app.complianceStatus}</span>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Manifest Path</span>
-          <span class="text-sm">{app.manifestPath ?? '-'}</span>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Service Account Email</span>
-          <span class="text-sm font-mono">{app.serviceAccountEmail ?? '-'}</span>
-        </div>
-        <div class="flex justify-between border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Last Verified</span>
-          <span class="text-sm">{app.lastVerifiedAt ?? '-'}</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-xs text-muted-foreground">Status</span>
-          <span class="text-sm" class:text-status-active={app.status === 'active'} class:text-destructive={app.status !== 'active'}>{app.status}</span>
-        </div>
-      </div>
+      <Card class="max-w-lg">
+        <CardContent class="space-y-3 pt-6">
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Slug</span>
+            <span class="text-sm">{app.slug}</span>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">URL</span>
+            <a href={app.url} target="_blank" class="text-sm text-primary hover:text-primary/80">{app.url}</a>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Base Path</span>
+            <span class="text-sm">{app.basePath ?? '-'}</span>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Adapter Type</span>
+            <span class="text-sm">{app.adapterType}</span>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Transport</span>
+            <span class="text-sm">{app.transportMode}</span>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Handoff</span>
+            <span class="text-sm">{app.handoffMode}</span>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Broker Origin</span>
+            <span class="text-sm">{app.brokerOrigin ?? '-'}</span>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Contract Version</span>
+            <span class="text-sm">{app.contractVersion}</span>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Compliance</span>
+            <span class="text-sm">{app.complianceStatus}</span>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Manifest Path</span>
+            <span class="text-sm">{app.manifestPath ?? '-'}</span>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Service Account Email</span>
+            <span class="text-sm font-mono">{app.serviceAccountEmail ?? '-'}</span>
+          </div>
+          <div class="flex justify-between border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Last Verified</span>
+            <span class="text-sm">{app.lastVerifiedAt ?? '-'}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-xs text-muted-foreground">Status</span>
+            <Badge variant={app.status === 'active' ? 'default' : 'destructive'}>
+              {app.status}
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
 
       <!-- Team grants -->
       {#if app.teamGrants && app.teamGrants.length > 0}
         <div class="mt-6 max-w-lg">
           <h2 class="mb-3 text-sm font-semibold">Teams with Access</h2>
-          <div class="rounded-xl border border-border bg-card p-4 space-y-1">
-            {#each app.teamGrants as grant}
-              <div class="flex items-center justify-between py-1">
-                <a href="/admin/teams/{grant.teamId}" class="text-sm text-primary hover:text-primary/80">{grant.teamName ?? grant.teamId}</a>
-              </div>
-            {/each}
-          </div>
+          <Card>
+            <CardContent class="space-y-1 pt-4">
+              {#each app.teamGrants as grant}
+                <div class="flex items-center justify-between py-1">
+                  <a href="/admin/teams/{grant.teamId}" class="text-sm text-primary hover:text-primary/80">{grant.teamName ?? grant.teamId}</a>
+                </div>
+              {/each}
+            </CardContent>
+          </Card>
         </div>
       {/if}
     {/if}
@@ -522,12 +567,13 @@
           <code class="flex-1 overflow-auto rounded bg-yellow-900 px-2 py-1 font-mono text-yellow-100 select-all">
             {revealedSecret}
           </code>
-          <button
+          <Button
+            size="sm"
+            class="bg-yellow-700 text-yellow-100 hover:bg-yellow-600"
             onclick={() => copyToClipboard(revealedSecret!, () => { secretCopied = true })}
-            class="rounded bg-yellow-700 px-3 py-1 text-xs font-medium text-yellow-100 hover:bg-yellow-600"
           >
             {secretCopied ? 'Copied!' : 'Copy'}
-          </button>
+          </Button>
         </div>
         <button
           onclick={() => { revealedSecret = null; secretCopied = false }}
@@ -547,12 +593,13 @@
           <code class="flex-1 overflow-auto rounded bg-yellow-900 px-2 py-1 font-mono text-yellow-100 select-all">
             {rotatedSecret.secret}
           </code>
-          <button
+          <Button
+            size="sm"
+            class="bg-yellow-700 text-yellow-100 hover:bg-yellow-600"
             onclick={() => copyToClipboard(rotatedSecret!.secret, () => { rotatedCopied = true })}
-            class="rounded bg-yellow-700 px-3 py-1 text-xs font-medium text-yellow-100 hover:bg-yellow-600"
           >
             {rotatedCopied ? 'Copied!' : 'Copy'}
-          </button>
+          </Button>
         </div>
         <button
           onclick={() => { rotatedSecret = null; rotatedCopied = false }}
@@ -574,99 +621,107 @@
       <div class="mb-4 space-y-2">
         {#each $webhooksQuery.data as endpoint}
           {@const testResult = testResults[endpoint.id]}
-          <div class="rounded-xl border border-border bg-card p-4">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-medium">{endpoint.url}</p>
-                <div class="mt-1 flex flex-wrap gap-1">
-                  {#each endpoint.subscribedEvents as ev}
-                    <span class="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{ev}</span>
-                  {/each}
-                </div>
-                <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  <span class:text-status-active={endpoint.status === 'active'} class:text-muted-foreground={endpoint.status !== 'active'}>
-                    {endpoint.status}
-                  </span>
-                  {#if endpoint.failureCount > 0}
-                    <span class="text-destructive">{endpoint.failureCount} failure{endpoint.failureCount !== 1 ? 's' : ''}</span>
-                  {/if}
-                  {#if endpoint.lastDeliveredAt}
-                    <span>Last delivered {new Date(endpoint.lastDeliveredAt).toLocaleString()}</span>
-                  {/if}
-                  {#if endpoint.lastFailureAt}
-                    <span class="text-destructive" title={endpoint.lastFailureReason ?? ''}>
-                      Last failed {new Date(endpoint.lastFailureAt).toLocaleString()}
+          <Card>
+            <CardContent class="pt-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-medium">{endpoint.url}</p>
+                  <div class="mt-1 flex flex-wrap gap-1">
+                    {#each endpoint.subscribedEvents as ev}
+                      <Badge variant="secondary">{ev}</Badge>
+                    {/each}
+                  </div>
+                  <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <span class:text-status-active={endpoint.status === 'active'} class:text-muted-foreground={endpoint.status !== 'active'}>
+                      {endpoint.status}
                     </span>
-                  {/if}
-                </div>
-
-                {#if testResult}
-                  <div class="mt-2 rounded border px-2 py-1 text-xs {testResult.delivered ? 'border-status-active/30 bg-status-active/10 text-status-active' : 'border-destructive/30 bg-destructive/10 text-destructive'}">
-                    {#if testResult.delivered}
-                      Delivered — HTTP {testResult.status}
-                    {:else}
-                      Failed — {testResult.error ?? `HTTP ${testResult.status}`}
+                    {#if endpoint.failureCount > 0}
+                      <span class="text-destructive">{endpoint.failureCount} failure{endpoint.failureCount !== 1 ? 's' : ''}</span>
+                    {/if}
+                    {#if endpoint.lastDeliveredAt}
+                      <span>Last delivered {new Date(endpoint.lastDeliveredAt).toLocaleString()}</span>
+                    {/if}
+                    {#if endpoint.lastFailureAt}
+                      <span class="text-destructive" title={endpoint.lastFailureReason ?? ''}>
+                        Last failed {new Date(endpoint.lastFailureAt).toLocaleString()}
+                      </span>
                     {/if}
                   </div>
-                {/if}
-              </div>
 
-              <div class="flex shrink-0 flex-wrap gap-1.5">
-                <button
-                  onclick={() => handleTestWebhook(endpoint.id)}
-                  disabled={pendingTestWebhook === endpoint.id}
-                  class="rounded border border-border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                >
-                  {pendingTestWebhook === endpoint.id ? 'Sending…' : 'Test'}
-                </button>
-
-                <button
-                  onclick={() => handleToggleStatus(endpoint)}
-                  disabled={pendingToggleWebhook === endpoint.id}
-                  class="rounded border border-border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                >
-                  {#if pendingToggleWebhook === endpoint.id}
-                    Updating…
-                  {:else if endpoint.status === 'active'}
-                    Disable
-                  {:else}
-                    Enable
+                  {#if testResult}
+                    <div class="mt-2 rounded border px-2 py-1 text-xs {testResult.delivered ? 'border-status-active/30 bg-status-active/10 text-status-active' : 'border-destructive/30 bg-destructive/10 text-destructive'}">
+                      {#if testResult.delivered}
+                        Delivered — HTTP {testResult.status}
+                      {:else}
+                        Failed — {testResult.error ?? `HTTP ${testResult.status}`}
+                      {/if}
+                    </div>
                   {/if}
-                </button>
+                </div>
 
-                <button
-                  onclick={() => handleRotateSecret(endpoint.id)}
-                  disabled={pendingRotateWebhook === endpoint.id}
-                  class="rounded border border-border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                >
-                  {pendingRotateWebhook === endpoint.id ? 'Rotating…' : 'Rotate secret'}
-                </button>
+                <div class="flex shrink-0 flex-wrap gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() => handleTestWebhook(endpoint.id)}
+                    disabled={pendingTestWebhook === endpoint.id}
+                  >
+                    {pendingTestWebhook === endpoint.id ? 'Sending…' : 'Test'}
+                  </Button>
 
-                {#if confirmingDeleteWebhook === endpoint.id}
-                  <button
-                    onclick={() => handleDeleteWebhook(endpoint.id)}
-                    disabled={pendingDeleteWebhook === endpoint.id}
-                    class="rounded border border-destructive/50 px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() => handleToggleStatus(endpoint)}
+                    disabled={pendingToggleWebhook === endpoint.id}
                   >
-                    {pendingDeleteWebhook === endpoint.id ? 'Deleting…' : 'Confirm delete'}
-                  </button>
-                  <button
-                    onclick={() => { confirmingDeleteWebhook = null; webhookActionError = null }}
-                    class="rounded border border-border px-2 py-1 text-xs hover:bg-accent"
+                    {#if pendingToggleWebhook === endpoint.id}
+                      Updating…
+                    {:else if endpoint.status === 'active'}
+                      Disable
+                    {:else}
+                      Enable
+                    {/if}
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() => handleRotateSecret(endpoint.id)}
+                    disabled={pendingRotateWebhook === endpoint.id}
                   >
-                    Cancel
-                  </button>
-                {:else}
-                  <button
-                    onclick={() => { confirmingDeleteWebhook = endpoint.id; webhookActionError = null }}
-                    class="rounded border border-destructive/50 px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
-                  >
-                    Delete
-                  </button>
-                {/if}
+                    {pendingRotateWebhook === endpoint.id ? 'Rotating…' : 'Rotate secret'}
+                  </Button>
+
+                  {#if confirmingDeleteWebhook === endpoint.id}
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onclick={() => handleDeleteWebhook(endpoint.id)}
+                      disabled={pendingDeleteWebhook === endpoint.id}
+                    >
+                      {pendingDeleteWebhook === endpoint.id ? 'Deleting…' : 'Confirm delete'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onclick={() => { confirmingDeleteWebhook = null; webhookActionError = null }}
+                    >
+                      Cancel
+                    </Button>
+                  {:else}
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onclick={() => { confirmingDeleteWebhook = endpoint.id; webhookActionError = null }}
+                    >
+                      Delete
+                    </Button>
+                  {/if}
+                </div>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         {/each}
       </div>
     {:else if !$webhooksQuery.isLoading}
@@ -674,52 +729,56 @@
     {/if}
 
     <!-- Register endpoint form -->
-    <div class="rounded-xl border border-border bg-card p-5">
-      <h3 class="mb-4 text-xs font-semibold text-muted-foreground">Register Endpoint</h3>
-      <form onsubmit={handleRegisterWebhook} class="space-y-3">
-        <div>
-          <label for="wh-url" class="mb-1 block text-xs text-muted-foreground">URL</label>
-          <input
-            id="wh-url"
-            type="url"
-            bind:value={newWebhookUrl}
-            required
-            placeholder="https://your-app.example.com/webhook"
-            class="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm focus:border-ring focus:outline-none"
-          />
-          <p class="mt-1 text-xs text-muted-foreground">https:// required (http://localhost allowed for dev)</p>
-        </div>
-
-        <div>
-          <p class="mb-2 text-xs text-muted-foreground">Subscribe to events</p>
-          <div class="grid grid-cols-2 gap-1.5">
-            {#each PORTAL_WEBHOOK_EVENTS as ev}
-              <label class="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent">
-                <input
-                  type="checkbox"
-                  checked={newWebhookEvents.includes(ev)}
-                  onchange={() => toggleEventSelection(ev)}
-                  class="accent-primary"
-                />
-                <span class="text-xs">{ev}</span>
-              </label>
-            {/each}
+    <Card>
+      <CardHeader>
+        <CardTitle class="text-xs font-semibold text-muted-foreground">Register Endpoint</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onsubmit={handleRegisterWebhook} class="space-y-3">
+          <div>
+            <Label for="wh-url" class="mb-1 block text-xs text-muted-foreground">URL</Label>
+            <Input
+              id="wh-url"
+              type="url"
+              bind:value={newWebhookUrl}
+              required
+              placeholder="https://your-app.example.com/webhook"
+              class="w-full"
+            />
+            <p class="mt-1 text-xs text-muted-foreground">https:// required (http://localhost allowed for dev)</p>
           </div>
-        </div>
 
-        {#if registerError}
-          <p class="text-xs text-destructive">{registerError}</p>
-        {/if}
+          <div>
+            <p class="mb-2 text-xs text-muted-foreground">Subscribe to events</p>
+            <div class="grid grid-cols-2 gap-1.5">
+              {#each PORTAL_WEBHOOK_EVENTS as ev}
+                <label class="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent">
+                  <input
+                    type="checkbox"
+                    checked={newWebhookEvents.includes(ev)}
+                    onchange={() => toggleEventSelection(ev)}
+                    class="accent-primary"
+                  />
+                  <span class="text-xs">{ev}</span>
+                </label>
+              {/each}
+            </div>
+          </div>
 
-        <button
-          type="submit"
-          disabled={registerPending}
-          class="rounded-lg bg-primary text-primary-foreground px-4 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-        >
-          {registerPending ? 'Registering…' : 'Register endpoint'}
-        </button>
-      </form>
-    </div>
+          {#if registerError}
+            <p class="text-xs text-destructive">{registerError}</p>
+          {/if}
+
+          <Button
+            type="submit"
+            size="sm"
+            disabled={registerPending}
+          >
+            {registerPending ? 'Registering…' : 'Register endpoint'}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   </div>
 
   <a href="/admin/apps" class="mt-6 inline-block text-xs text-primary hover:text-primary/80">&larr; Back to apps</a>
