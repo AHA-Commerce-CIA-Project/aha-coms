@@ -86,22 +86,10 @@ mock.module('../cloud-tasks-client', () => ({
   enqueueWebhookDelivery: enqueueWebhookDeliveryMock,
 }))
 
-// Logger stub — lets tests spy on structured warn/error calls without
-// relying on console.warn (which pino no longer calls).
-const loggerWarnMock = mock((..._args: unknown[]) => {})
-const loggerErrorMock = mock((..._args: unknown[]) => {})
-mock.module('~/logger', () => ({
-  logger: {
-    warn: loggerWarnMock,
-    error: loggerErrorMock,
-    info: mock((..._args: unknown[]) => {}),
-    child: mock(() => ({
-      warn: loggerWarnMock,
-      error: loggerErrorMock,
-      info: mock((..._args: unknown[]) => {}),
-    })),
-  },
-}))
+// Import the live logger so we can spy on its warn method directly.
+// mock.module('~/logger') does not intercept modules already in bun's cache;
+// replacing the property on the shared instance is the reliable approach.
+const { logger: sharedLogger } = await import('~/logger')
 
 type EndpointRecord = {
   id: string
@@ -272,7 +260,13 @@ describe('webhook-dispatcher OIDC dual-mode (Rev 2 §03)', () => {
     const ep = makeEndpoint({ id: 'ep-hmac-only' })
     endpointStore.push(ep)
 
-    loggerWarnMock.mockClear()
+    // Spy on the live shared logger instance — mock.module('~/logger') does
+    // not intercept a module already in bun's cache, so we patch the property.
+    const warnCalls: unknown[][] = []
+    const originalWarn = sharedLogger.warn.bind(sharedLogger)
+    ;(sharedLogger as unknown as Record<string, unknown>).warn = (...args: unknown[]) => {
+      warnCalls.push(args)
+    }
 
     const fetchSpy = okFetch()
     let thrown = false
@@ -281,6 +275,8 @@ describe('webhook-dispatcher OIDC dual-mode (Rev 2 §03)', () => {
       await new Promise((r) => setTimeout(r, 10))
     } catch {
       thrown = true
+    } finally {
+      ;(sharedLogger as unknown as Record<string, unknown>).warn = originalWarn
     }
 
     expect(thrown).toBe(false)
@@ -297,13 +293,8 @@ describe('webhook-dispatcher OIDC dual-mode (Rev 2 §03)', () => {
     // Authorization header absent (HMAC-only fallback)
     expect(headers['Authorization']).toBeUndefined()
 
-    // Warning was logged via structured logger
-    expect(loggerWarnMock.mock.calls.some((args) => {
-      const first = args[0]
-      return typeof first === 'object' && first !== null
-        ? JSON.stringify(first).includes('OIDC token minting failed') || String(args[1]).includes('OIDC token minting failed')
-        : String(first).includes('OIDC token minting failed')
-    })).toBe(true)
+    // Warning was logged: logger.warn({ err }, 'OIDC token minting failed ...')
+    expect(warnCalls.some((args) => String(args[1]).includes('OIDC token minting failed'))).toBe(true)
   })
 
   // -------------------------------------------------------------------------
