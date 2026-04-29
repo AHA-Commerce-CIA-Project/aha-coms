@@ -1,9 +1,5 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
-
-// Snapshot the real `gip-admin` module before mocking. We only stub
-// revokeRefreshTokens; spreading the real surface keeps the rest available.
-const realGipAdmin = { ...(await import('../../gip-admin')) }
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing the module under test.
@@ -76,22 +72,10 @@ mock.module('~/db/schema', () => ({
 
 mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
-// Mock GIP revokeRefreshTokens
 // Path is relative to the TEST FILE: '../../gip-admin' resolves to src/gip-admin.ts
 const revokeRefreshTokens = mock(async (_uid: string) => undefined)
-mock.module('../../gip-admin', () => ({ ...realGipAdmin, revokeRefreshTokens }))
+mock.module('../../gip-admin', () => ({ revokeRefreshTokens }))
 
-afterAll(() => {
-  mock.module('../../gip-admin', () => realGipAdmin)
-})
-
-// Mock the webhook dispatcher via the dedicated re-export shim.
-// We must NOT mock '../webhook-dispatcher' directly: Bun's `mock.module` is
-// process-global and registered at file load, so a partial replacement of the
-// dispatcher leaks into webhook-dispatcher.test.ts and worker tests, causing
-// `signWebhookBody`/`verifyWebhookSignature`/`deliverWebhook` to come back as
-// undefined for those suites. Mocking the thin re-export keeps the dispatcher
-// untouched everywhere else.
 const dispatchPortalWebhook = mock(async () => undefined)
 mock.module('../portal-webhook-fanout', () => ({ dispatchPortalWebhook }))
 

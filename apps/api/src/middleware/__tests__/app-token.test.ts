@@ -1,31 +1,15 @@
-import { afterAll, describe, expect, mock, test, beforeEach } from 'bun:test'
+import { describe, expect, mock, test, beforeEach } from 'bun:test'
 import { Elysia } from 'elysia'
 import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
-
-// ---------------------------------------------------------------------------
-// Mock verifyGoogleOidcToken before importing the module under test
-// ---------------------------------------------------------------------------
 
 const mockVerifyGoogleOidcToken = mock(async (_header: string, _audience: string) => ({
   email: 'heroes-sa@project.iam.gserviceaccount.com',
   sub: 'some-sub',
 }))
 
-// Snapshot the real `oidc-verifier` module BEFORE mocking, then spread its
-// exports into the mock and override only what this file exercises. Bun's
-// `mock.module` is process-global; without afterAll restoration, sibling
-// files that exercise `verifyGoogleIdToken` (with their own google-auth-library
-// patching) read a stub from this mock and their assertions misfire.
-const realOidcVerifier = { ...(await import('~/services/oidc-verifier')) }
-
 mock.module('~/services/oidc-verifier', () => ({
-  ...realOidcVerifier,
   verifyGoogleOidcToken: mockVerifyGoogleOidcToken,
 }))
-
-afterAll(() => {
-  mock.module('~/services/oidc-verifier', () => realOidcVerifier)
-})
 
 // ---------------------------------------------------------------------------
 // Mock DB

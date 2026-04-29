@@ -7,7 +7,7 @@
  *   - POST /auth/logout: accepts allowlisted URI (with trailing-slash normalization)
  *   - GET /auth/logout: 400 without redirect, 400 unallowlisted, 303 with allowlisted target
  */
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import { fullDrizzleOrmMock, fullSchemaBarrelMock, mockSpecs } from '~/test-helpers/schema-barrel-mock'
 
 // ---------------------------------------------------------------------------
@@ -89,19 +89,13 @@ mock.module('~/db', () => ({ db }))
 mock.module('~/db/schema', () => fullSchemaBarrelMock())
 mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
-// Snapshot the real `gip-admin` module BEFORE we mock it. The override below
-// stubs only verifySessionCookie + verifyIdToken + createSessionCookie; sibling
-// test files (e.g. session-revocation.test.ts production import of
-// `revokeRefreshTokens`) need the rest of the surface intact. Without this
-// snapshot, CI's Linux file-discovery order surfaces our partial mock to
-// session-revocation/auth-resolution and they error with `SyntaxError: Export
-// named 'revokeRefreshTokens' not found`.
+// Registered under all three specifier spellings since auth.ts imports via
+// '../gip-admin' but userinfo.ts and other transitive callers may use '~/gip-admin'.
+// Real exports are spread so transitive production imports (revokeRefreshTokens
+// from the session-revocation chain, etc.) resolve.
 const realGipAdmin = { ...(await import('~/gip-admin')) }
 const GIP_ADMIN_SPECS = ['../gip-admin', '../../gip-admin', '~/gip-admin']
 
-// gip-admin: stub verifySessionCookie + verifyIdToken. Registered under all
-// three specifier spellings since auth.ts imports via '../gip-admin' but
-// userinfo.ts and other transitive callers may use '~/gip-admin'.
 const gipAdminMock = {
   ...realGipAdmin,
   verifySessionCookie: async (cookie: string) => {
@@ -134,21 +128,15 @@ const middlewareAuthMock = {
 }
 mockSpecs(['../middleware/auth', '../../middleware/auth', '~/middleware/auth'], () => middlewareAuthMock)
 
-// Snapshot the real `auth-broker` and `oidc-verifier` modules BEFORE we mock
-// them. `~/db` is already mocked above, so importing the real modules binds
-// them to the test mocks but doesn't crash. We spread the real exports into
-// the mock and override only what this test needs to stub — and restore the
-// real modules in `afterAll` so sibling test files (auth-broker-audience,
-// auth-broker-dual-mode, oidc-verifier-verify-google-id-token, etc.) read
-// the genuine implementations.
+// Specifier triples: relative-from-routes, relative-from-routes/__tests__, and
+// the '~/' tsconfig alias. Bun's mock store keys by literal specifier string,
+// so we register every form a route may use. Real exports are spread into each
+// mock so transitive production imports (BrokerValidationError, etc.) resolve.
 const realAuthBroker = { ...(await import('~/services/auth-broker')) }
 const realOidcVerifier = { ...(await import('~/services/oidc-verifier')) }
 const realSessionRevocation = { ...(await import('~/services/session-revocation')) }
 const realClaims = { ...(await import('~/services/claims')) }
 
-// Specifier triples for each service module: relative-from-routes, relative-
-// from-routes/__tests__, and the '~/' tsconfig alias. Bun's mock store keys
-// by literal specifier string, so we register every form a route may use.
 const CLAIMS_SPECS = ['../services/claims', '../../services/claims', '~/services/claims']
 const SESSION_REVOCATION_SPECS = [
   '../services/session-revocation',
@@ -162,30 +150,26 @@ const OIDC_VERIFIER_SPECS = [
   '~/services/oidc-verifier',
 ]
 
-const claimsMock = { ...realClaims, resolveAndSyncClaims: async () => undefined }
-mockSpecs(CLAIMS_SPECS, () => claimsMock)
+mockSpecs(CLAIMS_SPECS, () => ({ ...realClaims, resolveAndSyncClaims: async () => undefined }))
 
-const sessionRevocationMock = {
+mockSpecs(SESSION_REVOCATION_SPECS, () => ({
   ...realSessionRevocation,
   revokePortalSession: async () => undefined,
   listAppSlugsForUser: async () => mockUser?.apps ?? [],
-}
-mockSpecs(SESSION_REVOCATION_SPECS, () => sessionRevocationMock)
+}))
 
-const authBrokerMock = {
+mockSpecs(AUTH_BROKER_SPECS, () => ({
   ...realAuthBroker,
   createBrokerHandoff: async () => ({}),
   exchangeBrokerHandoff: async () => ({}),
   findBrokerAppBySlug: async () => null,
-}
-mockSpecs(AUTH_BROKER_SPECS, () => authBrokerMock)
+}))
 
-const oidcVerifierMock = {
+mockSpecs(OIDC_VERIFIER_SPECS, () => ({
   ...realOidcVerifier,
   verifyGoogleOidcToken: async () => ({ email: '', sub: '' }),
   verifyGoogleIdToken: async () => ({ email: '', sub: '' }),
-}
-mockSpecs(OIDC_VERIFIER_SPECS, () => oidcVerifierMock)
+}))
 
 const middlewareSessionCookieMock = {
   getSessionCookieValue: (cookieHeader: string) => {
@@ -200,17 +184,6 @@ mockSpecs(
 
 const { authRoutes } = await import('../auth')
 const { userinfoRoutes } = await import('../userinfo')
-
-// Restore real service modules after this file's tests so sibling test files
-// (auth-broker family, oidc-verifier strict-wrapper, session-revocation) read
-// the genuine implementations.
-afterAll(() => {
-  mockSpecs(AUTH_BROKER_SPECS, () => realAuthBroker)
-  mockSpecs(OIDC_VERIFIER_SPECS, () => realOidcVerifier)
-  mockSpecs(SESSION_REVOCATION_SPECS, () => realSessionRevocation)
-  mockSpecs(CLAIMS_SPECS, () => realClaims)
-  mockSpecs(GIP_ADMIN_SPECS, () => realGipAdmin)
-})
 
 // Compose into a tree that mirrors index.ts (api/auth + api/userinfo)
 import { Elysia } from 'elysia'
