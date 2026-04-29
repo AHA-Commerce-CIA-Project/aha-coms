@@ -14,7 +14,7 @@
  * scale-to-zero because Cloud Tasks dispatches them.
  */
 
-import { createHmac } from 'node:crypto'
+import { verifyWebhookSignature, signWebhookPayload } from '@coms-portal/sdk'
 import { eq, and, sql } from 'drizzle-orm'
 import { GoogleAuth } from 'google-auth-library'
 import { db } from '~/db'
@@ -72,42 +72,16 @@ export async function mintWebhookAudienceToken(audience: string): Promise<string
 // ---------------------------------------------------------------------------
 
 /**
- * Sign a webhook payload.
- *
- * Format: sha256=hex(HMAC-SHA256(secret, timestamp + '.' + jsonBody))
- * Relying parties verify by recomputing the same HMAC over the raw request body
- * using the shared secret and comparing to the header value in constant time.
- */
-export function verifyWebhookSignature(
-  secret: string,
-  timestamp: string,
-  rawBody: string,
-  signatureHeader: string,
-): boolean {
-  const expected = computeSignature(secret, timestamp, rawBody)
-  // Constant-time compare to prevent timing attacks
-  if (signatureHeader.length !== expected.length) return false
-  const a = Buffer.from(signatureHeader)
-  const b = Buffer.from(expected)
-  return a.length === b.length && Buffer.compare(a, b) === 0 // timingSafeEqual via compare
-}
-
-function computeSignature(secret: string, timestamp: string, jsonBody: string): string {
-  const mac = createHmac('sha256', secret)
-    .update(`${timestamp}.${jsonBody}`)
-    .digest('hex')
-  return `sha256=${mac}`
-}
-
-/**
  * Pure signing helper — exported so that the test-send route can sign
  * one-off payloads without going through the full dispatch pipeline.
  *
  * Returns the value that should be set on PORTAL_WEBHOOK_SIGNATURE_HEADER.
  */
 export function signWebhookBody(secret: string, timestamp: string, jsonBody: string): string {
-  return computeSignature(secret, timestamp, jsonBody)
+  return signWebhookPayload(secret, timestamp, jsonBody)
 }
+
+export { verifyWebhookSignature }
 
 // ---------------------------------------------------------------------------
 // Delivery
@@ -135,7 +109,7 @@ export async function deliverWebhook(
   oidcToken?: string | null,
   requestId?: string,
 ): Promise<void> {
-  const signature = computeSignature(endpointSecret, occurredAt, jsonBody)
+  const signature = signWebhookPayload(endpointSecret, occurredAt, jsonBody)
 
   const extraHeaders: Record<string, string> = {}
   if (oidcToken) {

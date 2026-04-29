@@ -1,0 +1,24 @@
+name: lint
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  hardcoded-urls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for hardcoded portal URLs
+        run: |
+          ! git grep -nE 'run\.app|coms-portal-[a-z0-9]|ahacommerce\.net' -- \
+            ':!apps/api/src/config.ts' \
+            ':!apps/web/src/lib/config.ts' \
+            ':!.env.example' \
+            ':!**/__tests__/**' \
+            ':!**/*.test.ts' \
+            ':!**/*.test.svelte' \
+            ':!.github/workflows/*' \
+            ':!docs/**' \
+            ':!.nelson/**'

@@ -13,12 +13,11 @@ import { inArray } from 'drizzle-orm'
 import { db } from '~/db'
 import { portalBrokerSigningKeys } from '~/db/schema/signing-keys'
 import { PLATFORM_AUTH_CONTRACT_VERSION } from '@coms-portal/shared/contracts/auth'
+import { PORTAL_ORIGIN } from '~/config'
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-
-const PORTAL_ORIGIN = process.env.PORTAL_PUBLIC_ORIGIN ?? 'https://coms.ahacommerce.net'
 
 const JWKS_CACHE_MAX_AGE_S = 600   // 10 min — short enough rotation propagates fast
 const DISCOVERY_CACHE_S = 3600     // 1 hour — content rarely changes
