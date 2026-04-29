@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.0 — Tailwind source registration
+
+- Adds `./styles.css` export. Hosts must `@import "@coms-portal/account-widget/styles.css"` in their Tailwind v4 entry point so AccountWidget's class strings (including responsive utilities like `hidden sm:inline`) are scanned. Tailwind v4 excludes `node_modules` from auto-discovery, so without this import the responsive classes never make it into the host's compiled CSS. No code change to the widget itself — purely the source-registration contract. See README "Tailwind setup — required".
+
 ## v0.1.0 — initial widget API
 
 - `AccountWidget` Svelte 5 component implementing spec-01 §Widget API (lines 105-132).

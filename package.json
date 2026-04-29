@@ -1,6 +1,6 @@
 {
   "name": "@coms-portal/account-widget",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shared COMS account widget — avatar + popover (profile, app switcher, RP-initiated sign-out). Mounted in the chrome's right slot by every COMS app.",
   "type": "module",
   "license": "UNLICENSED",
@@ -12,7 +12,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./svelte": "./src/AccountWidget.svelte",
-    "./sign-out": "./src/sign-out.ts"
+    "./sign-out": "./src/sign-out.ts",
+    "./styles.css": "./src/styles.css"
   },
   "files": [
     "src",

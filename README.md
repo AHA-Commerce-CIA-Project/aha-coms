@@ -95,3 +95,19 @@ bun run typecheck
 ## Visual + token contract
 
 The widget uses Tailwind utility classes (`bg-card`, `text-foreground`, `bg-primary-light/25`, etc.) that resolve through `@coms-portal/design-tokens`. The consuming host must `@import "@coms-portal/design-tokens/css"` in its Tailwind v4 entry point so the utilities resolve correctly.
+
+## Tailwind setup — required
+
+Tailwind v4 excludes `node_modules` from auto-discovery, so AccountWidget's class strings (including responsive ones like `hidden sm:inline`) are invisible to the host's compile step unless the host opts them back in.
+
+This package ships an `@source` directive that opts the widget back into the scanner. Import it once in your Tailwind v4 entry point:
+
+```css
+/* apps/web/src/app.css */
+@import "tailwindcss";
+@import "@coms-portal/ui/styles.css";
+@import "@coms-portal/account-widget/styles.css";
+@import "@coms-portal/design-tokens/css";
+```
+
+You do **not** need to know where this package lives in `node_modules`. The `@source` paths inside `styles.css` are resolved relative to the file itself, so the host's Tailwind plugin scans this package no matter how it is installed (workspace, `file:` link, or `git+url`).
