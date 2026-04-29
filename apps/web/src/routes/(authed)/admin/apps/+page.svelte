@@ -13,10 +13,11 @@
     type PortalComplianceStatus,
     type PortalHandoffMode,
   } from '@coms-portal/shared'
+  import { PUBLIC_PORTAL_ORIGIN } from '$lib/config'
 
   const query = appsQuery()
   const queryClient = useQueryClient()
-  const PORTAL_BROKER_ORIGIN = 'https://coms.ahacommerce.net'
+  const PORTAL_BROKER_ORIGIN = PUBLIC_PORTAL_ORIGIN
 
   let registering = $state(false)
   let regName = $state('')
