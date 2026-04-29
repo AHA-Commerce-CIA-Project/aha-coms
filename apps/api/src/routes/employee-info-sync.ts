@@ -8,7 +8,7 @@ export const employeeInfoSyncRoutes = new Elysia({ prefix: '/employee-info-sync'
 
   // POST /employee-info-sync/trigger
   .post('/trigger', async (ctx) => {
-    const { authUser } = ctx as unknown as { authUser: { id: string; gipUid: string } }
+    const { authUser, requestId, actorIp } = ctx as unknown as { authUser: { id: string; gipUid: string }; requestId: string; actorIp: string | undefined }
 
     const result = await syncEmployeeInfo()
 
@@ -17,6 +17,8 @@ export const employeeInfoSyncRoutes = new Elysia({ prefix: '/employee-info-sync'
       action: 'employee_info_sync_triggered',
       targetType: 'employee_info_sync',
       targetId: 'sheet',
+      requestId,
+      actorIp,
     })
 
     return result

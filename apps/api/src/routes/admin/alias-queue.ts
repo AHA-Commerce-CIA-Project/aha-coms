@@ -43,7 +43,7 @@ export const aliasQueueRoutes = new Elysia({ prefix: '/alias-queue' })
 
   .post(
     '/:id/resolve',
-    async ({ params, body, authUser, status }) => {
+    async ({ params, body, authUser, requestId, actorIp, status }) => {
       const queueRow = await db.query.aliasCollisionQueue.findFirst({
         where: eq(aliasCollisionQueue.id, params.id),
       })
@@ -79,6 +79,8 @@ export const aliasQueueRoutes = new Elysia({ prefix: '/alias-queue' })
           identityUserId: body.identityUserId,
           action: 'merge',
         },
+        requestId,
+        actorIp,
       })
 
       return { aliasId: newAlias.id }
@@ -91,7 +93,7 @@ export const aliasQueueRoutes = new Elysia({ prefix: '/alias-queue' })
 
   .post(
     '/:id/reject',
-    async ({ params, body, authUser, status }) => {
+    async ({ params, body, authUser, requestId, actorIp, status }) => {
       const queueRow = await db.query.aliasCollisionQueue.findFirst({
         where: eq(aliasCollisionQueue.id, params.id),
       })
@@ -121,6 +123,8 @@ export const aliasQueueRoutes = new Elysia({ prefix: '/alias-queue' })
           rawName: queueRow.rawName,
           reason: body.reason,
         },
+        requestId,
+        actorIp,
       })
 
       return { ok: true }

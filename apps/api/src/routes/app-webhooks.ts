@@ -91,12 +91,12 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
       .where(eq(appWebhookEndpoints.appId, params.id))
 
     return rows.map(toPublicEndpoint)
-  })
+  }, { response: { 200: t.Array(t.Any()), 404: t.Object({ message: t.String() }) } })
 
   // POST /api/v1/apps/:id/webhooks
   .post(
     '/',
-    async ({ params, body, authUser, set }) => {
+    async ({ params, body, authUser, requestId, actorIp, set }) => {
       // Validate app exists
       const app = await db.query.appRegistry.findFirst({
         where: eq(appRegistry.id, params.id),
@@ -144,6 +144,9 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
         targetType: 'app',
         targetId: params.id,
         details: { endpointId: row.id, url: body.url, subscribedEvents: body.subscribedEvents },
+        requestId,
+        actorIp,
+        targetAppId: params.id,
       })
 
       // Return the full row including secret — the ONLY time it is exposed
@@ -157,6 +160,11 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
         url: t.String({ minLength: 1 }),
         subscribedEvents: t.Array(t.String(), { minItems: 1 }),
       }),
+      response: {
+        200: t.Any(),
+        400: t.Object({ message: t.String() }),
+        404: t.Object({ message: t.String() }),
+      },
     },
   )
 
@@ -218,11 +226,16 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
           status: t.Union([t.Literal('active'), t.Literal('disabled')]),
         }),
       ),
+      response: {
+        200: t.Any(),
+        400: t.Object({ message: t.String() }),
+        404: t.Object({ message: t.String() }),
+      },
     },
   )
 
   // POST /api/v1/apps/:id/webhooks/:endpointId/rotate-secret
-  .post('/:endpointId/rotate-secret', async ({ params, authUser, set }) => {
+  .post('/:endpointId/rotate-secret', async ({ params, authUser, requestId, actorIp, set }) => {
     const existing = await db.query.appWebhookEndpoints.findFirst({
       where: and(
         eq(appWebhookEndpoints.id, params.endpointId),
@@ -253,13 +266,16 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
       targetType: 'app',
       targetId: params.id,
       details: { endpointId: params.endpointId },
+      requestId,
+      actorIp,
+      targetAppId: params.id,
     })
 
     return { secret }
-  })
+  }, { response: { 200: t.Object({ secret: t.String() }), 404: t.Object({ message: t.String() }) } })
 
   // DELETE /api/v1/apps/:id/webhooks/:endpointId
-  .delete('/:endpointId', async ({ params, authUser, set }) => {
+  .delete('/:endpointId', async ({ params, authUser, requestId, actorIp, set }) => {
     const existing = await db.query.appWebhookEndpoints.findFirst({
       where: and(
         eq(appWebhookEndpoints.id, params.endpointId),
@@ -286,10 +302,13 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
       targetType: 'app',
       targetId: params.id,
       details: { endpointId: params.endpointId, url: existing.url },
+      requestId,
+      actorIp,
+      targetAppId: params.id,
     })
 
     return { ok: true }
-  })
+  }, { response: { 200: t.Object({ ok: t.Literal(true) }), 404: t.Object({ message: t.String() }) } })
 
   // POST /api/v1/apps/:id/webhooks/:endpointId/test
   .post('/:endpointId/test', async ({ params, set }) => {
@@ -354,4 +373,4 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
         error: err instanceof Error ? err.message : String(err),
       }
     }
-  })
+  }, { response: { 200: t.Object({ delivered: t.Boolean(), status: t.Optional(t.Number()), error: t.Optional(t.String()) }) } })

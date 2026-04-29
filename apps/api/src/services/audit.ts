@@ -39,6 +39,10 @@ export async function logAudit(params: {
   targetType: AuditTargetType
   targetId: string
   details?: Record<string, unknown>
+  requestId?: string
+  actorIp?: string
+  actorAppId?: string
+  targetAppId?: string
 }): Promise<void> {
   await db.insert(accessAuditLog).values({
     actorId: params.actorId,
@@ -46,5 +50,9 @@ export async function logAudit(params: {
     targetType: params.targetType,
     targetId: params.targetId,
     details: params.details ?? null,
+    requestId: params.requestId ?? null,
+    actorIp: params.actorIp ?? null,
+    actorAppId: params.actorAppId ?? null,
+    targetAppId: params.targetAppId ?? null,
   })
 }
