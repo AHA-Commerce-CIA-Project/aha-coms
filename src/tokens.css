@@ -50,16 +50,6 @@
   --radius-input: 12px;
 
   /* Spacing scale */
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 0.75rem;
-  --spacing-lg: 1rem;
-  --spacing-xl: 1.25rem;
-  --spacing-2xl: 1.5rem;
-  --spacing-3xl: 2rem;
-  --spacing-4xl: 2.5rem;
-  --spacing-5xl: 3rem;
-  --spacing-6xl: 4rem;
   --spacing-page-padding-desktop: 1.5rem;
   --spacing-page-padding-mobile: 1rem;
   --spacing-page-bottom-desktop: 2rem;

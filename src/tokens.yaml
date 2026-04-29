@@ -144,17 +144,13 @@ rounded:
   service-tab: 6px
   input: 12px
 
+# Spacing only carries semantic, non-numeric names. The previous numeric
+# scale (xs/sm/md/lg/xl/2xl/...) collided with Tailwind v4's container
+# scale: defining `--spacing-2xl` shadowed `--container-2xl`, silently
+# rewriting `max-w-2xl` from 42rem to 1.5rem. Tailwind's built-in numeric
+# scale (`p-1`, `gap-4`, `max-w-2xl`, …) is the source of truth for sizes
+# the design system never overrides.
 spacing:
-  xs: 4px
-  sm: 8px
-  md: 12px
-  lg: 16px
-  xl: 20px
-  2xl: 24px
-  3xl: 32px
-  4xl: 40px
-  5xl: 48px
-  6xl: 64px
   page-padding-desktop: 24px
   page-padding-mobile: 16px
   page-bottom-desktop: 32px

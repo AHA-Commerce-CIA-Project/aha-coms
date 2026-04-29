@@ -1,6 +1,6 @@
 {
   "name": "@coms-portal/design-tokens",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "COMS design tokens — colors, typography, spacing, radii, shadows, motion. Single source for the COMS suite.",
   "type": "module",
   "license": "UNLICENSED",
