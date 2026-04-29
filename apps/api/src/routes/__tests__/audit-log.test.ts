@@ -134,7 +134,7 @@ mock.module('~/middleware/broker-token', () => ({
   requireBrokerToken: () =>
     new Elysia({ name: 'mock-require-broker-token' }).derive(
       { as: 'scoped' },
-      async ({ request, status }: { request: Request; status: (code: number, body: unknown) => Error }) => {
+      async ({ request, status }) => {
         const auth = request.headers.get('authorization')
         if (!tokenValid || !auth || !auth.startsWith('Bearer ')) {
           throw status(401, { error: 'unauthorized', reason: 'invalid_token' })
@@ -148,7 +148,7 @@ mock.module('../middleware/broker-token', () => ({
   requireBrokerToken: () =>
     new Elysia({ name: 'mock-require-broker-token-rel' }).derive(
       { as: 'scoped' },
-      async ({ request, status }: { request: Request; status: (code: number, body: unknown) => Error }) => {
+      async ({ request, status }) => {
         const auth = request.headers.get('authorization')
         if (!tokenValid || !auth || !auth.startsWith('Bearer ')) {
           throw status(401, { error: 'unauthorized', reason: 'invalid_token' })

@@ -373,4 +373,4 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
         error: err instanceof Error ? err.message : String(err),
       }
     }
-  }, { response: { 200: t.Object({ delivered: t.Boolean(), status: t.Optional(t.Number()), error: t.Optional(t.String()) }) } })
+  }, { response: { 200: t.Object({ delivered: t.Boolean(), status: t.Optional(t.Number()), error: t.Optional(t.String()) }), 404: t.Object({ message: t.String() }) } })
