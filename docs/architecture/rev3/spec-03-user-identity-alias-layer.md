@@ -6,9 +6,11 @@
 
 ---
 
-## Status (2026-04-28) — portal-side shipped on `main`
+## Status (2026-04-29) — portal-side shipped on `main`; test-gate clean
 
 All twelve portal-side effects of this spec landed in a single coordinated session on 2026-04-28 and are merged to `main`. The schema migrations, services, routes, webhooks, admin UIs, and the gated REVOKE migration are all in place; the merge ships as commits `b6e3bd1` through `e296ab5` plus follow-up `b407682` (svelte-check fix). The `@coms-portal/shared` package is at `v1.4.0` with new event types and the additive `appConfig` payload extension.
+
+**Test-gate cleanup (Spec 03b) shipped 2026-04-29.** All 261 API tests pass locally; the CI deploy gate is ready to unblock on the next push to `main`. See `docs/architecture/rev3/spec-03b-test-gate-cleanup.md` for the full resolution shape — root cause was Bun `mock.module` process-global cross-file contamination (not real fixture bugs); fix introduced `apps/api/src/test-helpers/schema-barrel-mock.ts` and a snapshot+restore mock-isolation pattern now enforced via `.codebase-memory/adr.md` §7.
 
 **What ships portal-side:**
 
@@ -25,7 +27,7 @@ All twelve portal-side effects of this spec landed in a single coordinated sessi
 
 **Naming reconciliation (vs. spec prose):** the spec calls webhook events `user.created` / `user.updated` / `user.deactivated`. Reconnaissance found Rev 2 already publishes `user.provisioned` / `user.updated` / `user.offboarded`. The implementation reuses the Rev 2 names (additive `appConfig` extension on `user.provisioned`); the spec's prose names should be read as synonyms.
 
-**Known debt — see Spec 03b.** CI's test gate is red on `main` (typecheck green; tests fail across pre-existing `main` failures + a few new `requireAppToken` CI mock setups + barrel-mock contamination). The deploy job skips until cleared. Three small PRs prescribed in `spec-03b-test-gate-cleanup.md`.
+**Known debt — Spec 03b cleared 2026-04-29.** CI's test gate (red on `main` since this spec's merge) is locally green at 261 pass / 0 fail. Resolution turned out to be cross-file Bun `mock.module` contamination, not real fixture bugs; details in `spec-03b-test-gate-cleanup.md`. Deploy job expected to run on the next push to `main`.
 
 **What remains — Heroes-side (out of portal scope):** the Heroes-side adoption work in §Appendix A — rename `users` → `heroes_profiles`, drop role/eligibility columns, ingestion rewrite via the new `POST /api/aliases/resolve-batch`, alias + user-config caches, webhook consumers, audit log routing. The Phase 3 cutover (truncate + reprovision + apply the gated REVOKE) is a coordinated <30-minute window with portal.
 

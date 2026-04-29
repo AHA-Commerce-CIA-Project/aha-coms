@@ -1,4 +1,13 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { mockSpecs } from '~/test-helpers/schema-barrel-mock'
+
+// Snapshot the real `manifests` module BEFORE we mock it. The mock below
+// stubs `validateConfig`/`registerManifest` (which this file doesn't exercise)
+// and Bun's `mock.module` is process-global — without restoration in afterAll,
+// `manifests.test.ts` later reads the stubbed `validateConfig` and its
+// assertions flip from `valid: false` to `valid: true`.
+const realManifests = { ...(await import('../manifests')) }
+const MANIFESTS_SPECS = ['../manifests', '~/services/manifests']
 
 // ---------------------------------------------------------------------------
 // Mocks — registered before module import
@@ -53,24 +62,26 @@ const mockSeedDefaults = (manifest: { configSchema: Record<string, { default: un
   return result
 }
 
-mock.module('../manifests', () => ({
+// Spread the real module first so non-overridden exports remain intact;
+// only `loadAllManifests` and `seedDefaults` need stubbing here.
+const manifestsMock = {
+  ...realManifests,
   loadAllManifests: mockLoadAllManifests,
   seedDefaults: mockSeedDefaults,
-  validateConfig: mock(() => ({ valid: true })),
-  registerManifest: mock(async () => {}),
-}))
-mock.module('~/services/manifests', () => ({
-  loadAllManifests: mockLoadAllManifests,
-  seedDefaults: mockSeedDefaults,
-  validateConfig: mock(() => ({ valid: true })),
-  registerManifest: mock(async () => {}),
-}))
+}
+mockSpecs(MANIFESTS_SPECS, () => manifestsMock)
 
 // db mock (not used directly — tx is passed in)
 mock.module('~/db', () => ({ db: { transaction: mock(async (fn: (tx: unknown) => unknown) => fn(fakeTx)) } }))
 mock.module('~/db/schema/app-user-config', () => ({ appUserConfig: { name: 'app_user_config' } }))
 
 const { seedAppUserConfigForUser } = await import('../app-user-config')
+
+// Restore the real `manifests` module after this file's tests, so sibling
+// test files (e.g. `manifests.test.ts`) read the real implementation.
+afterAll(() => {
+  mockSpecs(MANIFESTS_SPECS, () => realManifests)
+})
 
 function resetMocks() {
   mockInsert.mockClear()

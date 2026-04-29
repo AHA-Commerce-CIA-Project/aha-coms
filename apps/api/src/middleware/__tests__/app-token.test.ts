@@ -1,5 +1,6 @@
-import { describe, expect, mock, test, beforeEach } from 'bun:test'
+import { afterAll, describe, expect, mock, test, beforeEach } from 'bun:test'
 import { Elysia } from 'elysia'
+import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
 
 // ---------------------------------------------------------------------------
 // Mock verifyGoogleOidcToken before importing the module under test
@@ -10,9 +11,21 @@ const mockVerifyGoogleOidcToken = mock(async (_header: string, _audience: string
   sub: 'some-sub',
 }))
 
+// Snapshot the real `oidc-verifier` module BEFORE mocking, then spread its
+// exports into the mock and override only what this file exercises. Bun's
+// `mock.module` is process-global; without afterAll restoration, sibling
+// files that exercise `verifyGoogleIdToken` (with their own google-auth-library
+// patching) read a stub from this mock and their assertions misfire.
+const realOidcVerifier = { ...(await import('~/services/oidc-verifier')) }
+
 mock.module('~/services/oidc-verifier', () => ({
+  ...realOidcVerifier,
   verifyGoogleOidcToken: mockVerifyGoogleOidcToken,
 }))
+
+afterAll(() => {
+  mock.module('~/services/oidc-verifier', () => realOidcVerifier)
+})
 
 // ---------------------------------------------------------------------------
 // Mock DB
@@ -52,59 +65,8 @@ mock.module('~/db/schema/apps', () => ({
     status: 'appRegistry.status',
   },
 }))
-// Comprehensive barrel mock so later test files that import ~/db/schema don't get a stale incomplete mock
-mock.module('~/db/schema', () => ({
-  appRegistry: { id: 'appRegistry.id', slug: 'appRegistry.slug', serviceAccountEmail: 'appRegistry.serviceAccountEmail', status: 'appRegistry.status' },
-  identityUsers: { id: 'iu.id', gipUid: 'iu.gipUid', email: 'iu.email', name: 'iu.name', portalRole: 'iu.portalRole', status: 'iu.status', portalSub: 'iu.portalSub', provisioningStatus: 'iu.provisioningStatus', provisioningError: 'iu.provisioningError', createdAt: 'iu.createdAt', updatedAt: 'iu.updatedAt' },
-  sessionRevocations: { id: 'sr.id', userId: 'sr.userId', notBefore: 'sr.notBefore', reason: 'sr.reason', createdAt: 'sr.createdAt' },
-  teamMembers: { teamId: 'tm.teamId', userId: 'tm.userId' },
-  teamAppAccess: { teamId: 'ta.teamId', appId: 'ta.appId' },
-  appWebhookEndpoints: { id: 'awe.id', appId: 'awe.appId', url: 'awe.url', signingKey: 'awe.signingKey', status: 'awe.status' },
-  appUserConfig: { portalSub: 'auc.portalSub', appId: 'auc.appId', config: 'auc.config', schemaVersion: 'auc.schemaVersion', updatedAt: 'auc.updatedAt', updatedBy: 'auc.updatedBy' },
-  appManifests: { appId: 'am.appId', displayName: 'am.displayName', schemaVersion: 'am.schemaVersion', configSchema: 'am.configSchema', registeredAt: 'am.registeredAt', updatedAt: 'am.updatedAt' },
-  bulkEditLocks: { appId: 'bel.appId', acquiredBy: 'bel.acquiredBy', acquiredAt: 'bel.acquiredAt' },
-  aliasCollisionQueue: { id: 'acq.id', rawName: 'acq.rawName', rawNameNormalized: 'acq.rawNameNormalized', suggestedIdentityUserId: 'acq.suggestedIdentityUserId', source: 'acq.source', context: 'acq.context', status: 'acq.status', createdAt: 'acq.createdAt', resolvedAt: 'acq.resolvedAt', resolvedBy: 'acq.resolvedBy', resolutionAction: 'acq.resolutionAction' },
-  userAliases: { id: 'ua.id', identityUserId: 'ua.identityUserId', alias: 'ua.alias', aliasNormalized: 'ua.aliasNormalized', isPrimary: 'ua.isPrimary', source: 'ua.source', createdAt: 'ua.createdAt', tombstoned: 'ua.tombstoned' },
-  accessAuditLog: { actorId: 'aal.actorId', action: 'aal.action', targetId: 'aal.targetId', details: 'aal.details', createdAt: 'aal.createdAt' },
-  teams: { id: 'teams.id', name: 'teams.name' },
-  signingKeys: { kid: 'sk.kid', publicKey: 'sk.publicKey', privateKey: 'sk.privateKey', algorithm: 'sk.algorithm', status: 'sk.status', createdAt: 'sk.createdAt' },
-  authHandoffs: { id: 'ah.id', nonce: 'ah.nonce', state: 'ah.state', createdAt: 'ah.createdAt', expiresAt: 'ah.expiresAt' },
-  webhookDeliveryJobs: { id: 'wdj.id', endpointId: 'wdj.endpointId', payload: 'wdj.payload', status: 'wdj.status', createdAt: 'wdj.createdAt', scheduledAt: 'wdj.scheduledAt' },
-}))
-mock.module('drizzle-orm', () => ({
-  eq: (_left: unknown, _right: unknown) => ({}),
-  and: (..._args: unknown[]) => ({}),
-  asc: (_col: unknown) => ({}),
-  desc: (_col: unknown) => ({}),
-  ilike: (_col: unknown, _val: unknown) => ({}),
-  or: (..._args: unknown[]) => ({}),
-  ne: (_l: unknown, _r: unknown) => ({}),
-  inArray: (_l: unknown, _r: unknown) => ({}),
-  gte: (_l: unknown, _r: unknown) => ({}),
-  lte: (_l: unknown, _r: unknown) => ({}),
-  gt: (_l: unknown, _r: unknown) => ({}),
-  lt: (_l: unknown, _r: unknown) => ({}),
-  isNull: (_col: unknown) => ({}),
-  isNotNull: (_col: unknown) => ({}),
-  not: (_expr: unknown) => ({}),
-  count: (_col?: unknown) => ({}),
-  sql: new Proxy((_s: TemplateStringsArray) => '', { get: (_t, p) => (_: unknown) => p }),
-  relations: () => ({}),
-  uniqueIndex: () => ({ on: () => ({ where: () => ({}) }) }),
-  index: () => ({ on: () => ({}) }),
-  unique: () => ({ on: () => ({}) }),
-  pgTable: (_name: string, cols: unknown) => cols,
-  uuid: () => ({ primaryKey: () => ({}) }),
-  text: () => ({ notNull: () => ({ default: () => ({}) }) }),
-  boolean: () => ({ notNull: () => ({ default: () => ({}) }) }),
-  integer: () => ({ notNull: () => ({ default: () => ({}) }) }),
-  jsonb: () => ({ notNull: () => ({ default: () => ({}) }) }),
-  timestamp: () => ({ notNull: () => ({ defaultNow: () => ({}) }) }),
-  foreignKey: () => ({ references: () => ({}) }),
-  varchar: () => ({ notNull: () => ({ default: () => ({}) }) }),
-  serial: () => ({ primaryKey: () => ({}) }),
-  bigint: () => ({ notNull: () => ({}) }),
-}))
+mock.module('~/db/schema', () => fullSchemaBarrelMock())
+mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
 // ---------------------------------------------------------------------------
 // State shared between mock implementations

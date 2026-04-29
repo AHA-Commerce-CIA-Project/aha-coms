@@ -7,9 +7,9 @@
 
 ---
 
-## Status — 2026-04-28 (Specs 01 + 02 + 03 portal-side shipped; Heroes adoption pending)
+## Status — 2026-04-29 (Specs 01 + 02 + 03 + 03b portal-side shipped; Heroes adoption pending)
 
-Portal/COMS team landed Specs 01 + 02 (Phases 2 + 3) + 03 (portal-side, all twelve effects) end-to-end on 2026-04-28. The Spec 03 merge is on `main`; the deploy gate is currently red on tests (see Spec 03b).
+Portal/COMS team landed Specs 01 + 02 (Phases 2 + 3) + 03 (portal-side, all twelve effects) end-to-end on 2026-04-28; Spec 03b test-gate cleanup followed on 2026-04-29 (locally green). The Spec 03 merge is on `main`; the deploy gate clears on the next push.
 
 **Shipped (public GitHub repos, consumed via `git+url`):**
 
@@ -24,7 +24,7 @@ Portal `apps/web` is migrated and dogfooding all four (consuming via `git+https:
 
 **Spec 03 portal-side shipped (2026-04-28):** alias layer (`user_aliases` with Postgres `GENERATED ALWAYS AS` for `alias_normalized`, `alias_collision_queue`, alias service with two-step rename and Levenshtein-or-token-set collision detection, `POST /api/aliases/resolve-batch` with per-app token-bucket rate limiting, `alias.resolved` / `alias.updated` / `alias.deleted` webhooks, admin collision queue UI at `/admin/aliases`); per-app config (`app_manifests`, `app_user_config`, `bulk_edit_locks`, manifest validation service with Heroes seed registered at boot, default config seeded inside the `createEmployee` transaction, `app_config.updated` webhook with per-app slice filtering, `GET /api/users/:portalSub/config/:appId`, admin app-config UI at `/admin/app-config` with single edit + selection-bulk + CSV-bulk preview-then-commit + `bulk_edit_locks` enforcement); inbound app SA token middleware (`requireAppToken`); gated `REVOKE` migration prepared at `apps/api/src/db/migrations/cutover/0001_revoke_heroes_writes.sql` with cutover runbook, NOT auto-applied. `user.provisioned` payload extended with optional per-recipient `appConfig` slice — additive, no consumer breakage. Mission artefacts at `.nelson/missions/2026-04-28_050010_1b5c498e/`.
 
-**Known debt — Spec 03b:** CI's `Typecheck & Unit Tests` job is red on `main` (typecheck green, tests fail). Pre-existing `main` failures + a few new `requireAppToken` CI mock setups + barrel-mock contamination on `appUserConfig`. Deploy step skips until cleared. See `spec-03b-test-gate-cleanup.md` for the catalog and three-PR phasing.
+**Spec 03b test-gate cleanup — shipped 2026-04-29.** Resolution turned out to be entirely Bun `mock.module` cross-file contamination (every failing file passed in isolation), not real fixture bugs. One PR, one new shared test helper at `apps/api/src/test-helpers/schema-barrel-mock.ts`, snapshot+restore pattern adopted across 8 test files, and an `OAuth2Client.prototype` patch replacing a vendor-SDK module mock. Local: 261 pass / 0 fail / 0 typecheck errors. CI deploy gate expected to clear on the next push to `main`. Canonical pattern enforced via `.codebase-memory/adr.md` §7. See `spec-03b-test-gate-cleanup.md` §"Outcome" for the full diff.
 
 **Heroes-side work pending** — see `heroes-integration-handoff.md` for install lines, mount snippets, file-deletion list, and verification checklist (Specs 01 + 02). For Spec 03, Heroes-side adoption follows §Appendix A of `spec-03-user-identity-alias-layer.md` (rename `users` → `heroes_profiles`, drop role/eligibility columns, ingestion rewrite via `POST /api/aliases/resolve-batch`, alias + user-config caches, webhook consumers, audit log).
 
@@ -50,8 +50,8 @@ After Rev 3, identity is *centrally owned* (Rev 2), *centrally surfaced* (Spec 0
 | 00 | Implementation Timeline (this doc) | Portal | — | — | — |
 | 01 | Shared Account Widget | Portal | Medium | Yes — H1 (adoption) | Yes — UX surface |
 | 02 | Design System (skeleton + spec) | Portal | Phases 1+2+3 done portal-side (2026-04-28); Phase 4+5 deferred | Phase 2 token consumption + Phase 3 chrome adoption | No — deferred until trigger |
-| 03 | User Identity Ownership & Alias Layer | Portal + Heroes | Portal-side shipped 2026-04-28 (twelve effects on `main`); test-gate debt tracked in 03b | Yes — H1 (rename, ingestion rewrite, caches, webhook consumers) | **Yes — must land before real users** |
-| 03b | Spec 03 Test-Gate Cleanup | Portal | Small (~1–2 days, three small PRs) | No | High — blocks deploy |
+| 03 | User Identity Ownership & Alias Layer | Portal + Heroes | Portal-side shipped 2026-04-28 (twelve effects on `main`); test-gate cleared 2026-04-29 (Spec 03b) | Yes — H1 (rename, ingestion rewrite, caches, webhook consumers) | **Yes — must land before real users** |
+| 03b | Spec 03 Test-Gate Cleanup | Portal | Shipped 2026-04-29 — single PR; root cause was Bun mock-pollution, not real fixture bugs | No | Resolved |
 | 04 | Unified User Preferences (theme + locale) | Portal + every H-app | Small per phase | Yes — Phase 3 (preference consumption) | No — deferred until trigger |
 | 05 | Suite Search / Command Palette | Portal + every H-app | Medium per phase | Optional — Phase 3 (search provider) | No — deferred until trigger |
 
@@ -74,9 +74,9 @@ Every Rev 3 spec touches Heroes eventually, but only Specs 01 + 03 are scheduled
 **Wall-clock — what shipped and what remains:**
 
 - **2026-04-28 (single session):** Spec 03 portal-side built end-to-end — twelve effects across alias layer, per-app config, admin UIs, webhooks, gated REVOKE migration. Merged to `main` as commits `b6e3bd1` through `e296ab5` (Mr. Door commit format), with a follow-up svelte-check fix at `b407682` and Spec 03b doc at `7f059fa`.
-- **Now — Spec 03b:** clear the CI test gate so the deploy job runs. Three small PRs (Class A pre-existing, Class B Spec 03 introductions, Class C residuals). ~1–2 days portal engineering, single captain. **Until 03b lands, staging stays on the pre-Spec-03 release** even though `main`'s source is current.
+- **2026-04-29 — Spec 03b shipped:** CI test gate cleared. Single PR — diagnostic work showed every failing file passed in isolation, so the planned Class A/B/C three-PR phasing collapsed once the dominant root cause (Bun `mock.module` cross-file contamination) was identified. New shared helper at `apps/api/src/test-helpers/schema-barrel-mock.ts`; snapshot+restore mock-isolation pattern adopted across 8 test files; `OAuth2Client.prototype.verifyIdToken` patched directly in the verifyGoogleIdToken test. 261 pass / 0 fail / 0 typecheck errors. Pattern enforced via `.codebase-memory/adr.md` §7.
 - **Now — Spec 01 Heroes adoption:** Heroes mounts `@coms-portal/account-widget` per `heroes-integration-handoff.md`. Independent of the test gate; ships on Heroes' deploy pipeline.
-- **Soon — Spec 03 Heroes adoption (after 03b clears):** Heroes Phase 0 prep + Phase 1 ingestion rewrite per spec-03 §Appendix A. ~2 weeks Heroes engineering. Cutover (Phase 3) is a coordinated <30-minute window with portal — truncate Heroes' projection tables, portal admin reprovisions users via existing CSV/Sheet/manual flows, Heroes ops re-runs sheet ingestion for points data, Deploy C applies the gated REVOKE.
+- **Soon — Spec 03 Heroes adoption (now unblocked by 03b):** Heroes Phase 0 prep + Phase 1 ingestion rewrite per spec-03 §Appendix A. ~2 weeks Heroes engineering. Cutover (Phase 3) is a coordinated <30-minute window with portal — truncate Heroes' projection tables, portal admin reprovisions users via existing CSV/Sheet/manual flows, Heroes ops re-runs sheet ingestion for points data, Deploy C applies the gated REVOKE.
 - **Rev 3 closes** when spec-00 §Success Criteria are green: widget renders identically in portal + Heroes from one package version; Heroes' DB role cannot write `identity_users`; sheet ingestion mints zero new user rows.
 
 No fixed dates — gated by team capacity, not calendar. Specs 02 / 04 / 05 sit on the shelf with full architecture pre-baked; spinning one up is a "trigger fires → start phase plan" decision, not a re-design.

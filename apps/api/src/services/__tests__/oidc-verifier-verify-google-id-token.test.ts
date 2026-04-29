@@ -10,30 +10,33 @@
  * live separately and this file must not alter its behaviour.
  */
 
-import { describe, expect, mock, test } from 'bun:test'
+import { afterAll, describe, expect, test } from 'bun:test'
+import { OAuth2Client } from 'google-auth-library'
 
 // ---------------------------------------------------------------------------
-// Mock google-auth-library before module import
+// Patch OAuth2Client.prototype.verifyIdToken instead of mocking
+// `google-auth-library` at the module level. The module-level mock approach
+// breaks when sibling test files (e.g. routes/userinfo.test.ts) load
+// oidc-verifier.ts first — the production module's `oauthClient = new
+// OAuth2Client()` is bound to the real class at first import and survives
+// later `mock.module('google-auth-library', …)` calls. Patching the prototype
+// of the already-loaded `OAuth2Client` is order-independent: the existing
+// instance dispatches to the prototype on every call.
 // ---------------------------------------------------------------------------
-
-// We swap out verifyIdToken on OAuth2Client to control what the token yields.
-// The mock is set up module-scope here; individual tests override it via
-// mock.mockImplementation inside the test body.
 
 let verifyIdTokenImpl: () => Promise<{ getPayload: () => Record<string, unknown> | null }>
 
-const mockVerifyIdToken = mock((..._args: unknown[]) => verifyIdTokenImpl())
+// `verifyIdToken` is overloaded on the real OAuth2Client; relax the typing
+// once here so the patch and restore below can assign without per-line casts.
+const oauthProto = OAuth2Client.prototype as unknown as { verifyIdToken: unknown }
+const realVerifyIdToken = oauthProto.verifyIdToken
+oauthProto.verifyIdToken = async function () {
+  return verifyIdTokenImpl()
+}
 
-mock.module('google-auth-library', () => ({
-  OAuth2Client: class {
-    verifyIdToken = mockVerifyIdToken
-  },
-  GoogleAuth: class {},
-}))
-
-// ---------------------------------------------------------------------------
-// Import the module under test (after mocks are registered)
-// ---------------------------------------------------------------------------
+afterAll(() => {
+  oauthProto.verifyIdToken = realVerifyIdToken
+})
 
 const { verifyGoogleIdToken } = await import('../oidc-verifier')
 

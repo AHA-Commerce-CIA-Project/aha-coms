@@ -7,7 +7,8 @@
  *   - POST /auth/logout: accepts allowlisted URI (with trailing-slash normalization)
  *   - GET /auth/logout: 400 without redirect, 400 unallowlisted, 303 with allowlisted target
  */
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { fullDrizzleOrmMock, fullSchemaBarrelMock, mockSpecs } from '~/test-helpers/schema-barrel-mock'
 
 // ---------------------------------------------------------------------------
 // Module mocks — pattern matches well-known.test.ts
@@ -59,11 +60,13 @@ function makeThenable(): {
     from: () => makeThenable(),
     then: (resolve: (v: unknown) => void) => resolve(mockApps),
     where: (predicate?: unknown) => {
+      // Detect `ne(appRegistry.status, 'deprecated')` from the shared
+      // drizzle-orm mock helper, which emits `{type: 'ne', left, right}`.
       const isDeprecatedFilter =
         predicate !== null &&
         typeof predicate === 'object' &&
-        (predicate as { op?: string }).op === 'ne' &&
-        (predicate as { r?: unknown }).r === 'deprecated'
+        (predicate as { type?: string }).type === 'ne' &&
+        (predicate as { right?: unknown }).right === 'deprecated'
       const rows = isDeprecatedFilter
         ? mockApps.filter((a) => (a.status ?? 'active') !== 'deprecated')
         : mockApps
@@ -83,31 +86,12 @@ const db = {
 }
 
 mock.module('~/db', () => ({ db }))
-mock.module('~/db/schema', () => ({
-  identityUsers: { gipUid: 'gip_uid', id: 'id' },
-  sessionRevocations: {},
-  teamMembers: {},
-  appRegistry: { slug: 'slug', name: 'name', url: 'url', status: 'status' },
-  teamAppAccess: {},
-}))
-mock.module('drizzle-orm', () => ({
-  eq: (l: unknown, r: unknown) => ({ op: 'eq', l, r }),
-  and: (...c: unknown[]) => ({ op: 'and', c }),
-  ne: (l: unknown, r: unknown) => ({ op: 'ne', l, r }),
-  inArray: () => ({ op: 'inArray' }),
-  gte: () => ({ op: 'gte' }),
-  sql: new Proxy(
-    (strings: TemplateStringsArray) => strings.join(''),
-    { get: (_t, prop) => prop },
-  ),
-  relations: () => ({}),
-}))
+mock.module('~/db/schema', () => fullSchemaBarrelMock())
+mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
-// gip-admin: stub verifySessionCookie + verifyIdToken.
-// Bun mock.module identifies modules by specifier string; consumers that
-// import via '../gip-admin' and consumers that import via '~/gip-admin' would
-// resolve to the same file but different module identity inside bun's mock
-// store. Our consumers use '../gip-admin' (auth.ts and userinfo.ts both).
+// gip-admin: stub verifySessionCookie + verifyIdToken. Registered under all
+// three specifier spellings since auth.ts imports via '../gip-admin' but
+// userinfo.ts and other transitive callers may use '~/gip-admin'.
 const gipAdminMock = {
   verifySessionCookie: async (cookie: string) => {
     if (!mockSessionValid || cookie === 'invalid') {
@@ -118,9 +102,7 @@ const gipAdminMock = {
   verifyIdToken: async () => ({ uid: 'unknown', email: '' }),
   createSessionCookie: async () => 'cookie',
 }
-mock.module('../gip-admin', () => gipAdminMock)
-mock.module('../../gip-admin', () => gipAdminMock)
-mock.module('~/gip-admin', () => gipAdminMock)
+mockSpecs(['../gip-admin', '../../gip-admin', '~/gip-admin'], () => gipAdminMock)
 
 // resolveAuthUser: stub returns the configured mockUser as a SessionUser
 const middlewareAuthMock = {
@@ -139,41 +121,60 @@ const middlewareAuthMock = {
   AuthResolutionError: class extends Error {},
   authPlugin: { name: 'auth-plugin' },
 }
-mock.module('../middleware/auth', () => middlewareAuthMock)
-mock.module('../../middleware/auth', () => middlewareAuthMock)
-mock.module('~/middleware/auth', () => middlewareAuthMock)
+mockSpecs(['../middleware/auth', '../../middleware/auth', '~/middleware/auth'], () => middlewareAuthMock)
 
-// Service-layer mocks. Multiple specifier spellings for the same module so
-// bun's mock store intercepts whether the consumer imports via '../', '../../',
-// or the '~/' tsconfig alias.
-const claimsMock = { resolveAndSyncClaims: async () => undefined }
-mock.module('../services/claims', () => claimsMock)
-mock.module('../../services/claims', () => claimsMock)
-mock.module('~/services/claims', () => claimsMock)
+// Snapshot the real `auth-broker` and `oidc-verifier` modules BEFORE we mock
+// them. `~/db` is already mocked above, so importing the real modules binds
+// them to the test mocks but doesn't crash. We spread the real exports into
+// the mock and override only what this test needs to stub — and restore the
+// real modules in `afterAll` so sibling test files (auth-broker-audience,
+// auth-broker-dual-mode, oidc-verifier-verify-google-id-token, etc.) read
+// the genuine implementations.
+const realAuthBroker = { ...(await import('~/services/auth-broker')) }
+const realOidcVerifier = { ...(await import('~/services/oidc-verifier')) }
+const realSessionRevocation = { ...(await import('~/services/session-revocation')) }
+const realClaims = { ...(await import('~/services/claims')) }
+
+// Specifier triples for each service module: relative-from-routes, relative-
+// from-routes/__tests__, and the '~/' tsconfig alias. Bun's mock store keys
+// by literal specifier string, so we register every form a route may use.
+const CLAIMS_SPECS = ['../services/claims', '../../services/claims', '~/services/claims']
+const SESSION_REVOCATION_SPECS = [
+  '../services/session-revocation',
+  '../../services/session-revocation',
+  '~/services/session-revocation',
+]
+const AUTH_BROKER_SPECS = ['../services/auth-broker', '../../services/auth-broker', '~/services/auth-broker']
+const OIDC_VERIFIER_SPECS = [
+  '../services/oidc-verifier',
+  '../../services/oidc-verifier',
+  '~/services/oidc-verifier',
+]
+
+const claimsMock = { ...realClaims, resolveAndSyncClaims: async () => undefined }
+mockSpecs(CLAIMS_SPECS, () => claimsMock)
 
 const sessionRevocationMock = {
+  ...realSessionRevocation,
   revokePortalSession: async () => undefined,
   listAppSlugsForUser: async () => mockUser?.apps ?? [],
 }
-mock.module('../services/session-revocation', () => sessionRevocationMock)
-mock.module('../../services/session-revocation', () => sessionRevocationMock)
-mock.module('~/services/session-revocation', () => sessionRevocationMock)
+mockSpecs(SESSION_REVOCATION_SPECS, () => sessionRevocationMock)
 
 const authBrokerMock = {
-  BrokerAuthorizationError: class extends Error {},
-  BrokerValidationError: class extends Error {},
+  ...realAuthBroker,
   createBrokerHandoff: async () => ({}),
   exchangeBrokerHandoff: async () => ({}),
   findBrokerAppBySlug: async () => null,
 }
-mock.module('../services/auth-broker', () => authBrokerMock)
-mock.module('../../services/auth-broker', () => authBrokerMock)
-mock.module('~/services/auth-broker', () => authBrokerMock)
+mockSpecs(AUTH_BROKER_SPECS, () => authBrokerMock)
 
-const oidcVerifierMock = { verifyGoogleIdToken: async () => undefined }
-mock.module('../services/oidc-verifier', () => oidcVerifierMock)
-mock.module('../../services/oidc-verifier', () => oidcVerifierMock)
-mock.module('~/services/oidc-verifier', () => oidcVerifierMock)
+const oidcVerifierMock = {
+  ...realOidcVerifier,
+  verifyGoogleOidcToken: async () => ({ email: '', sub: '' }),
+  verifyGoogleIdToken: async () => ({ email: '', sub: '' }),
+}
+mockSpecs(OIDC_VERIFIER_SPECS, () => oidcVerifierMock)
 
 const middlewareSessionCookieMock = {
   getSessionCookieValue: (cookieHeader: string) => {
@@ -181,12 +182,23 @@ const middlewareSessionCookieMock = {
     return m ? m[1] : undefined
   },
 }
-mock.module('../middleware/session-cookie', () => middlewareSessionCookieMock)
-mock.module('../../middleware/session-cookie', () => middlewareSessionCookieMock)
-mock.module('~/middleware/session-cookie', () => middlewareSessionCookieMock)
+mockSpecs(
+  ['../middleware/session-cookie', '../../middleware/session-cookie', '~/middleware/session-cookie'],
+  () => middlewareSessionCookieMock,
+)
 
 const { authRoutes } = await import('../auth')
 const { userinfoRoutes } = await import('../userinfo')
+
+// Restore real service modules after this file's tests so sibling test files
+// (auth-broker family, oidc-verifier strict-wrapper, session-revocation) read
+// the genuine implementations.
+afterAll(() => {
+  mockSpecs(AUTH_BROKER_SPECS, () => realAuthBroker)
+  mockSpecs(OIDC_VERIFIER_SPECS, () => realOidcVerifier)
+  mockSpecs(SESSION_REVOCATION_SPECS, () => realSessionRevocation)
+  mockSpecs(CLAIMS_SPECS, () => realClaims)
+})
 
 // Compose into a tree that mirrors index.ts (api/auth + api/userinfo)
 import { Elysia } from 'elysia'

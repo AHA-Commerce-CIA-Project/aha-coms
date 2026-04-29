@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
 
 const identityUsers = { id: 'identityUsers.id' }
 const teamMembers = { teamId: 'teamMembers.teamId', userId: 'teamMembers.userId' }
-
-const eq = (left: unknown, right: unknown) => ({ left, right })
 
 const operationLog: string[] = []
 const resolveAndSyncClaims = mock(async () => {
@@ -98,55 +97,15 @@ const db = {
 }
 
 mock.module('~/db', () => ({ db }))
-mock.module('~/db/schema', () => {
-  return {
-    identityUsers,
-    teamMembers,
-    appRegistry: { id: 'appRegistry.id' },
-    teams: { id: 'teams.id' },
-    teamAppAccess: { id: 'teamAppAccess.id' },
-    accessAuditLog: { actorId: 'accessAuditLog.actorId' },
-    // Added in the SSO upgrade — barrel re-exports these new schema tables
-    sessionRevocations: { userId: 'sessionRevocations.userId' },
-    appWebhookEndpoints: { id: 'appWebhookEndpoints.id' },
-    memberAppRole: { userId: 'memberAppRole.userId', appId: 'memberAppRole.appId', appRole: 'memberAppRole.appRole' },
-    // Added in Rev 3 — needed by downstream test files that import the barrel
-    appUserConfig: { portalSub: 'appUserConfig.portalSub', appId: 'appUserConfig.appId', config: 'appUserConfig.config', schemaVersion: 'appUserConfig.schemaVersion', updatedAt: 'appUserConfig.updatedAt' },
-    appManifests: { appId: 'appManifests.appId', displayName: 'appManifests.displayName', schemaVersion: 'appManifests.schemaVersion', configSchema: 'appManifests.configSchema' },
-    bulkEditLocks: { appId: 'bulkEditLocks.appId', acquiredBy: 'bulkEditLocks.acquiredBy', acquiredAt: 'bulkEditLocks.acquiredAt' },
-    aliasCollisionQueue: { id: 'aliasCollisionQueue.id', rawName: 'aliasCollisionQueue.rawName', rawNameNormalized: 'aliasCollisionQueue.rawNameNormalized', status: 'aliasCollisionQueue.status', createdAt: 'aliasCollisionQueue.createdAt' },
-    userAliases: { id: 'userAliases.id', identityUserId: 'userAliases.identityUserId', alias: 'userAliases.alias', aliasNormalized: 'userAliases.aliasNormalized' },
-  }
-})
-mock.module('drizzle-orm', () => {
-  return {
-    eq,
-    inArray: (left: unknown, right: unknown) => ({ left, right }),
-    sql: new Proxy(
-      (strings: TemplateStringsArray) => strings.join(''),
-      { get: (_t, prop) => prop },
-    ),
-    relations: () => ({}),
-    and: (...conditions: unknown[]) => ({ conditions }),
-    // Full set of exports to avoid polluting downstream test files
-    asc: (_col: unknown) => ({}),
-    desc: (_col: unknown) => ({}),
-    ilike: (_col: unknown, _val: unknown) => ({}),
-    or: (..._args: unknown[]) => ({}),
-    ne: (_l: unknown, _r: unknown) => ({}),
-    uniqueIndex: () => ({ on: () => ({ where: () => ({}) }) }),
-    index: () => ({ on: () => ({}) }),
-    unique: () => ({ on: () => ({}) }),
-    pgTable: (_name: string, cols: unknown) => cols,
-    uuid: () => ({ primaryKey: () => ({}) }),
-    text: () => ({ notNull: () => ({ default: () => ({}) }) }),
-    boolean: () => ({ notNull: () => ({ default: () => ({}) }) }),
-    integer: () => ({ notNull: () => ({ default: () => ({}) }) }),
-    jsonb: () => ({ notNull: () => ({ default: () => ({}) }) }),
-    timestamp: () => ({ notNull: () => ({ defaultNow: () => ({}) }) }),
-    foreignKey: () => ({ references: () => ({}) }),
-  }
-})
+// The tx mock above branches on `table === identityUsers` / `table === teamMembers`
+// reference equality. Override those two with the local consts so production
+// `tx.insert(identityUsers)` hits the same object the test compares against.
+mock.module('~/db/schema', () => ({
+  ...fullSchemaBarrelMock(),
+  identityUsers,
+  teamMembers,
+}))
+mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 mock.module('../claims', () => ({ resolveAndSyncClaims }))
 // We intentionally do NOT mock.module ../session-revocation or
 // ../provisioning-events: Bun's mock.module is process-global and the mock
