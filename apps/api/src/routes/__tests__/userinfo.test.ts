@@ -89,10 +89,21 @@ mock.module('~/db', () => ({ db }))
 mock.module('~/db/schema', () => fullSchemaBarrelMock())
 mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
+// Snapshot the real `gip-admin` module BEFORE we mock it. The override below
+// stubs only verifySessionCookie + verifyIdToken + createSessionCookie; sibling
+// test files (e.g. session-revocation.test.ts production import of
+// `revokeRefreshTokens`) need the rest of the surface intact. Without this
+// snapshot, CI's Linux file-discovery order surfaces our partial mock to
+// session-revocation/auth-resolution and they error with `SyntaxError: Export
+// named 'revokeRefreshTokens' not found`.
+const realGipAdmin = { ...(await import('~/gip-admin')) }
+const GIP_ADMIN_SPECS = ['../gip-admin', '../../gip-admin', '~/gip-admin']
+
 // gip-admin: stub verifySessionCookie + verifyIdToken. Registered under all
 // three specifier spellings since auth.ts imports via '../gip-admin' but
 // userinfo.ts and other transitive callers may use '~/gip-admin'.
 const gipAdminMock = {
+  ...realGipAdmin,
   verifySessionCookie: async (cookie: string) => {
     if (!mockSessionValid || cookie === 'invalid') {
       throw new Error('Invalid session')
@@ -102,7 +113,7 @@ const gipAdminMock = {
   verifyIdToken: async () => ({ uid: 'unknown', email: '' }),
   createSessionCookie: async () => 'cookie',
 }
-mockSpecs(['../gip-admin', '../../gip-admin', '~/gip-admin'], () => gipAdminMock)
+mockSpecs(GIP_ADMIN_SPECS, () => gipAdminMock)
 
 // resolveAuthUser: stub returns the configured mockUser as a SessionUser
 const middlewareAuthMock = {
@@ -198,6 +209,7 @@ afterAll(() => {
   mockSpecs(OIDC_VERIFIER_SPECS, () => realOidcVerifier)
   mockSpecs(SESSION_REVOCATION_SPECS, () => realSessionRevocation)
   mockSpecs(CLAIMS_SPECS, () => realClaims)
+  mockSpecs(GIP_ADMIN_SPECS, () => realGipAdmin)
 })
 
 // Compose into a tree that mirrors index.ts (api/auth + api/userinfo)
