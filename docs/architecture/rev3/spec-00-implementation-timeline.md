@@ -2,12 +2,12 @@
 
 > Coordination plan for Rev 3 specs. Rev 3 is the **suite-UX hardening pass** that turns the federation from "SSO works" into "the apps feel like one product."
 >
-> **Last updated:** 2026-04-28
+> **Last updated:** 2026-04-29
 > **Prerequisites:** Rev 2 closed end-to-end (RS256/JWKS, OIDC discovery, webhook + introspect via Google OIDC). Identity ownership is now firmly in the portal; Rev 3 builds the user-facing surface that makes that ownership visible.
 
 ---
 
-## Status — 2026-04-29 (Specs 01 + 02 + 03 + 03b portal-side shipped; Heroes adoption pending; Spec 03c queued)
+## Status — 2026-04-29 (Specs 01 + 02 + 03 + 03b + 03c portal-side shipped; Heroes adoption pending)
 
 Portal/COMS team landed Specs 01 + 02 (Phases 2 + 3) + 03 (portal-side, all twelve effects) end-to-end on 2026-04-28; Spec 03b test-gate cleanup followed on 2026-04-29 (locally green). The Spec 03 merge is on `main`; the deploy gate clears on the next push.
 
@@ -18,13 +18,16 @@ Portal/COMS team landed Specs 01 + 02 (Phases 2 + 3) + 03 (portal-side, all twel
 | `@coms-portal/design-tokens` | v1.0.0 | https://github.com/mrdoorba/coms-design-tokens |
 | `@coms-portal/ui` (chrome only) | v1.0.0 | https://github.com/mrdoorba/coms-ui |
 | `@coms-portal/account-widget` | v0.1.0 | https://github.com/mrdoorba/coms-account-widget |
-| `@coms-portal/shared` (+ Spec 03 event types) | v1.4.0 | https://github.com/mrdoorba/coms-shared |
+| `@coms-portal/shared` (+ Spec 03 events + 03c APP_LAUNCHER deprecation) | v1.4.1 | https://github.com/mrdoorba/coms-shared |
+| `@coms-portal/sdk` (Spec 03c integrator surface — verifyBrokerToken, verifyWebhookSignature, resolveAlias, introspectSession, getAuditLog) | v0.1.1 | https://github.com/mrdoorba/coms-sdk |
 
 Portal `apps/web` is migrated and dogfooding all four (consuming via `git+https://...#vX.Y.Z`); portal `apps/api` exposes `GET /api/userinfo` and OIDC RP-initiated logout (`GET /api/auth/logout`), both with `app_registry.url` origin allowlist (post-deprecation filter, post red-cell sweep).
 
 **Spec 03 portal-side shipped (2026-04-28):** alias layer (`user_aliases` with Postgres `GENERATED ALWAYS AS` for `alias_normalized`, `alias_collision_queue`, alias service with two-step rename and Levenshtein-or-token-set collision detection, `POST /api/aliases/resolve-batch` with per-app token-bucket rate limiting, `alias.resolved` / `alias.updated` / `alias.deleted` webhooks, admin collision queue UI at `/admin/aliases`); per-app config (`app_manifests`, `app_user_config`, `bulk_edit_locks`, manifest validation service with Heroes seed registered at boot, default config seeded inside the `createEmployee` transaction, `app_config.updated` webhook with per-app slice filtering, `GET /api/users/:portalSub/config/:appId`, admin app-config UI at `/admin/app-config` with single edit + selection-bulk + CSV-bulk preview-then-commit + `bulk_edit_locks` enforcement); inbound app SA token middleware (`requireAppToken`); gated `REVOKE` migration prepared at `apps/api/src/db/migrations/cutover/0001_revoke_heroes_writes.sql` with cutover runbook, NOT auto-applied. `user.provisioned` payload extended with optional per-recipient `appConfig` slice — additive, no consumer breakage. Mission artefacts at `.nelson/missions/2026-04-28_050010_1b5c498e/`.
 
 **Spec 03b test-gate cleanup — shipped 2026-04-29.** Resolution turned out to be entirely Bun `mock.module` cross-file contamination (every failing file passed in isolation), not real fixture bugs. One PR, one new shared test helper at `apps/api/src/test-helpers/schema-barrel-mock.ts`, snapshot+restore pattern adopted across 8 test files, and an `OAuth2Client.prototype` patch replacing a vendor-SDK module mock. Local: 261 pass / 0 fail / 0 typecheck errors. CI deploy gate expected to clear on the next push to `main`. Canonical pattern enforced via `.codebase-memory/adr.md` §7. See `spec-03b-test-gate-cleanup.md` §"Outcome" for the full diff.
+
+**Spec 03c pre-Spec-4 hardening — shipped 2026-04-29.** Eleven work items across six effects, two missions (main + follow-on), eight commits on `main`, two sibling public repos. Portal foundation: centralised origin/CORS config (`apps/api/src/config.ts` + `apps/web/src/lib/config.ts` via `$env/dynamic/public`), CI hardcoded-URL gate (`.github/workflows/lint.yml`), webhook DLQ docstring reconciliation. Observability: Pino structured logging across all 49 console.* sites (zero remaining), request-ID middleware (UUID-validated inbound, response header on success and error, propagated to webhook outbound + Cloud Tasks payload + redelivery handler), real `/api/health` probing DB + Secret Manager + Cloud Tasks. Audit log: schema migration `0028_little_deadpool.sql` adds `actor_ip` + `request_id` + `actor_app_id` + `target_app_id` (all nullable) + two composite indexes; writer extended; all 28 call sites populated; 12 enumerated app-scoped sites populate `target_app_id`. Integrator pathway: `@elysiajs/swagger` plugin at `/api/openapi.json` + `/api/docs`, response schemas on 7 integrator-relevant routes; new `@coms-portal/sdk` v0.1.1 (five exports, framework-neutral, ESM, jose-only); broker-token middleware + tenant-scoped `GET /api/v1/audit-log` (OR-bounded predicate `actor_app_id OR target_app_id`, `actor_ip` excluded from SELECT, cursor pagination, cross-tenant leak test); launcher migration (chrome reads `/api/userinfo` via SSR, `APP_LAUNCHER` zero hits in `apps/web/src/`); `@coms-portal/shared` v1.4.1 deprecation shim; `docs/architecture/integrator-quickstart.md`. Domain flip to `coms.ahacommerce.net` is now a config change. Red-cell findings F-1 (UUID validation) and F-2 (error-response correlation header) closed in mission; F-3 (SDK JWKS shared cache) closed in follow-on as v0.1.1; F-4 (Postgres integration test fixture) deferred to Spec 4. Mission artefacts at `.nelson/missions/2026-04-29_024712_fd19ceb1/` and `.nelson/missions/2026-04-29_044152_ff8f84c1/` (gitignored). See `spec-03c-pre-spec-4-hardening.md` §"Shipped state" for the full deviations + follow-up table.
 
 **Heroes-side work pending** — see `heroes-integration-handoff.md` for install lines, mount snippets, file-deletion list, and verification checklist (Specs 01 + 02). For Spec 03, Heroes-side adoption follows §Appendix A of `spec-03-user-identity-alias-layer.md` (rename `users` → `heroes_profiles`, drop role/eligibility columns, ingestion rewrite via `POST /api/aliases/resolve-batch`, alias + user-config caches, webhook consumers, audit log).
 

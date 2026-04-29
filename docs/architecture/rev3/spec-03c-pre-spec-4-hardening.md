@@ -1,9 +1,9 @@
 # Rev 3 — Spec 03c: Pre-Spec-4 Hardening
 
-> **Status (2026-04-29):** Queued. Estimated ~3.5 days portal-side (was ~3; +½ day for the four superapp cheap-wins folded in 2026-04-29). Blocks Spec 4 / Spec 5 critical-path debugging and the planned `coms.ahacommerce.net` domain wiring; does not block Heroes Rev 3 adoption.
+> **Status (2026-04-29):** **Shipped portal-side.** All eleven work items landed across eight commits on `main` (`b03fb10`, `41a1d0d`, `93ab759` by HMS Beacon during execution; `24f0ec6`, `8bea99f`, `2a7e608`, `249359c`, `a091968` at stand-down under Door's Lore Protocol). Two sibling public repos shipped alongside: `mrdoorba/coms-sdk` v0.1.1 (initial v0.1.0 + F-3 patch — JWKS cache hoisted to module level), `mrdoorba/coms-shared` v1.4.1 (APP_LAUNCHER deprecation shim; v1.4.0 was already taken by prior missions, used patch bump). Mission artefacts at `.nelson/missions/2026-04-29_024712_fd19ceb1/` and `.nelson/missions/2026-04-29_044152_ff8f84c1/` (gitignored).
 > **Original priority:** **High — closes verified gaps in shipped Rev 3 (Specs 01–03) before Spec 4/5 begins, while Heroes has not yet integrated and the contract surface is still mutable at zero cost.**
-> **Superapp intent (added 2026-04-29):** This spec is the foundation that makes the portal feel like a "mini-GCP/AWS/Azure" rather than a stitched set of apps — easy onboarding, one stable contract, one observable request flow. Items 6–9 fold in the four zero-cost gaps that were missing for that intent (domain-readiness, SDK semver policy, public OpenAPI, tenant-scoped audit read).
-> Scope: Portal `apps/api` + `apps/web`, plus a new sibling repo for `@coms-portal/sdk` (created locally under the project folder, pushed to GitHub as a **public** repo at `github.com/mrdoorba/coms-sdk`). No Heroes-side work in this spec; Heroes consumes the SDK in a follow-up.
+> **Superapp intent (added 2026-04-29):** This spec is the foundation that makes the portal feel like a "mini-GCP/AWS/Azure" rather than a stitched set of apps — easy onboarding, one stable contract, one observable request flow. Items 6–9 folded in the four zero-cost gaps that were missing for that intent (domain-readiness, SDK semver policy, public OpenAPI, tenant-scoped audit read).
+> Scope (shipped): Portal `apps/api` + `apps/web` + new sibling repo `@coms-portal/sdk` (created locally, pushed to GitHub as **public** at `github.com/mrdoorba/coms-sdk`) + `@coms-portal/shared` v1.4.1 deprecation bump. No Heroes-side work in this spec; Heroes consumes the SDK in a follow-up.
 > Prerequisites: Specs 01 + 02 (Phases 1–3) + 03 + 03b shipped portal-side.
 
 ---
@@ -260,3 +260,55 @@ Spec 03c is done when:
 8. The SDK repo carries a stated semver + deprecation policy (`CHANGELOG.md` + `SUPPORTED_VERSIONS.md`).
 9. `GET /api/openapi.json` serves a valid OpenAPI 3.x document covering every public route; `/api/docs` serves the Swagger UI.
 10. `GET /api/v1/audit-log` lets an integrator read their tenant's audit trail (no `actor_ip`, with pagination + date filters), and the cross-tenant leak test passes.
+
+---
+
+## Shipped state (2026-04-29) — what actually landed
+
+### Commits on `main`
+
+| SHA | Subject |
+|---|---|
+| `b03fb10` | Spec 03c Effects 3.3+3.4+3.6: Pino logging, request-ID middleware, real health probe |
+| `41a1d0d` | Spec 03c Effect 3.3 close-out: migrate auth.ts + auth-broker.ts console.* calls |
+| `93ab759` | Fix webhook-dispatcher-oidc test: spy on live logger instance for warn assertion |
+| `24f0ec6` | Reconcile Spec 03c with Checkpoint 1 and 2 amendments |
+| `8bea99f` | Centralise portal origin and CORS behind a single config + CI hardcoded-URL gate + reconcile webhook-dispatcher docstring with reality |
+| `2a7e608` | Extend access_audit_log with actor_ip, request_id, actor_app_id, target_app_id and populate at all 28 call sites |
+| `249359c` | Open the integrator pathway: OpenAPI plugin + tenant-scoped audit-log read + launcher migration + UUID-validated request-ID + correlation header on error responses + integrator quickstart |
+| `a091968` | Consolidate apps/api/package.json with all Spec 03c deps + bump @coms-portal/sdk to v0.1.1 + collapse auth.ts inline env reads to PORTAL_ORIGIN import |
+
+Sibling repos: `mrdoorba/coms-sdk` v0.1.0 + v0.1.1; `mrdoorba/coms-shared` v1.4.1.
+
+### Deviations from plan
+
+1. **Effect 3.5 grew during planning to four columns.** Original spec listed `actor_ip` + `request_id` only; Checkpoint 1 added `actor_app_id` and Checkpoint 2 added `target_app_id` so admin-on-tenant's-behalf actions surface in tenant audit-log reads. Migration `0028_little_deadpool.sql` carries all four nullable columns + two composite indexes on `(actor_app_id, created_at)` and `(target_app_id, created_at)`.
+2. **`@coms-portal/shared` shipped as v1.4.1, not v1.4.0.** v1.4.0 was already tagged on GitHub from prior missions (commits `7aa5ae5`, `9295678`). Patch bump used; semver-correct, non-breaking.
+3. **CORS plugin was added, not centralized.** Original spec assumed an existing CORS plugin needed config-driven allowlisting; reconnaissance found none was active. `@elysiajs/cors` was installed and wired from config — slightly more scope than the spec implied (~30 min added), but the outcome (env-driven `CORS_ALLOWED_ORIGINS`) matches.
+4. **Red-cell findings folded in.** Vigilant's review (at `.nelson/missions/2026-04-29_024712_fd19ceb1/red-cell-review.md`) surfaced two correlation-integrity gaps not in the original spec: F-1 (UUID-format validation on inbound `X-Coms-Request-Id`) and F-2 (`x-coms-request-id` header missing on error responses thrown via `status()`). Both fixed in commit `249359c`. F-3 (SDK JWKS per-call instantiation) shipped as SDK v0.1.1 in commit `a091968`. F-4 (cross-tenant integration test infra) deferred to Spec 4 — see §Follow-ups.
+5. **Audit-log read endpoint mounted in a separate `/v1` group.** Original implementation plan put it inside the existing `/v1` group; that group's `authPlugin` would have 401'd broker-token requests before `requireBrokerToken` could see them. Mount strategy adjusted at execution time to a sibling `/v1` group carrying its own broker-token middleware.
+6. **`actor_ip` exclusion is invariant by design.** The audit-log read endpoint's SELECT clause explicitly omits `actor_ip`. Vigilant verified no `details` JSONB call site contains `actor_ip` either.
+7. **OpenAPI doc not live-curl validated** — verified structurally via Elysia's internal route map (the same map the swagger plugin consumes at boot). Live-curl validation deferred until integration test infra exists (Spec 4).
+
+### Follow-ups carried out of the mission
+
+| Item | Status | Where it goes |
+|---|---|---|
+| F-3 — SDK JWKS module-level cache (per-`jwksUrl`) | **Closed.** Shipped as `coms-sdk` v0.1.1; portal consumes `#v0.1.1`. | — |
+| auth.ts:107 inline `process.env.PORTAL_PUBLIC_ORIGIN` read | **Closed.** Replaced with `PORTAL_ORIGIN` import at line 108 in commit `a091968`. | — |
+| F-4 — Real Postgres integration test fixture for cross-tenant leak test (replace structural mock; harden `applyWhereFilter` fallthrough) | **Deferred.** Spec 4 needs integration test infra anyway (federated search fan-out across providers). Layer 1 insurance edit (replace `return true` with `throw`) deferred too — folds in alongside the fixture work. | Spec 4 prerequisite. |
+| DNS + Cloud Run domain mapping for `coms.ahacommerce.net` | **Deferred.** Item 6 made the flip config-only. Provision DNS record + Cloud Run domain mapping when ready. Zero infra cost (managed certs + domain mappings on Cloud Run are free). | User-side runbook. |
+| Heroes' adoption of `@coms-portal/sdk` | **Deferred.** SDK is published; Heroes can adopt at any point. | Heroes-side follow-up; not portal scope. |
+| Larger deferred items | **Spec 03d.** Redis rate-limiter, staging env, per-tenant signing keys, KMS for webhook secrets, `compliance_status` enforcement, refresh tokens, session-expiry UX, audit-log Cloud Logging sink, OpenTelemetry, canary deploys. Each has a documented trigger. | Spec 03d backlog. |
+
+### Verification evidence summary
+
+- **Canonical API test invocation** (`bun run --cwd apps/api test`, which is `find src -name '*.test.ts' \| sort \| xargs -I{} -n1 -P 4 bun test {}`): exit 0, 38 files, 0 failures across multiple runs.
+- **APP_LAUNCHER cleanup:** `grep -r "APP_LAUNCHER" apps/web/src/` returns zero hits.
+- **Webhook DLQ doc fix:** `grep -r "webhook-dlq" apps/api/src/` returns zero hits.
+- **Console.* sweep:** zero `console.*` calls in any non-test file under `apps/api/src` and `apps/web/src` (verified by grep including the 11 sites in auth.ts/auth-broker.ts that Beacon closed in commit `41a1d0d`).
+- **Domain config-only flip:** verified by HMS Lighthouse — flipping `PORTAL_PUBLIC_ORIGIN=https://flip-test.example.com` and restarting reflects the new origin in JWKS, well-known, broker `iss` claims, and admin web page; reverting restores original. Zero code edits either direction.
+- **Cross-tenant leak test:** structural-mock test passes (calling with tenant A's broker token returns zero rows scoped only to tenant B even with crafted query params). Methodology gap (F-4) documented above.
+- **`actor_ip` exclusion:** verified by reading SELECT clause in `audit-log.ts` and asserted in the test via `JSON.stringify(response).not.toContain('actor_ip')`.
+- **SDK five exports:** verified in `coms-sdk/src/index.ts` — `verifyBrokerToken`, `verifyWebhookSignature`, `resolveAlias`, `introspectSession`, `getAuditLog`. Constant-time signature comparison verified in `webhook.ts`. `BrokerTokenError` discriminated codes verified in `errors.ts`.
+- **Red-cell review:** 6 findings (0 critical, 2 medium fixed in-mission, 1 medium fixed in follow-on, 1 low + 2 info deferred). Report at `.nelson/missions/2026-04-29_024712_fd19ceb1/red-cell-review.md`.

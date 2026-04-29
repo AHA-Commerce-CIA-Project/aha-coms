@@ -1,9 +1,10 @@
 # Rev 3 — Spec 03d: Deferred Hardening Backlog
 
 > **Status (2026-04-29):** Decided + deferred. Each item has a documented trigger; none are scheduled. This spec exists so deferred work is visible and not rediscovered as bugs later.
+> **Spec 03c prerequisite — satisfied (2026-04-29).** All 03c work is on `main`; the observability foundation (Pino structured logging, request-ID middleware with UUID validation, real `/api/health` probe, four audit-log columns: `actor_ip` + `request_id` + `actor_app_id` + `target_app_id`) is in place. Items below that referenced "after Spec 03c ships" can now proceed when their own triggers fire.
 > **Original priority:** **Variable per item.** Two are cost-bearing infra decisions (Redis, staging); the rest are pure engineering deferred behind product or compliance triggers.
 > Scope: Portal `apps/api`, `apps/web`, `infra/`, `.github/workflows/`. No Heroes-side work.
-> Prerequisites: Spec 03c shipped (provides the observability foundation several items below depend on).
+> Prerequisites: Spec 03c shipped (provides the observability foundation several items below depend on) — **satisfied**.
 
 ---
 
@@ -168,7 +169,7 @@ These are deferred for product or compliance reasons, not for cost.
 
 ### D9. Audit log Cloud Logging sink + retention + failure events
 
-**Today:** `apps/api/src/db/schema/audit.ts:5–15` defines `access_audit_log` with the columns Spec 03c adds (`actor_ip`, `request_id`). Still missing: a Cloud Logging sink, a retention/archival policy, and failure-event audit actions (the `AuditAction` enum is success-only).
+**Today:** `apps/api/src/db/schema/audit.ts` defines `access_audit_log` with the four columns Spec 03c shipped (`actor_ip`, `request_id`, `actor_app_id`, `target_app_id`) plus composite indexes on `(actor_app_id, created_at)` and `(target_app_id, created_at)`. Still missing: a Cloud Logging sink, a retention/archival policy, and failure-event audit actions (the `AuditAction` enum is success-only).
 
 **Trigger.** Compliance review forces it (SOC 2 typically requires retention ≥1 year + tamper-evident export). Or a security incident response reveals the audit log is hard to query at scale (Postgres `jsonb` queries on millions of rows).
 
