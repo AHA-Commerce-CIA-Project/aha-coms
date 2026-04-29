@@ -2,7 +2,9 @@
 
 > Priority: **Deferred. Not critical-path; ships when the third H-app onboards or users report drift.**
 > Scope: Portal (preferences endpoint, ID-token claim, broadcast mechanism) + every H-app (consume preference, render in shared chrome).
-> Prerequisites: Rev 3 Spec 01 (account widget — preference UI lives in the widget popover); Rev 3 Spec 03c (pre-Spec-4 hardening — structured logging + request-ID propagation are required for the preference-write debug path; the launcher migration also lets the widget refresh preferences cleanly when the user changes them).
+> Prerequisites: Rev 3 Spec 01 (account widget — preference UI lives in the widget popover); Rev 3 Spec 03c (pre-Spec-4 hardening — structured logging + request-ID propagation are required for the preference-write debug path; the launcher migration also lets the widget refresh preferences cleanly when the user changes them) — **shipped 2026-04-29**.
+>
+> **Inherited follow-up from Spec 03c (F-4):** the cross-tenant leak test in `apps/api/src/routes/__tests__/audit-log.test.ts` uses a structural mock (`applyWhereFilter`) that re-implements Drizzle WHERE predicates in JS with a `return true` fallthrough for unrecognised types. Spec 4 needs real integration test infrastructure regardless (federated search fan-out across providers cannot be validated with module mocks), and that infrastructure is the natural home for replacing 03c's structural test with a Postgres-fixture integration test. **Spec 4 should establish the project's first integration test fixture pattern** (Bun + Docker postgres or testcontainers) and convert the audit-log leak test as part of its acceptance.
 
 ---
 
