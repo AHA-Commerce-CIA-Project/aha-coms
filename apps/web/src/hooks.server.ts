@@ -1,7 +1,7 @@
 import type { Handle, HandleServerError } from '@sveltejs/kit'
 import { SESSION_COOKIE_NAME } from '@coms-portal/shared'
 import { validateSession } from '~/services/auth'
-import { logger } from '~/lib/logger'
+import { logger } from '$lib/logger'
 
 const AUTHED_PREFIX = '/(authed)'
 const AUTH_TIMEOUT_MS = 3_000

@@ -162,7 +162,11 @@ export const auditLogRoutes = new Elysia({ prefix: '/audit-log' })
         cursor: t.Optional(t.String({ description: 'Opaque base64url pagination cursor' })),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 50 })),
       }),
-      response: responseSchema,
+      response: {
+        200: responseSchema,
+        400: t.Object({ error: t.String(), reason: t.String() }),
+        401: t.Object({ error: t.String(), reason: t.String() }),
+      },
       tags: ['audit'],
       detail: {
         summary: 'List audit log entries for the calling app',

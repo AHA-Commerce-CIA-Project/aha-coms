@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia'
 import { hasPortalRole, type PortalRole } from '@coms-portal/shared'
 import { authPlugin } from './auth'
+import { requestIdPlugin } from './request-id'
 
 /**
  * Returns an Elysia plugin that enforces portal role access.
@@ -11,6 +12,7 @@ import { authPlugin } from './auth'
  */
 export function requireRole(...roles: PortalRole[]) {
   return new Elysia({ name: `rbac-${roles.join('-')}` })
+    .use(requestIdPlugin)
     .use(authPlugin)
     .derive({ as: 'scoped' }, async ({ authUser, status }) => {
       if (!authUser) {

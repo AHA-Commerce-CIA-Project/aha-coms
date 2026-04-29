@@ -33,23 +33,15 @@ export const aliasesRoutes = new Elysia({ prefix: '/aliases' })
   .use(requireAppToken())
   .post(
     '/resolve-batch',
-    async ({ app, body, request, status }) => {
+    async ({ app, body, request, set, status }) => {
       const contentLength = request.headers.get('content-length')
       if (contentLength && parseInt(contentLength, 10) > MAX_BODY_BYTES) {
         throw status(413, { error: 'payload_too_large' })
       }
 
       if (!takeToken(app.id)) {
-        return new Response(
-          JSON.stringify({ error: 'rate_limited', retry_after_seconds: 1 }),
-          {
-            status: 429,
-            headers: {
-              'Content-Type': 'application/json',
-              'Retry-After': '1',
-            },
-          },
-        )
+        set.headers['retry-after'] = '1'
+        return status(429, { error: 'rate_limited' as const, retry_after_seconds: 1 })
       }
 
       const resolved = await resolveAliases(body.names)
@@ -84,7 +76,7 @@ export const aliasesRoutes = new Elysia({ prefix: '/aliases' })
                   aliasId: t.String(),
                   isPrimary: t.Boolean(),
                   tombstoned: t.Boolean(),
-                  deactivatedAt: t.Union([t.Date(), t.Null()]),
+                  deactivatedAt: t.Union([t.String(), t.Null()]),
                 }),
               ]),
             }),

@@ -49,7 +49,7 @@ export const app = new Elysia({ prefix: '/api' })
       ? CORS_ALLOWED_ORIGINS
       : /http:\/\/localhost(:\d+)?$/,
     credentials: true,
-    exposedHeaders: ['X-Coms-Request-Id'],
+    exposeHeaders: ['X-Coms-Request-Id'],
   }))
   // Elysia's validation errors and route-level handlers set their own status +
   // message before the request reaches onError. This handler is the catch-all
@@ -73,8 +73,8 @@ export const app = new Elysia({ prefix: '/api' })
     return { message: 'Internal error' }
   })
   .use(swagger({
-    path: '/openapi.json',
-    swaggerPath: '/docs',
+    path: '/docs',
+    specPath: '/openapi.json',
     documentation: {
       info: {
         title: 'COMS Portal API',
