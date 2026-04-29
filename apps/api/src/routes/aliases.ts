@@ -72,5 +72,26 @@ export const aliasesRoutes = new Elysia({ prefix: '/aliases' })
       body: t.Object({
         names: t.Array(t.String(), { maxItems: 1000 }),
       }),
+      response: {
+        200: t.Object({
+          results: t.Array(
+            t.Object({
+              input: t.String(),
+              match: t.Union([
+                t.Null(),
+                t.Object({
+                  portalSub: t.String(),
+                  aliasId: t.String(),
+                  isPrimary: t.Boolean(),
+                  tombstoned: t.Boolean(),
+                  deactivatedAt: t.Union([t.Date(), t.Null()]),
+                }),
+              ]),
+            }),
+          ),
+        }),
+        413: t.Object({ error: t.Literal('payload_too_large') }),
+        429: t.Object({ error: t.Literal('rate_limited'), retry_after_seconds: t.Number() }),
+      },
     },
   )

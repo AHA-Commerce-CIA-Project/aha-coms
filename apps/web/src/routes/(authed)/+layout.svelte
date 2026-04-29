@@ -2,7 +2,7 @@
   import { onMount, setContext } from 'svelte'
   import { page } from '$app/stores'
   import { api } from '$lib/api'
-  import { APP_LAUNCHER, hasPortalRole } from '@coms-portal/shared'
+  import { hasPortalRole } from '@coms-portal/shared'
   import { ServiceBar, Sidebar, MobileTopBar, MobileBottomNav } from '@coms-portal/ui/chrome'
   import { AccountWidget } from '@coms-portal/account-widget'
   import { readHandoffIntent, popStashedIntent, navigateToLaunch } from '$lib/portal-handoff'
@@ -52,21 +52,8 @@
     localStorage.setItem('theme', theme)
   }
 
-  // Build the widget's appSwitcher prop from the user's accessible apps and
-  // the shared APP_LAUNCHER slug→URL map. Apps the user can reach but that
-  // are missing from the launcher map are filtered out — adding them is a
-  // single edit on @coms-portal/shared (per spec-01 §Open Question 2).
-  const widgetAppSwitcher = $derived(
-    user
-      ? user.apps
-          .map((slug) => {
-            const entry = APP_LAUNCHER[slug as keyof typeof APP_LAUNCHER]
-            if (!entry) return null
-            return { slug, label: entry.label, url: entry.url }
-          })
-          .filter((e): e is { slug: string; label: string; url: string } => e !== null)
-      : [],
-  )
+  // App switcher populated from SSR fetch of /api/userinfo — no static map needed.
+  const widgetAppSwitcher = $derived(data.apps ?? [])
 
   // Same-origin portal post-logout target. The widget's sign-out helper hits
   // GET /api/auth/logout?post_logout_redirect_uri=… which the portal validates

@@ -25,6 +25,7 @@ import { aliasQueueRoutes } from './routes/admin/alias-queue'
 import { adminAppConfigRoutes } from './routes/admin/app-config'
 import { aliasesRoutes } from './routes/aliases'
 import { userRoutes } from './routes/users'
+import { auditLogRoutes } from './routes/audit-log'
 import { registerManifest } from './services/manifests'
 import heroesManifest from './services/manifests/heroes.json'
 import type { ManifestDefinition } from './services/manifests'
@@ -57,8 +58,12 @@ export const app = new Elysia({ prefix: '/api' })
   // client — Drizzle / Postgres errors include the failing SQL + parameters,
   // which is an information-disclosure footgun on a public endpoint.
   .use(requestIdPlugin)
-  .onError(({ error, code, path, set }) => {
-    logger.error({ err: error, path }, '[API Error]')
+  .onError((context) => {
+    const { error, code, path, set } = context
+    // requestId is available when requestIdPlugin's global derive ran before the throw.
+    const requestId = (context as Record<string, unknown>).requestId as string | undefined
+    if (requestId) set.headers['x-coms-request-id'] = requestId
+    logger.error({ err: error, path, requestId }, '[API Error]')
     if (code === 'VALIDATION') {
       // Elysia's typebox validation errors are safe to surface — they describe
       // the request shape, not internal state.
@@ -122,5 +127,8 @@ export const app = new Elysia({ prefix: '/api' })
         adminGroup.use(adminSigningKeyRoutes).use(aliasQueueRoutes).use(adminAppConfigRoutes),
       ),
   )
+  // Broker-token authenticated routes — separate /v1 group so session-cookie
+  // authPlugin does not interfere with the broker bearer-token auth scheme.
+  .group('/v1', (app) => app.use(auditLogRoutes))
 
 export type App = typeof app
