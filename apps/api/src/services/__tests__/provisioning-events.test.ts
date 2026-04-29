@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
 
 // ---------------------------------------------------------------------------
 // Stubs — set up before importing the module under test
@@ -70,30 +71,17 @@ const db = {
 }
 
 mock.module('~/db', () => ({ db }))
+// The select stub branches on `table === <const>` reference equality. Override
+// the relevant tables with the local consts so production reads the same object.
 mock.module('~/db/schema', () => ({
+  ...fullSchemaBarrelMock(),
   identityUsers,
   teamMembers,
   teamAppAccess,
   appRegistry,
   memberAppRole,
-  appUserConfig: {
-    appId: 'appUserConfig.appId',
-    portalSub: 'appUserConfig.portalSub',
-    config: 'appUserConfig.config',
-    schemaVersion: 'appUserConfig.schemaVersion',
-  },
 }))
-mock.module('drizzle-orm', () => ({
-  eq: (left: unknown, right: unknown) => ({ left, right }),
-  inArray: (left: unknown, right: unknown) => ({ left, right }),
-  // sql and relations needed by schema files loaded through the ~/db/schema barrel
-  sql: new Proxy(
-    (strings: TemplateStringsArray) => strings.join(''),
-    { get: (_t, prop) => prop },
-  ),
-  relations: () => ({}),
-  and: (...conditions: unknown[]) => ({ conditions }),
-}))
+mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
 // Mock the dispatcher via the dedicated re-export shim.
 // Bun's `mock.module` is process-global and registered at file load, so a

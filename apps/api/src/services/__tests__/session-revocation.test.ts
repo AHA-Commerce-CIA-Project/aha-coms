@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing the module under test.
-// We mock all schema modules individually so the drizzle pg-core constructors
-// are never invoked. This matches the pattern in auth-broker.test.ts.
 // ---------------------------------------------------------------------------
 
-// Schema stubs — simple column-name sentinel objects
+// Local table sentinels: the select stub below branches on `table === <const>`
+// reference equality, so production `select(…).from(table)` must land on the
+// same object the test compares against. These override the schema barrel
+// entries for the relevant tables.
 const identityUsers = { id: 'identityUsers.id', gipUid: 'identityUsers.gipUid' }
 const sessionRevocations = { userId: 'sessionRevocations.userId', notBefore: 'sessionRevocations.notBefore' }
 const teamMembers = { teamId: 'teamMembers.teamId', userId: 'teamMembers.userId' }
@@ -57,28 +59,18 @@ const db = {
 
 mock.module('~/db', () => ({ db }))
 
-// Mock the schema barrel with all symbols used by session-revocation + listAppSlugsForUser
+// Override the local-const tables so production `select(…).from(table)` lands
+// on the same object the select stub above branches on.
 mock.module('~/db/schema', () => ({
+  ...fullSchemaBarrelMock(),
   identityUsers,
   sessionRevocations,
   teamMembers,
   teamAppAccess,
   appRegistry,
-  memberAppRole: { userId: 'memberAppRole.userId', appId: 'memberAppRole.appId', appRole: 'memberAppRole.appRole' },
 }))
 
-mock.module('drizzle-orm', () => ({
-  eq: (left: unknown, right: unknown) => ({ left, right }),
-  inArray: (left: unknown, right: unknown) => ({ left, right }),
-  and: (...conditions: unknown[]) => ({ type: 'and', conditions }),
-  gte: (left: unknown, right: unknown) => ({ left, right }),
-  // sql and relations needed by schema files transitively loaded by the barrel
-  sql: new Proxy(
-    (strings: TemplateStringsArray) => strings.join(''),
-    { get: (_t, prop) => prop },
-  ),
-  relations: () => ({}),
-}))
+mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
 // Mock GIP revokeRefreshTokens
 // Path is relative to the TEST FILE: '../../gip-admin' resolves to src/gip-admin.ts

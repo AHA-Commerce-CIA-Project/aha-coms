@@ -1,4 +1,5 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test'
+import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
 
 // ─── Pure function tests (no DB needed) ──────────────────────────────────────
 
@@ -101,11 +102,8 @@ mock.module('~/db', () => ({
   },
 }))
 
-mock.module('~/db/schema', () => ({
-  userAliases: { identityUserId: 'ua.identity_user_id', aliasNormalized: 'ua.alias_normalized', isPrimary: 'ua.is_primary' },
-  aliasCollisionQueue: {},
-  identityUsers: { id: 'iu.id', status: 'iu.status', updatedAt: 'iu.updated_at' },
-}))
+mock.module('~/db/schema', () => fullSchemaBarrelMock())
+mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
 const { resolveAliases, renamePrimaryAlias, detectCollision } =
   await import('../aliases')

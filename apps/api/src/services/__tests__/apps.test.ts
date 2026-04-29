@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
 
 const insertedValues: Array<Record<string, unknown>> = []
 const updatedValues: Array<Record<string, unknown>> = []
@@ -34,23 +35,8 @@ const db = {
 }
 
 mock.module('~/db', () => ({ db }))
-mock.module('~/db/schema', () => ({
-  appRegistry: { id: 'app_registry.id' },
-  // Added in the SSO upgrade — barrel re-exports these new schema tables
-  sessionRevocations: { userId: 'sessionRevocations.userId' },
-  appWebhookEndpoints: { id: 'appWebhookEndpoints.id' },
-  memberAppRole: { userId: 'memberAppRole.userId', appId: 'memberAppRole.appId', appRole: 'memberAppRole.appRole' },
-}))
-mock.module('drizzle-orm', () => ({
-  eq: (left: unknown, right: unknown) => ({ left, right }),
-  // sql and relations needed by the schema barrel's new re-exports
-  sql: new Proxy(
-    (strings: TemplateStringsArray) => strings.join(''),
-    { get: (_t, prop) => prop },
-  ),
-  relations: () => ({}),
-  and: (...conditions: unknown[]) => ({ conditions }),
-}))
+mock.module('~/db/schema', () => fullSchemaBarrelMock())
+mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
 const {
   AppIntegrationValidationError,
