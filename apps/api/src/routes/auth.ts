@@ -12,6 +12,7 @@ import {
   type PortalSessionUser,
   SESSION_COOKIE_OPTIONS,
 } from '@coms-portal/shared'
+import { PORTAL_ORIGIN } from '~/config'
 import { resolveAndSyncClaims } from '../services/claims'
 import { getSessionCookieValue } from '../middleware/session-cookie'
 import { resolveAuthUser } from '../middleware/auth'
@@ -28,9 +29,9 @@ import {
   type RevocationReason,
 } from '../services/session-revocation'
 import { verifyGoogleIdToken } from '../services/oidc-verifier'
+import { logger } from '~/logger'
 
-const SELF_AUDIENCE =
-  process.env.PORTAL_PUBLIC_ORIGIN ?? 'https://coms.ahacommerce.net'
+const SELF_AUDIENCE = PORTAL_ORIGIN
 
 type IntrospectAuthFailure =
   | 'app_not_found'
@@ -154,7 +155,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       try {
         decoded = await verifyIdToken(body.idToken)
       } catch (e) {
-        console.error('verifyIdToken failed:', e)
+        logger.error({ err: e }, 'verifyIdToken failed')
         set.status = 401
         return { message: e instanceof Error ? e.message : 'Invalid token' }
       }
@@ -199,7 +200,14 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
       return { ok: true }
     },
-    { body: t.Object({ idToken: t.String() }) },
+    {
+      body: t.Object({ idToken: t.String() }),
+      response: {
+        200: t.Object({ ok: t.Literal(true) }),
+        401: t.Object({ message: t.String() }),
+        403: t.Object({ message: t.String() }),
+      },
+    },
   )
 
   /**
@@ -222,9 +230,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       if (postLogoutRedirectUri) {
         validatedRedirect = await validatePostLogoutRedirectUri(postLogoutRedirectUri)
         if (!validatedRedirect) {
-          console.warn(
-            `[logout] rejected post_logout_redirect_uri (not in allowlist): ${postLogoutRedirectUri}`,
-          )
+          logger.warn({ postLogoutRedirectUri }, '[logout] rejected post_logout_redirect_uri (not in allowlist)')
           set.status = 400
           return { message: 'post_logout_redirect_uri not allowlisted' }
         }
@@ -265,6 +271,13 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           post_logout_redirect_uri: t.Optional(t.String()),
         }),
       ),
+      response: {
+        200: t.Union([
+          t.Object({ ok: t.Literal(true) }),
+          t.Object({ ok: t.Literal(true), redirect_to: t.String() }),
+        ]),
+        400: t.Object({ message: t.String() }),
+      },
     },
   )
 
@@ -292,9 +305,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
       const validatedRedirect = await validatePostLogoutRedirectUri(postLogoutRedirectUri)
       if (!validatedRedirect) {
-        console.warn(
-          `[logout-rp] rejected post_logout_redirect_uri (not in allowlist): ${postLogoutRedirectUri}`,
-        )
+        logger.warn({ postLogoutRedirectUri }, '[logout-rp] rejected post_logout_redirect_uri (not in allowlist)')
         set.status = 400
         return { message: 'post_logout_redirect_uri not allowlisted' }
       }
@@ -332,6 +343,10 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         post_logout_redirect_uri: t.String(),
         id_token_hint: t.Optional(t.String()),
       }),
+      response: {
+        303: t.String(),
+        400: t.Object({ message: t.String() }),
+      },
     },
   )
 
@@ -365,6 +380,12 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         appSlug: t.String({ minLength: 1 }),
         redirectTo: t.Optional(t.String()),
       }),
+      response: {
+        200: t.Any(),
+        401: t.Object({ message: t.String() }),
+        403: t.Object({ message: t.String() }),
+        404: t.Object({ message: t.String() }),
+      },
     },
   )
 
@@ -373,7 +394,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     return {
       message: 'Use POST /api/auth/broker/launch/:appSlug instead.',
     }
-  })
+  }, { response: { 405: t.Object({ message: t.String() }) } })
 
   .post(
     '/broker/launch/:appSlug',
@@ -405,6 +426,12 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       query: t.Object({
         redirectTo: t.Optional(t.String()),
       }),
+      response: {
+        302: t.String(),
+        401: t.Object({ message: t.String() }),
+        403: t.Object({ message: t.String() }),
+        404: t.Object({ message: t.String() }),
+      },
     },
   )
 
@@ -427,6 +454,10 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         code: t.Optional(t.String()),
         token: t.Optional(t.String()),
       }),
+      response: {
+        200: t.Any(),
+        400: t.Object({ message: t.String() }),
+      },
     },
   )
 
@@ -434,21 +465,36 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
    * GET /api/auth/me
    * Return current authenticated user plus accessible apps.
    */
-  .get('/me', async ({ request, set }) => {
-    try {
-      const user = await resolveSessionUser(request)
-      return {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        portalRole: user.portalRole,
-        apps: user.apps,
+  .get(
+    '/me',
+    async ({ request, set }) => {
+      try {
+        const user = await resolveSessionUser(request)
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          portalRole: user.portalRole,
+          apps: user.apps,
+        }
+      } catch {
+        set.status = 401
+        return { message: 'Invalid session' }
       }
-    } catch {
-      set.status = 401
-      return { message: 'Invalid session' }
-    }
-  })
+    },
+    {
+      response: {
+        200: t.Object({
+          id: t.String(),
+          email: t.String(),
+          name: t.String(),
+          portalRole: t.String(),
+          apps: t.Array(t.String()),
+        }),
+        401: t.Object({ message: t.String() }),
+      },
+    },
+  )
 
   /**
    * POST /api/auth/broker/introspect
@@ -470,11 +516,11 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       if (!auth.ok) {
         // Reason is logged but never returned to the client to avoid leaking
         // whether the app exists / is OIDC-configured.
-        console.warn(`[introspect] auth_failed app:${appSlug} reason:${auth.reason}`)
+        logger.warn({ appSlug, reason: auth.reason }, '[introspect] auth_failed')
         set.status = 401
         return { message: 'Unauthorized' }
       }
-      console.log(`[introspect] via:oidc app:${appSlug}`)
+      logger.info({ appSlug }, '[introspect] via:oidc')
 
       const issuedAt = new Date(sessionIssuedAt)
 
@@ -549,5 +595,24 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         sessionIssuedAt: t.String({ minLength: 1 }),
         appSlug: t.String({ minLength: 1 }),
       }),
+      response: {
+        200: t.Union([
+          t.Object({
+            active: t.Literal(true),
+            user: t.Any(),
+          }),
+          t.Object({
+            active: t.Literal(false),
+            revokedAt: t.String(),
+            reason: t.String(),
+          }),
+          t.Object({
+            active: t.Literal(false),
+            reason: t.String(),
+          }),
+        ]),
+        401: t.Object({ message: t.String() }),
+        404: t.Object({ message: t.String() }),
+      },
     },
   )

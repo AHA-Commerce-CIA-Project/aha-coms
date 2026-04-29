@@ -9,6 +9,8 @@ import {
   SIGNING_KEY_STATUS,
 } from '~/db/schema/signing-keys'
 import { loadActiveSigningKey } from './signing-keys'
+import { PORTAL_ORIGIN } from '~/config'
+import { logger } from '~/logger'
 import type { AppRegistry } from '~/db/schema/apps'
 import type {
   PortalBrokerExchangePayload,
@@ -26,7 +28,7 @@ import type {
  *     working. Switching the mint-side issuer to URL-form before Heroes
  *     ships H1 would break every login.
  *   - ES256 tokens are minted with the NEW URL-form issuer
- *     (`${PORTAL_PUBLIC_ORIGIN}/broker`). This matches the OIDC discovery
+ *     (`${PORTAL_ORIGIN}/broker`). This matches the OIDC discovery
  *     document and is what stock OIDC client libraries expect.
  *
  * **Verifier side — accept both:** every `jwtVerify` call uses an array
@@ -41,10 +43,9 @@ import type {
  * delete `signHS256BrokerToken` + `LEGACY_PORTAL_BROKER_ISSUER`, and
  * collapse the verifier `issuer` array to a single string.
  */
-const PORTAL_PUBLIC_ORIGIN = process.env.PORTAL_PUBLIC_ORIGIN ?? 'https://coms.ahacommerce.net'
 
 /** URL-form issuer — used by ES256 minting + discovery document. */
-export const PORTAL_BROKER_ISSUER = `${PORTAL_PUBLIC_ORIGIN}/broker`
+export const PORTAL_BROKER_ISSUER = `${PORTAL_ORIGIN}/broker`
 
 /** Bare-string issuer — used by HS256 minting during dual-mode for Heroes compat. */
 const LEGACY_PORTAL_BROKER_ISSUER = 'coms-portal-broker'
@@ -76,7 +77,7 @@ export function sanitizeRedirectTo(
   // Protocol-relative URLs are rejected outright (they inherit the current
   // scheme and can route off-domain).
   if (redirectTo.startsWith('//')) {
-    console.warn('[auth-broker] rejected protocol-relative redirect_to:', redirectTo)
+    logger.warn({ redirectTo }, '[auth-broker] rejected protocol-relative redirect_to')
     return undefined
   }
 
@@ -89,12 +90,12 @@ export function sanitizeRedirectTo(
   try {
     parsed = new URL(redirectTo)
   } catch {
-    console.warn('[auth-broker] rejected malformed redirect_to:', redirectTo)
+    logger.warn({ redirectTo }, '[auth-broker] rejected malformed redirect_to')
     return undefined
   }
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    console.warn('[auth-broker] rejected non-http redirect_to:', redirectTo)
+    logger.warn({ redirectTo }, '[auth-broker] rejected non-http redirect_to')
     return undefined
   }
 
@@ -103,17 +104,12 @@ export function sanitizeRedirectTo(
   try {
     registeredHostname = new URL(appUrl).hostname
   } catch {
-    console.warn('[auth-broker] invalid appUrl in registry, rejecting redirect_to:', appUrl)
+    logger.warn({ appUrl }, '[auth-broker] invalid appUrl in registry, rejecting redirect_to')
     return undefined
   }
 
   if (parsed.hostname !== registeredHostname) {
-    console.warn(
-      '[auth-broker] rejected redirect_to with mismatched host:',
-      redirectTo,
-      '(expected host:',
-      registeredHostname + ')',
-    )
+    logger.warn({ redirectTo, expectedHost: registeredHostname }, '[auth-broker] rejected redirect_to with mismatched host')
     return undefined
   }
 
@@ -247,10 +243,7 @@ async function signBrokerToken(
   try {
     es256 = await signES256BrokerToken(payload)
   } catch (err) {
-    console.warn(
-      '[auth-broker] ES256 minting failed, falling back to HS256-only for this token:',
-      err instanceof Error ? err.message : err,
-    )
+    logger.warn({ err }, '[auth-broker] ES256 minting failed, falling back to HS256-only for this token')
   }
   return { hs256, es256 }
 }

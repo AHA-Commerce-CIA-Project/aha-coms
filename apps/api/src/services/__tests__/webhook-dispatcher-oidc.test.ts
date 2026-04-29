@@ -86,6 +86,23 @@ mock.module('../cloud-tasks-client', () => ({
   enqueueWebhookDelivery: enqueueWebhookDeliveryMock,
 }))
 
+// Logger stub — lets tests spy on structured warn/error calls without
+// relying on console.warn (which pino no longer calls).
+const loggerWarnMock = mock((..._args: unknown[]) => {})
+const loggerErrorMock = mock((..._args: unknown[]) => {})
+mock.module('~/logger', () => ({
+  logger: {
+    warn: loggerWarnMock,
+    error: loggerErrorMock,
+    info: mock((..._args: unknown[]) => {}),
+    child: mock(() => ({
+      warn: loggerWarnMock,
+      error: loggerErrorMock,
+      info: mock((..._args: unknown[]) => {}),
+    })),
+  },
+}))
+
 type EndpointRecord = {
   id: string
   appId: string
@@ -255,9 +272,7 @@ describe('webhook-dispatcher OIDC dual-mode (Rev 2 §03)', () => {
     const ep = makeEndpoint({ id: 'ep-hmac-only' })
     endpointStore.push(ep)
 
-    const warnSpy = mock(console.warn.bind(console))
-    const originalWarn = console.warn
-    console.warn = warnSpy
+    loggerWarnMock.mockClear()
 
     const fetchSpy = okFetch()
     let thrown = false
@@ -266,8 +281,6 @@ describe('webhook-dispatcher OIDC dual-mode (Rev 2 §03)', () => {
       await new Promise((r) => setTimeout(r, 10))
     } catch {
       thrown = true
-    } finally {
-      console.warn = originalWarn
     }
 
     expect(thrown).toBe(false)
@@ -284,8 +297,13 @@ describe('webhook-dispatcher OIDC dual-mode (Rev 2 §03)', () => {
     // Authorization header absent (HMAC-only fallback)
     expect(headers['Authorization']).toBeUndefined()
 
-    // Warning was logged
-    expect(warnSpy.mock.calls.some((args) => String(args[0]).includes('OIDC token minting failed'))).toBe(true)
+    // Warning was logged via structured logger
+    expect(loggerWarnMock.mock.calls.some((args) => {
+      const first = args[0]
+      return typeof first === 'object' && first !== null
+        ? JSON.stringify(first).includes('OIDC token minting failed') || String(args[1]).includes('OIDC token minting failed')
+        : String(first).includes('OIDC token minting failed')
+    })).toBe(true)
   })
 
   // -------------------------------------------------------------------------
