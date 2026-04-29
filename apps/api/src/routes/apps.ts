@@ -57,7 +57,7 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
 
   .get('/', async () => {
     return db.select().from(appRegistry)
-  })
+  }, { response: { 200: t.Array(t.Any()) } })
 
   .get('/:id', async ({ params, set }) => {
     const app = await db.query.appRegistry.findFirst({
@@ -79,11 +79,11 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
       .where(eq(teamAppAccess.appId, params.id))
 
     return { ...app, teamGrants }
-  })
+  }, { response: { 200: t.Any(), 404: t.Object({ message: t.String() }) } })
 
   .post(
     '/',
-    async ({ body, authUser, set }) => {
+    async ({ body, authUser, requestId, actorIp, set }) => {
       let result: { id: string }
       try {
         result = await registerApp({
@@ -109,15 +109,24 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
           transportMode: body.transportMode,
           complianceStatus: body.complianceStatus,
         },
+        requestId,
+        actorIp,
+        targetAppId: result.id,
       })
       return { id: result.id }
     },
-    { body: appBody },
+    {
+      body: appBody,
+      response: {
+        200: t.Object({ id: t.String() }),
+        400: t.Object({ message: t.String(), errors: t.Any() }),
+      },
+    },
   )
 
   .patch(
     '/:id',
-    async ({ params, body, authUser, set }) => {
+    async ({ params, body, authUser, requestId, actorIp, set }) => {
       try {
         await updateApp(params.id, {
           ...body,
@@ -140,13 +149,22 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
           transportMode: body.transportMode,
           complianceStatus: body.complianceStatus,
         },
+        requestId,
+        actorIp,
+        targetAppId: params.id,
       })
       return { ok: true }
     },
-    { body: t.Partial(appBody) },
+    {
+      body: t.Partial(appBody),
+      response: {
+        200: t.Object({ ok: t.Literal(true) }),
+        400: t.Object({ message: t.String(), errors: t.Any() }),
+      },
+    },
   )
 
-  .delete('/:id', async ({ params, authUser, set }) => {
+  .delete('/:id', async ({ params, authUser, requestId, actorIp, set }) => {
     const app = await db.query.appRegistry.findFirst({
       where: eq(appRegistry.id, params.id),
     })
@@ -161,6 +179,9 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
       targetType: 'app',
       targetId: params.id,
       details: { slug: app.slug, name: app.name },
+      requestId,
+      actorIp,
+      targetAppId: params.id,
     })
     return { ok: true }
-  })
+  }, { response: { 200: t.Object({ ok: t.Literal(true) }), 404: t.Object({ message: t.String() }) } })

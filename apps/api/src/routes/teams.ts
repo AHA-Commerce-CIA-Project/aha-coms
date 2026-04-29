@@ -25,13 +25,15 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
 
   .post(
     '/',
-    async ({ body, authUser }) => {
+    async ({ body, authUser, requestId, actorIp }) => {
       const [team] = await db.insert(teams).values(body).returning({ id: teams.id })
       await logAudit({
         actorId: authUser.id,
         action: 'create_team',
         targetType: 'team',
         targetId: team.id,
+        requestId,
+        actorIp,
       })
       return { id: team.id }
     },
@@ -85,7 +87,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
 
   .patch(
     '/:id',
-    async ({ params, body, authUser }) => {
+    async ({ params, body, authUser, requestId, actorIp }) => {
       await db
         .update(teams)
         .set({ ...body, updatedAt: new Date() })
@@ -95,26 +97,30 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
         action: 'update_team',
         targetType: 'team',
         targetId: params.id,
+        requestId,
+        actorIp,
       })
       return { ok: true }
     },
     { body: t.Partial(t.Object({ name: t.String(), description: t.String() })) },
   )
 
-  .delete('/:id', async ({ params, authUser }) => {
+  .delete('/:id', async ({ params, authUser, requestId, actorIp }) => {
     await deleteTeam(params.id)
     await logAudit({
       actorId: authUser.id,
       action: 'delete_team',
       targetType: 'team',
       targetId: params.id,
+      requestId,
+      actorIp,
     })
     return { ok: true }
   })
 
   .post(
     '/:id/members',
-    async ({ params, body, authUser }) => {
+    async ({ params, body, authUser, requestId, actorIp }) => {
       await addTeamMember(params.id, body.userId, body.roleInTeam)
       await logAudit({
         actorId: authUser.id,
@@ -122,6 +128,8 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
         targetType: 'team',
         targetId: params.id,
         details: { userId: body.userId },
+        requestId,
+        actorIp,
       })
       return { ok: true }
     },
@@ -130,7 +138,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
 
   .post(
     '/:id/members/batch',
-    async ({ params, body, authUser }) => {
+    async ({ params, body, authUser, requestId, actorIp }) => {
       await addTeamMembersBatch(params.id, body.members)
       await logAudit({
         actorId: authUser.id,
@@ -138,6 +146,8 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
         targetType: 'team',
         targetId: params.id,
         details: { memberCount: body.members.length },
+        requestId,
+        actorIp,
       })
       return { ok: true }
     },
@@ -148,7 +158,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
     },
   )
 
-  .delete('/:id/members/:userId', async ({ params, authUser }) => {
+  .delete('/:id/members/:userId', async ({ params, authUser, requestId, actorIp }) => {
     await removeTeamMember(params.id, params.userId)
     await logAudit({
       actorId: authUser.id,
@@ -156,6 +166,8 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
       targetType: 'team',
       targetId: params.id,
       details: { userId: params.userId },
+      requestId,
+      actorIp,
     })
     return { ok: true }
   })
