@@ -1,8 +1,9 @@
 # Rev 3 — Spec 03c: Pre-Spec-4 Hardening
 
-> **Status (2026-04-29):** Queued. Estimated ~3 days portal-side. Blocks Spec 4 / Spec 5 critical-path debugging; does not block Heroes Rev 3 adoption.
+> **Status (2026-04-29):** Queued. Estimated ~3.5 days portal-side (was ~3; +½ day for the four superapp cheap-wins folded in 2026-04-29). Blocks Spec 4 / Spec 5 critical-path debugging and the planned `coms.ahacommerce.net` domain wiring; does not block Heroes Rev 3 adoption.
 > **Original priority:** **High — closes verified gaps in shipped Rev 3 (Specs 01–03) before Spec 4/5 begins, while Heroes has not yet integrated and the contract surface is still mutable at zero cost.**
-> Scope: Portal `apps/api` + `apps/web`, plus a new sibling repo for `@coms-portal/sdk`. No Heroes-side work in this spec; Heroes consumes the SDK in a follow-up.
+> **Superapp intent (added 2026-04-29):** This spec is the foundation that makes the portal feel like a "mini-GCP/AWS/Azure" rather than a stitched set of apps — easy onboarding, one stable contract, one observable request flow. Items 6–9 fold in the four zero-cost gaps that were missing for that intent (domain-readiness, SDK semver policy, public OpenAPI, tenant-scoped audit read).
+> Scope: Portal `apps/api` + `apps/web`, plus a new sibling repo for `@coms-portal/sdk` (created locally under the project folder, pushed to GitHub as a **public** repo at `github.com/mrdoorba/coms-sdk`). No Heroes-side work in this spec; Heroes consumes the SDK in a follow-up.
 > Prerequisites: Specs 01 + 02 (Phases 1–3) + 03 + 03b shipped portal-side.
 
 ---
@@ -95,6 +96,63 @@ This doc is the **canonical** integrator path. The Heroes handoff doc (`heroes-i
 
 **Acceptance test:** Same as item 4 — a fresh developer can ship a working integration in 30 minutes using only this doc + the SDK.
 
+### 6. Domain-wiring readiness (config-only flip to `coms.ahacommerce.net`)
+
+**Goal:** When the domain is provisioned, going live is a **config change only** — no code edits, no SDK rebuild, no integrator-facing breakage. Today the portal answers on its Cloud Run URL (`coms-portal-xyz-uc.a.run.app` per the project memory note); flipping to `coms.ahacommerce.net` should be a single env-var change in the deploy workflow plus DNS.
+
+**Audit + centralize.** Grep the codebase for hardcoded origin / host references. Move every one behind a single source of truth:
+- `apps/api/src/config.ts` (or equivalent existing config module): introduce `PORTAL_ORIGIN` (env var, e.g. `https://coms.ahacommerce.net` in prod, `https://coms-portal-xyz-uc.a.run.app` today, `http://localhost:8787` in dev) — plus `WEB_ORIGIN` if the API and web app live on different hosts.
+- All places that build URLs (broker token `iss` claim, JWKS URL in `/.well-known/jwks.json` references, webhook callback URLs in test fixtures, OAuth-style redirect targets, audit-log links, admin email content) read from this single config.
+- The SDK's default JWKS URL is **already** parameter-driven (`${portalOrigin}/.well-known/jwks.json` per item 4); confirm no portal-side default leaks the Cloud Run host.
+
+**CORS allowlist becomes config-driven.** `CORS_ALLOWED_ORIGINS` env var (comma-separated) replaces any hardcoded list in `apps/api/src/index.ts`. Default in dev includes `http://localhost:*`; prod default reads from env.
+
+**Cookie domain becomes config-driven.** `SESSION_COOKIE_DOMAIN` env var replaces any hardcoded domain string in `apps/web/src/hooks.server.ts` cookie options. Empty / unset = host-only cookie (current behavior).
+
+**Hardcoded-URL test.** Add a CI check (a simple grep gate in the existing pipeline) that fails the build if `run.app`, `coms-portal-`, or any literal `ahacommerce.net` appears outside `apps/api/src/config.ts`, `.env.example`, deploy workflow YAML, or docs.
+
+**Acceptance test:** Set `PORTAL_ORIGIN=https://coms.ahacommerce.net` in a local `.env`, restart, hit `/.well-known/jwks.json`, confirm broker tokens issued thereafter carry `iss=https://coms.ahacommerce.net`, confirm the SDK (item 4) verifies them by passing `portalOrigin: "https://coms.ahacommerce.net"`, confirm the webhook outbound `User-Agent` and any embedded callback URLs use the new origin. Revert the env, confirm the system is back on the Cloud Run URL — zero code changes either way.
+
+### 7. SDK semver + supported-versions policy
+
+**Goal:** The SDK is a public contract; integrators won't depend on it without a stated versioning policy.
+
+**Add to the `coms-sdk` repo:**
+- `CHANGELOG.md` in [Keep-a-Changelog](https://keepachangelog.com/) format. Entry for `v0.1.0` lists the four exports and notes the pre-1.0 stability disclaimer.
+- `SUPPORTED_VERSIONS.md` (or a section in the README) stating: (a) the current major is supported; (b) deprecation requires one minor with a runtime `console.warn` before removal; (c) breaking changes bump major; (d) the `0.x` range is pre-stable and may break on minor until `1.0.0`.
+- A `## Versioning` section in the SDK README pointing to both files.
+
+**Acceptance test:** A reader of the SDK repo can answer "is `v0.1.0` going to break me on the next minor?" without reading source — the policy is explicit.
+
+### 8. OpenAPI generation (public typed contract)
+
+**Goal:** Integrators using endpoints outside the SDK's four hot paths (`/v1/employees`, `/v1/apps`, `/access`, etc.) shouldn't have to read source. A served OpenAPI document closes that gap at zero infra cost.
+
+**Implementation.** Elysia exposes a `@elysiajs/swagger` plugin that derives an OpenAPI 3.x document from the existing route schemas already defined in the routes (no schema rewrite). Wire it:
+- Mount the plugin in `apps/api/src/index.ts`.
+- Serve the JSON document at `GET /api/openapi.json` (no auth — it's a public contract).
+- Serve the Swagger UI at `GET /api/docs` (no auth — convenience for integrators).
+- Tag every route with the appropriate group (`auth`, `aliases`, `webhooks`, `apps`, `internal`); mark `internal/*` routes with `x-internal: true` so integrators see them but understand they are not part of the public contract.
+
+**Document in the quickstart (item 5):** A "Beyond the SDK" section linking to `/api/openapi.json` + `/api/docs`.
+
+**Acceptance test:** `curl /api/openapi.json | jq '.paths | keys | length'` returns ≥10. The Swagger UI loads at `/api/docs` and lists every public route. The OpenAPI document validates against the OpenAPI 3.1 schema (use `swagger-cli validate` or equivalent in CI).
+
+### 9. Tenant-scoped audit-log read endpoint
+
+**Goal:** Internal `actor_ip` + `request_id` columns (item 2) are for *our* debugging. Integrators need read access to the audit trail of activity *involving their tenant* — a Cloud-Audit-Logs-shaped feature. Without it, "what happened to my users last Tuesday" is a support ticket, not a self-service query.
+
+**Implementation.**
+- New route: `GET /api/v1/audit-log` (broker-token-authenticated, tenant-scoped).
+- Returns rows from `access_audit_log` where the row touches the caller's tenant (e.g. `target_app_id = caller.appId` OR `actor_app_id = caller.appId`; concrete predicate confirmed during implementation against the actual schema).
+- Query params: `from` (ISO timestamp, default 24h ago, max 30d ago), `to` (ISO timestamp, default now), `cursor` (opaque pagination token), `limit` (max 100, default 50).
+- Response shape: `{ entries: [{ id, occurredAt, actorAppId, targetAppId, action, requestId, /* no actor_ip — internal-only */ }], nextCursor: string | null }`.
+- **`actor_ip` is NOT exposed** to integrators (PII / debugging-only). `request_id` IS exposed so integrators can correlate with their own logs if they captured the `X-Coms-Request-Id` response header.
+
+**Document in the quickstart (item 5):** A "Read your tenant's audit log" section with a `@coms-portal/sdk` `getAuditLog(client, { from, to })` helper added as a fifth SDK export.
+
+**Acceptance test:** A broker-token-authenticated request to `/api/v1/audit-log` returns only rows touching the caller's tenant; rows from other tenants are not leaked even with crafted query params. `actor_ip` is absent from the response. Pagination works (cursor round-trips). `from`/`to` filters work.
+
 ---
 
 ## Scope (out)
@@ -115,26 +173,27 @@ Explicitly deferred to post-Spec-5 (or to Rev 4 / a dedicated security spec):
 
 ## Cost
 
-**Engineering:** ~3 days portal-side, single engineer. Items 1–3 fit comfortably in one PR (~2 days); item 4 (SDK extraction) runs in parallel as a sibling repo (~1 day); item 5 (quickstart doc) lands last after the SDK is real (~½ day).
+**Engineering:** ~3.5 days portal-side, single engineer. Items 1–3 + 6 + 8 fit comfortably in one PR (~2.5 days; +½ day for the domain-readiness audit and OpenAPI plugin wiring); item 4 (SDK extraction) + item 7 (SDK semver policy) run in parallel as a sibling repo (~1 day); items 5 + 9 (quickstart + audit-log read endpoint) land last after the SDK is real (~½ day).
 
-**Infra:** **$0 incremental.** Cloud Logging already collects unstructured stdout (you're paying for it now); structured JSON costs the same and lands in the free tier (50 GiB/project/month) for portal-scale traffic. Cloud Trace and Error Reporting are GCP-native and free at portal scale (Cloud Trace: 2.5M spans/month free; Error Reporting: free for log-based grouping). The SDK is a code/repo deliverable, not infra. No new database, no new queues, no new services.
+**Infra:** **$0 incremental.** Cloud Logging already collects unstructured stdout (you're paying for it now); structured JSON costs the same and lands in the free tier (50 GiB/project/month) for portal-scale traffic. Cloud Trace and Error Reporting are GCP-native and free at portal scale (Cloud Trace: 2.5M spans/month free; Error Reporting: free for log-based grouping). The SDK is a code/repo deliverable, not infra. OpenAPI is served from the existing API container. No new database, no new queues, no new services.
 
-First infra spend kicks in only when staging or Redis are picked up — both deferred above.
+First infra spend kicks in only when staging or Redis are picked up — both deferred above. Domain wiring itself (item 6 enables it; the actual DNS + Cloud Run domain mapping) is **$0** on GCP — managed certificates and domain mappings on Cloud Run are free.
 
 ---
 
 ## Sequencing
 
-Items 1–3 land in any order in a single PR. Item 4 (SDK) runs in parallel as a separate repo and PR. Item 5 (quickstart) lands last, after item 4 is real.
+Items 1–3 + 6 + 8 land in any order in a single portal PR. Items 4 + 7 (SDK + semver policy) run in parallel as a separate repo and PR. Items 5 + 9 (quickstart + tenant audit-log read) land last, after the SDK is real.
 
 Recommended:
-- **Day 1 morning:** Audit log schema migration (`drizzle-kit generate`). Request-ID middleware. Pino integration.
-- **Day 1 afternoon:** Launcher migration to `/api/userinfo`. Real `/api/health`. Webhook-dispatcher comment fix.
-- **Day 2:** SDK extraction — scaffold the `coms-sdk` repo, port the verification logic from `auth-broker.ts` and `webhook-dispatcher.ts`, publish v0.1.0.
-- **Day 3 morning:** Integrator quickstart doc.
-- **Day 3 afternoon:** End-to-end acceptance test (fresh integrator scaffolds against the SDK + quickstart in a sandbox).
+- **Day 1 morning:** Audit log schema migration (`drizzle-kit generate`, item 2). Request-ID middleware (item 2). Pino integration (item 2). Hardcoded-URL audit + `PORTAL_ORIGIN` / `CORS_ALLOWED_ORIGINS` / `SESSION_COOKIE_DOMAIN` config centralization (item 6).
+- **Day 1 afternoon:** Launcher migration to `/api/userinfo` (item 1). Real `/api/health` (item 2). Webhook-dispatcher comment fix (item 3). Hardcoded-URL CI gate (item 6).
+- **Day 2 morning:** OpenAPI plugin wiring + route tagging (item 8). SDK extraction begins — scaffold the `coms-sdk` repo locally under the project folder (item 4).
+- **Day 2 afternoon:** SDK extraction continues — port verification logic from `auth-broker.ts` and `webhook-dispatcher.ts`, add `getAuditLog` helper for item 9, write `CHANGELOG.md` + `SUPPORTED_VERSIONS.md` (items 4 + 7), publish v0.1.0 to the public GitHub repo at `github.com/mrdoorba/coms-sdk`.
+- **Day 3 morning:** Tenant-scoped audit-log read endpoint (item 9). Integrator quickstart doc including "Beyond the SDK" / OpenAPI link and "Read your tenant's audit log" sections (items 5 + 8 + 9).
+- **Day 3 afternoon:** End-to-end acceptance test (fresh integrator scaffolds against the SDK + quickstart in a sandbox), domain-flip dry-run (set `PORTAL_ORIGIN` to a fake domain, confirm everything keeps working — proves the config-only flip).
 
-Heroes can adopt the SDK in a follow-up at any point after v0.1.0 ships; that adoption is not part of this spec.
+Heroes can adopt the SDK in a follow-up at any point after v0.1.0 ships; that adoption is not part of this spec. Domain wiring (DNS + Cloud Run domain mapping for `coms.ahacommerce.net`) happens after this spec ships and is a **config change only** by item 6's design.
 
 ---
 
@@ -149,12 +208,16 @@ Heroes can adopt the SDK in a follow-up at any point after v0.1.0 ships; that ad
 | `APP_LAUNCHER` deprecation break Heroes when they consume the next `@coms-portal/shared` minor. | Heroes pins to a minor; the deprecation is in v1.4.x with a `console.warn` only, removal in v1.5.0. Heroes doesn't break unless they explicitly upgrade across the major; coordinate with the Heroes team before v1.5 ships. |
 | SDK signature verification disagrees with the portal's signing scheme. | Port the verification logic by *moving* the existing `computeSignature` (`webhook-dispatcher.ts:138`) and broker-token-verify code into the SDK, then re-import from the SDK on the portal side. Single source, no possibility of drift. |
 | Integrator quickstart drifts from reality. | The doc is exercised by the acceptance test (a fresh sandbox integrator scaffolds against it) — drift breaks the test, not just the docs. Run the sandbox scaffold in CI as a smoke test once it's stable. |
+| Hardcoded-URL CI gate (item 6) false-positives on legitimate doc references. | Allowlist documented: `apps/api/src/config.ts`, `.env.example`, `.github/workflows/*.yml`, `docs/**`. Anywhere else, the literal must come from config. |
+| OpenAPI document (item 8) leaks an internal route's request shape. | Tag every `internal/*` route with `x-internal: true` and exclude from the swagger UI's default tag filter. The document still lists them (single source of truth), but the swagger UI navigation hides them by default. |
+| Tenant-scoped audit-log endpoint (item 9) leaks rows from another tenant via crafted query params. | The tenant-scope predicate is applied in the SQL `WHERE` clause from the broker token's `appId` claim (server-side, not client-controlled). Add a unit test that calls the endpoint with `appId=A` and confirms zero rows where `target_app_id != A AND actor_app_id != A`. |
+| Domain flip (item 6) silently breaks the SDK's JWKS cache for already-issued tokens. | Broker tokens are 5-min TTL (`auth-broker.ts:52–53`); any token issued before the flip naturally expires within 5 min of the flip. Document this 5-min "soft cutover" window in the runbook for the actual domain switch. |
 
 ---
 
 ## Verification (full)
 
-After all five items land:
+After all nine items land:
 
 1. **Launcher.** Add app #3 to `app_registry` via `/admin/apps`. Confirm it appears in the chrome and account widget without a portal redeploy and without bumping `@coms-portal/shared`.
 2. **Observability.** Trigger an error in `/api/aliases/resolve-batch`. Confirm: (a) Cloud Logging structured JSON entry with `requestId` field, (b) `X-Coms-Request-Id` response header matches that ID, (c) any webhook the request kicked off carries the same ID in its outbound header, (d) the `access_audit_log` row from that request has `request_id` populated.
@@ -162,6 +225,10 @@ After all five items land:
 4. **Doc drift.** `grep -r "webhook-dlq" apps/api/src/` returns zero hits.
 5. **SDK.** A fresh repo `coms-sdk-smoke-test` with `bun add git+https://github.com/mrdoorba/coms-sdk.git#v0.1.0` plus a 30-line script verifies a real broker token (issued by a local portal) and a real webhook signature (signed by a local portal). No portal source-code reading allowed during the test.
 6. **Quickstart.** A developer who has never seen this codebase reads `docs/architecture/integrator-quickstart.md`, runs the SDK against a local portal, and ships a working "hello world" integrator in ≤30 minutes.
+7. **Domain readiness.** Set `PORTAL_ORIGIN=https://coms.ahacommerce.net` in a local `.env`, restart, hit `/.well-known/jwks.json`, broker `iss` claims and webhook callback URLs reflect the new origin. Revert — system back on Cloud Run URL. Zero code changes either direction. CI hardcoded-URL gate is green.
+8. **SDK semver policy.** `coms-sdk` repo has `CHANGELOG.md` (Keep-a-Changelog format, v0.1.0 entry) and `SUPPORTED_VERSIONS.md` (or README section). The "is v0.1.0 going to break me on next minor?" question is answered without reading source.
+9. **OpenAPI.** `curl /api/openapi.json` returns a valid OpenAPI 3.x document; `swagger-cli validate` (or equivalent) passes; `/api/docs` serves the Swagger UI listing every public route grouped by tag.
+10. **Tenant audit-log read.** A broker-token-authenticated `GET /api/v1/audit-log?from=...&to=...` returns only rows touching the caller's tenant, paginates correctly, and never includes `actor_ip`. Cross-tenant leak test (calling with tenant A's token, asserting zero rows scoped to tenant B) passes.
 
 ---
 
@@ -170,7 +237,12 @@ After all five items land:
 - Heroes' adoption of the SDK. Tracked separately as a Heroes-side follow-up; not part of this spec.
 - Any change to the broker token shape, the webhook envelope shape, or the alias resolve contract. The SDK ports the existing verification logic; it does not redefine the contracts.
 - Any change to the admin UI at `/admin/apps`. App registration via the existing form is sufficient for the verification tests.
-- Any new external dependency beyond `pino` and `pino-pretty` (dev). No OpenTelemetry SDK in this spec — Cloud Logging structured JSON ingestion covers the observability gap; OTel + Cloud Trace are deferred to whenever distributed tracing is genuinely required (currently a single Cloud Run service; nothing to trace across).
+- Any new external dependency beyond `pino`, `pino-pretty` (dev), and `@elysiajs/swagger` (item 8). No OpenTelemetry SDK in this spec — Cloud Logging structured JSON ingestion covers the observability gap; OTel + Cloud Trace are deferred to whenever distributed tracing is genuinely required (currently a single Cloud Run service; nothing to trace across).
+- Actual DNS provisioning + Cloud Run domain mapping for `coms.ahacommerce.net`. Item 6 makes the flip a config-only change; doing the flip is a follow-up runbook task gated on this spec landing.
+- Tenant self-service for app registration (`/admin/apps` remains admin-only). Deferred to Spec 4+.
+- Sandbox / "developer credentials in 5 minutes" tenant for external integrators. Deferred.
+- Public status page (`status.coms.ahacommerce.net`) and SLO definitions. Deferred.
+- Webhook replay UI / dashboard. Deferred — disabled-on-max-retries remains the dead-letter signal per item 3.
 
 ---
 
@@ -182,5 +254,9 @@ Spec 03c is done when:
 2. Every API request has a `X-Coms-Request-Id` response header; that ID appears on every log line from the request, every webhook dispatched during the request, and the `access_audit_log` row written by the request.
 3. `/api/health` returns 503 when the DB, Secret Manager, or Cloud Tasks dependency is unhealthy.
 4. The webhook dispatcher source no longer references a non-existent `/api/internal/webhook-dlq` route.
-5. `@coms-portal/sdk` v0.1.0 is published at `github.com/mrdoorba/coms-sdk` with `verifyBrokerToken`, `verifyWebhookSignature`, `resolveAlias`, and `introspectSession` exports.
+5. `@coms-portal/sdk` v0.1.0 is published at `github.com/mrdoorba/coms-sdk` (public repo) with `verifyBrokerToken`, `verifyWebhookSignature`, `resolveAlias`, `introspectSession`, and `getAuditLog` exports.
 6. `docs/architecture/integrator-quickstart.md` exists, is exercised by an end-to-end acceptance test, and a fresh developer can ship a working integration in ≤30 minutes using only the doc + the SDK.
+7. Flipping `PORTAL_ORIGIN` to `https://coms.ahacommerce.net` is a config-only change — no code edits, no SDK rebuild, CI hardcoded-URL gate stays green.
+8. The SDK repo carries a stated semver + deprecation policy (`CHANGELOG.md` + `SUPPORTED_VERSIONS.md`).
+9. `GET /api/openapi.json` serves a valid OpenAPI 3.x document covering every public route; `/api/docs` serves the Swagger UI.
+10. `GET /api/v1/audit-log` lets an integrator read their tenant's audit trail (no `actor_ip`, with pagination + date filters), and the cross-tenant leak test passes.
