@@ -7,7 +7,7 @@
 
 ---
 
-## Status — 2026-04-29 (Specs 01 + 02 + 03 + 03b portal-side shipped; Heroes adoption pending)
+## Status — 2026-04-29 (Specs 01 + 02 + 03 + 03b portal-side shipped; Heroes adoption pending; Spec 03c queued)
 
 Portal/COMS team landed Specs 01 + 02 (Phases 2 + 3) + 03 (portal-side, all twelve effects) end-to-end on 2026-04-28; Spec 03b test-gate cleanup followed on 2026-04-29 (locally green). The Spec 03 merge is on `main`; the deploy gate clears on the next push.
 
@@ -52,6 +52,8 @@ After Rev 3, identity is *centrally owned* (Rev 2), *centrally surfaced* (Spec 0
 | 02 | Design System (skeleton + spec) | Portal | Phases 1+2+3 done portal-side (2026-04-28); Phase 4+5 deferred | Phase 2 token consumption + Phase 3 chrome adoption | No — deferred until trigger |
 | 03 | User Identity Ownership & Alias Layer | Portal + Heroes | Portal-side shipped 2026-04-28 (twelve effects on `main`); test-gate cleared 2026-04-29 (Spec 03b) | Yes — H1 (rename, ingestion rewrite, caches, webhook consumers) | **Yes — must land before real users** |
 | 03b | Spec 03 Test-Gate Cleanup | Portal | Shipped 2026-04-29 — single PR; root cause was Bun mock-pollution, not real fixture bugs | No | Resolved |
+| 03c | Pre-Spec-4 Hardening (launcher migration, observability, SDK extraction) | Portal | Queued — ~3 days | No (Heroes consumes new SDK in a follow-up) | **Yes — blocks Spec 4/5 debugging** |
+| 03d | Deferred Hardening Backlog (Redis, staging, per-tenant keys, KMS encryption, audit Cloud Logging sink, OTel, canary, feature flags, etc.) | Portal | 11 items, ~13–18 days total if every item ships | No | No — each item ships on its own trigger |
 | 04 | Unified User Preferences (theme + locale) | Portal + every H-app | Small per phase | Yes — Phase 3 (preference consumption) | No — deferred until trigger |
 | 05 | Suite Search / Command Palette | Portal + every H-app | Medium per phase | Optional — Phase 3 (search provider) | No — deferred until trigger |
 
@@ -139,20 +141,27 @@ Rev 2 Spec 04 (introspect OIDC) ──→ Rev 3 Spec 01 (account widget)
 
 Rev 2 Spec 03 (webhook delivery) ──→ Rev 3 Spec 03 (alias.resolved webhook
                                      reuses existing delivery + DLQ infra)
+
+Specs 01 + 03 (shipped portal-side) ──→ Spec 03c (pre-Spec-4 hardening:
+                                          launcher migration, observability,
+                                          @coms-portal/sdk, integrator quickstart)
+                                          ──→ Specs 4, 5 (when their triggers fire)
 ```
 
-Spec 01 and Spec 03 are independent — they touch different surfaces (UX vs identity-writer enforcement) and can ship in parallel. Specs 02, 04, 05 stay deferred until their own triggers fire.
+Spec 01 and Spec 03 are independent — they touch different surfaces (UX vs identity-writer enforcement) and can ship in parallel. Spec 03c is sequenced *after* both have shipped portal-side and *before* Spec 4/5 critical-path debugging begins; it is independent of Heroes' Rev 3 adoption (Heroes can adopt the existing packages today and migrate to the SDK in a follow-up).
 
 **Recommended sequence:**
 
-1. **Rev 3 Spec 01** — Shared account widget package, portal adoption, Heroes adoption as the pilot H-app.
-2. **Rev 3 Spec 03** — Portal alias layer + Heroes ingestion rewrite + DB-role REVOKE. Critical-path: must land before any H-app takes real users. Once portal answers the six §Open Questions in spec-03 and Heroes confirms, both teams can sequence the three-deploy cutover.
+1. **Rev 3 Spec 01** — Shared account widget package, portal adoption, Heroes adoption as the pilot H-app. *(Portal-side shipped 2026-04-28.)*
+2. **Rev 3 Spec 03** — Portal alias layer + Heroes ingestion rewrite + DB-role REVOKE. Critical-path: must land before any H-app takes real users. *(Portal-side shipped 2026-04-28; test gate cleared 2026-04-29 via Spec 03b.)*
+3. **Rev 3 Spec 03c** — Pre-Spec-4 hardening. Queued. Closes the launcher data-source mismatch (`/api/userinfo` already exists; chrome ignores it), lays observability foundations (Pino + request-IDs + Cloud Logging structured ingestion + real `/api/health`), corrects webhook-dispatcher doc/code drift, and extracts `@coms-portal/sdk` + a generic integrator quickstart. ~3 days portal-side; $0 incremental infra spend.
 
 **Deferred specs (no scheduled work; ship on trigger):**
 
 - **Spec 02** — Design System Phase 2+. Trigger: third H-app onboards, token value change, or drift detected.
-- **Spec 04** — User Preferences. Trigger: third H-app onboards, portal localizes, drift incident, or Spec 02 Phase 2+ ships.
-- **Spec 05** — Suite Search. Trigger: N > 6 apps, first cross-app search request, an app builds its own palette, or recent-items demand.
+- **Spec 03d** — Deferred Hardening Backlog. 11 items (Redis-backed rate limiter, staging environment, per-tenant signing keys, KMS encryption for webhook secrets, `compliance_status` enforcement, session-expiry UX, broker refresh flow, rate-limit extension, audit Cloud Logging sink, OpenTelemetry → Cloud Trace, canary + feature flags). Each ships on its own trigger; documented as a backlog so deferred work stays visible. Max combined infra spend if everything ships: ~$85/mo.
+- **Spec 04** — User Preferences. Trigger: third H-app onboards, portal localizes, drift incident, or Spec 02 Phase 2+ ships. *(Spec 03c is now a documented prerequisite — the preference-write debug path needs structured logging + request IDs.)*
+- **Spec 05** — Suite Search. Trigger: N > 6 apps, first cross-app search request, an app builds its own palette, or recent-items demand. *(Spec 03c is now a documented prerequisite — federated `/api/search` calls need request-ID propagation to debug timeouts and silently-skipped providers.)*
 
 ---
 

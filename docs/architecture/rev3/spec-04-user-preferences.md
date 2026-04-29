@@ -2,7 +2,7 @@
 
 > Priority: **Deferred. Not critical-path; ships when the third H-app onboards or users report drift.**
 > Scope: Portal (preferences endpoint, ID-token claim, broadcast mechanism) + every H-app (consume preference, render in shared chrome).
-> Prerequisites: Rev 3 Spec 01 (account widget — preference UI lives in the widget popover).
+> Prerequisites: Rev 3 Spec 01 (account widget — preference UI lives in the widget popover); Rev 3 Spec 03c (pre-Spec-4 hardening — structured logging + request-ID propagation are required for the preference-write debug path; the launcher migration also lets the widget refresh preferences cleanly when the user changes them).
 
 ---
 
