@@ -8,6 +8,7 @@ import { processEmployeeProvisioning } from './employee-provisioning'
 import { revokePortalSession } from './session-revocation'
 import { emitUserProvisioned, emitUserOffboarded, emitUserUpdated } from './provisioning-events'
 import { seedAppUserConfigForUser } from './app-user-config'
+import { logger } from '~/logger'
 
 export async function createEmployee(data: {
   email: string
@@ -64,7 +65,7 @@ export async function createEmployee(data: {
   // and GIP provisioning has run (so gipUid is set). No await — does not block
   // the response. If the user has no teams yet, dispatchPortalWebhook is a no-op.
   emitUserProvisioned(user.id).catch((err) => {
-    console.error(`[provisioning-events] emitUserProvisioned failed for ${user.id}:`, err)
+    logger.error({ err, userId: user.id }, '[provisioning-events] emitUserProvisioned failed')
   })
 
   return {
@@ -98,14 +99,14 @@ export async function deactivateEmployee(userId: string): Promise<void> {
   try {
     await revokePortalSession({ userId, reason: 'offboarded' })
   } catch (err) {
-    console.error(`[deactivateEmployee] revokePortalSession failed for ${userId}:`, err)
+    logger.error({ err, userId }, '[deactivateEmployee] revokePortalSession failed')
   }
 
   // Emit user.offboarded AFTER session.revoked so events arrive in order.
   // The user's team memberships still exist post-deactivation, so appSlugs
   // are resolved from current DB state (accurate for fanout).
   emitUserOffboarded(userId).catch((err) => {
-    console.error(`[provisioning-events] emitUserOffboarded failed for ${userId}:`, err)
+    logger.error({ err, userId }, '[provisioning-events] emitUserOffboarded failed')
   })
 }
 
@@ -136,7 +137,7 @@ export async function batchUpdateEmployees(
     // Fan out user.updated for each affected user — fire-and-forget
     for (const u of users) {
       emitUserUpdated(u.id, ['portalRole']).catch((err) => {
-        console.error(`[provisioning-events] emitUserUpdated failed for ${u.id}:`, err)
+        logger.error({ err, userId: u.id }, '[provisioning-events] emitUserUpdated failed')
       })
     }
   }

@@ -11,6 +11,7 @@ import { appWebhookEndpoints } from '~/db/schema/app-webhook-endpoints'
 import { deliverWebhook } from '~/services/webhook-dispatcher'
 import { verifyGoogleOidcToken } from '~/services/oidc-verifier'
 import type { PortalWebhookEvent } from '@coms-portal/shared'
+import { logger } from '~/logger'
 
 // Must match `retry_config.max_attempts` in infra/cloud-tasks.tf. On the final
 // attempt the handler disables the endpoint directly — Cloud Tasks has no
@@ -24,11 +25,7 @@ interface DeliveryPayload {
   eventId: string
   jsonBody: string
   occurredAt: string
-}
-
-function logJson(fields: Record<string, unknown>): void {
-  // Cloud Logging ingests structured JSON from stdout automatically.
-  console.log(JSON.stringify(fields))
+  requestId?: string
 }
 
 async function authenticateOidcRequest(
@@ -77,6 +74,8 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
 
       const payload = body as DeliveryPayload
       const retryCount = request.headers.get('x-cloudtasks-taskretrycount') ?? '0'
+      // Re-use the original request's trace ID so the full chain shares one ID.
+      const log = payload.requestId ? logger.child({ requestId: payload.requestId }) : logger
 
       try {
         const [endpoint] = await db
@@ -87,8 +86,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
         if (!endpoint || endpoint.status !== 'active') {
           // Endpoint is gone or already disabled — nothing to deliver. Return 200
           // so Cloud Tasks marks the task done; we do not want it retrying a no-op.
-          logJson({
-            severity: 'WARNING',
+          log.warn({
             message: 'webhook_delivery_skipped',
             reason: !endpoint ? 'endpoint_deleted' : 'endpoint_disabled',
             endpointId: payload.endpointId,
@@ -107,6 +105,8 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
           payload.eventId,
           payload.occurredAt,
           fetch,
+          undefined,
+          payload.requestId,
         )
 
         const now = new Date()
@@ -115,8 +115,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
           .set({ failureCount: 0, lastDeliveredAt: now, updatedAt: now })
           .where(eq(appWebhookEndpoints.id, endpoint.id))
 
-        logJson({
-          severity: 'INFO',
+        log.info({
           message: 'webhook_delivery_attempt',
           endpointId: endpoint.id,
           eventId: payload.eventId,
@@ -129,8 +128,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
         return { ok: true }
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err)
-        logJson({
-          severity: 'ERROR',
+        log.error({
           message: 'webhook_delivery_attempt',
           endpointId: payload.endpointId,
           eventId: payload.eventId,
@@ -158,8 +156,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
               })
               .where(eq(appWebhookEndpoints.id, payload.endpointId))
 
-            logJson({
-              severity: 'WARNING',
+            log.warn({
               message: 'webhook_endpoint_disabled',
               endpointId: payload.endpointId,
               eventId: payload.eventId,
@@ -168,8 +165,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
           } catch (disableErr) {
             const disableReason =
               disableErr instanceof Error ? disableErr.message : String(disableErr)
-            logJson({
-              severity: 'ERROR',
+            log.error({
               message: 'webhook_endpoint_disable_failed',
               endpointId: payload.endpointId,
               eventId: payload.eventId,
@@ -193,6 +189,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
         eventId: t.String({ minLength: 1 }),
         jsonBody: t.String(),
         occurredAt: t.String({ minLength: 1 }),
+        requestId: t.Optional(t.String()),
       }),
     },
   )

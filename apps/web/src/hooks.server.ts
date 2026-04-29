@@ -1,6 +1,7 @@
 import type { Handle, HandleServerError } from '@sveltejs/kit'
 import { SESSION_COOKIE_NAME } from '@coms-portal/shared'
 import { validateSession } from '~/services/auth'
+import { logger } from '~/lib/logger'
 
 const AUTHED_PREFIX = '/(authed)'
 const AUTH_TIMEOUT_MS = 3_000
@@ -50,7 +51,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 export const handleError: HandleServerError = ({ error, status, message, event }) => {
   const err = error as Error | undefined
-  console.error('[handleError]', {
+  logger.error({
     status,
     message,
     route: event.route.id,
@@ -58,7 +59,6 @@ export const handleError: HandleServerError = ({ error, status, message, event }
     name: err?.name,
     errorMessage: err?.message,
     stack: err?.stack,
-    raw: error,
-  })
+  }, '[handleError]')
   return { message: 'Internal error' }
 }

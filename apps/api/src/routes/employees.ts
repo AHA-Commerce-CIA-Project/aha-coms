@@ -10,6 +10,7 @@ import { processEmployeeProvisioning } from '../services/employee-provisioning'
 import { resolveAndSyncClaims } from '../services/claims'
 import { logAudit } from '../services/audit'
 import { emitUserUpdated } from '../services/provisioning-events'
+import { logger } from '~/logger'
 
 const employeeBody = t.Object({
   email: t.String({ format: 'email' }),
@@ -75,6 +76,14 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         limit: t.Optional(t.String()),
         search: t.Optional(t.String()),
       }),
+      response: {
+        200: t.Object({
+          data: t.Array(t.Any()),
+          total: t.Number(),
+          page: t.Number(),
+          limit: t.Number(),
+        }),
+      },
     },
   )
 
@@ -107,12 +116,21 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       query: t.Object({
         q: t.String({ minLength: 2 }),
       }),
+      response: {
+        200: t.Array(
+          t.Object({
+            id: t.String(),
+            name: t.String(),
+            email: t.String(),
+          }),
+        ),
+      },
     },
   )
 
   .post(
     '/',
-    async ({ body, authUser }) => {
+    async ({ body, authUser, requestId, actorIp }) => {
       const result = await createEmployee(body)
       await logAudit({
         actorId: authUser.id,
@@ -124,15 +142,22 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
           provisioningStatus: result.provisioningStatus,
           ...(result.provisioningError ? { provisioningError: result.provisioningError } : {}),
         },
+        requestId,
+        actorIp,
       })
       return result
     },
-    { body: employeeBody },
+    {
+      body: employeeBody,
+      response: {
+        200: t.Any(),
+      },
+    },
   )
 
   .post(
     '/batch-update',
-    async ({ body, authUser }) => {
+    async ({ body, authUser, requestId, actorIp }) => {
       const count = await batchUpdateEmployees(body.ids, body.field, body.value)
 
       for (const id of body.ids) {
@@ -142,6 +167,8 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
           targetType: 'user',
           targetId: id,
           details: { field: body.field, value: body.value },
+          requestId,
+          actorIp,
         })
       }
 
@@ -153,12 +180,18 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         field: t.Union([t.Literal('portalRole')]),
         value: t.String({ minLength: 1 }),
       }),
+      response: {
+        200: t.Object({
+          ok: t.Literal(true),
+          count: t.Number(),
+        }),
+      },
     },
   )
 
   .post(
     '/import-csv',
-    async ({ body, authUser }) => {
+    async ({ body, authUser, requestId, actorIp }) => {
       const result = await importEmployeesFromGoogleAdminCsv(body.csv, {
         preview: body.preview,
       })
@@ -175,6 +208,8 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
               rowNumber: createdEmployee.rowNumber,
               source: 'google_admin_csv',
             },
+            requestId,
+            actorIp,
           })
         }
       }
@@ -186,6 +221,9 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         csv: t.String({ minLength: 1 }),
         preview: t.Optional(t.Boolean()),
       }),
+      response: {
+        200: t.Any(),
+      },
     },
   )
 
@@ -218,11 +256,11 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       return { message: 'Not found' }
     }
     return user
-  })
+  }, { response: { 200: t.Any(), 404: t.Object({ message: t.String() }) } })
 
   .patch(
     '/:id',
-    async ({ params, body, authUser }) => {
+    async ({ params, body, authUser, requestId, actorIp }) => {
       const needsExistingUser = body.email !== undefined || body.portalRole !== undefined
       const existingUser = needsExistingUser
         ? await db.query.identityUsers.findFirst({ where: eq(identityUsers.id, params.id) })
@@ -247,6 +285,8 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         targetType: 'user',
         targetId: params.id,
         details: body.portalRole ? { portalRole: body.portalRole } : undefined,
+        requestId,
+        actorIp,
       })
 
       // Compute changedFields from request body keys (only fields present in body)
@@ -255,27 +295,34 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       )
       if (changedFields.length > 0) {
         emitUserUpdated(params.id, changedFields).catch((err) => {
-          console.error(`[provisioning-events] emitUserUpdated failed for ${params.id}:`, err)
+          logger.error({ err, userId: params.id }, '[provisioning-events] emitUserUpdated failed')
         })
       }
 
       return { ok: true }
     },
-    { body: t.Partial(employeeBody) },
+    {
+      body: t.Partial(employeeBody),
+      response: {
+        200: t.Object({ ok: t.Literal(true) }),
+      },
+    },
   )
 
-  .delete('/:id', async ({ params, authUser }) => {
+  .delete('/:id', async ({ params, authUser, requestId, actorIp }) => {
     await deactivateEmployee(params.id)
     await logAudit({
       actorId: authUser.id,
       action: 'deactivate_employee',
       targetType: 'user',
       targetId: params.id,
+      requestId,
+      actorIp,
     })
     return { ok: true }
-  })
+  }, { response: { 200: t.Object({ ok: t.Literal(true) }) } })
 
-  .post('/:id/retry-provisioning', async ({ params, authUser }) => {
+  .post('/:id/retry-provisioning', async ({ params, authUser, requestId, actorIp }) => {
     const result = await processEmployeeProvisioning(params.id)
 
     await logAudit({
@@ -287,10 +334,12 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         provisioningStatus: result.status,
         ...(result.error ? { provisioningError: result.error } : {}),
       },
+      requestId,
+      actorIp,
     })
 
     return result
-  })
+  }, { response: { 200: t.Any() } })
 
   .post('/:id/reset-password', async ({ params, set }) => {
     const employee = await db.query.identityUsers.findFirst({
@@ -306,11 +355,11 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
     }
     await generatePasswordResetLink(employee.email)
     return { ok: true, email: employee.email }
-  })
+  }, { response: { 200: t.Object({ ok: t.Literal(true), email: t.String() }), 400: t.Object({ message: t.String() }), 404: t.Object({ message: t.String() }) } })
 
   .post(
     '/:id/upgrade-workspace',
-    async ({ params, body, authUser, set }) => {
+    async ({ params, body, authUser, requestId, actorIp, set }) => {
       const employee = await db.query.identityUsers.findFirst({
         where: eq(identityUsers.id, params.id),
       })
@@ -375,10 +424,12 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
           previousEmail: employee.email,
           workspaceEmail: body.workspaceEmail,
         },
+        requestId,
+        actorIp,
       })
 
       emitUserUpdated(params.id, changedFields).catch((err) => {
-        console.error(`[provisioning-events] emitUserUpdated failed for ${params.id}:`, err)
+        logger.error({ err, userId: params.id }, '[provisioning-events] emitUserUpdated failed')
       })
 
       return { ok: true }
@@ -391,5 +442,11 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         position: t.Optional(t.String()),
         phone: t.Optional(t.String()),
       }),
+      response: {
+        200: t.Object({ ok: t.Literal(true) }),
+        400: t.Object({ message: t.String() }),
+        404: t.Object({ message: t.String() }),
+        409: t.Object({ message: t.String() }),
+      },
     },
   )

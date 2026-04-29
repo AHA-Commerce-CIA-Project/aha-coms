@@ -4,6 +4,7 @@ import { eq, and, sql, inArray } from 'drizzle-orm'
 import { normalizeName, nameTokens } from './name-matching'
 import type { UserAlias, NewUserAlias, AliasCollisionSource } from '~/db/schema'
 import { emitAliasResolved, emitAliasUpdated, emitAliasDeleted } from './alias-events'
+import { logger } from '~/logger'
 
 // Levenshtein distance — inline, no dependency
 function levenshtein(a: string, b: string): number {
@@ -97,7 +98,7 @@ export async function createAlias(params: {
     .returning()
 
   emitAliasResolved(created!).catch((err) => {
-    console.error(`[alias-events] emitAliasResolved failed for ${created!.id}:`, err)
+    logger.error({ err, aliasId: created!.id }, '[alias-events] emitAliasResolved failed')
   })
 
   return created!
@@ -139,10 +140,10 @@ export async function renamePrimaryAlias(
     return { demoted, promoted: promoted! }
   }).then(({ demoted, promoted }) => {
     emitAliasUpdated(demoted, { previousIsPrimary: true }).catch((err) => {
-      console.error(`[alias-events] emitAliasUpdated (demote) failed for ${demoted.id}:`, err)
+      logger.error({ err, aliasId: demoted.id }, '[alias-events] emitAliasUpdated (demote) failed')
     })
     emitAliasUpdated(promoted, { previousIsPrimary: false }).catch((err) => {
-      console.error(`[alias-events] emitAliasUpdated (promote) failed for ${promoted.id}:`, err)
+      logger.error({ err, aliasId: promoted.id }, '[alias-events] emitAliasUpdated (promote) failed')
     })
     return { demoted, promoted }
   })

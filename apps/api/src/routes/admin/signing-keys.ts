@@ -10,6 +10,7 @@
  */
 import { Elysia } from 'elysia'
 import { rotateActiveKey } from '~/services/signing-keys'
+import { logger } from '~/logger'
 
 export const adminSigningKeyRoutes = new Elysia({ prefix: '/signing-keys' })
 
@@ -30,11 +31,7 @@ export const adminSigningKeyRoutes = new Elysia({ prefix: '/signing-keys' })
     try {
       const { newKid, previousKid } = await rotateActiveKey()
 
-      console.info('[admin/signing-keys] rotation completed', {
-        newKid,
-        previousKid,
-        trigger: 'manual',
-      })
+      logger.info({ newKid, previousKid, trigger: 'manual' }, '[admin/signing-keys] rotation completed')
 
       set.status = 200
       return {
@@ -43,7 +40,7 @@ export const adminSigningKeyRoutes = new Elysia({ prefix: '/signing-keys' })
         retiringKid: previousKid,
       }
     } catch (err) {
-      console.error('[admin/signing-keys] rotation failed:', err instanceof Error ? err.message : err)
+      logger.error({ err }, '[admin/signing-keys] rotation failed')
       set.status = 500
       return { message: 'Signing key rotation failed. Check server logs.' }
     }

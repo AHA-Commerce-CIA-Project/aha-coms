@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { db } from '~/db'
 import { appRegistry } from '~/db/schema'
+import { logger } from '~/logger'
 
 export async function probeAppHealth(app: { id: string; url: string; slug: string }): Promise<{
   status: 'healthy' | 'degraded' | 'unhealthy'
@@ -41,7 +42,7 @@ export async function probeAllApps(): Promise<void> {
   )
 
   const healthy = results.filter(r => r.status === 'fulfilled').length
-  console.log(`[health-probe] checked ${apps.length} apps, ${healthy} succeeded`)
+  logger.info({ total: apps.length, healthy }, '[health-probe] app health check completed')
 }
 
 export interface HealthProbeHandle {
@@ -52,10 +53,10 @@ export function startHealthProbeInterval(intervalMs = 60_000): HealthProbeHandle
   let timer: ReturnType<typeof setInterval> | null = null
 
   // Run once immediately, then on interval
-  probeAllApps().catch(err => console.error('[health-probe] Initial probe error:', err))
+  probeAllApps().catch(err => logger.error({ err }, '[health-probe] initial probe error'))
 
   timer = setInterval(() => {
-    probeAllApps().catch(err => console.error('[health-probe] Probe error:', err))
+    probeAllApps().catch(err => logger.error({ err }, '[health-probe] probe error'))
   }, intervalMs)
 
   return {
