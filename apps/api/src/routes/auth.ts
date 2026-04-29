@@ -105,7 +105,7 @@ async function validatePostLogoutRedirectUri(uri: string): Promise<string | null
     return null
   }
 
-  const portalOrigin = process.env.PORTAL_PUBLIC_ORIGIN ?? SELF_AUDIENCE
+  const portalOrigin = PORTAL_ORIGIN
   try {
     if (new URL(portalOrigin).origin === candidate.origin) {
       return candidate.toString()
