@@ -1,4 +1,10 @@
 <script lang="ts">
+  import {
+    Button,
+    Select, SelectTrigger, SelectContent, SelectItem,
+    Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
+  } from '@coms-portal/ui/primitives'
+
   interface BatchAction {
     key: string
     label: string
@@ -19,7 +25,7 @@
     entityLabel?: string
   } = $props()
 
-  let activeAction = $state<string | null>(null)
+  let activeAction = $state<string | undefined>(undefined)
   let activeValue = $state<string>('')
   let showConfirm = $state(false)
 
@@ -41,7 +47,7 @@
   }
 
   function reset() {
-    activeAction = null
+    activeAction = undefined
     activeValue = ''
     showConfirm = false
   }
@@ -56,57 +62,67 @@
   <div class="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2 text-sm">
     <span class="text-xs text-muted-foreground">{selectedCount} selected</span>
 
-    <select
-      bind:value={activeAction}
-      onchange={() => { activeValue = '' }}
-      class="rounded-lg border border-border bg-muted px-2 py-1 text-xs focus:border-ring focus:outline-none"
+    <Select
+      type="single"
+      value={activeAction}
+      onValueChange={(v) => { activeAction = v; activeValue = '' }}
     >
-      <option value={null}>Action...</option>
-      {#each actions as action}
-        <option value={action.key}>{action.label}</option>
-      {/each}
-    </select>
+      <SelectTrigger size="sm" class="w-32">
+        <span>{currentAction?.label ?? 'Action...'}</span>
+      </SelectTrigger>
+      <SelectContent>
+        {#each actions as action}
+          <SelectItem value={action.key} label={action.label} />
+        {/each}
+      </SelectContent>
+    </Select>
 
     {#if currentAction}
-      <select
-        bind:value={activeValue}
-        class="rounded-lg border border-border bg-muted px-2 py-1 text-xs focus:border-ring focus:outline-none"
+      <Select
+        type="single"
+        value={activeValue}
+        onValueChange={(v) => { activeValue = v ?? '' }}
       >
-        <option value="">Select...</option>
-        {#each currentAction.options as opt}
-          <option value={opt.value}>{opt.label}</option>
-        {/each}
-      </select>
+        <SelectTrigger size="sm" class="w-32">
+          <span>{currentAction.options.find((o) => o.value === activeValue)?.label ?? 'Select...'}</span>
+        </SelectTrigger>
+        <SelectContent>
+          {#each currentAction.options as opt}
+            <SelectItem value={opt.value} label={opt.label} />
+          {/each}
+        </SelectContent>
+      </Select>
 
       {#if activeValue}
-        <button
+        <Button
           onclick={handleApplyClick}
           disabled={isPending}
-          class="rounded-lg bg-primary text-primary-foreground px-3 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
+          size="sm"
         >
           Apply
-        </button>
+        </Button>
       {/if}
     {/if}
   </div>
 
-  {#if showConfirm}
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
-      <div class="w-full max-w-sm rounded-xl border border-border bg-card p-6">
-        <p class="mb-4 text-sm">
-          {currentAction?.label} to <strong>{currentAction?.options.find((o) => o.value === activeValue)?.label}</strong> for <strong>{selectedCount}</strong> {entityLabel}{selectedCount > 1 ? 's' : ''}?
-        </p>
-        <div class="flex justify-end gap-2">
-          <button onclick={handleCancel} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">Cancel</button>
-          <button
-            onclick={handleConfirm}
-            disabled={isPending}
-            class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-          >
-            {isPending ? 'Applying...' : 'Confirm'}
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
+  <Dialog bind:open={showConfirm}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Confirm Bulk Action</DialogTitle>
+        <DialogDescription>This will apply the selected action to {selectedCount} item(s). This cannot be undone.</DialogDescription>
+      </DialogHeader>
+      <p class="text-sm">
+        {currentAction?.label} to <strong>{currentAction?.options.find((o) => o.value === activeValue)?.label}</strong> for <strong>{selectedCount}</strong> {entityLabel}{selectedCount > 1 ? 's' : ''}?
+      </p>
+      <DialogFooter>
+        <Button variant="outline" onclick={handleCancel}>Cancel</Button>
+        <Button
+          onclick={handleConfirm}
+          disabled={isPending}
+        >
+          {isPending ? 'Applying...' : 'Confirm'}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 {/if}

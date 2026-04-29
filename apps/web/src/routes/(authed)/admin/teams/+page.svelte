@@ -1,5 +1,6 @@
 <script lang="ts">
   import { teamsQuery } from '$lib/queries/teams'
+  import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Button } from '@coms-portal/ui/primitives'
 
   const query = teamsQuery()
 </script>
@@ -7,7 +8,7 @@
 <div class="p-8">
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold">Teams</h1>
-    <a href="/admin/teams/new" class="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90">New Team</a>
+    <Button href="/admin/teams/new">New Team</Button>
   </div>
 
   {#if $query.isLoading}
@@ -17,28 +18,28 @@
       {/each}
     </div>
   {:else if $query.data}
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b border-border text-left text-xs text-muted-foreground">
-          <th class="pb-2 font-medium">Name</th>
-          <th class="pb-2 font-medium">Description</th>
-          <th class="pb-2 font-medium">Members</th>
-          <th class="pb-2 font-medium">Created</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Name</TableHead>
+          <TableHead>Description</TableHead>
+          <TableHead>Members</TableHead>
+          <TableHead>Created</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {#each $query.data as team}
-          <tr class="border-b border-border/50 hover:bg-accent">
-            <td class="py-2">
+          <TableRow>
+            <TableCell>
               <a href="/admin/teams/{team.id}" class="text-primary hover:text-primary/80">{team.name}</a>
-            </td>
-            <td class="py-2 text-muted-foreground">{team.description ?? '-'}</td>
-            <td class="py-2 text-muted-foreground">{team.memberCount ?? 0}</td>
-            <td class="py-2 text-muted-foreground">{new Date(team.createdAt).toLocaleDateString()}</td>
-          </tr>
+            </TableCell>
+            <TableCell class="text-muted-foreground">{team.description ?? '-'}</TableCell>
+            <TableCell class="text-muted-foreground">{team.memberCount ?? 0}</TableCell>
+            <TableCell class="text-muted-foreground">{new Date(team.createdAt).toLocaleDateString()}</TableCell>
+          </TableRow>
         {/each}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
     {#if $query.data.length === 0}
       <p class="mt-4 text-sm text-muted-foreground">No teams yet.</p>
     {/if}

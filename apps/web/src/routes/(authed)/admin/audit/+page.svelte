@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createQuery } from '@tanstack/svelte-query'
   import { api } from '$lib/api'
+  import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Button } from '@coms-portal/ui/primitives'
 
   let page = $state(1)
   const limit = 20
@@ -32,37 +33,37 @@
       {/each}
     </div>
   {:else if $query.data}
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b border-border text-left text-xs text-muted-foreground">
-          <th class="pb-2 font-medium">Action</th>
-          <th class="pb-2 font-medium">Target Type</th>
-          <th class="pb-2 font-medium">Target ID</th>
-          <th class="pb-2 font-medium">Actor</th>
-          <th class="pb-2 font-medium">Timestamp</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Action</TableHead>
+          <TableHead>Target Type</TableHead>
+          <TableHead>Target ID</TableHead>
+          <TableHead>Actor</TableHead>
+          <TableHead>Timestamp</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {#each ($query.data.entries ?? $query.data) as entry}
-          <tr class="border-b border-border/50 hover:bg-accent">
-            <td class="py-2">
+          <TableRow>
+            <TableCell>
               <span class="rounded-full bg-muted px-2 py-0.5 text-xs font-mono">{entry.action}</span>
-            </td>
-            <td class="py-2 text-muted-foreground">{entry.targetType ?? '-'}</td>
-            <td class="py-2 font-mono text-xs text-muted-foreground">{entry.targetId ?? '-'}</td>
-            <td class="py-2">
+            </TableCell>
+            <TableCell class="text-muted-foreground">{entry.targetType ?? '-'}</TableCell>
+            <TableCell class="font-mono text-xs text-muted-foreground">{entry.targetId ?? '-'}</TableCell>
+            <TableCell>
               <p class="text-sm">{entry.actor?.name ?? '-'}</p>
               {#if entry.actor?.email}
                 <p class="text-xs text-muted-foreground">{entry.actor.email}</p>
               {/if}
-            </td>
-            <td class="py-2 text-xs text-muted-foreground">
+            </TableCell>
+            <TableCell class="text-xs text-muted-foreground">
               {new Date(entry.createdAt).toLocaleString()}
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         {/each}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
 
     {#if ($query.data.entries ?? $query.data).length === 0}
       <p class="mt-4 text-sm text-muted-foreground">No audit entries found.</p>
@@ -74,22 +75,24 @@
       {:else}
         <span></span>
       {/if}
-      <div class="flex gap-2">
-        <button
+      <div class="flex gap-2 items-center">
+        <Button
+          variant="ghost"
+          size="sm"
           onclick={() => page = Math.max(1, page - 1)}
           disabled={page === 1}
-          class="rounded px-2 py-1 hover:bg-accent disabled:opacity-30"
         >
           Prev
-        </button>
+        </Button>
         <span>Page {page}</span>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onclick={() => page++}
           disabled={($query.data.entries ?? $query.data).length < limit}
-          class="rounded px-2 py-1 hover:bg-accent disabled:opacity-30"
         >
           Next
-        </button>
+        </Button>
       </div>
     </div>
   {:else if $query.error}

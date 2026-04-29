@@ -2,6 +2,24 @@
   import { createAliasQueueQuery, createResolveAliasMutation, createRejectAliasMutation } from '$lib/queries/aliases'
   import { adminApi } from '$lib/admin-api'
   import type { AliasQueueItem } from '$lib/admin-api'
+  import {
+    Button,
+    Input,
+    Textarea,
+    Card,
+    Table,
+    TableHeader,
+    TableBody,
+    TableRow,
+    TableHead,
+    TableCell,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+  } from '@coms-portal/ui/primitives'
 
   const query = createAliasQueueQuery()
   const resolveMutation = createResolveAliasMutation()
@@ -9,6 +27,7 @@
 
   // Resolve modal state
   let resolveItem = $state<AliasQueueItem | null>(null)
+  let resolveOpen = $state(false)
   let resolveSearch = $state('')
   let resolveResults = $state<Array<{ id: string; name: string; email: string }>>([])
   let selectedIdentityId = $state<string | null>(null)
@@ -19,6 +38,7 @@
 
   // Reject modal state
   let rejectItem = $state<AliasQueueItem | null>(null)
+  let rejectOpen = $state(false)
   let rejectReason = $state('')
   let rejectError = $state<string | null>(null)
   let rejectSuccess = $state<string | null>(null)
@@ -37,9 +57,11 @@
       selectedIdentityId = null
       selectedIdentityName = null
     }
+    resolveOpen = true
   }
 
   function closeResolveModal() {
+    resolveOpen = false
     resolveItem = null
     resolveSearch = ''
     resolveResults = []
@@ -54,9 +76,11 @@
     rejectReason = ''
     rejectError = null
     rejectSuccess = null
+    rejectOpen = true
   }
 
   function closeRejectModal() {
+    rejectOpen = false
     rejectItem = null
     rejectReason = ''
     rejectError = null
@@ -143,55 +167,56 @@
     {:else}
       <div class="space-y-6">
         {#each $query.data.groups as group}
-          <div class="rounded-lg border border-border bg-card">
+          <Card>
             <div class="border-b border-border px-4 py-3">
               <span class="font-medium">"{group.rawNameNormalized}"</span>
               <span class="ml-2 text-sm text-muted-foreground">
                 — {group.count} pending, oldest {formatRelativeDate(group.oldestAt)}
               </span>
             </div>
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b border-border/50 text-left text-xs text-muted-foreground">
-                  <th class="px-4 pb-2 pt-3 font-medium">Raw Name</th>
-                  <th class="px-4 pb-2 pt-3 font-medium">Source</th>
-                  <th class="px-4 pb-2 pt-3 font-medium">Context</th>
-                  <th class="px-4 pb-2 pt-3 font-medium">Received</th>
-                  <th class="px-4 pb-2 pt-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Raw Name</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Context</TableHead>
+                  <TableHead>Received</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {#each group.items as item}
-                  <tr class="border-b border-border/30 hover:bg-accent">
-                    <td class="px-4 py-2 font-medium">{item.rawName}</td>
-                    <td class="px-4 py-2 text-muted-foreground">{item.source}</td>
-                    <td class="px-4 py-2 text-muted-foreground text-xs">
+                  <TableRow>
+                    <TableCell class="font-medium">{item.rawName}</TableCell>
+                    <TableCell class="text-muted-foreground">{item.source}</TableCell>
+                    <TableCell class="text-muted-foreground text-xs">
                       {Object.keys(item.context).length > 0 ? JSON.stringify(item.context) : '—'}
-                    </td>
-                    <td class="px-4 py-2 text-muted-foreground">{formatRelativeDate(item.createdAt)}</td>
-                    <td class="px-4 py-2">
+                    </TableCell>
+                    <TableCell class="text-muted-foreground">{formatRelativeDate(item.createdAt)}</TableCell>
+                    <TableCell>
                       <div class="flex gap-2">
-                        <button
+                        <Button
                           type="button"
+                          size="sm"
                           onclick={() => openResolveModal(item)}
-                          class="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-white hover:bg-primary/80"
                         >
                           Resolve
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           type="button"
+                          size="sm"
+                          variant="destructive"
                           onclick={() => openRejectModal(item)}
-                          class="rounded-md border border-destructive px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive hover:text-white"
                         >
                           Reject
-                        </button>
+                        </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 {/each}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </Card>
         {/each}
       </div>
     {/if}
@@ -199,124 +224,111 @@
 </div>
 
 <!-- Resolve Modal -->
-{#if resolveItem}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-    <div class="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
-      <h2 class="mb-1 text-base font-semibold">Resolve alias collision</h2>
-      <p class="mb-4 text-sm text-muted-foreground">
-        Attach <span class="font-medium text-foreground">"{resolveItem.rawName}"</span> to an existing identity.
+<Dialog bind:open={resolveOpen}>
+  <DialogContent class="max-w-md">
+    <DialogHeader>
+      <DialogTitle>Resolve alias collision</DialogTitle>
+      <DialogDescription>
+        Attach <span class="font-medium text-foreground">"{resolveItem?.rawName}"</span> to an existing identity.
+      </DialogDescription>
+    </DialogHeader>
+
+    {#if resolveItem?.suggestedIdentityUserId}
+      <p class="text-xs text-status-active">
+        A suggested identity is pre-selected. Confirm or pick a different one below.
       </p>
+    {/if}
 
-      {#if resolveItem.suggestedIdentityUserId}
-        <p class="mb-3 text-xs text-status-active">
-          A suggested identity is pre-selected. Confirm or pick a different one below.
-        </p>
-      {/if}
-
-      {#if selectedIdentityName}
-        <div class="mb-3 rounded-md border border-border bg-muted px-3 py-2 text-sm">
-          Selected: <span class="font-medium text-foreground">{selectedIdentityName}</span>
-          <button
-            type="button"
-            onclick={() => { selectedIdentityId = null; selectedIdentityName = null }}
-            class="ml-2 text-xs text-muted-foreground hover:text-destructive"
-          >clear</button>
-        </div>
-      {/if}
-
-      <input
-        type="text"
-        placeholder="Search by name or email…"
-        bind:value={resolveSearch}
-        oninput={onSearchInput}
-        class="mb-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
-      />
-
-      {#if resolveResults.length > 0}
-        <ul class="mb-3 max-h-40 overflow-y-auto rounded-lg border border-border bg-background">
-          {#each resolveResults.slice(0, 5) as user}
-            <li>
-              <button
-                type="button"
-                onclick={() => selectIdentity(user.id, user.name, user.email)}
-                class="flex w-full flex-col px-3 py-2 text-left hover:bg-accent"
-              >
-                <span class="text-sm font-medium">{user.name}</span>
-                <span class="text-xs text-muted-foreground">{user.email}</span>
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-
-      {#if resolveError}
-        <p class="mb-2 text-sm text-destructive">{resolveError}</p>
-      {/if}
-      {#if resolveSuccess}
-        <p class="mb-2 text-sm text-status-active">{resolveSuccess}</p>
-      {/if}
-
-      <div class="flex justify-end gap-2 pt-2">
+    {#if selectedIdentityName}
+      <div class="rounded-md border border-border bg-muted px-3 py-2 text-sm">
+        Selected: <span class="font-medium text-foreground">{selectedIdentityName}</span>
         <button
           type="button"
-          onclick={closeResolveModal}
-          class="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onclick={submitResolve}
-          disabled={!selectedIdentityId || $resolveMutation.isPending}
-          class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary/80 disabled:opacity-50"
-        >
-          {$resolveMutation.isPending ? 'Resolving…' : 'Confirm Resolve'}
-        </button>
+          onclick={() => { selectedIdentityId = null; selectedIdentityName = null }}
+          class="ml-2 text-xs text-muted-foreground hover:text-destructive"
+        >clear</button>
       </div>
-    </div>
-  </div>
-{/if}
+    {/if}
+
+    <Input
+      type="text"
+      placeholder="Search by name or email…"
+      bind:value={resolveSearch}
+      oninput={onSearchInput}
+      class="w-full"
+    />
+
+    {#if resolveResults.length > 0}
+      <ul class="max-h-40 overflow-y-auto rounded-lg border border-border bg-background">
+        {#each resolveResults.slice(0, 5) as user}
+          <li>
+            <button
+              type="button"
+              onclick={() => selectIdentity(user.id, user.name, user.email)}
+              class="flex w-full flex-col px-3 py-2 text-left hover:bg-accent"
+            >
+              <span class="text-sm font-medium">{user.name}</span>
+              <span class="text-xs text-muted-foreground">{user.email}</span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+
+    {#if resolveError}
+      <p class="text-sm text-destructive">{resolveError}</p>
+    {/if}
+    {#if resolveSuccess}
+      <p class="text-sm text-status-active">{resolveSuccess}</p>
+    {/if}
+
+    <DialogFooter>
+      <Button type="button" variant="outline" onclick={closeResolveModal}>Cancel</Button>
+      <Button
+        type="button"
+        onclick={submitResolve}
+        disabled={!selectedIdentityId || $resolveMutation.isPending}
+      >
+        {$resolveMutation.isPending ? 'Resolving…' : 'Confirm Resolve'}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
 
 <!-- Reject Modal -->
-{#if rejectItem}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-    <div class="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
-      <h2 class="mb-1 text-base font-semibold">Reject alias collision</h2>
-      <p class="mb-4 text-sm text-muted-foreground">
-        Reject <span class="font-medium text-foreground">"{rejectItem.rawName}"</span> — provide a reason for audit trail.
-      </p>
+<Dialog bind:open={rejectOpen}>
+  <DialogContent class="max-w-md">
+    <DialogHeader>
+      <DialogTitle>Reject alias collision</DialogTitle>
+      <DialogDescription>
+        Reject <span class="font-medium text-foreground">"{rejectItem?.rawName}"</span> — provide a reason for audit trail.
+      </DialogDescription>
+    </DialogHeader>
 
-      <textarea
-        placeholder="Reason for rejection…"
-        bind:value={rejectReason}
-        rows={3}
-        class="mb-3 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
-      ></textarea>
+    <Textarea
+      placeholder="Reason for rejection…"
+      bind:value={rejectReason}
+      rows={3}
+      class="w-full"
+    />
 
-      {#if rejectError}
-        <p class="mb-2 text-sm text-destructive">{rejectError}</p>
-      {/if}
-      {#if rejectSuccess}
-        <p class="mb-2 text-sm text-status-active">{rejectSuccess}</p>
-      {/if}
+    {#if rejectError}
+      <p class="text-sm text-destructive">{rejectError}</p>
+    {/if}
+    {#if rejectSuccess}
+      <p class="text-sm text-status-active">{rejectSuccess}</p>
+    {/if}
 
-      <div class="flex justify-end gap-2">
-        <button
-          type="button"
-          onclick={closeRejectModal}
-          class="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onclick={submitReject}
-          disabled={!rejectReason.trim() || $rejectMutation.isPending}
-          class="rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-white hover:bg-destructive/80 disabled:opacity-50"
-        >
-          {$rejectMutation.isPending ? 'Rejecting…' : 'Confirm Reject'}
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
+    <DialogFooter>
+      <Button type="button" variant="outline" onclick={closeRejectModal}>Cancel</Button>
+      <Button
+        type="button"
+        variant="destructive"
+        onclick={submitReject}
+        disabled={!rejectReason.trim() || $rejectMutation.isPending}
+      >
+        {$rejectMutation.isPending ? 'Rejecting…' : 'Confirm Reject'}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>

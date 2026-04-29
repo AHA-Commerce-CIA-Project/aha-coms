@@ -14,6 +14,33 @@
     type PortalHandoffMode,
   } from '@coms-portal/shared'
   import { PUBLIC_PORTAL_ORIGIN } from '$lib/config'
+  import {
+    Button,
+    Input,
+    Label,
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+    CardFooter,
+    Table,
+    TableHeader,
+    TableBody,
+    TableRow,
+    TableHead,
+    TableCell,
+    Badge,
+    Select,
+    SelectTrigger,
+    SelectContent,
+    SelectItem,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+  } from '@coms-portal/ui/primitives'
 
   const query = appsQuery()
   const queryClient = useQueryClient()
@@ -82,147 +109,164 @@
 <div class="p-8">
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold">App Registry</h1>
-    {#if !registering}
-      <button
-        onclick={openRegister}
-        class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90"
-      >
-        Register App
-      </button>
-    {/if}
+    <Button onclick={openRegister} size="sm">Register App</Button>
   </div>
 
-  {#if registering}
-    <form onsubmit={handleRegister} class="mb-6 max-w-lg space-y-3 rounded-xl border border-border bg-card p-6">
-      <h2 class="text-sm font-semibold">Register New App</h2>
-      <div>
-        <label for="reg-name" class="mb-1 block text-xs text-muted-foreground">Name</label>
-        <input
-          id="reg-name"
-          type="text"
-          bind:value={regName}
-          required
-          class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
-        />
-      </div>
-      <div>
-        <label for="reg-slug" class="mb-1 block text-xs text-muted-foreground">Slug</label>
-        <input
-          id="reg-slug"
-          type="text"
-          bind:value={regSlug}
-          required
-          placeholder="e.g. my-app"
-          class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
-        />
-      </div>
-      <div>
-        <label for="reg-url" class="mb-1 block text-xs text-muted-foreground">URL</label>
-        <input
-          id="reg-url"
-          type="url"
-          bind:value={regUrl}
-          required
-          placeholder="https://example.com"
-          class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
-        />
-      </div>
-      <div>
-        <label for="reg-base-path" class="mb-1 block text-xs text-muted-foreground">Base Path</label>
-        <input
-          id="reg-base-path"
-          type="text"
-          bind:value={regBasePath}
-          required
-          placeholder="e.g. /app"
-          class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
-        />
-      </div>
-      <div class="grid gap-3 sm:grid-cols-2">
+  <!-- Register Modal -->
+  <Dialog bind:open={registering}>
+    <DialogContent class="max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Register New App</DialogTitle>
+        <DialogDescription class="sr-only">Register a new application in the COMS app registry.</DialogDescription>
+      </DialogHeader>
+      <form onsubmit={handleRegister} class="space-y-3">
         <div>
-          <label for="reg-adapter-type" class="mb-1 block text-xs text-muted-foreground">Adapter Type</label>
-          <select
-            id="reg-adapter-type"
-            bind:value={regAdapterType}
-            class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
-          >
-            {#each PORTAL_ADAPTER_TYPES as adapterType}
-              <option value={adapterType}>{adapterType}</option>
-            {/each}
-          </select>
-        </div>
-        <div>
-          <label for="reg-transport-mode" class="mb-1 block text-xs text-muted-foreground">Transport</label>
-          <select
-            id="reg-transport-mode"
-            bind:value={regTransportMode}
-            class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
-          >
-            <option value="portable_token">portal-brokered token</option>
-            <option value="same_host_cookie">same-host cookie</option>
-          </select>
-        </div>
-      </div>
-      <div class="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label for="reg-handoff-mode" class="mb-1 block text-xs text-muted-foreground">Handoff Mode</label>
-          <select
-            id="reg-handoff-mode"
-            bind:value={regHandoffMode}
-            class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
-          >
-            {#each PORTAL_HANDOFF_MODES as handoffMode}
-              <option value={handoffMode}>{handoffMode}</option>
-            {/each}
-          </select>
-        </div>
-        <div>
-          <label for="reg-compliance-status" class="mb-1 block text-xs text-muted-foreground">Compliance</label>
-          <select
-            id="reg-compliance-status"
-            bind:value={regComplianceStatus}
-            class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
-          >
-            {#each PORTAL_COMPLIANCE_STATUSES as complianceStatus}
-              <option value={complianceStatus}>{complianceStatus}</option>
-            {/each}
-          </select>
-        </div>
-      </div>
-      <div class="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label for="reg-broker-origin" class="mb-1 block text-xs text-muted-foreground">Broker Origin</label>
-          <input
-            id="reg-broker-origin"
-            type="url"
-            bind:value={regBrokerOrigin}
-            disabled={regTransportMode !== 'portable_token'}
-            class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label for="reg-manifest-path" class="mb-1 block text-xs text-muted-foreground">Manifest Path</label>
-          <input
-            id="reg-manifest-path"
+          <Label for="reg-name" class="mb-1 block text-xs text-muted-foreground">Name</Label>
+          <Input
+            id="reg-name"
             type="text"
-            bind:value={regManifestPath}
-            class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-ring focus:outline-none"
+            bind:value={regName}
+            required
+            class="w-full"
           />
         </div>
-      </div>
-      {#if regError}
-        <p class="text-xs text-destructive">{regError}</p>
-      {/if}
-      <div class="flex gap-2">
-        <button type="submit" disabled={regPending} class="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
-          {regPending ? 'Registering…' : 'Register'}
-        </button>
-        <button type="button" onclick={() => registering = false} class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent">
-          Cancel
-        </button>
-      </div>
-    </form>
-  {/if}
+        <div>
+          <Label for="reg-slug" class="mb-1 block text-xs text-muted-foreground">Slug</Label>
+          <Input
+            id="reg-slug"
+            type="text"
+            bind:value={regSlug}
+            required
+            placeholder="e.g. my-app"
+            class="w-full"
+          />
+        </div>
+        <div>
+          <Label for="reg-url" class="mb-1 block text-xs text-muted-foreground">URL</Label>
+          <Input
+            id="reg-url"
+            type="url"
+            bind:value={regUrl}
+            required
+            placeholder="https://example.com"
+            class="w-full"
+          />
+        </div>
+        <div>
+          <Label for="reg-base-path" class="mb-1 block text-xs text-muted-foreground">Base Path</Label>
+          <Input
+            id="reg-base-path"
+            type="text"
+            bind:value={regBasePath}
+            required
+            placeholder="e.g. /app"
+            class="w-full"
+          />
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label class="mb-1 block text-xs text-muted-foreground">Adapter Type</Label>
+            <Select
+              type="single"
+              value={regAdapterType}
+              onValueChange={(v) => { if (v) regAdapterType = v as PortalAdapterType }}
+            >
+              <SelectTrigger class="w-full">
+                <span>{regAdapterType}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {#each PORTAL_ADAPTER_TYPES as adapterType}
+                  <SelectItem value={adapterType} label={adapterType} />
+                {/each}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label class="mb-1 block text-xs text-muted-foreground">Transport</Label>
+            <Select
+              type="single"
+              value={regTransportMode}
+              onValueChange={(v) => { if (v) regTransportMode = v as typeof regTransportMode }}
+            >
+              <SelectTrigger class="w-full">
+                <span>{regTransportMode === 'portable_token' ? 'portal-brokered token' : 'same-host cookie'}</span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="portable_token" label="portal-brokered token" />
+                <SelectItem value="same_host_cookie" label="same-host cookie" />
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label class="mb-1 block text-xs text-muted-foreground">Handoff Mode</Label>
+            <Select
+              type="single"
+              value={regHandoffMode}
+              onValueChange={(v) => { if (v) regHandoffMode = v as PortalHandoffMode }}
+            >
+              <SelectTrigger class="w-full">
+                <span>{regHandoffMode}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {#each PORTAL_HANDOFF_MODES as handoffMode}
+                  <SelectItem value={handoffMode} label={handoffMode} />
+                {/each}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label class="mb-1 block text-xs text-muted-foreground">Compliance</Label>
+            <Select
+              type="single"
+              value={regComplianceStatus}
+              onValueChange={(v) => { if (v) regComplianceStatus = v as PortalComplianceStatus }}
+            >
+              <SelectTrigger class="w-full">
+                <span>{regComplianceStatus}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {#each PORTAL_COMPLIANCE_STATUSES as complianceStatus}
+                  <SelectItem value={complianceStatus} label={complianceStatus} />
+                {/each}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label for="reg-broker-origin" class="mb-1 block text-xs text-muted-foreground">Broker Origin</Label>
+            <Input
+              id="reg-broker-origin"
+              type="url"
+              bind:value={regBrokerOrigin}
+              disabled={regTransportMode !== 'portable_token'}
+              class="w-full"
+            />
+          </div>
+          <div>
+            <Label for="reg-manifest-path" class="mb-1 block text-xs text-muted-foreground">Manifest Path</Label>
+            <Input
+              id="reg-manifest-path"
+              type="text"
+              bind:value={regManifestPath}
+              class="w-full"
+            />
+          </div>
+        </div>
+        {#if regError}
+          <p class="text-xs text-destructive">{regError}</p>
+        {/if}
+        <DialogFooter>
+          <Button type="button" variant="outline" onclick={() => (registering = false)}>Cancel</Button>
+          <Button type="submit" disabled={regPending}>
+            {regPending ? 'Registering…' : 'Register'}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>
 
   {#if $query.isLoading}
     <div class="animate-pulse space-y-2">
@@ -231,40 +275,36 @@
       {/each}
     </div>
   {:else if $query.data}
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b border-border text-left text-xs text-muted-foreground">
-          <th class="pb-2 font-medium">Name</th>
-          <th class="pb-2 font-medium">Slug</th>
-          <th class="pb-2 font-medium">Transport</th>
-          <th class="pb-2 font-medium">Compliance</th>
-          <th class="pb-2 font-medium">URL</th>
-          <th class="pb-2 font-medium">Status</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Name</TableHead>
+          <TableHead>Slug</TableHead>
+          <TableHead>Transport</TableHead>
+          <TableHead>Compliance</TableHead>
+          <TableHead>URL</TableHead>
+          <TableHead>Status</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {#each $query.data as app}
-          <tr class="border-b border-border/50 hover:bg-accent">
-            <td class="py-2">
+          <TableRow>
+            <TableCell>
               <a href="/admin/apps/{app.id}" class="text-primary hover:text-primary/80">{app.name}</a>
-            </td>
-            <td class="py-2 text-muted-foreground">{app.slug}</td>
-            <td class="py-2 text-muted-foreground">{app.transportMode}</td>
-            <td class="py-2 text-muted-foreground">{app.complianceStatus}</td>
-            <td class="py-2 text-muted-foreground">{app.url}</td>
-            <td class="py-2">
-              <span
-                class="text-xs"
-                class:text-status-active={app.status === 'active'}
-                class:text-destructive={app.status !== 'active'}
-              >
+            </TableCell>
+            <TableCell class="text-muted-foreground">{app.slug}</TableCell>
+            <TableCell class="text-muted-foreground">{app.transportMode}</TableCell>
+            <TableCell class="text-muted-foreground">{app.complianceStatus}</TableCell>
+            <TableCell class="text-muted-foreground">{app.url}</TableCell>
+            <TableCell>
+              <Badge variant={app.status === 'active' ? 'default' : 'destructive'}>
                 {app.status}
-              </span>
-            </td>
-          </tr>
+              </Badge>
+            </TableCell>
+          </TableRow>
         {/each}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
     {#if $query.data.length === 0}
       <p class="mt-4 text-sm text-muted-foreground">No apps registered.</p>
     {/if}

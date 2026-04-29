@@ -5,6 +5,17 @@
   import { adminApi } from '$lib/admin-api'
   import { useQueryClient } from '@tanstack/svelte-query'
   import { PORTAL_ROLES, PORTAL_ROLE_LABELS, type PortalRole } from '@coms-portal/shared'
+  import {
+    Button,
+    Input,
+    Badge,
+    Card,
+    CardContent,
+    Select,
+    SelectTrigger,
+    SelectContent,
+    SelectItem,
+  } from '@coms-portal/ui/primitives'
 
   const ROLES = PORTAL_ROLES
 
@@ -282,475 +293,525 @@
       </div>
       <div class="flex gap-2">
         {#if emp.provisioningStatus === 'ready'}
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onclick={handleResetPassword}
             disabled={resetPending}
-            class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
           >
             {resetPending ? 'Sending…' : 'Reset Password'}
-          </button>
+          </Button>
         {/if}
         {#if confirmingDeactivate}
           <div class="flex items-center gap-2">
-            <button
+            <Button
+              variant="destructive"
+              size="sm"
               onclick={handleDeactivate}
               disabled={deletePending}
-              class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
             >
               {deletePending ? 'Deactivating…' : 'Confirm Deactivate'}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onclick={() => { confirmingDeactivate = false; deleteError = null }}
-              class="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-accent"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         {:else}
-          <button
+          <Button
+            variant="destructive"
+            size="sm"
             onclick={() => { confirmingDeactivate = true; deleteError = null }}
-            class="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10"
           >
             Deactivate
-          </button>
+          </Button>
         {/if}
       </div>
     </div>
 
-    <div class="max-w-lg space-y-3 rounded-xl border border-border bg-card p-6">
-      <!-- Role -->
-      <div class="flex items-center justify-between border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Role</span>
-        <div class="flex items-center gap-2">
-          <select
-            bind:value={selectedRole}
-            class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
-          >
-            {#each ROLES as role}
-              <option value={role}>{PORTAL_ROLE_LABELS[role]}</option>
-            {/each}
-          </select>
-          {#if dirty}
-            <button
-              onclick={handleSaveRole}
-              disabled={$mutation.isPending}
-              class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
+    <Card class="max-w-lg">
+      <CardContent class="space-y-3 pt-6">
+        <!-- Role -->
+        <div class="flex items-center justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Role</span>
+          <div class="flex items-center gap-2">
+            <Select
+              type="single"
+              value={selectedRole ?? undefined}
+              onValueChange={(v) => { if (v) selectedRole = v as PortalRole }}
             >
-              {$mutation.isPending ? 'Saving...' : 'Save'}
-            </button>
-          {/if}
+              <SelectTrigger size="sm" class="w-32">
+                <span>{selectedRole ? PORTAL_ROLE_LABELS[selectedRole] : ''}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {#each ROLES as role}
+                  <SelectItem value={role} label={PORTAL_ROLE_LABELS[role]} />
+                {/each}
+              </SelectContent>
+            </Select>
+            {#if dirty}
+              <Button
+                size="sm"
+                onclick={handleSaveRole}
+                disabled={$mutation.isPending}
+              >
+                {$mutation.isPending ? 'Saving...' : 'Save'}
+              </Button>
+            {/if}
+          </div>
         </div>
-      </div>
 
-      <!-- Department (read-only) -->
-      <div class="flex justify-between border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Department</span>
-        <span class="text-sm">{emp.department ?? '-'}</span>
-      </div>
-
-      <!-- Position (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Position</span>
-        <div class="text-right">
-          {#if editingPosition}
-            <div class="flex flex-col items-end gap-2">
-              <input
-                type="text"
-                bind:value={positionValue}
-                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
-              />
-              {#if positionError}
-                <p class="text-xs text-destructive">{positionError}</p>
-              {/if}
-              <div class="flex gap-2">
-                <button
-                  onclick={handleSavePosition}
-                  disabled={positionPending}
-                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {positionPending ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onclick={() => { editingPosition = false; positionError = null }}
-                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {:else}
-            <div class="flex items-center gap-2">
-              <span class="text-sm">{emp.position ?? '-'}</span>
-              <button
-                onclick={() => { editingPosition = true; positionValue = emp.position ?? '' }}
-                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
-              >
-                Edit
-              </button>
-            </div>
-          {/if}
+        <!-- Department (read-only) -->
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Department</span>
+          <span class="text-sm">{emp.department ?? '-'}</span>
         </div>
-      </div>
 
-      <!-- Phone / WA (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Phone (WA)</span>
-        <div class="text-right">
-          {#if editingPhone}
-            <div class="flex flex-col items-end gap-2">
-              <input
-                type="text"
-                bind:value={phoneValue}
-                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
-              />
-              {#if phoneError}
-                <p class="text-xs text-destructive">{phoneError}</p>
-              {/if}
-              <div class="flex gap-2">
-                <button
-                  onclick={handleSavePhone}
-                  disabled={phonePending}
-                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {phonePending ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onclick={() => { editingPhone = false; phoneError = null }}
-                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {:else}
-            <div class="flex items-center gap-2">
-              <span class="text-sm">{emp.phone ?? '-'}</span>
-              <button
-                onclick={() => { editingPhone = true; phoneValue = emp.phone ?? '' }}
-                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
-              >
-                Edit
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Birth Date (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Birth Date</span>
-        <div class="text-right">
-          {#if editingBirthDate}
-            <div class="flex flex-col items-end gap-2">
-              <input
-                type="date"
-                bind:value={birthDateValue}
-                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
-              />
-              {#if birthDateError}
-                <p class="text-xs text-destructive">{birthDateError}</p>
-              {/if}
-              <div class="flex gap-2">
-                <button
-                  onclick={handleSaveBirthDate}
-                  disabled={birthDatePending}
-                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {birthDatePending ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onclick={() => { editingBirthDate = false; birthDateError = null }}
-                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {:else}
-            <div class="flex items-center gap-2">
-              <span class="text-sm">{(emp as any).birthDate ?? '-'}</span>
-              <button
-                onclick={() => { editingBirthDate = true; birthDateValue = (emp as any).birthDate ?? '' }}
-                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
-              >
-                Edit
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Personal Email (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Personal Email</span>
-        <div class="text-right">
-          {#if editingPersonalEmail}
-            <div class="flex flex-col items-end gap-2">
-              <input
-                type="email"
-                bind:value={personalEmailValue}
-                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
-              />
-              {#if personalEmailError}
-                <p class="text-xs text-destructive">{personalEmailError}</p>
-              {/if}
-              <div class="flex gap-2">
-                <button
-                  onclick={handleSavePersonalEmail}
-                  disabled={personalEmailPending}
-                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {personalEmailPending ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onclick={() => { editingPersonalEmail = false; personalEmailError = null }}
-                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {:else}
-            <div class="flex items-center gap-2">
-              <span class="text-sm">{(emp as any).personalEmail ?? '-'}</span>
-              <button
-                onclick={() => { editingPersonalEmail = true; personalEmailValue = (emp as any).personalEmail ?? '' }}
-                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
-              >
-                Edit
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Leader (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Leader</span>
-        <div class="text-right">
-          {#if editingLeader}
-            <div class="flex flex-col items-end gap-2">
-              <input
-                type="text"
-                bind:value={leaderValue}
-                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
-              />
-              {#if leaderError}
-                <p class="text-xs text-destructive">{leaderError}</p>
-              {/if}
-              <div class="flex gap-2">
-                <button
-                  onclick={handleSaveLeader}
-                  disabled={leaderPending}
-                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {leaderPending ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onclick={() => { editingLeader = false; leaderError = null }}
-                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {:else}
-            <div class="flex items-center gap-2">
-              <span class="text-sm">{(emp as any).leaderName ?? '-'}</span>
-              <button
-                onclick={() => { editingLeader = true; leaderValue = (emp as any).leaderName ?? '' }}
-                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
-              >
-                Edit
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Team (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Team</span>
-        <div class="text-right">
-          {#if editingTeam}
-            <div class="flex flex-col items-end gap-2">
-              <select
-                bind:value={teamIdValue}
-                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
-              >
-                <option value="">No team</option>
-                {#if $teams.data}
-                  {#each $teams.data as team}
-                    <option value={team.id}>{team.name}</option>
-                  {/each}
-                {/if}
-              </select>
-              {#if teamError}
-                <p class="text-xs text-destructive">{teamError}</p>
-              {/if}
-              <div class="flex gap-2">
-                <button
-                  onclick={handleSaveTeam}
-                  disabled={teamPending}
-                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {teamPending ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onclick={() => { editingTeam = false; teamError = null }}
-                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {:else}
-            <div class="flex items-center gap-2">
-              <span class="text-sm">
-                {#if (emp as any).teamId && $teams.data}
-                  {$teams.data.find((t) => t.id === (emp as any).teamId)?.name ?? 'Unknown team'}
-                {:else}
-                  No team
-                {/if}
-              </span>
-              <button
-                onclick={() => { editingTeam = true; teamIdValue = (emp as any).teamId ?? '' }}
-                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
-              >
-                Edit
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Branch (editable) -->
-      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Branch</span>
-        <div class="text-right">
-          {#if editingBranch}
-            <div class="flex flex-col items-end gap-2">
-              <select
-                bind:value={branchValue}
-                class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
-              >
-                <option value="">Not set</option>
-                <option value="Indonesia">Indonesia</option>
-                <option value="Thailand">Thailand</option>
-              </select>
-              {#if branchError}
-                <p class="text-xs text-destructive">{branchError}</p>
-              {/if}
-              <div class="flex gap-2">
-                <button
-                  onclick={handleSaveBranch}
-                  disabled={branchPending}
-                  class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {branchPending ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  onclick={() => { editingBranch = false; branchError = null }}
-                  class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {:else}
-            <div class="flex items-center gap-2">
-              <span class="text-sm capitalize">{emp.branch ?? '-'}</span>
-              <button
-                onclick={() => { editingBranch = true; branchValue = (emp.branch as 'Indonesia' | 'Thailand' | '') ?? '' }}
-                class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
-              >
-                Edit
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Status (read-only) -->
-      <div class="flex justify-between border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Status</span>
-        <span class="text-sm" class:text-status-active={emp.status === 'active'} class:text-destructive={emp.status !== 'active'}>{emp.status}</span>
-      </div>
-
-      <!-- Workspace upgrade -->
-      {#if !emp.hasGoogleWorkspace}
+        <!-- Position (editable) -->
         <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Workspace</span>
+          <span class="text-xs text-muted-foreground">Position</span>
           <div class="text-right">
-            {#if editingWorkspace}
+            {#if editingPosition}
               <div class="flex flex-col items-end gap-2">
-                <input
-                  type="email"
-                  bind:value={workspaceEmail}
-                  placeholder="workspace@ahacommerce.net"
-                  class="rounded-lg border border-border bg-muted px-2 py-1 text-sm focus:border-ring focus:outline-none"
+                <Input
+                  type="text"
+                  bind:value={positionValue}
+                  class="rounded-lg"
                 />
-                {#if workspaceError}
-                  <p class="text-xs text-destructive">{workspaceError}</p>
+                {#if positionError}
+                  <p class="text-xs text-destructive">{positionError}</p>
                 {/if}
                 <div class="flex gap-2">
-                  <button
-                    onclick={handleUpgradeWorkspace}
-                    disabled={!workspaceEmail || workspacePending}
-                    class="rounded-lg bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
+                  <Button
+                    size="sm"
+                    onclick={handleSavePosition}
+                    disabled={positionPending}
                   >
-                    {workspacePending ? 'Saving…' : 'Save'}
-                  </button>
-                  <button
-                    onclick={() => { editingWorkspace = false; workspaceEmail = ''; workspaceError = null }}
-                    class="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent"
+                    {positionPending ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() => { editingPosition = false; positionError = null }}
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </div>
             {:else}
               <div class="flex items-center gap-2">
-                <span class="text-sm text-muted-foreground">No workspace account</span>
-                <button
-                  onclick={() => { editingWorkspace = true; workspaceEmail = '' }}
-                  class="rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
+                <span class="text-sm">{emp.position ?? '-'}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => { editingPosition = true; positionValue = emp.position ?? '' }}
                 >
-                  Upgrade
-                </button>
+                  Edit
+                </Button>
               </div>
             {/if}
           </div>
         </div>
-      {/if}
 
-      <!-- Provisioning -->
-      <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
-        <span class="text-xs text-muted-foreground">Provisioning</span>
-        <div class="text-right">
-          <p
-            class="text-sm"
-            class:text-status-active={emp.provisioningStatus === 'ready'}
-            class:text-status-pending={emp.provisioningStatus === 'pending' || emp.provisioningStatus === 'processing'}
-            class:text-destructive={emp.provisioningStatus === 'failed'}
-          >
-            {emp.provisioningStatus}
-          </p>
-          {#if emp.provisioningError}
-            <p class="mt-1 text-xs text-destructive">{emp.provisioningError}</p>
-          {/if}
-          {#if emp.provisioningStatus === 'failed' && emp.status === 'active'}
-            <button
-              onclick={handleRetryProvisioning}
-              disabled={retryProvisioningPending}
-              class="mt-2 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-accent disabled:opacity-50"
-            >
-              {retryProvisioningPending ? 'Retrying…' : 'Retry Provisioning'}
-            </button>
-          {/if}
+        <!-- Phone / WA (editable) -->
+        <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Phone (WA)</span>
+          <div class="text-right">
+            {#if editingPhone}
+              <div class="flex flex-col items-end gap-2">
+                <Input
+                  type="text"
+                  bind:value={phoneValue}
+                  class="rounded-lg"
+                />
+                {#if phoneError}
+                  <p class="text-xs text-destructive">{phoneError}</p>
+                {/if}
+                <div class="flex gap-2">
+                  <Button
+                    size="sm"
+                    onclick={handleSavePhone}
+                    disabled={phonePending}
+                  >
+                    {phonePending ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() => { editingPhone = false; phoneError = null }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            {:else}
+              <div class="flex items-center gap-2">
+                <span class="text-sm">{emp.phone ?? '-'}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => { editingPhone = true; phoneValue = emp.phone ?? '' }}
+                >
+                  Edit
+                </Button>
+              </div>
+            {/if}
+          </div>
         </div>
-      </div>
-    </div>
+
+        <!-- Birth Date (editable) -->
+        <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Birth Date</span>
+          <div class="text-right">
+            {#if editingBirthDate}
+              <div class="flex flex-col items-end gap-2">
+                <Input
+                  type="date"
+                  bind:value={birthDateValue}
+                  class="rounded-lg"
+                />
+                {#if birthDateError}
+                  <p class="text-xs text-destructive">{birthDateError}</p>
+                {/if}
+                <div class="flex gap-2">
+                  <Button
+                    size="sm"
+                    onclick={handleSaveBirthDate}
+                    disabled={birthDatePending}
+                  >
+                    {birthDatePending ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() => { editingBirthDate = false; birthDateError = null }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            {:else}
+              <div class="flex items-center gap-2">
+                <span class="text-sm">{(emp as any).birthDate ?? '-'}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => { editingBirthDate = true; birthDateValue = (emp as any).birthDate ?? '' }}
+                >
+                  Edit
+                </Button>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Personal Email (editable) -->
+        <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Personal Email</span>
+          <div class="text-right">
+            {#if editingPersonalEmail}
+              <div class="flex flex-col items-end gap-2">
+                <Input
+                  type="email"
+                  bind:value={personalEmailValue}
+                  class="rounded-lg"
+                />
+                {#if personalEmailError}
+                  <p class="text-xs text-destructive">{personalEmailError}</p>
+                {/if}
+                <div class="flex gap-2">
+                  <Button
+                    size="sm"
+                    onclick={handleSavePersonalEmail}
+                    disabled={personalEmailPending}
+                  >
+                    {personalEmailPending ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() => { editingPersonalEmail = false; personalEmailError = null }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            {:else}
+              <div class="flex items-center gap-2">
+                <span class="text-sm">{(emp as any).personalEmail ?? '-'}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => { editingPersonalEmail = true; personalEmailValue = (emp as any).personalEmail ?? '' }}
+                >
+                  Edit
+                </Button>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Leader (editable) -->
+        <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Leader</span>
+          <div class="text-right">
+            {#if editingLeader}
+              <div class="flex flex-col items-end gap-2">
+                <Input
+                  type="text"
+                  bind:value={leaderValue}
+                  class="rounded-lg"
+                />
+                {#if leaderError}
+                  <p class="text-xs text-destructive">{leaderError}</p>
+                {/if}
+                <div class="flex gap-2">
+                  <Button
+                    size="sm"
+                    onclick={handleSaveLeader}
+                    disabled={leaderPending}
+                  >
+                    {leaderPending ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() => { editingLeader = false; leaderError = null }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            {:else}
+              <div class="flex items-center gap-2">
+                <span class="text-sm">{(emp as any).leaderName ?? '-'}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => { editingLeader = true; leaderValue = (emp as any).leaderName ?? '' }}
+                >
+                  Edit
+                </Button>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Team (editable) -->
+        <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Team</span>
+          <div class="text-right">
+            {#if editingTeam}
+              <div class="flex flex-col items-end gap-2">
+                <Select
+                  type="single"
+                  value={teamIdValue || undefined}
+                  onValueChange={(v) => { teamIdValue = v ?? '' }}
+                >
+                  <SelectTrigger size="sm" class="w-40">
+                    <span>
+                      {#if teamIdValue && $teams.data}
+                        {$teams.data.find((t) => t.id === teamIdValue)?.name ?? 'No team'}
+                      {:else}
+                        No team
+                      {/if}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="" label="No team" />
+                    {#if $teams.data}
+                      {#each $teams.data as team}
+                        <SelectItem value={team.id} label={team.name} />
+                      {/each}
+                    {/if}
+                  </SelectContent>
+                </Select>
+                {#if teamError}
+                  <p class="text-xs text-destructive">{teamError}</p>
+                {/if}
+                <div class="flex gap-2">
+                  <Button
+                    size="sm"
+                    onclick={handleSaveTeam}
+                    disabled={teamPending}
+                  >
+                    {teamPending ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() => { editingTeam = false; teamError = null }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            {:else}
+              <div class="flex items-center gap-2">
+                <span class="text-sm">
+                  {#if (emp as any).teamId && $teams.data}
+                    {$teams.data.find((t) => t.id === (emp as any).teamId)?.name ?? 'Unknown team'}
+                  {:else}
+                    No team
+                  {/if}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => { editingTeam = true; teamIdValue = (emp as any).teamId ?? '' }}
+                >
+                  Edit
+                </Button>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Branch (editable) -->
+        <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Branch</span>
+          <div class="text-right">
+            {#if editingBranch}
+              <div class="flex flex-col items-end gap-2">
+                <Select
+                  type="single"
+                  value={branchValue || undefined}
+                  onValueChange={(v) => { branchValue = (v ?? '') as 'Indonesia' | 'Thailand' | '' }}
+                >
+                  <SelectTrigger size="sm" class="w-32">
+                    <span>{branchValue || 'Not set'}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="" label="Not set" />
+                    <SelectItem value="Indonesia" label="Indonesia" />
+                    <SelectItem value="Thailand" label="Thailand" />
+                  </SelectContent>
+                </Select>
+                {#if branchError}
+                  <p class="text-xs text-destructive">{branchError}</p>
+                {/if}
+                <div class="flex gap-2">
+                  <Button
+                    size="sm"
+                    onclick={handleSaveBranch}
+                    disabled={branchPending}
+                  >
+                    {branchPending ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onclick={() => { editingBranch = false; branchError = null }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            {:else}
+              <div class="flex items-center gap-2">
+                <span class="text-sm capitalize">{emp.branch ?? '-'}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => { editingBranch = true; branchValue = (emp.branch as 'Indonesia' | 'Thailand' | '') ?? '' }}
+                >
+                  Edit
+                </Button>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Status (read-only) -->
+        <div class="flex justify-between border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Status</span>
+          <Badge variant={emp.status === 'active' ? 'default' : 'destructive'}>
+            {emp.status}
+          </Badge>
+        </div>
+
+        <!-- Workspace upgrade -->
+        {#if !emp.hasGoogleWorkspace}
+          <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+            <span class="text-xs text-muted-foreground">Workspace</span>
+            <div class="text-right">
+              {#if editingWorkspace}
+                <div class="flex flex-col items-end gap-2">
+                  <Input
+                    type="email"
+                    bind:value={workspaceEmail}
+                    placeholder="workspace@ahacommerce.net"
+                    class="rounded-lg"
+                  />
+                  {#if workspaceError}
+                    <p class="text-xs text-destructive">{workspaceError}</p>
+                  {/if}
+                  <div class="flex gap-2">
+                    <Button
+                      size="sm"
+                      onclick={handleUpgradeWorkspace}
+                      disabled={!workspaceEmail || workspacePending}
+                    >
+                      {workspacePending ? 'Saving…' : 'Save'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onclick={() => { editingWorkspace = false; workspaceEmail = ''; workspaceError = null }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              {:else}
+                <div class="flex items-center gap-2">
+                  <span class="text-sm text-muted-foreground">No workspace account</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => { editingWorkspace = true; workspaceEmail = '' }}
+                  >
+                    Upgrade
+                  </Button>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Provisioning -->
+        <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
+          <span class="text-xs text-muted-foreground">Provisioning</span>
+          <div class="text-right">
+            <p
+              class="text-sm"
+              class:text-status-active={emp.provisioningStatus === 'ready'}
+              class:text-status-pending={emp.provisioningStatus === 'pending' || emp.provisioningStatus === 'processing'}
+              class:text-destructive={emp.provisioningStatus === 'failed'}
+            >
+              {emp.provisioningStatus}
+            </p>
+            {#if emp.provisioningError}
+              <p class="mt-1 text-xs text-destructive">{emp.provisioningError}</p>
+            {/if}
+            {#if emp.provisioningStatus === 'failed' && emp.status === 'active'}
+              <Button
+                size="sm"
+                variant="outline"
+                class="mt-2"
+                onclick={handleRetryProvisioning}
+                disabled={retryProvisioningPending}
+              >
+                {retryProvisioningPending ? 'Retrying…' : 'Retry Provisioning'}
+              </Button>
+            {/if}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   {:else}
     <p class="text-sm text-muted-foreground">Employee not found.</p>
   {/if}
