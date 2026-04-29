@@ -5,8 +5,10 @@
  *   - Attempt 1: inline, synchronous (fire-and-forget from the caller's perspective).
  *   - On failure: a Cloud Task is enqueued via the Cloud Tasks REST API. Cloud Tasks
  *     owns the retry schedule (max_attempts=3, 30s → 2m backoff per queue config).
- *   - After Cloud Tasks exhausts retries, the dead-letter Pub/Sub topic fires and
- *     /api/internal/webhook-dlq disables the endpoint.
+ *   - Final attempt: When Cloud Tasks has exhausted all retries (retryCount === MAX_ATTEMPTS - 1),
+ *     the inline handler at routes/internal.ts:144-182 disables the endpoint by setting
+ *     appWebhookEndpoints.status to 'disabled'. This acts as the dead-letter queue —
+ *     no external Pub/Sub topic involved.
  *
  * No in-process timers, no DB-backed job table — retries survive Cloud Run
  * scale-to-zero because Cloud Tasks dispatches them.
@@ -30,6 +32,7 @@ import {
   PORTAL_WEBHOOK_EVENT_ID_HEADER,
   PORTAL_WEBHOOK_TIMESTAMP_HEADER,
 } from '@coms-portal/shared'
+import { logger } from '~/logger'
 
 // ---------------------------------------------------------------------------
 // OIDC token minting (Rev 2 §03 dual-mode)
@@ -54,16 +57,12 @@ export async function mintWebhookAudienceToken(audience: string): Promise<string
     // getRequestHeaders returns a Headers instance (Web fetch API); use .get()
     const authHeader = headers.get('Authorization') ?? ''
     if (!authHeader.startsWith('Bearer ')) {
-      console.warn('[webhook-dispatcher] OIDC: unexpected Authorization header format — falling back to HMAC-only')
+      logger.warn('[webhook-dispatcher] OIDC: unexpected Authorization header format — falling back to HMAC-only')
       return null
     }
     return authHeader.slice('Bearer '.length)
   } catch (err) {
-    console.warn(
-      '[webhook-dispatcher] OIDC token minting failed (metadata server unavailable or missing ADC); ' +
-        'proceeding with HMAC-only. Error:',
-      err instanceof Error ? err.message : String(err),
-    )
+    logger.warn({ err }, '[webhook-dispatcher] OIDC token minting failed — proceeding with HMAC-only')
     return null
   }
 }
@@ -134,12 +133,16 @@ export async function deliverWebhook(
   occurredAt: string,
   fetchImpl: typeof fetch,
   oidcToken?: string | null,
+  requestId?: string,
 ): Promise<void> {
   const signature = computeSignature(endpointSecret, occurredAt, jsonBody)
 
   const extraHeaders: Record<string, string> = {}
   if (oidcToken) {
     extraHeaders['Authorization'] = `Bearer ${oidcToken}`
+  }
+  if (requestId) {
+    extraHeaders['X-Coms-Request-Id'] = requestId
   }
 
   const response = await fetchImpl(endpointUrl, {
@@ -181,7 +184,7 @@ export async function deliverWebhook(
 export async function dispatchPortalWebhook<T>(
   event: PortalWebhookEvent,
   payload: T,
-  opts?: { appSlugs?: string[]; fetchImpl?: typeof fetch },
+  opts?: { appSlugs?: string[]; fetchImpl?: typeof fetch; requestId?: string },
 ): Promise<void> {
   const fetchImpl = opts?.fetchImpl ?? fetch
 
@@ -238,7 +241,7 @@ export async function dispatchPortalWebhook<T>(
       }
       const jsonBody = JSON.stringify(envelope)
 
-      return inlineAttempt(endpoint, event, jsonBody, eventId, occurredAt, fetchImpl)
+      return inlineAttempt(endpoint, event, jsonBody, eventId, occurredAt, fetchImpl, opts?.requestId)
     }),
   ).catch(() => {
     // allSettled never rejects, but satisfy linters
@@ -260,6 +263,7 @@ async function inlineAttempt(
   eventId: string,
   occurredAt: string,
   fetchImpl: typeof fetch,
+  requestId?: string,
 ): Promise<void> {
   const now = new Date()
 
@@ -270,13 +274,11 @@ async function inlineAttempt(
   const oidcToken = await mintWebhookAudienceToken(audience)
 
   if (!oidcToken) {
-    console.warn(
-      `[webhook-dispatcher] OIDC degraded path: no token for ${audience} — sending HMAC-only to endpoint ${endpoint.id}`,
-    )
+    logger.warn({ endpointId: endpoint.id, audience }, '[webhook-dispatcher] OIDC degraded path — sending HMAC-only')
   }
 
   try {
-    await deliverWebhook(endpoint.url, endpoint.secret, event, jsonBody, eventId, occurredAt, fetchImpl, oidcToken)
+    await deliverWebhook(endpoint.url, endpoint.secret, event, jsonBody, eventId, occurredAt, fetchImpl, oidcToken, requestId)
 
     // Success — reset failure state
     await db
@@ -286,9 +288,7 @@ async function inlineAttempt(
   } catch (err: unknown) {
     const reason = err instanceof Error ? err.message : String(err)
 
-    console.warn(
-      `[webhook-dispatcher] endpoint ${endpoint.id} (${endpoint.url}) inline delivery failed. Enqueueing Cloud Task. Reason: ${reason}`,
-    )
+    logger.warn({ endpointId: endpoint.id, url: endpoint.url, reason }, '[webhook-dispatcher] inline delivery failed — enqueueing Cloud Task')
 
     // Update endpoint failure stats — same as before, the dispatcher always owns
     // the inline-failure stats write.
@@ -311,12 +311,10 @@ async function inlineAttempt(
         eventId,
         jsonBody,
         occurredAt,
+        requestId,
       })
     } catch (enqueueErr) {
-      console.error(
-        `[webhook-dispatcher] Failed to enqueue Cloud Task for endpoint ${endpoint.id}:`,
-        enqueueErr,
-      )
+      logger.error({ err: enqueueErr, endpointId: endpoint.id }, '[webhook-dispatcher] failed to enqueue Cloud Task')
     }
   }
 }

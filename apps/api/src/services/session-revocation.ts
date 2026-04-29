@@ -4,6 +4,7 @@ import { identityUsers, sessionRevocations, teamMembers, teamAppAccess, appRegis
 import { revokeRefreshTokens } from '../gip-admin'
 import { dispatchPortalWebhook } from './portal-webhook-fanout'
 import type { SessionRevokedPayload } from '@coms-portal/shared'
+import { logger } from '~/logger'
 
 export type RevocationReason = SessionRevokedPayload['reason']
 // = 'logout' | 'status_change' | 'offboarded' | 'admin'
@@ -77,7 +78,7 @@ export async function revokePortalSession(input: {
       notBefore,
     })
   } catch (err) {
-    console.error('[session-revocation] failed to write session_revocations row:', err)
+    logger.error({ err }, '[session-revocation] failed to write session_revocations row')
     // Still proceed — GIP revoke and webhook fanout are more important for security.
   }
 
@@ -86,7 +87,7 @@ export async function revokePortalSession(input: {
     try {
       await revokeRefreshTokens(user.gipUid)
     } catch (err) {
-      console.error(`[session-revocation] revokeRefreshTokens failed for gipUid ${user.gipUid}:`, err)
+      logger.error({ err, gipUid: user.gipUid }, '[session-revocation] revokeRefreshTokens failed')
     }
   }
 
@@ -106,7 +107,7 @@ export async function revokePortalSession(input: {
       await dispatchPortalWebhook('session.revoked', payload, { appSlugs })
     }
   } catch (err) {
-    console.error('[session-revocation] webhook dispatch failed:', err)
+    logger.error({ err }, '[session-revocation] webhook dispatch failed')
   }
 
   return { revokedAt }

@@ -6,6 +6,7 @@ import { requireRole } from '../middleware/rbac'
 import { resolveAndSyncClaims } from '../services/claims'
 import { logAudit } from '../services/audit'
 import { emitUserUpdated } from '../services/provisioning-events'
+import { logger } from '~/logger'
 
 async function refreshTeamMemberClaims(teamId: string): Promise<void> {
   const members = await db
@@ -21,7 +22,7 @@ async function refreshTeamMemberClaims(teamId: string): Promise<void> {
       await resolveAndSyncClaims(user.gipUid, userId)
     }
     emitUserUpdated(userId, ['teamIds', 'apps']).catch((err) => {
-      console.error(`[provisioning-events] emitUserUpdated failed for ${userId}:`, err)
+      logger.error({ err, userId }, '[provisioning-events] emitUserUpdated failed')
     })
   }
 }
@@ -31,7 +32,7 @@ export const accessRoutes = new Elysia()
 
   .post(
     '/teams/:id/apps',
-    async ({ params, body, authUser }) => {
+    async ({ params, body, authUser, requestId, actorIp }) => {
       const actor = await db.query.identityUsers.findFirst({
         where: eq(identityUsers.gipUid, authUser.gipUid),
       })
@@ -50,11 +51,19 @@ export const accessRoutes = new Elysia()
         targetType: 'team',
         targetId: params.id,
         details: { appId: body.appId },
+        requestId,
+        actorIp,
+        targetAppId: body.appId,
       })
 
       return { ok: true }
     },
-    { body: t.Object({ appId: t.String() }) },
+    {
+      body: t.Object({ appId: t.String() }),
+      response: {
+        200: t.Object({ ok: t.Literal(true) }),
+      },
+    },
   )
 
   .get(
@@ -93,10 +102,18 @@ export const accessRoutes = new Elysia()
         page: t.Optional(t.String()),
         limit: t.Optional(t.String()),
       }),
+      response: {
+        200: t.Object({
+          entries: t.Array(t.Any()),
+          total: t.Number(),
+          page: t.Number(),
+          limit: t.Number(),
+        }),
+      },
     },
   )
 
-  .delete('/teams/:id/apps/:appId', async ({ params, authUser }) => {
+  .delete('/teams/:id/apps/:appId', async ({ params, authUser, requestId, actorIp }) => {
     // Also clean up per-member role assignments for this team's members
     const members = await db
       .select({ userId: teamMembers.userId })
@@ -139,10 +156,13 @@ export const accessRoutes = new Elysia()
       targetType: 'team',
       targetId: params.id,
       details: { appId: params.appId },
+      requestId,
+      actorIp,
+      targetAppId: params.appId,
     })
 
     return { ok: true }
-  })
+  }, { response: { 200: t.Object({ ok: t.Literal(true) }) } })
 
   // ---------------------------------------------------------------------------
   // Per-member app role management
@@ -150,7 +170,7 @@ export const accessRoutes = new Elysia()
 
   .put(
     '/members/:userId/apps/:appId/role',
-    async ({ params, body, set, authUser }) => {
+    async ({ params, body, set, authUser, requestId, actorIp }) => {
       // Validate the role against the app's declared roles
       const app = await db.query.appRegistry.findFirst({
         where: eq(appRegistry.id, params.appId),
@@ -193,7 +213,7 @@ export const accessRoutes = new Elysia()
         await resolveAndSyncClaims(user.gipUid, params.userId)
       }
       emitUserUpdated(params.userId, ['appRole']).catch((err) => {
-        console.error(`[provisioning-events] emitUserUpdated failed for ${params.userId}:`, err)
+        logger.error({ err, userId: params.userId }, '[provisioning-events] emitUserUpdated failed')
       })
 
       await logAudit({
@@ -202,14 +222,24 @@ export const accessRoutes = new Elysia()
         targetType: 'user',
         targetId: params.userId,
         details: { appId: params.appId, appRole: body.appRole },
+        requestId,
+        actorIp,
+        targetAppId: params.appId,
       })
 
       return { ok: true }
     },
-    { body: t.Object({ appRole: t.String() }) },
+    {
+      body: t.Object({ appRole: t.String() }),
+      response: {
+        200: t.Object({ ok: t.Literal(true) }),
+        400: t.Object({ message: t.String() }),
+        404: t.Object({ message: t.String() }),
+      },
+    },
   )
 
-  .delete('/members/:userId/apps/:appId/role', async ({ params, authUser }) => {
+  .delete('/members/:userId/apps/:appId/role', async ({ params, authUser, requestId, actorIp }) => {
     await db
       .delete(memberAppRole)
       .where(and(eq(memberAppRole.userId, params.userId), eq(memberAppRole.appId, params.appId)))
@@ -221,7 +251,7 @@ export const accessRoutes = new Elysia()
       await resolveAndSyncClaims(user.gipUid, params.userId)
     }
     emitUserUpdated(params.userId, ['appRole']).catch((err) => {
-      console.error(`[provisioning-events] emitUserUpdated failed for ${params.userId}:`, err)
+      logger.error({ err, userId: params.userId }, '[provisioning-events] emitUserUpdated failed')
     })
 
     await logAudit({
@@ -230,7 +260,10 @@ export const accessRoutes = new Elysia()
       targetType: 'user',
       targetId: params.userId,
       details: { appId: params.appId },
+      requestId,
+      actorIp,
+      targetAppId: params.appId,
     })
 
     return { ok: true }
-  })
+  }, { response: { 200: t.Object({ ok: t.Literal(true) }) } })

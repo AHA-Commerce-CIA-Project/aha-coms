@@ -3,6 +3,7 @@ import { db } from '~/db'
 import { appRegistry } from '~/db/schema/apps'
 import { dispatchPortalWebhook } from './portal-webhook-fanout'
 import type { AppConfigUpdatedPayload } from '@coms-portal/shared'
+import { logger } from '~/logger'
 
 export interface EmitAppConfigUpdatedParams {
   portalSub: string
@@ -27,7 +28,7 @@ export async function emitAppConfigUpdated(params: EmitAppConfigUpdatedParams): 
     .limit(1)
 
   if (!appRow) {
-    console.warn(`[app-user-config-events] app not found for appId ${params.appId} — skipping emit`)
+    logger.warn({ appId: params.appId }, '[app-user-config-events] app not found — skipping emit')
     return
   }
 

@@ -1,5 +1,6 @@
 import { inArray, eq } from 'drizzle-orm'
 import { findBestMatch } from './name-matching'
+import { logger } from '~/logger'
 
 export interface ParsedGoogleAdminUserRow {
   rowNumber: number
@@ -300,7 +301,7 @@ export async function importEmployeesFromGoogleAdminCsv(
     Promise.all(
       created.map((c) =>
         emitUserProvisioned(c.id).catch((err) => {
-          console.error(`[provisioning-events] emitUserProvisioned failed for ${c.id}:`, err)
+          logger.error({ err, userId: c.id }, '[provisioning-events] emitUserProvisioned failed')
         }),
       ),
     ).catch(() => {})

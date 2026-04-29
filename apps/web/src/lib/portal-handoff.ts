@@ -1,3 +1,5 @@
+import { logger } from '~/lib/logger'
+
 export interface HandoffIntent {
   appSlug: string
   redirectTo?: string
@@ -44,7 +46,7 @@ export function readHandoffIntent(url: URL): HandoffIntent | null {
     if (isSafeRedirectTo(raw)) {
       redirectTo = raw
     } else {
-      console.warn('[portal-handoff] rejected unsafe redirect_to', raw)
+      logger.warn({ raw }, '[portal-handoff] rejected unsafe redirect_to')
     }
   }
 

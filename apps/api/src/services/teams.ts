@@ -3,6 +3,7 @@ import { teams, teamMembers, teamAppAccess, memberAppRole, identityUsers } from 
 import { and, eq } from 'drizzle-orm'
 import { resolveAndSyncClaims } from './claims'
 import { emitUserUpdated } from './provisioning-events'
+import { logger } from '~/logger'
 
 export async function addTeamMember(teamId: string, userId: string, roleInTeam?: string): Promise<void> {
   await db.insert(teamMembers).values({ teamId, userId, ...(roleInTeam ? { roleInTeam } : {}) })
@@ -17,7 +18,7 @@ export async function addTeamMember(teamId: string, userId: string, roleInTeam?:
 
   // Fan out user.updated — team membership changed, which may change app access
   emitUserUpdated(userId, ['teamIds', 'apps']).catch((err) => {
-    console.error(`[provisioning-events] emitUserUpdated failed for ${userId}:`, err)
+    logger.error({ err, userId }, '[provisioning-events] emitUserUpdated failed')
   })
 }
 
@@ -44,7 +45,7 @@ export async function addTeamMembersBatch(
     }
 
     emitUserUpdated(member.userId, ['teamIds', 'apps']).catch((err) => {
-      console.error(`[provisioning-events] emitUserUpdated failed for ${member.userId}:`, err)
+      logger.error({ err, userId: member.userId }, '[provisioning-events] emitUserUpdated failed')
     })
   }
 }
@@ -93,7 +94,7 @@ export async function removeTeamMember(teamId: string, userId: string): Promise<
 
   // Fan out user.updated — team removed, app access may have narrowed
   emitUserUpdated(userId, ['teamIds', 'apps']).catch((err) => {
-    console.error(`[provisioning-events] emitUserUpdated failed for ${userId}:`, err)
+    logger.error({ err, userId }, '[provisioning-events] emitUserUpdated failed')
   })
 }
 

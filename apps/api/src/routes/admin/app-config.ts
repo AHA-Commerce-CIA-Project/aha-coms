@@ -10,6 +10,7 @@ import type { ManifestDefinition } from '~/services/manifests'
 import { emitAppConfigUpdated } from '~/services/app-user-config-events'
 import { logAudit } from '~/services/audit'
 import { randomUUID } from 'crypto'
+import { logger } from '~/logger'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -164,7 +165,7 @@ export const adminAppConfigRoutes = new Elysia({ prefix: '/app-config' })
   // Edit one user's config for one app
   .post(
     '/single',
-    async ({ body, authUser, status }) => {
+    async ({ body, authUser, requestId, actorIp, status }) => {
       const manifest = await getManifest(body.appId)
       if (!manifest) throw status(404, { message: 'App manifest not found' })
 
@@ -200,7 +201,7 @@ export const adminAppConfigRoutes = new Elysia({ prefix: '/app-config' })
         previousConfig,
         schemaVersion: manifest.schemaVersion,
         batchId: null,
-      }).catch((err) => console.error('[app-config] emitAppConfigUpdated failed:', err))
+      }).catch((err) => logger.error({ err }, '[app-config] emitAppConfigUpdated failed'))
 
       await logAudit({
         actorId: authUser.id,
@@ -208,6 +209,9 @@ export const adminAppConfigRoutes = new Elysia({ prefix: '/app-config' })
         targetType: 'app_user_config',
         targetId: body.portalSub,
         details: { appId: body.appId, before: previousConfig, after: body.config },
+        requestId,
+        actorIp,
+        targetAppId: body.appId,
       })
 
       return { ok: true }
@@ -247,7 +251,7 @@ export const adminAppConfigRoutes = new Elysia({ prefix: '/app-config' })
   // Acquires lock, validates all, writes all, emits events, releases lock
   .post(
     '/bulk-commit',
-    async ({ body, authUser, status }) => {
+    async ({ body, authUser, requestId, actorIp, status }) => {
       const manifest = await getManifest(body.appId)
       if (!manifest) throw status(404, { message: 'App manifest not found' })
 
@@ -287,7 +291,7 @@ export const adminAppConfigRoutes = new Elysia({ prefix: '/app-config' })
             previousConfig: change.previousConfig,
             schemaVersion: manifest.schemaVersion,
             batchId,
-          }).catch((err) => console.error('[app-config] bulk emitAppConfigUpdated failed:', err))
+          }).catch((err) => logger.error({ err }, '[app-config] bulk emitAppConfigUpdated failed'))
 
           await logAudit({
             actorId: authUser.id,
@@ -295,6 +299,9 @@ export const adminAppConfigRoutes = new Elysia({ prefix: '/app-config' })
             targetType: 'app_user_config',
             targetId: change.portalSub,
             details: { appId: body.appId, batchId, before: change.previousConfig, after: change.newConfig },
+            requestId,
+            actorIp,
+            targetAppId: body.appId,
           })
         }
 

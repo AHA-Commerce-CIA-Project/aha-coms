@@ -4,6 +4,7 @@ import { eq, ilike } from 'drizzle-orm'
 import { readEmployeeInfoSheet, type EmployeeInfoSheetRow } from './sheets-client'
 import { findBestMatch } from './name-matching'
 import { emitUserProvisioned } from './provisioning-events'
+import { logger } from '~/logger'
 
 export interface EmployeeInfoSyncResult {
   updated: number
@@ -118,7 +119,7 @@ export async function syncEmployeeInfo(): Promise<EmployeeInfoSyncResult> {
         // its own emit is a no-op; this fires after the batch where team context
         // may be updated by subsequent sync runs).
         emitUserProvisioned(s.value.userId).catch((err) => {
-          console.error(`[sheet-sync] emitUserProvisioned failed for ${s.value.userId}:`, err)
+          logger.error({ err, userId: s.value.userId }, '[sheet-sync] emitUserProvisioned failed')
         })
       } else {
         const row = batch[idx]!

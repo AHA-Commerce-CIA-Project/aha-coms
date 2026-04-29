@@ -18,6 +18,8 @@ export interface WebhookDeliveryTaskPayload {
   eventId: string
   jsonBody: string
   occurredAt: string
+  /** Propagated from the originating request so redeliveries carry the same trace ID. */
+  requestId?: string
 }
 
 export interface EnqueueWebhookDeliveryOptions {

@@ -1,4 +1,9 @@
 import { Elysia } from 'elysia'
+import cors from '@elysiajs/cors'
+import swagger from '@elysiajs/swagger'
+import { requestIdPlugin } from './middleware/request-id'
+import { logger } from './logger'
+import { probeHealth } from './services/health'
 import { authRoutes } from './routes/auth'
 import { userinfoRoutes } from './routes/userinfo'
 import { employeeRoutes } from './routes/employees'
@@ -12,6 +17,7 @@ import { internalRoutes } from './routes/internal'
 import { authPlugin } from './middleware/auth'
 import { initGip } from './gip'
 import { startHealthProbeInterval } from './services/health-probe'
+import { CORS_ALLOWED_ORIGINS } from './config'
 import { adminRoutes } from './routes/admin'
 import { wellKnownRoutes } from './routes/well-known'
 import { adminSigningKeyRoutes } from './routes/admin/signing-keys'
@@ -32,19 +38,27 @@ if (process.env.NODE_ENV !== 'test') {
   startHealthProbeInterval()
   // Idempotent boot-time registration of all static app manifests.
   registerManifest(heroesManifest as ManifestDefinition).catch((err) => {
-    console.error('[boot] manifest registration failed:', err)
+    logger.error({ err }, '[boot] manifest registration failed')
   })
 }
 
 export const app = new Elysia({ prefix: '/api' })
+  .use(cors({
+    origin: process.env.NODE_ENV === 'production'
+      ? CORS_ALLOWED_ORIGINS
+      : /http:\/\/localhost(:\d+)?$/,
+    credentials: true,
+    exposedHeaders: ['X-Coms-Request-Id'],
+  }))
   // Elysia's validation errors and route-level handlers set their own status +
   // message before the request reaches onError. This handler is the catch-all
   // for unexpected exceptions (DB driver errors, dereference bugs, etc.). We
   // log the full error internally but never echo `error.message` to the
   // client — Drizzle / Postgres errors include the failing SQL + parameters,
   // which is an information-disclosure footgun on a public endpoint.
+  .use(requestIdPlugin)
   .onError(({ error, code, path, set }) => {
-    console.error(`[API Error] ${path}:`, error)
+    logger.error({ err: error, path }, '[API Error]')
     if (code === 'VALIDATION') {
       // Elysia's typebox validation errors are safe to surface — they describe
       // the request shape, not internal state.
@@ -53,7 +67,36 @@ export const app = new Elysia({ prefix: '/api' })
     set.status = 500
     return { message: 'Internal error' }
   })
-  .get('/health', () => ({ status: 'ok' }))
+  .use(swagger({
+    path: '/openapi.json',
+    swaggerPath: '/docs',
+    documentation: {
+      info: {
+        title: 'COMS Portal API',
+        version: '0.1.0',
+        contact: {
+          name: 'COMS Portal',
+          email: 'coms@ahacommerce.net',
+        },
+      },
+      tags: [
+        { name: 'auth' },
+        { name: 'aliases' },
+        { name: 'users' },
+        { name: 'webhooks' },
+        { name: 'apps' },
+        { name: 'employees' },
+        { name: 'access' },
+        { name: 'admin' },
+        { name: 'internal' },
+      ],
+    },
+  }))
+  .get('/health', async ({ set }) => {
+    const result = await probeHealth()
+    if (result.status === 'degraded') set.status = 503
+    return result
+  })
   // Public, unauthenticated — JWKS + OIDC discovery (Rev 2 §01 + §02)
   .use(wellKnownRoutes)
   .use(authRoutes)
