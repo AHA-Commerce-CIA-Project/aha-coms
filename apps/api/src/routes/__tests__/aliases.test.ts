@@ -1,12 +1,7 @@
-import { afterAll, describe, expect, mock, test, beforeEach } from 'bun:test'
+import { describe, expect, mock, test, beforeEach } from 'bun:test'
 import { Elysia } from 'elysia'
 import { mockSpecs } from '~/test-helpers/schema-barrel-mock'
 
-// Snapshot the real `services/aliases` module BEFORE we mock it. Bun's
-// `mock.module` is process-global; without restoration in afterAll, the
-// stubs below leak into `services/__tests__/aliases.test.ts` which exercises
-// the real `resolveAliases`/`renamePrimaryAlias`/`detectCollision` functions.
-const realAliasesService = { ...(await import('~/services/aliases')) }
 const ALIASES_SPECS = ['~/services/aliases', '../services/aliases']
 
 // ---------------------------------------------------------------------------
@@ -56,11 +51,7 @@ const mockResolveAliases = mock(
     names.map((name) => ({ name, match: null })),
 )
 
-// Spread real module so non-overridden exports stay intact. The route under
-// test only exercises `resolveAliases`; everything else is reset to a stub
-// to keep this file's blast radius contained.
 const aliasesServiceMock = {
-  ...realAliasesService,
   resolveAliases: mockResolveAliases,
   createAlias: mock(async () => {}),
   renamePrimaryAlias: mock(async () => {}),
@@ -69,16 +60,7 @@ const aliasesServiceMock = {
 }
 mockSpecs(ALIASES_SPECS, () => aliasesServiceMock)
 
-// ---------------------------------------------------------------------------
-// Import route after mocks are set
-// ---------------------------------------------------------------------------
-
 const { aliasesRoutes } = await import('../aliases')
-
-// Restore the real `services/aliases` module after this file's tests.
-afterAll(() => {
-  mockSpecs(ALIASES_SPECS, () => realAliasesService)
-})
 
 // ---------------------------------------------------------------------------
 // Test helpers

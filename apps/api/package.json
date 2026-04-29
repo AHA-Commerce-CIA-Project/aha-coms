@@ -15,7 +15,7 @@
     "build": "bun build server.ts --outdir dist --target bun",
     "start": "bun server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "find src -name '*.test.ts' | sort | xargs bun test",
+    "test": "find src -name '*.test.ts' | sort | xargs -I{} -n1 -P 4 bun test {}",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"

@@ -1,11 +1,5 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
-
-// Snapshot the real `gip-admin` module before mocking. The override below
-// stubs only the four functions this file exercises; restoring real exports
-// in afterAll keeps the rest of the surface (verifySessionCookie, verifyIdToken,
-// setCustomUserClaims, etc.) available to sibling test files.
-const realGipAdmin = { ...(await import('../../gip-admin')) }
 
 const identityUsers = { id: 'identityUsers.id' }
 const teamMembers = { teamId: 'teamMembers.teamId', userId: 'teamMembers.userId' }
@@ -113,24 +107,20 @@ mock.module('~/db/schema', () => ({
 }))
 mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 mock.module('../claims', () => ({ resolveAndSyncClaims }))
-// We intentionally do NOT mock.module ../session-revocation or
-// ../provisioning-events: Bun's mock.module is process-global and the mock
-// would leak into their own test files. The db stub above returns empty
-// selects, so the real fire-and-forget code paths run to a no-op.
+// `../session-revocation` and `../provisioning-events` are intentionally not
+// mocked — the empty-select db stub above lets the real fire-and-forget code
+// paths run to a no-op. Those code paths transitively import the rest of
+// gip-admin, so the mock must spread the real surface to expose every export
+// (revokeRefreshTokens, verifySessionCookie, etc.).
+const realGipAdmin = { ...(await import('../../gip-admin')) }
 mock.module('../../gip-admin', () => ({
   ...realGipAdmin,
   createGipUser,
   setGipUserDisabled,
   generatePasswordResetLink,
-  // revokeRefreshTokens added here so any transitive gip-admin import is fully stubbed
-  revokeRefreshTokens: mock(async () => undefined),
 }))
 
 const { createEmployee } = await import('../employees')
-
-afterAll(() => {
-  mock.module('../../gip-admin', () => realGipAdmin)
-})
 
 describe('createEmployee', () => {
   beforeEach(() => {
