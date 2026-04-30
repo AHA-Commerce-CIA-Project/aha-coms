@@ -23,6 +23,8 @@ Compositions remain stub: Heroes' `HeroGreeting`/`SummaryCard`/`NotificationsBad
 
 **Phase 5: still deferred.** Trigger (real third H-app onboarding) has not fired. Heroes adoption is no longer a pending follow-up — it shipped 2026-04-30 (see Phase 4 status above).
 
+> **Contributing UI changes?** This spec is the architectural intent. The contribution workflow — where to PR, how to test locally before opening a PR, versioning rules, reviewer expectations — lives in [`/DESIGN_SYSTEM.md`](../../../DESIGN_SYSTEM.md) at the repo root. Hand that doc to teams adopting the design system.
+
 ---
 
 ## Overview
