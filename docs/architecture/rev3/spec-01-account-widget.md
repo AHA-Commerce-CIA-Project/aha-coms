@@ -3,6 +3,8 @@
 > Priority: **1 (only Rev 3 spec; foundation for any future suite-UX work)**
 > Scope: Portal (widget package, userinfo endpoint, RP-initiated logout) + Heroes (widget adoption, header refactor)
 > Prerequisites: Rev 2 Spec 01–04 (RS256/JWKS, OIDC discovery, webhook + introspect via Google OIDC). Identity is portal-owned; this spec surfaces it.
+>
+> **Forward-looking note (2026-04-30):** Spec 06 (`spec-06-dual-email-auth.md`) restructures `identity_users.email` into a multi-row `identity_user_emails` table and adds a personal-email-OTP auth path. Widget-side impact is **zero in v1** — `/api/userinfo` continues to expose a scalar `email` field (now derived as "workspace if present, else personal" per Spec 06 §Q8a) plus an additive `emails` array for any future "show all login methods" UI. Heroes-side adoption per `heroes-integration-handoff.md` is **paused** until Spec 06 PR F lands and updates this spec to reflect shipped state. See `spec-00-implementation-timeline.md` for the at-a-glance status.
 
 ---
 
