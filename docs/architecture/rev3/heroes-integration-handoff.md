@@ -1,5 +1,9 @@
 # Rev 3 Spec 01 + Spec 02 — Heroes integration handoff
 
+> **Heroes-side adoption is paused as of 2026-04-30 — pending Spec 06.** Owner directive: portal-side dual-email auth (`spec-06-dual-email-auth.md`) ships fully → Spec 06 PR F sweeps spec updates → THEN Heroes-side rev3 adoption begins per this document and §Appendix A of `spec-03-user-identity-alias-layer.md`. Wipe-and-reprovision is the locked path (vs. alias backfill) — pre-real-users on Heroes makes the wipe a no-op. See `spec-00-implementation-timeline.md` for the at-a-glance status of the entire Rev 3 program. The body of this document below remains the canonical reference for Heroes' Rev 3 adoption once unblocked.
+>
+> ---
+>
 > Audience: the Heroes team. You have read spec-01 and spec-02; this document tells you what to do in `coms_aha_heroes/` to adopt the three packages we just shipped portal-side.
 >
 > **Scope note (added 2026-04-29):** This document is **Heroes-specific** by design — it speaks Heroes' Svelte stack, Heroes' file paths (`ServiceBar`, `Sidebar`, `TopBar`, `MobileNav`, `MobileBottomNav`), and Heroes' Tailwind setup. A generic, framework-neutral `@coms-portal/sdk` + integrator quickstart is queued as part of **Spec 03c (pre-Spec-4 hardening)**. Future tenants (tenant #3 onward, especially non-Svelte stacks) should follow that path. This doc remains the canonical reference for Heroes' Rev 3 adoption; it does not need to be re-genericized.

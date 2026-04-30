@@ -3,6 +3,8 @@
 > Priority: **Critical-path. Must land before Heroes (or any H-app) takes real users.**
 > Scope: Portal (alias table, per-app config, app manifests, resolve API, provisioning + config webhooks, admin UI for single + bulk config edits, DB-role lockdown) + every H-app (drop user-creation paths, drop role/eligibility columns, add ingestion + provisioning + config webhook consumers, add caches).
 > Prerequisites: Rev 2 closed (portal owns identity end-to-end). Rev 3 Spec 01 in flight (the account widget surfaces identity; this spec hardens the writer side of identity and extends portal to own per-app config).
+>
+> **Forward-looking note (2026-04-30):** Spec 06 (`spec-06-dual-email-auth.md`) restructures `identity_users.email` (single column, NOT NULL UNIQUE) and `identity_users.personal_email` (single column, nullable) into a multi-row `identity_user_emails` table with kind discriminator (`'workspace' | 'personal'`), per-row `verifiedAt`, and `addedBy` provenance. Spec 06 also adds an OTP-based auth path for the personal-email kind. The §Schema section below describes pre-Spec-06 state; the multi-row migration is owned by Spec 06 (PR A). User aliases (`user_aliases`) — *display-name* aliases for sheet ingestion — are unrelated to email aliases and remain governed by this spec. Heroes-side adoption per §Appendix A is **paused** until Spec 06 PR F lands. See `spec-00-implementation-timeline.md` for the at-a-glance status. Wipe-and-reprovision (vs. data-preserving alias backfill) is the locked path for Heroes-side cutover; pre-real-users state makes the wipe a no-op.
 
 ---
 

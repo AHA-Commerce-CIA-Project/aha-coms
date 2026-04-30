@@ -7,7 +7,7 @@
 
 ---
 
-## Status — 2026-04-30 (Specs 01 + 02 + 03 + 03b + 03c portal-side shipped; Spec 02 Phase 4 Heroes adoption shipped; Spec 01 + 03 Heroes adoption pending)
+## Status — 2026-04-30 (Specs 01 + 02 + 03 + 03b + 03c portal-side shipped; Spec 02 Phase 4 Heroes adoption shipped; **Spec 06 drafted, blocking Heroes-side rev3 adoption**)
 
 Portal/COMS team landed Specs 01 + 02 (Phases 1 + 2 + 3) + 03 (portal-side, all twelve effects) end-to-end on 2026-04-28; Spec 03b test-gate cleanup followed on 2026-04-29 (locally green); Spec 03c pre-Spec-4 hardening shipped 2026-04-29; Spec 02 Phase 4 (primitives lift) shipped portal-side 2026-04-29 and Heroes-side 2026-04-30 — the round-trip is complete and `@coms-portal/ui v1.2.0` is now the single source of truth for primitives across both consumers. Phase 5 (onboarding exercise) and Specs 04/05 remain deferred.
 
@@ -29,7 +29,9 @@ Portal `apps/web` is migrated and dogfooding all four (consuming via `git+https:
 
 **Spec 03c pre-Spec-4 hardening — shipped 2026-04-29.** Eleven work items across six effects, two missions (main + follow-on), eight commits on `main`, two sibling public repos. Portal foundation: centralised origin/CORS config (`apps/api/src/config.ts` + `apps/web/src/lib/config.ts` via `$env/dynamic/public`), CI hardcoded-URL gate (`.github/workflows/lint.yml`), webhook DLQ docstring reconciliation. Observability: Pino structured logging across all 49 console.* sites (zero remaining), request-ID middleware (UUID-validated inbound, response header on success and error, propagated to webhook outbound + Cloud Tasks payload + redelivery handler), real `/api/health` probing DB + Secret Manager + Cloud Tasks. Audit log: schema migration `0028_little_deadpool.sql` adds `actor_ip` + `request_id` + `actor_app_id` + `target_app_id` (all nullable) + two composite indexes; writer extended; all 28 call sites populated; 12 enumerated app-scoped sites populate `target_app_id`. Integrator pathway: `@elysiajs/swagger` plugin at `/api/openapi.json` + `/api/docs`, response schemas on 7 integrator-relevant routes; new `@coms-portal/sdk` v0.1.1 (five exports, framework-neutral, ESM, jose-only); broker-token middleware + tenant-scoped `GET /api/v1/audit-log` (OR-bounded predicate `actor_app_id OR target_app_id`, `actor_ip` excluded from SELECT, cursor pagination, cross-tenant leak test); launcher migration (chrome reads `/api/userinfo` via SSR, `APP_LAUNCHER` zero hits in `apps/web/src/`); `@coms-portal/shared` v1.4.1 deprecation shim; `docs/architecture/integrator-quickstart.md`. Domain flip to `coms.ahacommerce.net` is now a config change. Red-cell findings F-1 (UUID validation) and F-2 (error-response correlation header) closed in mission; F-3 (SDK JWKS shared cache) closed in follow-on as v0.1.1; F-4 (Postgres integration test fixture) deferred to Spec 4. Mission artefacts at `.nelson/missions/2026-04-29_024712_fd19ceb1/` and `.nelson/missions/2026-04-29_044152_ff8f84c1/` (gitignored). See `spec-03c-pre-spec-4-hardening.md` §"Shipped state" for the full deviations + follow-up table.
 
-**Heroes-side work pending** — see `heroes-integration-handoff.md` for install lines, mount snippets, file-deletion list, and verification checklist (Specs 01 + 02). For Spec 03, Heroes-side adoption follows §Appendix A of `spec-03-user-identity-alias-layer.md` (rename `users` → `heroes_profiles`, drop role/eligibility columns, ingestion rewrite via `POST /api/aliases/resolve-batch`, alias + user-config caches, webhook consumers, audit log).
+**Spec 06 drafted 2026-04-30 — currently blocks Heroes-side rev3 adoption.** New spec for portal-side dual-email auth (workspace-OIDC + personal-email-OTP). Restructures `identity_users.email` (single column) → `identity_user_emails` (multi-row, kind discriminator, per-email verification). Introduces Brevo for outbound mail. See `spec-06-dual-email-auth.md` for full scope, schema, PR sequencing (A through F), and pre-implementation checklist. Owner directive: portal-side full delivery (PRs A-E) → spec-update sweep (PR F: this doc + spec-01 + spec-03 + heroes-integration-handoff) → THEN Heroes-side rev3 work begins.
+
+**Heroes-side work paused pending Spec 06.** When Spec 06's PR F lands, Heroes-side adoption per `heroes-integration-handoff.md` (Specs 01 + 02 chrome migration) and §Appendix A of `spec-03-user-identity-alias-layer.md` (rename `users` → `heroes_profiles`, drop role/eligibility columns, ingestion rewrite via `POST /api/aliases/resolve-batch`, alias + user-config caches, webhook consumers, audit log, wipe-and-reprovision cutover) becomes the next focus. Heroes is pre-real-users — wipe-and-reprovision (vs. data-preserving alias backfill) is the locked path.
 
 Specs 02 (Phases 4+5), 04, 05 remain deferred until their triggers fire — see each spec's §Why this is deferred.
 
@@ -37,12 +39,13 @@ Specs 02 (Phases 4+5), 04, 05 remain deferred until their triggers fire — see 
 
 ## Theme of Rev 3
 
-Rev 1 hardened the federation. Rev 2 removed shared secrets. Rev 3 closes two gaps that follow from a working SSO:
+Rev 1 hardened the federation. Rev 2 removed shared secrets. Rev 3 closes three gaps that follow from a working SSO:
 
 1. **The user-experience gap.** A user landing in Heroes (or any future H-app) has no way to reach `/profile`, no account menu, no app switcher, and no consistent sign-out path. The fix (Spec 01) is the same pattern Google (OneGoogle/gbar), Microsoft (M365 suite header), and AWS (Identity Center menu) converged on: a shared account widget every app embeds, driven by props.
 2. **The identity-writer gap.** Rev 2 made the portal the sole *authenticator* of users. It did not make the portal the sole *writer*. Heroes' sheet ingestion can still implicitly mint user records — fine pre-real-users, catastrophic the moment real customers arrive. Spec 03 closes this by establishing portal as sole writer of `identity_users`, adding a portal-owned alias layer for name-based resolution, and locking down writes at the DB-role level.
+3. **The auth-population gap.** Rev 2 + Spec 01 + Spec 03 assume every user has a Google Workspace email. Two real populations are blocked: employees without a Workspace seat (contractors, casual hires) and Workspace employees who want to also access via their personal email (Gmail or any other provider). Spec 06 closes this by adding an OTP path for any email provider, restructuring identity emails into a multi-row table, and standing up outbound mail (Brevo).
 
-After Rev 3, identity is *centrally owned* (Rev 2), *centrally surfaced* (Spec 01), and *centrally written* (Spec 03) — one place creates users, one component surfaces them, and the database enforces both.
+After Rev 3, identity is *centrally owned* (Rev 2), *centrally surfaced* (Spec 01), *centrally written* (Spec 03), and *flexibly authenticated* (Spec 06) — one place creates users, one component surfaces them, the database enforces sole-writer, and any email provider can carry an auth.
 
 ---
 
@@ -59,8 +62,9 @@ After Rev 3, identity is *centrally owned* (Rev 2), *centrally surfaced* (Spec 0
 | 03d | Deferred Hardening Backlog (Redis, staging, per-tenant keys, KMS encryption, audit Cloud Logging sink, OTel, canary, feature flags, etc.) | Portal | 11 items, ~13–18 days total if every item ships | No | No — each item ships on its own trigger |
 | 04 | Unified User Preferences (theme + locale) | Portal + every H-app | Small per phase | Yes — Phase 3 (preference consumption) | No — deferred until trigger |
 | 05 | Suite Search / Command Palette | Portal + every H-app | Medium per phase | Optional — Phase 3 (search provider) | No — deferred until trigger |
+| 06 | Dual-Email Auth (workspace OIDC + personal OTP) | Portal | Drafted 2026-04-30; not started; ~1.5–2 weeks portal-side across PRs A-F | Minimal — Heroes consumes new `emails` array on userinfo if/when needed | **Yes — blocks Heroes-side rev3 adoption** |
 
-Specs 01 and 03 are the load-bearing pair for Rev 3: 01 surfaces identity, 03 hardens who can write it. Specs 02, 04, 05 are full architecture decided + deferred until their trigger conditions fire (documented in each spec's §Why this is deferred).
+Specs 01 + 03 + 06 are the load-bearing trio for Rev 3 closure: 01 surfaces identity, 03 hardens who can write it, 06 widens who can authenticate. Specs 02, 04, 05 are full architecture decided + deferred until their trigger conditions fire (documented in each spec's §Why this is deferred).
 
 ---
 
@@ -75,6 +79,7 @@ Every Rev 3 spec touches Heroes eventually, but only Specs 01 + 03 are scheduled
 | 03 | Rename `users` → `heroes_profiles`; drop all user-creation paths; ingestion rewrite (resolve-batch + pending queue + audit log + alias_cache); webhook consumer; DB-role REVOKE | ~2 weeks engineering + portal cutover coordination | **Now — critical-path** | Must land before real users |
 | 04 | Read `coms_prefs` claim from ID token; apply theme + locale on render; remove Heroes' standalone theme toggle (widget popover from Spec 01 owns it) | ~½ day | **Deferred** | 3rd H-app onboards, drift report, or Spec 02 Phase 2+ ships |
 | 05 | Register Heroes searchables (heroes, courses, cohorts) with portal search registry; expose `POST /search/provider` endpoint | ~1 day | **Deferred (optional)** | N > 6 apps, first cross-app search request, or Heroes ops asks |
+| 06 | Heroes consumes `userinfo.email` (scalar) — no widget-side change. Per Q8e Heroes mirrors primary email only on `heroes_profiles`; `emails` array fetched directly from `/api/userinfo` only if Heroes ever ships a "show all my login methods" UI (no v1 use case) | ~0 (no required Heroes work for v1) | **N/A** | Heroes-side rev3 (Specs 01 + 02 + 03) becomes unblocked when Spec 06 PR F lands |
 
 **Wall-clock — what shipped and what remains:**
 
@@ -83,9 +88,10 @@ Every Rev 3 spec touches Heroes eventually, but only Specs 01 + 03 are scheduled
 - **2026-04-29 — Spec 02 Phase 4 shipped portal-side:** `@coms-portal/ui v1.2.0` published with 15 shadcn-svelte primitive families (button, badge, card, label, input, textarea, separator, skeleton, table, avatar, tabs, dialog, dropdown-menu, select, sheet) lifted from Heroes verbatim. New direct deps: bits-ui, clsx, tailwind-merge, tailwind-variants, lucide-svelte. Portal `apps/web` second-consumer adoption across all 13 admin pages — trigger fired by portal itself. Compositions deliberately stub. Mission artefacts at `.nelson/missions/2026-04-29_094141_e71c70c4/`.
 - **2026-04-30 — Spec 02 Phase 4 round-trip complete (Heroes adoption + portal employees-list follow-up):** Heroes adopted v1.2.0 — 24 files rewritten to flat `@coms-portal/ui/primitives` imports, namespace-style usage flattened, `PullToRefresh.svelte` moved out of `ui/`, `cn()` + four type helpers stripped from Heroes' `utils.ts`, local `ui/` directory deleted (103 files, 2,276 lines net) — `commit b7b7431` on `mrdoorba/coms-aha-heroes`. Fork risk between Heroes' local primitives and the platform package permanently closed. Portal `admin/employees/+page.svelte` (the one out-of-scope file from the main mission) refactored — `commit 8b2d476` on `coms_portal`. `coms-ui` ONBOARDING.md Step 4a documents the canonical `<span>` inside `<SelectTrigger>` pattern — `commit 6f7f8c2`. See `.nelson/missions/2026-04-29_094141_e71c70c4/followup.md`.
 - **2026-04-30 — Design-system contribution guide shipped:** new `DESIGN_SYSTEM.md` at the repo root (portal + Heroes mirror) — canonical contribution guide for the COMS design system. Decision tree (token / primitive / chrome / widget / app-local), local-dev loop with `file:` refs, PR workflow + reviewer expectations, semver rules, forbidden patterns, discussion cadence. Pointer stubs (`CONTRIBUTING.md`) shipped in the three sibling shared-package repos: `coms-ui` (`commit 77aeb44`), `coms-design-tokens` (`commit 48120af`), `coms-account-widget` (`commit de0c412`). Hand `DESIGN_SYSTEM.md` to any team consuming the design system — Heroes today, future H-apps tomorrow.
-- **Now — Spec 01 Heroes adoption:** Heroes mounts `@coms-portal/account-widget` per `heroes-integration-handoff.md`. Independent of the test gate; ships on Heroes' deploy pipeline.
-- **Soon — Spec 03 Heroes adoption (now unblocked by 03b):** Heroes Phase 0 prep + Phase 1 ingestion rewrite per spec-03 §Appendix A. ~2 weeks Heroes engineering. Cutover (Phase 3) is a coordinated <30-minute window with portal — truncate Heroes' projection tables, portal admin reprovisions users via existing CSV/Sheet/manual flows, Heroes ops re-runs sheet ingestion for points data, Deploy C applies the gated REVOKE.
-- **Rev 3 closes** when spec-00 §Success Criteria are green: widget renders identically in portal + Heroes from one package version; Heroes' DB role cannot write `identity_users`; sheet ingestion mints zero new user rows.
+- **2026-04-30 — Spec 06 drafted:** Planning conversation produced `spec-06-dual-email-auth.md`. Eleven decisions locked (auth mechanism: OTP; schema: multi-row `identity_user_emails`; email provider: Brevo; admin allowlist semantics; collision rules; session model; OTP service mechanics; OIDC + webhook wire format additions; UI scope = surfaces 1-7+9+10+11; PR sequencing A-F prod-direct; testing scope: migration + OTP + auth-route + webhook coverage). Not yet started — owner intends to implement in a clean session. Heroes-side rev3 adoption is paused pending Spec 06 PR F landing.
+- **Next — Spec 06 implementation:** Portal-side PRs A through E ship the feature; PR F sweeps spec updates (this doc + spec-01 + spec-03 + heroes-integration-handoff to reflect new identity model). ~1.5–2 weeks portal-side. Pre-implementation checklist at the bottom of `spec-06-dual-email-auth.md`.
+- **Then — Heroes-side rev3 adoption (Specs 01 + 02 chrome + 03 cutover):** Becomes unblocked when Spec 06 PR F lands. Plan from 2026-04-30 grilling: 5-PR slicing for Heroes (chrome migration → Deploy A schema rename + tables → Deploy B truncate runbook → Deploy C REVOKE → doc-sync + secrets cleanup); hybrid push (direct push for safe surfaces, PR-with-self-merge for spec-03 Deploy A schema, manual ops for truncate + REVOKE); two-database-one-instance Cloud SQL setup retained for cutover dry-run on staging before prod.
+- **Rev 3 closes** when spec-00 §Success Criteria are green: widget renders identically in portal + Heroes from one package version; Heroes' DB role cannot write `identity_users`; sheet ingestion mints zero new user rows; non-Workspace users can authenticate via personal-email OTP; Workspace users can self-bind a personal email and log in via either path.
 
 No fixed dates — gated by team capacity, not calendar. Specs 02 / 04 / 05 sit on the shelf with full architecture pre-baked; spinning one up is a "trigger fires → start phase plan" decision, not a re-design.
 
@@ -151,16 +157,22 @@ Rev 2 Spec 03 (webhook delivery) ──→ Rev 3 Spec 03 (alias.resolved webhook
 Specs 01 + 03 (shipped portal-side) ──→ Spec 03c (pre-Spec-4 hardening:
                                           launcher migration, observability,
                                           @coms-portal/sdk, integrator quickstart)
+                                          ──→ Spec 06 (dual-email auth:
+                                                identity_user_emails multi-row,
+                                                OTP, Brevo)
+                                          ──→ Heroes-side rev3 adoption
                                           ──→ Specs 4, 5 (when their triggers fire)
 ```
 
-Spec 01 and Spec 03 are independent — they touch different surfaces (UX vs identity-writer enforcement) and can ship in parallel. Spec 03c is sequenced *after* both have shipped portal-side and *before* Spec 4/5 critical-path debugging begins; it is independent of Heroes' Rev 3 adoption (Heroes can adopt the existing packages today and migrate to the SDK in a follow-up).
+Spec 01 and Spec 03 are independent — they touch different surfaces (UX vs identity-writer enforcement) and shipped in parallel. Spec 03c is sequenced *after* both have shipped portal-side and *before* Spec 4/5 critical-path debugging begins; it is independent of Heroes' Rev 3 adoption. **Spec 06 sits between portal-side hardening (Specs 01/03/03c shipped) and Heroes-side adoption — owner decision 2026-04-30 is to land Spec 06 portal-side fully before unblocking Heroes' rev3 adoption.** This trades parallelism for sequencing clarity: Heroes adopts against a stable, complete identity model rather than tracking a moving target.
 
 **Recommended sequence:**
 
 1. **Rev 3 Spec 01** — Shared account widget package, portal adoption, Heroes adoption as the pilot H-app. *(Portal-side shipped 2026-04-28.)*
 2. **Rev 3 Spec 03** — Portal alias layer + Heroes ingestion rewrite + DB-role REVOKE. Critical-path: must land before any H-app takes real users. *(Portal-side shipped 2026-04-28; test gate cleared 2026-04-29 via Spec 03b.)*
-3. **Rev 3 Spec 03c** — Pre-Spec-4 hardening. Queued. Closes the launcher data-source mismatch (`/api/userinfo` already exists; chrome ignores it), lays observability foundations (Pino + request-IDs + Cloud Logging structured ingestion + real `/api/health`), corrects webhook-dispatcher doc/code drift, and extracts `@coms-portal/sdk` + a generic integrator quickstart. ~3 days portal-side; $0 incremental infra spend.
+3. **Rev 3 Spec 03c** — Pre-Spec-4 hardening. *(Shipped 2026-04-29.)* Closes the launcher data-source mismatch (`/api/userinfo` already exists; chrome ignores it), lays observability foundations (Pino + request-IDs + Cloud Logging structured ingestion + real `/api/health`), corrects webhook-dispatcher doc/code drift, and extracts `@coms-portal/sdk` + a generic integrator quickstart.
+4. **Rev 3 Spec 06** — Dual-email auth. **Drafted 2026-04-30; not yet started.** Multi-row `identity_user_emails` table replaces single-column model; OTP path for any email provider via Brevo; self-service personal-email binding; admin tooling (find-by-email, sign-out-everywhere, super_admin one-time login link). 6 PRs (A-F); F is the spec-update sweep that unblocks Heroes-side rev3.
+5. **Then — Heroes-side rev3 adoption** per `heroes-integration-handoff.md` + spec-03 §Appendix A.
 
 **Deferred specs (no scheduled work; ship on trigger):**
 
@@ -190,3 +202,4 @@ Rev 3 is done when:
 4. Onboarding a third H-app's chrome is a one-import / one-prop change, not a design exercise.
 5. `identity_users` rows can only be written by the portal API service account; Heroes' DB role attempts an `INSERT` and the database refuses.
 6. Heroes' sheet ingestion creates zero user records — every row resolves through the portal alias layer or lands in `pending_alias_resolution`. Tombstoned-user rows route to audit, never silently ingested or dropped.
+7. A user without a Google Workspace seat can be admin-allowlisted via personal email and authenticate via OTP. A Workspace user can self-bind a personal email post-login (OTP-verified) and authenticate via either path. Both produce identical `portal_sub`-keyed sessions; downstream H-apps cannot tell which path was used.
