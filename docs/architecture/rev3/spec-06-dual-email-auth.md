@@ -2,9 +2,14 @@
 
 > Priority: **Critical-path. Must land before Heroes-side rev3 implementation begins.**
 >
-> Drafted: 2026-04-30. Owner: Mr. Door (solo). Implementation status: not started.
+> Drafted: 2026-04-30. Owner: Mr. Door (solo).
 >
-> Sequencing rule: portal-side full delivery (PRs A-E) → spec-update sweep (PR F, this spec set + spec-01, spec-03 cross-references) → pivot to Heroes-side rev3 implementation per `heroes-integration-handoff.md`.
+> **Implementation status:**
+> - **PR A — shipped 2026-04-30** at commit `049008d`. Foundation: `identity_user_emails` (multi-row), `identity_user_emails_history` (DELETE-trigger tombstone), `auth_sessions` (portal-native opaque-UUID cookie). Session vehicle pivoted off GIP-managed cookie; GIP narrows to OIDC verifier role. Bootstrap-admin seed script wired into deploy. `coms-shared` bumped to v1.5.0 with additive `emails: UserEmailEntry[]` on user-provisioning/update payloads.
+> - **PRs B–E — pending.** B (OTP service + Brevo), C (login surfaces), D (profile + admin UIs + CSV import collision rules), E (extras: sign-out-everywhere, active-sessions panel, OTP-bypass).
+> - **PR F — partial.** Initial spec-update sweep landed alongside PR A, hold for the rest until B–E ship.
+>
+> Sequencing rule: portal-side full delivery (PRs A-E) → final spec-update sweep (PR F) → pivot to Heroes-side rev3 implementation per `heroes-integration-handoff.md`.
 
 ---
 
