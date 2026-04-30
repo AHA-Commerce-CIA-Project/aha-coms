@@ -1,7 +1,7 @@
 # Architecture Decision Record — coms-aha-heroes
 
-> Status: Living document. Last updated 2026-04-26.
-> Companion specs: `docs/architecture/rev1/spec-00..05.md` and `heroes-team-handoff.md`.
+> Status: Living document. Last updated 2026-04-30.
+> Companion specs: `docs/architecture/rev1/spec-00..05.md`, `docs/architecture/rev3/spec-00..05.md` (mirrored from portal), and `heroes-team-handoff.md`. Design-system contribution workflow: `/DESIGN_SYSTEM.md`.
 
 ---
 
@@ -18,7 +18,7 @@
 | Runtime | **Bun** | `bun --hot` for dev, `bun build … --target bun` for prod. |
 | API | **Elysia 1.3** | Mounted at `/api` and `/api/v1`. CORS, custom error handler, cache-control middleware. |
 | Frontend | **SvelteKit 2 + Svelte 5** | Built with Vite 6, served via `svelte-adapter-bun` handler imported by the Elysia process at runtime. |
-| Styling / UI | Tailwind v4, `bits-ui`, `lucide-svelte`, `tailwind-variants`, `layerchart` | |
+| Styling / UI | Tailwind v4, `@coms-portal/ui` v1.2.0 (chrome shells + 15 shadcn-style primitive families — Button/Card/Dialog/Select/Sheet/Tabs/Avatar/Badge/Input/Label/Table/Textarea/Separator/Skeleton/DropdownMenu, plus `cn()` helper), `bits-ui`, `lucide-svelte`, `tailwind-variants`, `layerchart` | After 2026-04-30 round-trip, primitives ship from `mrdoorba/coms-ui` only — the local `packages/web/src/lib/components/ui/` directory is gone (deleted in commit `b7b7431`, 103 files / 2,276 lines net). Tokens still live in Heroes' own `app.css` for now (Phase 2 adoption pending). |
 | i18n | Paraglide (inlang), cookie + `preferredLanguage` strategy | |
 | ORM / DB | **Drizzle 0.45** + `postgres` driver, Postgres on Cloud SQL | Migrations under `packages/shared/src/db/migrations`. |
 | Validation | TypeBox (`@sinclair/typebox`) + `drizzle-typebox` | Schemas re-exported from `@coms/shared/schemas`. |
@@ -83,7 +83,10 @@ Recent work (5fae8b3) added branch awareness to portal webhook provisioning. `br
 - **Postgres / Cloud SQL** — primary store. Migrations are authoritative.
 - **Google Cloud Storage** — signed URLs for uploads; bucket(s) managed by Terraform module `infra/modules/storage`.
 - **Google Sheets** — read source for sheet-sync; OAuth/service-account creds managed in infra.
-- **`@coms-portal/shared`** — git-pinned shared contracts package. Treat as an external semver-ish dependency.
+- **`@coms-portal/shared`** v1.1.0 — git-pinned shared contracts package. Treat as an external semver-ish dependency. **Out of date: portal is at v1.4.1.** Bumping is a coordinated change with the portal team; v1.4.1 added `APP_LAUNCHER` deprecation shim (Rev 3 §03c).
+- **`@coms-portal/ui`** v1.2.0 — git-pinned UI package; sole source of chrome shells + shadcn-style primitives across the COMS suite. After 2026-04-30 (commit `b7b7431`) Heroes adopted v1.2.0 end-to-end and deleted its local `ui/` directory. Future primitive changes go upstream to `mrdoorba/coms-ui` and propagate via tag bump — see `/DESIGN_SYSTEM.md` for the contribution workflow. Direct dependencies pulled in by `@coms-portal/ui`: `bits-ui`, `clsx`, `tailwind-merge`, `tailwind-variants`, `lucide-svelte` (already present in Heroes at matching versions).
+- **`@coms-portal/design-tokens`** — NOT yet pinned. Heroes' `app.css` owns the suite tokens locally (Spec 02 Phase 2 adoption pending). When Phase 2 is pulled forward, swap to `@import "@coms-portal/design-tokens/css"`.
+- **`@coms-portal/account-widget`** — NOT yet pinned. Spec 01 Heroes adoption pending (~1 week, scheduled per `heroes-integration-handoff.md`).
 
 ## 6. Conventions
 
@@ -93,7 +96,9 @@ Recent work (5fae8b3) added branch awareness to portal webhook provisioning. `br
 - **Tests:** Colocated `*.test.ts`, run via Bun. There is no global test command yet — invoke `bun test <path>`.
 - **i18n:** Add keys in `messages/*.json`; Paraglide compiles into `packages/web/src/lib/paraglide` at build time.
 
-## 7. Open / Active Initiatives (rev1)
+## 7. Open / Active Initiatives
+
+### Rev 1 (closed, kept for reference)
 
 | Spec | Title | Status hook |
 |------|-------|-------------|
@@ -104,9 +109,25 @@ Recent work (5fae8b3) added branch awareness to portal webhook provisioning. `br
 | 04 | Resilience (introspect SWR cache, health probes) | **H4 done — commit ccd9039** |
 | 05 | Architecture: SSR migration + Cloud Tasks for webhook delivery | Not started in Heroes |
 
+### Rev 3 (active — mirrors portal's `docs/architecture/rev3/`)
+
+| Spec | Title | Heroes status |
+|------|-------|----------------|
+| 01 | Shared Account Widget | **Pending Heroes adoption** (~1 week, mount `@coms-portal/account-widget` per `docs/architecture/rev3/heroes-integration-handoff.md`) |
+| 02 Phase 1+2+3 | Design system: docs + tokens + chrome | Phase 2 (token consumption) + Phase 3 (chrome migration) **pending** in Heroes; Heroes' `app.css` still owns tokens locally |
+| 02 Phase 4 | Design system: primitives | ✅ **shipped Heroes-side 2026-04-30** (commit `b7b7431` — adopted `@coms-portal/ui v1.2.0`, deleted local `ui/`, 24 files rewired) |
+| 03 | User identity ownership + alias layer | **Pending Heroes adoption — critical-path** (~2 weeks Heroes engineering + coordinated cutover; must land before real users; see `docs/architecture/rev3/spec-03-user-identity-alias-layer.md` §Appendix A) |
+| 03b/c/d | Test-gate cleanup, pre-Spec-4 hardening, deferred backlog | Portal-only; no Heroes work |
+| 04, 05 | User preferences, suite search | Deferred; trigger has not fired |
+
+Critical-path next: Spec 03 Heroes adoption (rename `users` → `heroes_profiles`, drop user-creation paths, build resolve-batch caller + alias_cache + pending-resolution queue + webhook consumer + audit log writer). Spec 01 Heroes adoption is parallel and can ship independently.
+
 ## 8. Things to Be Careful About
 
 - **Don't bypass the portal for auth.** Anything that mints local sessions or stores passwords belongs in the portal, not here. The legacy `change-password` route exists but is on the deprecation path.
 - **Webhook handler is idempotent and authoritative for user state** — duplicate `user.provisioned` events must not double-create. Lookup-by-email then upsert.
 - **Cloud Run scale-to-zero kills in-process workers.** The sheet-sync scheduler currently lives in the API process; long-running background work will die mid-flight. Plan accordingly until Spec 05 lands.
 - **Eden RPC couples `@coms/web` to `@coms/server` types.** Breaking changes in route response shapes break the web typecheck — that's intentional, treat type errors as a useful signal.
+- **Don't fork primitives back into a local `ui/` directory.** As of 2026-04-30 (Spec 02 Phase 4 round-trip), all primitives ship from `mrdoorba/coms-ui` v1.2.0 — Heroes' historical `packages/web/src/lib/components/ui/` is gone for a reason. If you need a new variant or component, open a PR upstream to `mrdoorba/coms-ui`; do not reintroduce a local copy. Workflow at `/DESIGN_SYSTEM.md`. The fork drift between Heroes' local primitives and the platform package is exactly what Spec 02 Phase 4 closed; reopening it silently is a regression that the design-system contract treats as forbidden.
+- **`cn()` comes from `@coms-portal/ui/primitives` now**, not from local `$lib/utils.ts`. Heroes' `utils.ts` still exports `buildSearchParams` and other Heroes-specific helpers, but `cn` and the four shadcn type helpers (`WithoutChildren`, `WithoutChild`, `WithoutChildrenOrChild`, `WithElementRef`) were stripped on 2026-04-30 and now live upstream.
+- **`@coms-portal/shared` is at v1.1.0** but portal is at **v1.4.1.** This is an out-of-date pin. v1.4.1 added the `APP_LAUNCHER` deprecation shim (Rev 3 §03c) — bumping unblocks the launcher migration on Heroes' side. Coordinate with portal team before bumping.
