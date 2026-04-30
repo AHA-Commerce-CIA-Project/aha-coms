@@ -180,6 +180,8 @@ The widget renders, right-to-left in the host header:
    - Section: "Sign out" button — triggers RP-initiated logout.
 3. **Optional left-of-logo product label** — when `currentApp !== "portal"`, render the app's label (e.g. "Heroes") as a subtle prefix next to the portal mark. Mirrors Microsoft's M365 suite-header pattern.
 
+> **As of Spec 06 PR A (shipped 2026-04-30, commit `049008d`):** `/api/userinfo` includes an additive `emails: UserEmailEntry[]` array alongside the existing scalar `email` field. The scalar `email` is derived per Spec 06 §Q8a (workspace email if present, else personal-primary, else first-personal). Widget v1 consumes only the scalar `email` field and is behaviorally unchanged; future widget versions may surface a "manage all emails" inline action using the `emails` array.
+
 Design tokens come from `@coms-portal/shared` (already used by both portal and Heroes), so the widget inherits the existing palette without a separate theming layer.
 
 ---
