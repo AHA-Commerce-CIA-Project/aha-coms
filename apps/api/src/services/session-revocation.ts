@@ -3,6 +3,7 @@ import { db } from '~/db'
 import { identityUsers, sessionRevocations, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
 import { revokeRefreshTokens } from '../gip-admin'
 import { dispatchPortalWebhook } from './portal-webhook-fanout'
+import { getDisplayEmail } from './email-resolution'
 import type { SessionRevokedPayload } from '@coms-portal/shared'
 import { logger } from '~/logger'
 
@@ -96,10 +97,12 @@ export async function revokePortalSession(input: {
     const appSlugs = await listAppSlugsForUser(userId)
 
     if (appSlugs.length > 0) {
+      // Resolve display email per Q8a for webhook payload
+      const displayEmail = await getDisplayEmail(userId)
       const payload: SessionRevokedPayload = {
         userId: user.id,
         gipUid: user.gipUid ?? '',
-        email: user.email,
+        email: displayEmail ?? '',
         reason,
         notBefore: notBefore.toISOString(),
       }

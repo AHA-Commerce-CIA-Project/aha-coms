@@ -10,15 +10,14 @@ export type IdentityUserSource = (typeof IDENTITY_USER_SOURCES)[number]
 export const identityUsers = pgTable('identity_users', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   gipUid: text('gip_uid').unique(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
+  // email and personalEmail moved to identity_user_emails (multi-row) per spec-06.
+  // gipUid retained as a nullable audit-link to the Google identity for Workspace users.
   name: varchar('name', { length: 255 }).notNull(),
   phone: varchar('phone', { length: 20 }),
   department: varchar('department', { length: 100 }),
   position: varchar('position', { length: 100 }),
   branch: varchar('branch', { length: 50 }),
   portalRole: varchar('portal_role', { length: 20 }).notNull().default('employee'),
-  personalEmail: varchar('personal_email', { length: 255 }),
-
   birthDate: varchar('birth_date', { length: 10 }),
   leaderName: varchar('leader_name', { length: 255 }),
   hasGoogleWorkspace: boolean('has_google_workspace').notNull().default(false),

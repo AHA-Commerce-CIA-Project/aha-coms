@@ -1,5 +1,6 @@
 import { describe, expect, mock, test, beforeEach } from 'bun:test'
 import { Elysia } from 'elysia'
+import { fullDrizzleOrmMock } from '~/test-helpers/schema-barrel-mock'
 
 // ---------------------------------------------------------------------------
 // Mock requireRole
@@ -67,6 +68,7 @@ function makeSelectChain(resolveWith: unknown[]): unknown {
   const resolve = () => Promise.resolve(resolveWith)
   chain.from = () => chain
   chain.innerJoin = () => chain
+  chain.leftJoin = () => chain
   chain.where = () => chain
   chain.orderBy = resolve
   chain.limit = (_n: number) => resolve()
@@ -121,34 +123,16 @@ mock.module('~/db/schema/app-user-config', () => ({
 mock.module('~/db/schema/identity-users', () => ({
   identityUsers: schemaPlaceholder('iu', 'id', 'name', 'email', 'status', 'portalSub', 'gipUid', 'createdAt', 'updatedAt'),
 }))
+mock.module('~/db/schema/identity-user-emails', () => ({
+  identityUserEmails: schemaPlaceholder('iue', 'id', 'identityUserId', 'email', 'emailNormalized', 'kind', 'isPrimary', 'verifiedAt', 'addedBy', 'createdAt', 'updatedAt'),
+}))
 mock.module('~/db/schema/bulk-edit-locks', () => ({
   bulkEditLocks: schemaPlaceholder('bel', 'appId', 'acquiredBy', 'acquiredAt'),
 }))
 mock.module('~/db/schema/alias-collision-queue', () => ({
   aliasCollisionQueue: schemaPlaceholder('acq', 'id', 'rawName', 'rawNameNormalized', 'suggestedIdentityUserId', 'source', 'context', 'status', 'createdAt', 'resolvedAt', 'resolvedBy', 'resolutionAction'),
 }))
-mock.module('drizzle-orm', () => ({
-  eq: (_l: unknown, _r: unknown) => ({}),
-  and: (..._args: unknown[]) => ({}),
-  ilike: (_col: unknown, _val: unknown) => ({}),
-  or: (..._args: unknown[]) => ({}),
-  asc: (_col: unknown) => ({}),
-  desc: (_col: unknown) => ({}),
-  sql: new Proxy((_s: TemplateStringsArray) => '', { get: (_t, p) => (_: unknown) => p }),
-  relations: () => ({}),
-  uniqueIndex: () => ({ on: () => ({ where: () => ({}) }) }),
-  index: () => ({ on: () => ({}) }),
-  unique: () => ({ on: () => ({}) }),
-  inArray: (_l: unknown, _r: unknown) => ({}),
-  pgTable: (_name: string, cols: unknown) => cols,
-  uuid: () => ({ primaryKey: () => ({}) }),
-  text: () => ({ notNull: () => ({ default: () => ({}) }) }),
-  boolean: () => ({ notNull: () => ({ default: () => ({}) }) }),
-  integer: () => ({ notNull: () => ({ default: () => ({}) }) }),
-  jsonb: () => ({ notNull: () => ({ default: () => ({}) }) }),
-  timestamp: () => ({ notNull: () => ({ defaultNow: () => ({}) }) }),
-  foreignKey: () => ({ references: () => ({}) }),
-}))
+mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
 // ---------------------------------------------------------------------------
 // Mock manifests service

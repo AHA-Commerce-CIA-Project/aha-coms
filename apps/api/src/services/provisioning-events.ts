@@ -12,10 +12,12 @@ import { eq, inArray, and } from 'drizzle-orm'
 import { db } from '~/db'
 import { identityUsers, teamMembers, teamAppAccess, appRegistry, memberAppRole, appUserConfig } from '~/db/schema'
 import { dispatchPortalWebhook } from './portal-webhook-fanout'
+import { getDisplayEmail, getEmailEntries } from './email-resolution'
 import type {
   UserProvisionedPayload,
   UserUpdatedPayload,
   UserOffboardedPayload,
+  UserEmailEntry,
 } from '@coms-portal/shared'
 import type { PortalRole, PortalAppRole } from '@coms-portal/shared'
 
@@ -27,6 +29,7 @@ interface ResolvedUserState {
   id: string
   gipUid: string | null
   email: string
+  emails: UserEmailEntry[]
   name: string
   portalRole: PortalRole
   branch: string | null
@@ -49,6 +52,11 @@ async function resolveUserState(userId: string): Promise<ResolvedUserState | nul
   })
 
   if (!user) return null
+
+  // Resolve display email per Q8a: workspace > personal-primary > first-personal
+  const email = await getDisplayEmail(userId)
+  // Resolve full emails array for additive Q8c webhook payload field
+  const emails = await getEmailEntries(userId)
 
   const memberships = await db
     .select({ teamId: teamMembers.teamId })
@@ -79,7 +87,8 @@ async function resolveUserState(userId: string): Promise<ResolvedUserState | nul
   return {
     id: user.id,
     gipUid: user.gipUid ?? null,
-    email: user.email,
+    email: email ?? '',
+    emails,
     name: user.name,
     portalRole: user.portalRole as PortalRole,
     branch: user.branch ?? null,
@@ -220,6 +229,7 @@ export async function emitUserProvisioned(userId: string): Promise<void> {
       userId: state.id,
       gipUid: state.gipUid,
       email: state.email,
+      emails: state.emails,
       name: state.name,
       portalRole: state.portalRole,
       teamIds: state.teamIds,
@@ -258,6 +268,7 @@ export async function emitUserUpdated(userId: string, changedFields: string[]): 
       userId: state.id,
       gipUid: state.gipUid,
       email: state.email,
+      emails: state.emails,
       name: state.name,
       portalRole: state.portalRole,
       teamIds: state.teamIds,

@@ -171,6 +171,20 @@ jobs:
 
           kill $PROXY_PID
 
+      - name: Seed bootstrap admin (idempotent)
+        run: |
+          ./cloud-sql-proxy ${{ env.CLOUD_SQL_CONNECTION }} --port 5432 &
+          PROXY_PID=$!
+          sleep 3
+
+          DATABASE_URL="postgresql://coms_portal_app:${{ secrets.DB_PASSWORD }}@localhost:5432/coms_portal" \
+            BOOTSTRAP_ADMIN_EMAIL="${{ vars.BOOTSTRAP_ADMIN_EMAIL }}" \
+            BOOTSTRAP_ADMIN_NAME="${{ vars.BOOTSTRAP_ADMIN_NAME }}" \
+            BOOTSTRAP_ADMIN_PERSONAL_EMAIL="${{ vars.BOOTSTRAP_ADMIN_PERSONAL_EMAIL }}" \
+            bun run --cwd apps/api db:seed-admin
+
+          kill $PROXY_PID
+
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v3
         with:

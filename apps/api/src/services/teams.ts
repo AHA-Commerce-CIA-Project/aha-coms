@@ -1,22 +1,14 @@
 import { db } from '~/db'
-import { teams, teamMembers, teamAppAccess, memberAppRole, identityUsers } from '~/db/schema'
+import { teams, teamMembers, teamAppAccess, memberAppRole } from '~/db/schema'
 import { and, eq } from 'drizzle-orm'
-import { resolveAndSyncClaims } from './claims'
 import { emitUserUpdated } from './provisioning-events'
 import { logger } from '~/logger'
 
 export async function addTeamMember(teamId: string, userId: string, roleInTeam?: string): Promise<void> {
   await db.insert(teamMembers).values({ teamId, userId, ...(roleInTeam ? { roleInTeam } : {}) })
 
-  const user = await db.query.identityUsers.findFirst({
-    where: eq(identityUsers.id, userId),
-  })
-
-  if (user?.gipUid) {
-    await resolveAndSyncClaims(user.gipUid, userId)
-  }
-
-  // Fan out user.updated — team membership changed, which may change app access
+  // Fan out user.updated — team membership changed, which may change app access.
+  // Claims are recomputed from DB per-request (resolveAuthUser); no GIP-side sync needed (Q-claims).
   emitUserUpdated(userId, ['teamIds', 'apps']).catch((err) => {
     logger.error({ err, userId }, '[provisioning-events] emitUserUpdated failed')
   })
@@ -36,14 +28,6 @@ export async function addTeamMembersBatch(
   })
 
   for (const member of members) {
-    const user = await db.query.identityUsers.findFirst({
-      where: eq(identityUsers.id, member.userId),
-    })
-
-    if (user?.gipUid) {
-      await resolveAndSyncClaims(user.gipUid, member.userId)
-    }
-
     emitUserUpdated(member.userId, ['teamIds', 'apps']).catch((err) => {
       logger.error({ err, userId: member.userId }, '[provisioning-events] emitUserUpdated failed')
     })
@@ -84,35 +68,16 @@ export async function removeTeamMember(teamId: string, userId: string): Promise<
     }
   }
 
-  const user = await db.query.identityUsers.findFirst({
-    where: eq(identityUsers.id, userId),
-  })
-
-  if (user?.gipUid) {
-    await resolveAndSyncClaims(user.gipUid, userId)
-  }
-
-  // Fan out user.updated — team removed, app access may have narrowed
+  // Fan out user.updated — team removed, app access may have narrowed.
+  // Claims are recomputed from DB per-request (Q-claims); no GIP-side sync needed.
   emitUserUpdated(userId, ['teamIds', 'apps']).catch((err) => {
     logger.error({ err, userId }, '[provisioning-events] emitUserUpdated failed')
   })
 }
 
 export async function deleteTeam(teamId: string): Promise<void> {
-  // Fetch members before cascade delete so we can refresh their claims
-  const members = await db
-    .select({ userId: teamMembers.userId })
-    .from(teamMembers)
-    .where(eq(teamMembers.teamId, teamId))
-
   await db.delete(teams).where(eq(teams.id, teamId))
-
-  for (const { userId } of members) {
-    const user = await db.query.identityUsers.findFirst({
-      where: eq(identityUsers.id, userId),
-    })
-    if (user?.gipUid) {
-      await resolveAndSyncClaims(user.gipUid, userId)
-    }
-  }
+  // Member claims are recomputed from DB per-request post-Q-claims; no GIP-side sync to refresh.
+  // user.updated webhook fanout would be desirable here for completeness, but the existing
+  // implementation never emitted on team delete — preserve current behavior.
 }

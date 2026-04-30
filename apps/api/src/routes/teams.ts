@@ -5,6 +5,7 @@ import { eq, sql, inArray } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { addTeamMember, addTeamMembersBatch, removeTeamMember, deleteTeam } from '../services/teams'
 import { logAudit } from '../services/audit'
+import { getDisplayEmail } from '../services/email-resolution'
 
 export const teamRoutes = new Elysia({ prefix: '/teams' })
   .use(requireRole('admin'))
@@ -69,6 +70,15 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
         .where(inArray(memberAppRole.userId, memberIds))
     }
 
+    // Resolve display email per Q8a for each team member
+    const memberEmailMap = new Map<string, string | null>()
+    await Promise.all(
+      team.members.map(async (member) => {
+        const email = await getDisplayEmail(member.userId)
+        memberEmailMap.set(member.userId, email)
+      }),
+    )
+
     return {
       ...team,
       members: team.members.map((member) => ({
@@ -76,7 +86,7 @@ export const teamRoutes = new Elysia({ prefix: '/teams' })
         userId: member.userId,
         roleInTeam: member.roleInTeam,
         name: member.user?.name ?? null,
-        email: member.user?.email ?? null,
+        email: memberEmailMap.get(member.userId) ?? null,
         appRoles: memberRoles
           .filter((r) => r.userId === member.userId)
           .map((r) => ({ appId: r.appId, appRole: r.appRole })),

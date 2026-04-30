@@ -86,6 +86,25 @@ mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 const dispatchPortalWebhook = mock(async () => undefined)
 mock.module('../portal-webhook-fanout', () => ({ dispatchPortalWebhook }))
 
+// Mock email-resolution so tests don't need to stub the orderBy chain used
+// by getDisplayEmail / getEmailEntries in email-resolution.ts.
+// getDisplayEmail returns the user's primary email; getEmailEntries returns
+// the full emails array (additive Q8c webhook field).
+const getDisplayEmail = mock(async (_userId: string) => currentUser?.email ?? null)
+const getEmailEntries = mock(async (_userId: string) => {
+  if (!currentUser) return []
+  return [
+    {
+      address: currentUser.email,
+      kind: 'workspace' as const,
+      isPrimary: true,
+      verified: true,
+      addedBy: 'admin' as const,
+    },
+  ]
+})
+mock.module('../email-resolution', () => ({ getDisplayEmail, getEmailEntries }))
+
 const { emitUserProvisioned, emitUserUpdated, emitUserOffboarded } =
   await import('../provisioning-events')
 
@@ -110,6 +129,22 @@ function resetState() {
   currentUser = null
   appsForUser = []
   dispatchPortalWebhook.mockClear()
+  getDisplayEmail.mockClear()
+  getEmailEntries.mockClear()
+  // Restore default implementations that read from currentUser
+  getDisplayEmail.mockImplementation(async (_userId: string) => currentUser?.email ?? null)
+  getEmailEntries.mockImplementation(async (_userId: string) => {
+    if (!currentUser) return []
+    return [
+      {
+        address: currentUser.email,
+        kind: 'workspace' as const,
+        isPrimary: true,
+        verified: true,
+        addedBy: 'admin' as const,
+      },
+    ]
+  })
 }
 
 // ---------------------------------------------------------------------------

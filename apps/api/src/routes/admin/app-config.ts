@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia'
 import { db } from '~/db'
 import { appUserConfig } from '~/db/schema/app-user-config'
 import { identityUsers } from '~/db/schema/identity-users'
+import { identityUserEmails } from '~/db/schema/identity-user-emails'
 import { bulkEditLocks } from '~/db/schema/bulk-edit-locks'
 import { eq, and, ilike, or } from 'drizzle-orm'
 import { requireRole } from '~/middleware/rbac'
@@ -83,7 +84,7 @@ export const adminAppConfigRoutes = new Elysia({ prefix: '/app-config' })
             eq(appUserConfig.appId, query.appId),
             or(
               ilike(identityUsers.name, `%${filter}%`),
-              ilike(identityUsers.email, `%${filter}%`),
+              ilike(identityUserEmails.email, `%${filter}%`),
             ),
           )
         : eq(appUserConfig.appId, query.appId)
@@ -92,13 +93,20 @@ export const adminAppConfigRoutes = new Elysia({ prefix: '/app-config' })
         .select({
           portalSub: appUserConfig.portalSub,
           name: identityUsers.name,
-          email: identityUsers.email,
+          email: identityUserEmails.email,
           config: appUserConfig.config,
           schemaVersion: appUserConfig.schemaVersion,
           updatedAt: appUserConfig.updatedAt,
         })
         .from(appUserConfig)
         .innerJoin(identityUsers, eq(appUserConfig.portalSub, identityUsers.id))
+        .leftJoin(
+          identityUserEmails,
+          and(
+            eq(identityUserEmails.identityUserId, identityUsers.id),
+            eq(identityUserEmails.kind, 'workspace'),
+          ),
+        )
         .where(whereClause)
         .orderBy(identityUsers.name)
 
