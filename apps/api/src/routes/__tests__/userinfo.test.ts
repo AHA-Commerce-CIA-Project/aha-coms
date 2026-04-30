@@ -98,16 +98,34 @@ const GIP_ADMIN_SPECS = ['../gip-admin', '../../gip-admin', '~/gip-admin']
 
 const gipAdminMock = {
   ...realGipAdmin,
-  verifySessionCookie: async (cookie: string) => {
-    if (!mockSessionValid || cookie === 'invalid') {
-      throw new Error('Invalid session')
-    }
-    return { uid: mockUser?.gipUid ?? 'unknown', email: mockUser?.email ?? '' }
-  },
   verifyIdToken: async () => ({ uid: 'unknown', email: '' }),
-  createSessionCookie: async () => 'cookie',
 }
 mockSpecs(GIP_ADMIN_SPECS, () => gipAdminMock)
+
+// Mock portal-native sessions service (replaces GIP verifySessionCookie)
+const SESSIONS_SPECS = ['../services/sessions', '../../services/sessions', '~/services/sessions']
+mockSpecs(SESSIONS_SPECS, () => ({
+  validateSession: async (cookie: string) => {
+    if (!mockSessionValid || cookie === 'invalid') return null
+    if (!mockUser) return null
+    return {
+      id: mockUser.id,
+      sessionId: 'session-1',
+      gipUid: mockUser.gipUid,
+      name: mockUser.name,
+      portalRole: mockUser.portalRole,
+    }
+  },
+  revokeSession: async () => undefined,
+  createPortalSession: async () => ({ sessionId: 'session-new', expiresAt: new Date() }),
+}))
+
+// Mock email-resolution service (getDisplayEmail is called by resolveAuthUser; getEmailEntries by userinfo)
+const EMAIL_RESOLUTION_SPECS = ['../services/email-resolution', '../../services/email-resolution', '~/services/email-resolution']
+mockSpecs(EMAIL_RESOLUTION_SPECS, () => ({
+  getDisplayEmail: async () => mockUser?.email ?? null,
+  getEmailEntries: async () => mockUser ? [{ address: mockUser.email, kind: 'workspace', isPrimary: true, verified: true, addedBy: 'admin' }] : [],
+}))
 
 // resolveAuthUser: stub returns the configured mockUser as a SessionUser
 const middlewareAuthMock = {
@@ -135,9 +153,7 @@ mockSpecs(['../middleware/auth', '../../middleware/auth', '~/middleware/auth'], 
 const realAuthBroker = { ...(await import('~/services/auth-broker')) }
 const realOidcVerifier = { ...(await import('~/services/oidc-verifier')) }
 const realSessionRevocation = { ...(await import('~/services/session-revocation')) }
-const realClaims = { ...(await import('~/services/claims')) }
 
-const CLAIMS_SPECS = ['../services/claims', '../../services/claims', '~/services/claims']
 const SESSION_REVOCATION_SPECS = [
   '../services/session-revocation',
   '../../services/session-revocation',
@@ -149,8 +165,6 @@ const OIDC_VERIFIER_SPECS = [
   '../../services/oidc-verifier',
   '~/services/oidc-verifier',
 ]
-
-mockSpecs(CLAIMS_SPECS, () => ({ ...realClaims, resolveAndSyncClaims: async () => undefined }))
 
 mockSpecs(SESSION_REVOCATION_SPECS, () => ({
   ...realSessionRevocation,
@@ -250,7 +264,9 @@ describe('GET /api/userinfo', () => {
     expect(body.sub).toBe('user-1')
     expect(body.name).toBe('Jane Smith')
     expect(body.email).toBe('jane@aha.test')
-    expect(body.role).toBe('employee')
+    // Q8b: emails array is present
+    expect(Array.isArray(body.emails)).toBe(true)
+    expect(body.portalRole).toBe('employee')
     expect(body.avatar_url).toBeNull()
     expect(body.apps).toEqual([
       { slug: 'heroes', label: 'Heroes', url: 'https://heroes.ahacommerce.net' },

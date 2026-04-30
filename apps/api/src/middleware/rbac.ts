@@ -18,7 +18,10 @@ export function requireRole(...roles: PortalRole[]) {
       if (!authUser) {
         throw status(401, { message: 'Unauthorized' })
       }
-      if (!hasPortalRole(authUser.portalRole, roles)) {
+      // super_admin is an internal concept; for RBAC purposes it has the highest
+      // rank — treat as 'admin' when forwarding to hasPortalRole.
+      const effectiveRole = (authUser.portalRole === 'super_admin' ? 'admin' : authUser.portalRole) as PortalRole
+      if (!hasPortalRole(effectiveRole, roles)) {
         throw status(403, { message: 'Insufficient portal role' })
       }
       return { authUser }

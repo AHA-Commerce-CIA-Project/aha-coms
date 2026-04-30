@@ -64,3 +64,13 @@ variable "service_url" {
   EOT
   type        = string
 }
+
+variable "bootstrap_admin_email" {
+  description = "Workspace email for the bootstrap admin identity row (spec-06). Passed to the seed-admin post-migrate script via Cloud Run env."
+  type        = string
+}
+
+variable "bootstrap_admin_name" {
+  description = "Display name for the bootstrap admin identity row (spec-06)."
+  type        = string
+}

@@ -1,11 +1,7 @@
 import { Elysia, t } from 'elysia'
-import {
-  verifyIdToken,
-  createSessionCookie,
-  verifySessionCookie,
-} from '../gip-admin'
+import { verifyIdToken } from '../gip-admin'
 import { db } from '~/db'
-import { identityUsers, sessionRevocations, teamMembers, appRegistry } from '~/db/schema'
+import { identityUsers, identityUserEmails, sessionRevocations, teamMembers, appRegistry } from '~/db/schema'
 import { eq, and, gte, ne } from 'drizzle-orm'
 import {
   type PortalBrokerExchangePayload,
@@ -13,7 +9,6 @@ import {
   SESSION_COOKIE_OPTIONS,
 } from '@coms-portal/shared'
 import { PORTAL_ORIGIN } from '~/config'
-import { resolveAndSyncClaims } from '../services/claims'
 import { getSessionCookieValue } from '../middleware/session-cookie'
 import { resolveAuthUser } from '../middleware/auth'
 import {
@@ -30,6 +25,12 @@ import {
 } from '../services/session-revocation'
 import { verifyGoogleIdToken } from '../services/oidc-verifier'
 import { logger } from '~/logger'
+import {
+  createPortalSession,
+  validateSession,
+  revokeSession,
+} from '../services/sessions'
+import { getDisplayEmail } from '../services/email-resolution'
 
 const SELF_AUDIENCE = PORTAL_ORIGIN
 
@@ -130,6 +131,11 @@ async function validatePostLogoutRedirectUri(uri: string): Promise<string | null
   return null
 }
 
+/**
+ * Resolve the session user for broker/handoff and broker/launch endpoints.
+ * Uses portal-native session validation + full AuthUser resolution.
+ * Throws BrokerValidationError if not authenticated.
+ */
 async function resolveSessionUser(request: Request): Promise<PortalSessionUser> {
   const cookieHeader = request.headers.get('cookie') ?? ''
   const sessionCookie = getSessionCookieValue(cookieHeader)
@@ -138,19 +144,38 @@ async function resolveSessionUser(request: Request): Promise<PortalSessionUser> 
     throw new BrokerValidationError('Not authenticated')
   }
 
-  const decoded = await verifySessionCookie(sessionCookie)
-  return resolveAuthUser(decoded)
+  const sessionUser = await validateSession(sessionCookie)
+  if (!sessionUser) {
+    throw new BrokerValidationError('Not authenticated')
+  }
+
+  const authUser = await resolveAuthUser(sessionUser)
+  // PortalSessionUser.portalRole is 'employee' | 'admin' from coms-shared.
+  // super_admin is an internal portal concept; cast it to 'admin' for the
+  // broker layer that forwards the role to H-apps.
+  return {
+    ...authUser,
+    portalRole: (authUser.portalRole === 'super_admin' ? 'admin' : authUser.portalRole) as PortalSessionUser['portalRole'],
+  }
 }
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
   /**
    * POST /api/auth/session
-   * Exchange a Firebase ID token for a server-managed session cookie.
-   * Returns 403 if the email is not pre-provisioned in identity_users.
+   * Exchange a Firebase ID token for a portal-native session cookie.
+   *
+   * Workspace OIDC path (Q1-session):
+   *  1. Verify the Google ID token via GIP's OIDC verifier.
+   *  2. Lookup the email in identity_user_emails (Q-mismatch: kind-agnostic lookup).
+   *  3. If kind='personal' → 403 WRONG_LOGIN_PATH with structured error.
+   *  4. Look up and validate the identity_users row; verify status.
+   *  5. Auto-link gipUid on first login (if null).
+   *  6. Auto-verify email on first successful login (Q4c).
+   *  7. Mint a portal-native auth_sessions row; set opaque UUID as cookie.
    */
   .post(
     '/session',
-    async ({ body, set, cookie }) => {
+    async ({ body, set, cookie, request }) => {
       let decoded
       try {
         decoded = await verifyIdToken(body.idToken)
@@ -160,9 +185,38 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         return { message: e instanceof Error ? e.message : 'Invalid token' }
       }
 
-      // Closed registration: only pre-provisioned employees may log in
+      if (!decoded.email) {
+        set.status = 401
+        return { message: 'No email claim' }
+      }
+      const emailNormalized = decoded.email.toLowerCase().trim()
+
+      // Q-mismatch: lookup by email_normalized only — no kind filter at this stage.
+      const emailRows = await db
+        .select()
+        .from(identityUserEmails)
+        .where(eq(identityUserEmails.emailNormalized, emailNormalized))
+        .limit(1)
+
+      if (emailRows.length === 0) {
+        set.status = 403
+        return { message: 'Access denied. Contact your administrator.' }
+      }
+
+      const emailRow = emailRows[0]!
+
+      if (emailRow.kind === 'personal') {
+        // Q-mismatch: workspace OIDC against personal-kind email — strict-but-helpful 403
+        set.status = 403
+        return {
+          error: 'WRONG_LOGIN_PATH' as const,
+          message: 'This email is registered for code-based sign-in only. Use the email & verification code option.',
+        }
+      }
+
+      // Look up identity_users; verify status
       const user = await db.query.identityUsers.findFirst({
-        where: eq(identityUsers.email, decoded.email ?? ''),
+        where: eq(identityUsers.id, emailRow.identityUserId),
       })
 
       if (!user) {
@@ -175,22 +229,33 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         return { message: 'Account is inactive or suspended.' }
       }
 
-      // Link GIP UID on first login if not yet stored
-      if (!user.gipUid) {
+      // Link gipUid on first login if not stored yet
+      if (!user.gipUid && decoded.uid) {
         await db
           .update(identityUsers)
           .set({ gipUid: decoded.uid, updatedAt: new Date() })
           .where(eq(identityUsers.id, user.id))
       }
 
-      // Sync custom claims (portalRole, teamIds, apps)
-      await resolveAndSyncClaims(user.gipUid ?? decoded.uid, user.id)
+      // Auto-verify on first successful login (Q4c)
+      if (emailRow.verifiedAt === null) {
+        await db
+          .update(identityUserEmails)
+          .set({ verifiedAt: new Date(), updatedAt: new Date() })
+          .where(eq(identityUserEmails.id, emailRow.id))
+      }
 
-      const expiresIn = SESSION_COOKIE_OPTIONS.maxAge * 1000
-      const sessionCookie = await createSessionCookie(body.idToken, expiresIn)
+      // Mint portal-native session
+      const { sessionId } = await createPortalSession({
+        identityUserId: user.id,
+        authMethod: 'workspace_oidc',
+        emailUsed: decoded.email,
+        request,
+      })
 
+      // Set cookie with sessionId as the opaque value
       cookie[SESSION_COOKIE_OPTIONS.name].set({
-        value: sessionCookie,
+        value: sessionId,
         path: SESSION_COOKIE_OPTIONS.path,
         httpOnly: SESSION_COOKIE_OPTIONS.httpOnly,
         secure: SESSION_COOKIE_OPTIONS.secure,
@@ -205,15 +270,23 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       response: {
         200: t.Object({ ok: t.Literal(true) }),
         401: t.Object({ message: t.String() }),
-        403: t.Object({ message: t.String() }),
+        403: t.Union([
+          t.Object({ error: t.Literal('WRONG_LOGIN_PATH'), message: t.String() }),
+          t.Object({ message: t.String() }),
+        ]),
       },
     },
   )
 
   /**
    * POST /api/auth/logout
-   * Clear the session cookie and revoke the GIP session.
-   * Fans out session.revoked webhooks to all apps the user has access to.
+   * Clear the session cookie and revoke the current session.
+   *
+   * Q-logout action A: per-row revokedAt UPDATE for the current session only.
+   * Also calls revokePortalSession (session-revocation.ts) which:
+   *   - inserts a session_revocations cutoff row (broad guard)
+   *   - calls GIP revokeRefreshTokens (best-effort)
+   *   - fans out session.revoked webhooks to all the user's apps
    *
    * Optional `post_logout_redirect_uri` body field (OIDC RP-initiated logout
    * adjunct): when present and allowlisted against `app_registry.url`, the
@@ -241,13 +314,12 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
       if (sessionCookie) {
         try {
-          const decoded = await verifySessionCookie(sessionCookie)
-          const user = await db.query.identityUsers.findFirst({
-            where: eq(identityUsers.gipUid, decoded.uid),
-            columns: { id: true },
-          })
-          if (user) {
-            await revokePortalSession({ userId: user.id, reason: 'logout' })
+          const sessionUser = await validateSession(sessionCookie)
+          if (sessionUser) {
+            // Action A: revoke this specific session row
+            await revokeSession(sessionUser.sessionId, 'logout')
+            // Fanout: webhook emission + GIP refresh-token revoke + cutoff row
+            await revokePortalSession({ userId: sessionUser.id, reason: 'logout' })
           }
         } catch {
           // Already invalid or user not found — clear the cookie anyway
@@ -289,7 +361,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
    *   - `id_token_hint` (optional today; reserved for future cross-IdP exits)
    *   - `post_logout_redirect_uri` (required for the redirect; must be allowlisted)
    *
-   * Clears the portal session cookie, revokes the GIP session (same as POST),
+   * Clears the portal session cookie, revokes the current session,
    * then 303-redirects to the validated URI. If the URI is missing or not
    * allowlisted, returns 400.
    */
@@ -315,13 +387,12 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
       if (sessionCookie) {
         try {
-          const decoded = await verifySessionCookie(sessionCookie)
-          const user = await db.query.identityUsers.findFirst({
-            where: eq(identityUsers.gipUid, decoded.uid),
-            columns: { id: true },
-          })
-          if (user) {
-            await revokePortalSession({ userId: user.id, reason: 'logout' })
+          const sessionUser = await validateSession(sessionCookie)
+          if (sessionUser) {
+            // Action A: revoke this specific session row
+            await revokeSession(sessionUser.sessionId, 'logout')
+            // Fanout: webhook emission + GIP refresh-token revoke + cutoff row
+            await revokePortalSession({ userId: sessionUser.id, reason: 'logout' })
           }
         } catch {
           // Already invalid or user not found — clear the cookie anyway
@@ -570,17 +641,20 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }
 
       // 5. Build and return the active session user
-      // Resolve teamIds via team memberships (mirrors claims.ts resolution)
+      // Resolve teamIds via team memberships and display email
       const memberships = await db
         .select({ teamId: teamMembers.teamId })
         .from(teamMembers)
         .where(eq(teamMembers.userId, userId))
       const teamIds = memberships.map((m) => m.teamId)
 
+      // Resolve display email per Q8a (workspace > primary personal > first personal)
+      const displayEmail = await getDisplayEmail(userId)
+
       const sessionUser: PortalSessionUser = {
         id: user.id,
         gipUid: user.gipUid ?? '',
-        email: user.email,
+        email: displayEmail ?? '',
         name: user.name,
         portalRole: user.portalRole as PortalSessionUser['portalRole'],
         teamIds,

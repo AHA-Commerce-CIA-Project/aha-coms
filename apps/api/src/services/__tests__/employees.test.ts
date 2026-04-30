@@ -62,12 +62,16 @@ const tx = {
   },
 }
 
-// Chainable select stub: .select(...).from(...).where(...) → []
+// Chainable select stub: .select(...).from(...).where(...).orderBy(...) → []
 // Lets fire-and-forget callers (emitUserProvisioned, etc.) run to a no-op
 // without exercising real DB logic.
 const emptySelectChain = {
   from: () => emptySelectChain,
-  where: async () => [] as unknown[],
+  innerJoin: () => emptySelectChain,
+  leftJoin: () => emptySelectChain,
+  where: () => emptySelectChain,
+  orderBy: async () => [] as unknown[],
+  limit: async () => [] as unknown[],
   then: (onFulfilled: (v: unknown[]) => unknown) => Promise.resolve([] as unknown[]).then(onFulfilled),
 }
 const emptySelect = () => emptySelectChain
@@ -107,6 +111,29 @@ mock.module('~/db/schema', () => ({
 }))
 mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 mock.module('../claims', () => ({ resolveAndSyncClaims }))
+
+// Mock email-resolution so processEmployeeProvisioning and emitUserProvisioned
+// don't blow up on the orderBy chain missing from the emptySelectChain stub.
+// getDisplayEmail derives the email from insertedValues (the workspace email
+// that was just inserted into identityUserEmails).
+mock.module('../email-resolution', () => ({
+  getDisplayEmail: async (_userId: string) => {
+    // Return the most recently inserted email (the workspace email, if any).
+    const emailInsert = insertedValues.find((v) => typeof v.email === 'string' && v.kind)
+    return emailInsert?.email as string ?? null
+  },
+  getEmailEntries: async (_userId: string) => {
+    const emailInsert = insertedValues.find((v) => typeof v.email === 'string' && v.kind)
+    if (!emailInsert) return []
+    return [{
+      address: emailInsert.email,
+      kind: emailInsert.kind,
+      isPrimary: emailInsert.isPrimary,
+      verified: true,
+      addedBy: emailInsert.addedBy,
+    }]
+  },
+}))
 // `../session-revocation` and `../provisioning-events` are intentionally not
 // mocked — the empty-select db stub above lets the real fire-and-forget code
 // paths run to a no-op. Those code paths transitively import the rest of

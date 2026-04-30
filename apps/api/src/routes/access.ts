@@ -1,26 +1,21 @@
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
-import { accessAuditLog, teamAppAccess, teamMembers, identityUsers, appRegistry, memberAppRole } from '~/db/schema'
+import { accessAuditLog, teamAppAccess, teamMembers, identityUsers, identityUserEmails, appRegistry, memberAppRole } from '~/db/schema'
 import { and, eq, desc, sql, inArray } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
-import { resolveAndSyncClaims } from '../services/claims'
 import { logAudit } from '../services/audit'
 import { emitUserUpdated } from '../services/provisioning-events'
 import { logger } from '~/logger'
 
 async function refreshTeamMemberClaims(teamId: string): Promise<void> {
+  // Claims are recomputed from DB per-request post-Q-claims; no GIP-side sync needed.
+  // We still emit user.updated webhooks so app-side projections refresh.
   const members = await db
     .select({ userId: teamMembers.userId })
     .from(teamMembers)
     .where(eq(teamMembers.teamId, teamId))
 
   for (const { userId } of members) {
-    const user = await db.query.identityUsers.findFirst({
-      where: eq(identityUsers.id, userId),
-    })
-    if (user?.gipUid) {
-      await resolveAndSyncClaims(user.gipUid, userId)
-    }
     emitUserUpdated(userId, ['teamIds', 'apps']).catch((err) => {
       logger.error({ err, userId }, '[provisioning-events] emitUserUpdated failed')
     })
@@ -84,11 +79,18 @@ export const accessRoutes = new Elysia()
             createdAt: accessAuditLog.createdAt,
             actor: {
               name: identityUsers.name,
-              email: identityUsers.email,
+              email: identityUserEmails.email,
             },
           })
           .from(accessAuditLog)
           .leftJoin(identityUsers, eq(accessAuditLog.actorId, identityUsers.id))
+          .leftJoin(
+            identityUserEmails,
+            and(
+              eq(identityUserEmails.identityUserId, identityUsers.id),
+              eq(identityUserEmails.kind, 'workspace'),
+            ),
+          )
           .orderBy(desc(accessAuditLog.createdAt))
           .limit(limit)
           .offset(offset),
@@ -205,13 +207,8 @@ export const accessRoutes = new Elysia()
           set: { appRole: body.appRole, grantedBy: actor?.id, grantedAt: new Date() },
         })
 
-      // Refresh claims and emit webhook for the affected user
-      const user = await db.query.identityUsers.findFirst({
-        where: eq(identityUsers.id, params.userId),
-      })
-      if (user?.gipUid) {
-        await resolveAndSyncClaims(user.gipUid, params.userId)
-      }
+      // Emit webhook for the affected user. Claims are recomputed from DB per-request post-Q-claims;
+      // no GIP-side sync needed.
       emitUserUpdated(params.userId, ['appRole']).catch((err) => {
         logger.error({ err, userId: params.userId }, '[provisioning-events] emitUserUpdated failed')
       })
@@ -244,12 +241,6 @@ export const accessRoutes = new Elysia()
       .delete(memberAppRole)
       .where(and(eq(memberAppRole.userId, params.userId), eq(memberAppRole.appId, params.appId)))
 
-    const user = await db.query.identityUsers.findFirst({
-      where: eq(identityUsers.id, params.userId),
-    })
-    if (user?.gipUid) {
-      await resolveAndSyncClaims(user.gipUid, params.userId)
-    }
     emitUserUpdated(params.userId, ['appRole']).catch((err) => {
       logger.error({ err, userId: params.userId }, '[provisioning-events] emitUserUpdated failed')
     })

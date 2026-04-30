@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '~/db'
 import { identityUsers, type EmployeeProvisioningStatus } from '~/db/schema'
 import { createGipUser, generatePasswordResetLink, setGipUserDisabled } from '../gip-admin'
-import { resolveAndSyncClaims } from './claims'
+import { getDisplayEmail } from './email-resolution'
 
 export interface EmployeeProvisioningResult {
   status: EmployeeProvisioningStatus
@@ -36,12 +36,19 @@ export async function processEmployeeProvisioning(userId: string): Promise<Emplo
     .where(eq(identityUsers.id, userId))
 
   try {
+    // Resolve the user's display email (workspace > personal) for GIP operations.
+    // GIP still needs an email address to create/identify the Firebase user record.
+    const displayEmail = await getDisplayEmail(userId)
+    if (!displayEmail) {
+      throw new Error('Cannot provision user with no email address')
+    }
+
     if (gipUid) {
       await setGipUserDisabled(gipUid, false)
       reenabledThisAttempt = true
     } else {
       const tempPassword = crypto.randomUUID()
-      gipUid = await createGipUser(user.email, tempPassword)
+      gipUid = await createGipUser(displayEmail, tempPassword)
       createdThisAttempt = true
 
       await db
@@ -50,8 +57,7 @@ export async function processEmployeeProvisioning(userId: string): Promise<Emplo
         .where(eq(identityUsers.id, userId))
     }
 
-    await resolveAndSyncClaims(gipUid, userId)
-    await generatePasswordResetLink(user.email)
+    await generatePasswordResetLink(displayEmail)
 
     await db
       .update(identityUsers)

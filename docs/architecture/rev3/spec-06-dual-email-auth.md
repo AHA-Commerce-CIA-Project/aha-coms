@@ -79,6 +79,14 @@ Operational requirements (from owner conversation, 2026-04-30):
 | Q10a | Feature flag for personal-email path | **No flag.** Revert is the rollback tool. | OTP service has its own kill-switch (yank API key). Avoids one-more-thing-to-flip. |
 | Q10b | Staging dry-run | **No.** Land on prod directly, per-PR. | Portal currently has no staging; introducing one for this single feature is over-investment. Symmetric with Heroes-side hybrid plan. |
 | Q10c | Spec-update timing | **After E, before Heroes-side work starts** | Matches owner's stated sequencing directive. |
+| Q1-session | Session vehicle | **Portal-native `auth_sessions` table; opaque-UUID cookie. GIP narrows to OIDC verifier (`verifyIdToken` only).** Replaces the existing GIP-encrypted-JWT session cookie. | Future auth methods (passkeys, magic-link, federation) become single-helper calls instead of GIP custom-token bridges. One revocation mechanism. No phantom GIP users for OTP-only employees. Cost concentrated in PR A; every future PR simpler. |
+| Q-claims | GIP custom-claim sync (`resolveAndSyncClaims` → `setCustomUserClaims`) | **Drop entirely.** Portal owns claims; `resolveAuthUser` already recomputes from DB per-request (`middleware/auth.ts:42-67`); GIP-side claims have no consumer post-Q1-session. Keep `gipUid` as a nullable audit-link column — cheap, useful for forensics. | Verified dead code today (`apps/api/src/middleware/auth.ts:42` comment confirms claims-from-DB-per-request). Each login currently pays a network round-trip to GIP for nothing. Removing eliminates portal-DB ↔ GIP-claims drift surface and gives all auth methods (Workspace, OTP, future) equal claim-resolution semantics. |
+| Q-mismatch | Workspace OIDC against an email registered as `kind='personal'` | **Strict-but-helpful 403.** Lookup ignores `kind`; if the row's kind is `personal`, return 403 with hint `"This email is registered for code-based sign-in only. Use the email & verification code option."` and structured `error: 'WRONG_LOGIN_PATH'` for the front-end. Does not reveal which identity the email belongs to. | Avoids silent 403 confusion when a user accidentally tries the wrong button; preserves privacy because the response is identical to a generic "contact admin" 403 from anyone else's perspective (the user already proved they own the email via Google). |
+| Q-bootstrap | First-admin / disaster-recovery provisioning | **Decoupled seed script** at `apps/api/scripts/seed-admin.ts`. Reads `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_NAME` from env; idempotently UPSERTs an `identity_users` row + `kind='workspace'` `identity_user_emails` row with `addedBy='bootstrap'`, `verifiedAt=NOW()`, `isPrimary=true`, `portalRole='super_admin'`. Runs separately from migrations (`bun run db:seed-admin`); also wired as a post-migrate step in deploy. Backfill in PR A still carries existing rows; seed script is the "fresh DB / recovery" path. | Industry standard (Django `createsuperuser`, Sentry/Grafana env-var auto-promote). Keeps schema migrations free of personal emails. Always-a-way-back-in invariant. |
+| Q-lifecycle | Per-request session-row writes (`lastSeenAt`) | **None.** `auth_sessions` carries `createdAt` only; no `lastSeenAt`, no `lastSeenIp`. Active-sessions panel shows "Started X ago." | User explicitly does not care about "last active" UX (2026-04-30). Avoids per-request DB writes; keeps `validateSession` to a single indexed read. |
+| Q-ttl | Session TTL by `authMethod` | **Differentiated: workspace_oidc 14d, personal_otp 14d, admin_bypass 1h.** Implemented as const map in `createPortalSession`. | Workspace and OTP are equivalent trust levels post-verification — both get the 14d default. Admin-bypass is literally a support hand-off tool; a 14d session born from "support handoff" lingering is an incident risk; 1h forces the user to log in normally for durable access. |
+| Q-logout | Sign-out semantics across surfaces (current, other-device, all-other, admin-everywhere, deactivation) | **Matrix locked**, see "Sign-out matrix" section. Per-row UPDATE for surgical actions; per-row UPDATE + `session_revocations` cutoff for admin/deactivation broad actions. | Cheap-cutoff via `session_revocations` keeps `validateSession` fast for fanout cases; per-row UPDATE keeps the active-sessions panel display truthful after re-login. |
+| Q-soak | Column-drop strategy for old `identity_users.email` / `personal_email` | **One-shot in PR A migration.** Steps 1-5 run together; rollback past the column drop requires restore-from-backup. | Cleanest end state. Solo-dev / prod-direct posture accepts the backup-restore as the rollback path; soak windows leaking dead columns indefinitely is the bigger long-term cost. |
 
 ---
 
@@ -228,7 +236,7 @@ export const otpRequestLog = pgTable(
     requestIp: varchar('request_ip', { length: 45 }).notNull(),
     requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
     outcome: varchar('outcome', { length: 20 }).notNull(),
-      // 'sent' | 'rate_limited_email' | 'rate_limited_ip' | 'unknown_email'
+      // 'sent' | 'rate_limited_email' | 'rate_limited_ip' | 'unknown_email' | 'wrong_login_path'
   },
   (t) => [
     index('otp_request_log_email_time_idx').on(t.emailNormalized, t.requestedAt),
@@ -239,20 +247,120 @@ export const otpRequestLog = pgTable(
 
 Cleanup cron prunes rows older than 24h.
 
-### `auth_sessions` — column additions for Q6e/Q10 admin tooling
+### `auth_sessions` — new (portal-native session model)
 
-```diff
- export const authSessions = pgTable('auth_sessions', {
-   // ... existing columns ...
-+  authMethod: varchar('auth_method', { length: 20 }).notNull(),
-+    // 'workspace_oidc' | 'personal_otp' | 'admin_bypass'
-+  emailUsed: varchar('email_used', { length: 255 }),
-+    // The specific email (workspace or personal) used to authenticate this session.
-+    // Surfaced on admin user-detail (Q6e); never returned to user/H-apps (Q6a).
-+  deviceLabel: varchar('device_label', { length: 255 }),
-+    // From User-Agent at session creation, e.g. "Mac · Safari 18". For active-sessions panel (#10).
- })
+**Architectural note (Q1, locked 2026-04-30):** The portal moves off GIP-issued session cookies as the *vehicle* for portal sessions. GIP narrows to the role of OIDC verifier for Google Workspace ID tokens (`verifyIdToken` in `apps/api/src/gip-admin.ts` stays). Portal sessions become a portal-owned table with an opaque-UUID cookie. Three reasons:
+
+1. Each future auth method (OTP today; passkeys, magic-link, federation later) becomes one helper call (`createPortalSession(...)`) instead of a `createCustomToken` → client-exchange → `verifyIdToken` round-trip through GIP.
+2. OTP-only employees (no Workspace seat) no longer require a phantom GIP user lazy-created on first login.
+3. One revocation mechanism (`auth_sessions.revokedAt` per-row + `session_revocations` cutoff for fanout) replaces the GIP-cookie + revocation-cutoff pair. Per-session sign-out becomes truthful.
+
+Cost: every callsite of `verifySessionCookie` (~10-15 files: middlewares, `/auth/me`, `/userinfo`, broker handoff) migrates to `validateSession(sessionId)` in PR A. Cookie value becomes an opaque random UUID (the `auth_sessions.id`); all session state is in the row. The broker `/introspect` endpoint barely changes — it already keys on `userId + sessionIssuedAt`, just reads `auth_sessions` instead of `session_revocations`.
+
+```ts
+export const AUTH_METHODS = ['workspace_oidc', 'personal_otp', 'admin_bypass'] as const
+export type AuthMethod = (typeof AUTH_METHODS)[number]
+
+export const SESSION_REVOKED_REASONS = [
+  'logout',                  // user clicked "sign out" (current session)
+  'logout_other_device',     // user clicked "sign out" on a row in active-sessions panel
+  'logout_all_other',        // user clicked "sign out all other devices"
+  'admin_revoke',            // admin clicked "sign out all sessions" on user-detail
+  'status_change',           // user deactivated / offboarded
+  'superseded',              // user re-authed from same device; old row marked superseded
+] as const
+
+export const authSessions = pgTable(
+  'auth_sessions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+      // Also the opaque value stored in the session cookie. Random UUID — no roll-your-own crypto.
+    identityUserId: uuid('identity_user_id')
+      .notNull()
+      .references(() => identityUsers.id, { onDelete: 'cascade' }),
+    authMethod: varchar('auth_method', { length: 20 }).notNull(),
+      // 'workspace_oidc' | 'personal_otp' | 'admin_bypass'
+    emailUsed: varchar('email_used', { length: 255 }),
+      // The specific email (workspace or personal) used to authenticate this session.
+      // Surfaced on admin user-detail (Q6e); never returned to user/H-apps (Q6a).
+      // Null for admin_bypass.
+    deviceLabel: varchar('device_label', { length: 255 }),
+      // From User-Agent at session creation, e.g. "Mac · Safari 18". For active-sessions panel (#10).
+    ipAddress: varchar('ip_address', { length: 45 }),
+      // IPv6-safe length. Frozen at session creation. Truncated for display in the active-sessions panel.
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+      // Active-sessions panel shows "Started X ago" using this. No `lastSeenAt` — per Q-lifecycle, we don't pay
+      // a per-request DB write for "last active" UX.
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+      // TTL is differentiated by authMethod (per Q-ttl):
+      //   workspace_oidc → 14 days
+      //   personal_otp   → 14 days
+      //   admin_bypass   → 1 hour (short-lived; the link is for immediate support hand-off, not durable access)
+      // Implemented as a const map in createPortalSession.
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+      // Set when this specific session is revoked. Null = active.
+    revokedReason: varchar('revoked_reason', { length: 30 }),
+  },
+  (t) => [
+    index('auth_sessions_identity_user_id_idx').on(t.identityUserId),
+    index('auth_sessions_active_idx')
+      .on(t.identityUserId, t.expiresAt)
+      .where(sql`${t.revokedAt} IS NULL`),
+  ],
+)
 ```
+
+`session_revocations` is **not** removed. Its role narrows to the cheap wall-clock-cutoff for "sign out everywhere" admin actions: instead of UPDATE-ing N rows, insert one revocation row with `notBefore = NOW()` and have `validateSession` reject any session whose `createdAt < notBefore`. Per-row `revokedAt` and the cutoff coexist; both are checked on every session validation.
+
+### `validateSession` shape (replaces `verifySessionCookie` callsites)
+
+```ts
+// apps/api/src/services/sessions.ts
+export async function validateSession(sessionId: string): Promise<SessionUser | null> {
+  // 1. Sanity-check sessionId is a UUID; bail to null if not (avoids DB query on stale/garbage cookies).
+  // 2. Look up the row (single indexed PK lookup).
+  // 3. Reject if revokedAt IS NOT NULL or expiresAt < now() or sessionRevocations cutoff.
+  // 4. Return resolved SessionUser (joined with identity_users + claims). No lastSeenAt write per Q-lifecycle.
+}
+
+export async function createPortalSession(args: {
+  identityUserId: string
+  authMethod: AuthMethod
+  emailUsed: string | null
+  request: Request          // for UA + IP extraction
+}): Promise<{ sessionId: string; expiresAt: Date }> {
+  // Inserts auth_sessions row, returns the id (= cookie value).
+}
+
+export async function revokeSession(sessionId: string, reason: SessionRevokedReason): Promise<void>
+  // Single-row UPDATE auth_sessions SET revokedAt=now(), revokedReason=$reason. Used by
+  // current-session logout, "sign out this other device", and admin actions per-row UPDATE.
+
+export async function revokeAllSessionsForUser(args: {
+  userId: string
+  reason: SessionRevokedReason
+  exceptSessionId?: string  // current session for "sign out all other devices"
+}): Promise<void>
+  // Bulk: UPDATE auth_sessions SET revokedAt=now(), revokedReason=$reason
+  //          WHERE identityUserId=$userId AND revokedAt IS NULL
+  //            AND (exceptSessionId IS NULL OR id != exceptSessionId).
+  // For admin-initiated cases (admin_revoke, status_change), ALSO insert a session_revocations
+  // cutoff row so validateSession short-circuits without scanning auth_sessions.
+
+export async function insertSessionCutoff(userId: string, reason: SessionRevokedReason): Promise<void>
+  // Wrapper around session_revocations insert; used internally by revokeAllSessionsForUser
+  // for admin paths, exposed for direct use in deactivation flows.
+```
+
+### Sign-out matrix (Q-logout, locked 2026-04-30)
+
+| Action | Trigger | DB writes | Cookie |
+|---|---|---|---|
+| A. Current-session logout | Top-bar "Sign out" / `POST /api/auth/logout` | `revokeSession($currentSessionId, 'logout')` | Cleared |
+| B. Sign out one specific other device | Profile #10 panel, per-row "Sign out" | `revokeSession($rowId, 'logout_other_device')` (gated by `identityUserId = $self` to prevent cross-user revoke) | No change |
+| C. Sign out all other devices | Profile #10 panel, "Sign out all other devices" | `revokeAllSessionsForUser({userId: $self, reason: 'logout_all_other', exceptSessionId: $currentSessionId})` — per-row UPDATE only, no cutoff insert | No change |
+| D. Admin sign-out-everywhere | Admin #9 "Sign out all sessions" on user-detail | Both: per-row UPDATE (`reason: 'admin_revoke'`) AND `session_revocations` cutoff insert. The cutoff is the cheap fast-path for `validateSession`; the per-row UPDATE keeps the target user's active-sessions panel display correct after they re-login. | N/A |
+| E. User deactivation | Admin "Deactivate user" | Same as D + `UPDATE identity_users SET status='inactive'`. | N/A |
 
 ### `one_time_login_links` — new (#11 admin OTP-bypass)
 
@@ -303,15 +411,17 @@ Access control:
 
 ## Auth flows
 
-### Workspace OIDC path (existing, behaviorally unchanged)
+### Workspace OIDC path
 
 1. User clicks "Sign in with Google" on portal login page.
 2. GIP redirect → token returned to portal.
-3. Portal validates token, extracts `decoded.email`.
-4. Portal looks up `identity_user_emails WHERE email_normalized = lower(trim(decoded.email)) AND kind = 'workspace' LIMIT 1`. (Replaces today's `identity_users WHERE email = decoded.email`.)
-5. If found: continue session creation. If `verifiedAt IS NULL`, set it now (first successful login auto-verifies workspace email per Q4c).
-6. If not found: 403 (matches today's behavior — pre-provisioned-only).
-7. Session row inserted with `authMethod='workspace_oidc'`, `emailUsed=decoded.email`.
+3. Portal validates token via `verifyIdToken` (GIP narrowed to OIDC-verifier role per Q1-session), extracts `decoded.email`.
+4. Portal looks up `identity_user_emails WHERE email_normalized = lower(trim(decoded.email)) LIMIT 1` (no `kind` filter at this stage — see Q-mismatch below).
+5. **Branch on result:**
+   - **No match:** 403 with `{ message: "Access denied. Contact your administrator." }` (matches today's pre-provisioned-only behavior).
+   - **Match with `kind='workspace'`:** continue. If `verifiedAt IS NULL`, set it now (first successful login auto-verifies workspace email per Q4c). Resolve `identityUserId`; if `identity_users.status != 'active'`, 403. Mint session: `createPortalSession({identityUserId, authMethod: 'workspace_oidc', emailUsed: decoded.email, ...})`.
+   - **Match with `kind='personal'`** (Q-mismatch): 403 with `{ message: "This email is registered for code-based sign-in only. Use the email & verification code option on the sign-in screen." }`. Strict-but-helpful — the user clearly owns the email (Google verified it just now) but the portal binding is for the OTP path, not Google OIDC. Does not reveal whose identity the email is attached to.
+6. Sign-in screen front-end should also receive a structured error code (e.g. `error: 'WRONG_LOGIN_PATH'`) so it can surface a "Switch to email code" CTA without parsing message text.
 
 ### Personal-email OTP path (new)
 
@@ -323,16 +433,23 @@ Body: `{ email: string }`
 2. Rate-limit checks against `otp_request_log`:
    - Count rows for this `emailNormalized` in last 60 seconds. If ≥1, return 429 with `Retry-After: 60`.
    - Count rows for this `requestIp` in last 60 minutes. If ≥30, return 429.
-3. Look up `identity_user_emails WHERE email_normalized = $1 AND kind = 'personal' AND verified_at IS NOT NULL LIMIT 1`.
-4. If not found → log to `otp_request_log` with `outcome='unknown_email'` and **return 200 with the same response shape as success** (Q7g enumeration resistance). Do NOT send email.
-5. If found:
-   - Generate 6-digit numeric code: `crypto.randomInt(0, 1_000_000).toString().padStart(6, '0')`.
-   - Hash: `sha256(code).hex()`.
-   - Invalidate any prior live row for this `emailNormalized`: `UPDATE otp_codes SET invalidated_at = now() WHERE email_normalized = $1 AND consumed_at IS NULL AND invalidated_at IS NULL AND expires_at > now()`.
-   - Insert new `otp_codes` row: `{emailNormalized, codeHash, expiresAt = now() + 10 minutes, attemptsRemaining = 5, requestIp}`.
-   - Send email via Brevo: subject "Your COMS portal sign-in code", body containing the code and a "did not request? ignore" line. Template lives in `apps/api/src/services/mail/templates/otp.ts`.
-   - Log to `otp_request_log` with `outcome='sent'`.
-6. Response (always, success or unknown-email): `{ message: "If this email is registered, you'll receive a code shortly. The code is valid for 10 minutes." }`.
+3. Look up `identity_user_emails WHERE email_normalized = $1 LIMIT 1` (no `kind` or `verified_at` filter — see branch logic).
+4. **Branch on result:**
+   - **Match with `kind='personal'`:**
+     - Generate 6-digit numeric code: `crypto.randomInt(0, 1_000_000).toString().padStart(6, '0')`.
+     - Hash: `sha256(code).hex()`.
+     - Invalidate any prior live row for this `emailNormalized`: `UPDATE otp_codes SET invalidated_at = now() WHERE email_normalized = $1 AND consumed_at IS NULL AND invalidated_at IS NULL AND expires_at > now()`.
+     - Insert new `otp_codes` row: `{emailNormalized, codeHash, expiresAt = now() + 10 minutes, attemptsRemaining = 5, requestIp}`.
+     - Send email via Brevo: subject "Your COMS portal sign-in code", body containing the code and a "did not request? ignore" line. Template lives in `apps/api/src/services/mail/templates/otp.ts`.
+     - Log to `otp_request_log` with `outcome='sent'`.
+     - Note: `verified_at` is NOT filtered. An unverified personal email still receives a login OTP; first successful verify auto-sets `verifiedAt = NOW()` (symmetric with Workspace OIDC's first-login auto-verify per Q4c). This is the only path back in for a user whose self-service binding never confirmed.
+   - **Match with `kind='workspace'`** (user typed their workspace email at the OTP screen):
+     - Return 200 with `{ error: 'WRONG_LOGIN_PATH', message: 'This email is for Google sign-in. Use the "Sign in with Google" button.' }`.
+     - Do NOT send code. Log to `otp_request_log` with `outcome='wrong_login_path'` (extend the outcome enum). Symmetric with Q-mismatch for the Workspace path.
+   - **No match:**
+     - Log to `otp_request_log` with `outcome='unknown_email'`. Do NOT send email.
+     - Return 200 with `{ message: "If this email is registered, you'll receive a code shortly. The code is valid for 10 minutes." }` — same shape as the success path. Q7g enumeration resistance.
+5. The `outcome` enum on `otp_request_log` becomes: `'sent' | 'rate_limited_email' | 'rate_limited_ip' | 'unknown_email' | 'wrong_login_path'`.
 
 #### Verify OTP (`POST /api/auth/otp/verify`)
 
@@ -535,7 +652,7 @@ On admin user-detail (#5):
 
 On profile page (#3) below email management:
 - "Active sessions" section.
-- Lists `auth_sessions WHERE identity_user_id = $self AND expires_at > now()`, showing `deviceLabel`, `authMethod`, `lastSeenAt`, ip-truncated.
+- Lists `auth_sessions WHERE identity_user_id = $self AND expires_at > now() AND revoked_at IS NULL`, showing `deviceLabel`, `authMethod`, `createdAt` ("Started X ago" — no `lastSeenAt` per Q-lifecycle), ip-truncated.
 - Per-row "Sign out" button (current session marked "This device").
 - "Sign out all other devices" button (revokes all but current).
 
@@ -656,27 +773,49 @@ Total: 8 test files, ~1-2 days of test writing spread across PRs A/B/D/E. Each t
 
 ## Implementation plan
 
-### PR A — Foundation (schema + auth-route refactor)
+### PR A — Foundation (schema + auth-route + session-vehicle refactor)
 
-**Lands:** Direct push to `main` (or PR-with-self-merge if you want a CI gate).
+**Lands:** PR with self-merge (CI gate; large blast-radius refactor).
 
 **Includes:**
-- Drizzle migration (one or two files):
-  1. Create `identity_user_emails` table + indexes + GENERATED `email_normalized` column (hand-edit SQL body for the GENERATED expression; journal entry from `drizzle-kit generate`).
-  2. Create `identity_user_emails_history` table + DELETE trigger on `identity_user_emails`.
-  3. Backfill: insert rows from existing `identity_users.email` (kind based on `hasGoogleWorkspace`, addedBy='backfill') and existing `identity_users.personal_email` (kind='personal', addedBy='backfill'), all with `verifiedAt = NOW()` and `isPrimary = true` for the workspace row (or for the personal row in `hasGoogleWorkspace=false` rows).
-  4. Drop `identity_users.email` and `identity_users.personal_email` columns.
-- Refactor `apps/api/src/routes/auth.ts` lookup (line 164-165) to query `identity_user_emails`.
-- Refactor `apps/api/src/routes/userinfo.ts` to read primary email per Q8a precedence.
-- Refactor OIDC token issuance path to derive `email` claim per Q8a.
-- Update `coms-shared` to v1.5.0 with new `emails` array on `UserProvisionedPayload`. Push, tag, swap `apps/web/package.json` git URL pin.
+- Drizzle migrations:
+  1. Create `identity_user_emails` + indexes + GENERATED `email_normalized` column (hand-edit SQL body for the GENERATED expression; journal entry from `drizzle-kit generate`).
+  2. Create `identity_user_emails_history` + DELETE trigger on `identity_user_emails`.
+  3. Create `auth_sessions` table.
+  4. Backfill `identity_user_emails` from existing `identity_users.email` (kind based on `hasGoogleWorkspace`, addedBy='backfill') and `identity_users.personal_email` (kind='personal', addedBy='backfill'), all with `verifiedAt = NOW()`. `isPrimary = true` for the workspace row, or for the personal row when `hasGoogleWorkspace=false`. NB (2026-04-30): no real users on the system — backfill primarily seeds dev/admin pre-provisioned rows. Idempotency still matters for re-runs.
+  5. Drop `identity_users.email` and `identity_users.personal_email` columns.
+- **Session-vehicle migration (new, replaces the GIP-cookie session model):**
+  - New `apps/api/src/services/sessions.ts` exposing `createPortalSession`, `validateSession`, `revokeSession`, `revokeAllSessionsForUser`.
+  - Cookie value changes from GIP-encrypted JWT to opaque UUID = `auth_sessions.id`. Cookie name unchanged (`SESSION_COOKIE_OPTIONS.name`).
+  - Refactor `POST /api/auth/session` (`auth.ts:151-211`): keep `verifyIdToken` for Workspace OIDC verification; remove `createSessionCookie`; call `createPortalSession({authMethod: 'workspace_oidc', emailUsed: decoded.email, ...})`; set the opaque-UUID cookie.
+  - Refactor `POST /api/auth/logout` and `GET /api/auth/logout` (`auth.ts:224-351`): replace `verifySessionCookie` with `validateSession`; call `revokeSession(sessionId, 'logout')` instead of `revokePortalSession` (which now only handles cutoff cases).
+  - Refactor `resolveSessionUser` (`auth.ts:133-143`) and every other callsite of `verifySessionCookie` / `getSessionCookieValue` — likely middlewares, `/auth/me`, `/userinfo`, broker handoff, possibly more. (PR A scope: enumerate and migrate all of them. Use `grep -rn "verifySessionCookie\|getSessionCookieValue"` as the migration checklist.)
+  - Refactor `/auth/broker/introspect` (`auth.ts:510-618`): keep the userId + sessionIssuedAt contract; query `auth_sessions` for liveness instead of (or in addition to) `session_revocations`. The relying-party app contract does not change.
+  - GIP Admin SDK usage narrows to `verifyIdToken` only. `createSessionCookie`, `verifySessionCookie`, and `setCustomUserClaims` calls are removed; `setCustomUserClaims` itself stays in `gip-admin.ts` only if another path needs it (likely deletable).
+  - Delete `apps/api/src/services/claims.ts` (`resolveAndSyncClaims`) and remove its callsite at `auth.ts:187`. Per Q-claims, GIP-side custom claims have no consumer post-pivot. `resolveAuthUser` (`middleware/auth.ts`) already computes claims from DB per request and continues to do so. `gipUid` column on `identity_users` stays as a nullable audit-link.
+- Refactor `apps/api/src/routes/auth.ts:164-165` identity lookup to query `identity_user_emails` joined to `identity_users` (replaces `email = decoded.email`).
+- Refactor `apps/api/src/routes/userinfo.ts` to read primary email per Q8a precedence and emit the new `emails` array per Q8b.
+- Refactor OIDC ID-token issuance path (broker handoff / claims) to derive `email` claim per Q8a.
+- Update `@coms-portal/shared` to v1.5.0 with new `emails` array on `UserProvisionedPayload` and equivalent shape on user-update payloads. Push, tag, swap `apps/web/package.json` git URL pin.
 - Update `apps/api/src/services/employee-import.ts` to write through `identity_user_emails`.
 - Update `apps/api/src/services/employee-info-sync.ts` to write through `identity_user_emails`.
 - Update `createEmployee` service in `apps/api/src/services/employees.ts`.
+- **Bootstrap-admin seed script (per Q-bootstrap):**
+  - New `apps/api/scripts/seed-admin.ts`. Reads `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_NAME` (and optionally `BOOTSTRAP_ADMIN_PERSONAL_EMAIL`) from env. No-ops if `BOOTSTRAP_ADMIN_EMAIL` is unset.
+  - In a single transaction: ensure an `identity_users` row exists for that email (UPSERT keyed on the `kind='workspace'` `identity_user_emails.email_normalized`); ensure an `identity_user_emails` row exists with `kind='workspace'`, `addedBy='bootstrap'`, `verifiedAt=NOW()`, `isPrimary=true`. Set `portalRole='super_admin'` on the identity row if newly created (do NOT downgrade an existing admin).
+  - Add `'bootstrap'` to `IDENTITY_USER_EMAIL_ADDED_BY` enum.
+  - Wire `bun run db:seed-admin` script in `apps/api/package.json`.
+  - Add a post-migrate hook in the deploy workflow (`infra/.github/workflows/deploy.yml` or wherever `db:migrate` is invoked) to run `db:seed-admin` after every migration. Idempotent so safe to repeat.
+  - Add `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_NAME` to Cloud Run env in `infra/cloud-run.tf` (set to your admin identity).
+  - Local: add to `.env.example` so a fresh dev clone can self-seed.
 
-**Verification:** existing Workspace-email login still works post-deploy. (Behavior unchanged from user perspective.)
+**Verification:** existing Workspace-email login still works post-deploy. **No real users on the system today (confirmed 2026-04-30)** — the cookie-format change has no human impact; no advance communication needed; in-flight `auth_handoffs` are not a concern. `validateSession` should still fail cleanly on a malformed (non-UUID) cookie value (return null without a DB query) so the dev's own stale cookies don't generate 500s during the rollout.
 
-**Risk:** schema migration on prod with no staging. Mitigation: backfill is idempotent (UPSERT on email_normalized); migration is reversible by dropping tables (the column drop in step 4 is the destructive step — split into a follow-up migration if you want a soak window).
+**Risk:** large blast radius (every authenticated request path touches the new `validateSession`) and one-shot destructive column drop on a no-staging prod. Mitigations:
+- `auth_sessions` table created and `createPortalSession` written first; tested in isolation against transactional Postgres before any callsite migration.
+- Cookie format change is reversible only by users re-logging in; revert deploy + revert cookie = users re-auth.
+- Backfill is idempotent (UPSERT on `email_normalized`).
+- Column drop in step 5 is one-shot per Q-soak (decided 2026-04-30); rollback past it requires restore-from-backup. Confirm a fresh DB backup exists immediately before the migration runs.
 
 ### PR B — OTP infrastructure
 
@@ -742,14 +881,25 @@ Total: 8 test files, ~1-2 days of test writing spread across PRs A/B/D/E. Each t
 
 ## Pre-implementation checklist (clean session pickup)
 
-Before starting PR A in a clean session, verify:
+Validated 2026-04-30:
 
-- [ ] `coms-shared` repo is reachable; the version-bump + push pattern is understood (per `feedback_drizzle_migrations.md` — but specific to npm/git+url pinning, not Drizzle).
-- [ ] Brevo account exists with verified single-sender (dev posture).
-- [ ] Three Brevo secrets in GCP Secret Manager.
-- [ ] CLAUDE.md rule on Drizzle migrations (`drizzle-kit generate` for journal, hand-edit SQL body if needed) is understood.
-- [ ] Hybrid push plan from Heroes side (PR-with-self-merge for security-sensitive PRs B, C, E#11; direct push for the rest) carries over.
-- [ ] No staging exists for portal — prod-direct deploys are the rule.
+**For PR A:**
+- [x] `coms-shared` is `git+https://github.com/mrdoorba/coms-shared.git#v1.4.1`. Bump procedure: push to `mrdoorba/coms-shared`, tag `v1.5.0`, swap pin in BOTH `apps/api/package.json` AND `apps/web/package.json`.
+- [x] `portalRole` currently has `'employee' | 'admin'` only (`identity-users.ts:19`, `routes/employees.ts:24`). `super_admin` extension deferred to PR E.
+- [x] `SESSION_COOKIE_OPTIONS` (in `@coms-portal/shared`) keeps its role for cookie attributes. `maxAge` set to 14d (the longest per-method TTL).
+- [x] Deploy workflow precedent for idempotent post-migrate scripts at `.github/workflows/deploy.yml:162-172` ("Bootstrap broker signing key"). Use as the template for `db:seed-admin`.
+- [x] `verifySessionCookie` / `getSessionCookieValue` / `createSessionCookie` callsites enumerated: `middleware/auth.ts`, `middleware/session-cookie.ts`, `routes/userinfo.ts`, `routes/auth.ts` (multiple), `services/auth.ts`. 5 files to migrate.
+- [x] `auth_handoffs` table carries its own `portalRole`; broker exchange independent of session cookie. Pivot does not break broker flow.
+- [x] CLAUDE.md rule on Drizzle migrations (`drizzle-kit generate` for journal, hand-edit SQL body if needed) understood.
+- [x] No real users on the system; cookie-format change is harmless to humans.
+- [x] Self-merge PR posture; no staging.
+
+**For PR B (deferred validation):**
+- [ ] Brevo account with verified single-sender (dev posture, no DNS access for `ahacommerce.net` per Q3-DNS).
+- [ ] Three Brevo secrets in GCP Secret Manager: `coms-portal-brevo-api-key`, `coms-portal-brevo-from`, `coms-portal-brevo-reply-to` (optional).
+
+**For PR E (deferred validation):**
+- [ ] `super_admin` value added to `portalRole` enum (extend `identity-users.ts`, `routes/employees.ts` t.Union, RBAC middleware, shared types in coms-shared if any).
 
 ---
 

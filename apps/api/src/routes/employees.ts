@@ -1,19 +1,22 @@
 import { Elysia, t } from 'elysia'
 import { db } from '~/db'
-import { identityUsers } from '~/db/schema'
-import { eq, ilike, or, and, sql } from 'drizzle-orm'
+import { identityUsers, identityUserEmails } from '~/db/schema'
+import { eq, ilike, or, and, sql, inArray } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import { generatePasswordResetLink, updateGipUserEmail } from '../gip-admin'
 import { createEmployee, deactivateEmployee, batchUpdateEmployees } from '../services/employees'
 import { importEmployeesFromGoogleAdminCsv } from '../services/employee-import'
 import { processEmployeeProvisioning } from '../services/employee-provisioning'
-import { resolveAndSyncClaims } from '../services/claims'
 import { logAudit } from '../services/audit'
 import { emitUserUpdated } from '../services/provisioning-events'
+import { getDisplayEmail } from '../services/email-resolution'
 import { logger } from '~/logger'
 
+// Per Q4a: both workspaceEmail and personalEmail are optional; at least one required.
+// The old `email` field mapped to workspace email. It is renamed here for clarity.
+// For PR D, the PATCH endpoint's email-management moves to the profile/admin-detail surface.
 const employeeBody = t.Object({
-  email: t.String({ format: 'email' }),
+  workspaceEmail: t.Optional(t.String({ format: 'email' })),
   personalEmail: t.Optional(t.String({ format: 'email' })),
   name: t.String({ minLength: 1 }),
   phone: t.Optional(t.String()),
@@ -39,14 +42,18 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       const page = Number(query.page ?? 1)
       const limit = Number(query.limit ?? 20)
       const offset = (page - 1) * limit
-      const where = query.search ? ilike(identityUsers.email, `%${query.search}%`) : undefined
+
+      // Search by name or by email (via identity_user_emails subquery)
+      let where: ReturnType<typeof ilike> | undefined
+      if (query.search) {
+        // Name search only in list view — email search is handled by /search
+        where = ilike(identityUsers.name, `%${query.search}%`)
+      }
 
       const [rows, [{ count }]] = await Promise.all([
         db
           .select({
             id: identityUsers.id,
-            email: identityUsers.email,
-            personalEmail: identityUsers.personalEmail,
             name: identityUsers.name,
             phone: identityUsers.phone,
             department: identityUsers.department,
@@ -57,6 +64,7 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
             leaderName: identityUsers.leaderName,
             portalRole: identityUsers.portalRole,
             status: identityUsers.status,
+            hasGoogleWorkspace: identityUsers.hasGoogleWorkspace,
             provisioningStatus: identityUsers.provisioningStatus,
             createdAt: identityUsers.createdAt,
             updatedAt: identityUsers.updatedAt,
@@ -93,11 +101,20 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       const q = query.q.trim()
       if (q.length < 2) return []
       const pattern = `%${q}%`
-      return db
+      const emailPattern = `%${q.toLowerCase()}%`
+
+      // Find user IDs whose emails match (via identity_user_emails)
+      const emailMatches = await db
+        .select({ identityUserId: identityUserEmails.identityUserId })
+        .from(identityUserEmails)
+        .where(ilike(identityUserEmails.emailNormalized, emailPattern))
+
+      const emailMatchIds = [...new Set(emailMatches.map((r) => r.identityUserId))]
+
+      const users = await db
         .select({
           id: identityUsers.id,
           name: identityUsers.name,
-          email: identityUsers.email,
         })
         .from(identityUsers)
         .where(
@@ -105,12 +122,21 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
             eq(identityUsers.status, 'active'),
             or(
               ilike(identityUsers.name, pattern),
-              ilike(identityUsers.email, pattern),
-              ilike(identityUsers.personalEmail, pattern),
+              ...(emailMatchIds.length > 0 ? [inArray(identityUsers.id, emailMatchIds)] : []),
             ),
           ),
         )
         .limit(10)
+
+      // Attach display email per Q8a for each result
+      const results = await Promise.all(
+        users.map(async (u) => ({
+          id: u.id,
+          name: u.name,
+          email: (await getDisplayEmail(u.id)) ?? '',
+        })),
+      )
+      return results
     },
     {
       query: t.Object({
@@ -130,15 +156,20 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
 
   .post(
     '/',
-    async ({ body, authUser, requestId, actorIp }) => {
-      const result = await createEmployee(body)
+    async ({ body, authUser, requestId, actorIp, set }) => {
+      if (!body.workspaceEmail && !body.personalEmail) {
+        set.status = 400
+        return { message: 'At least one of workspaceEmail or personalEmail is required' }
+      }
+      const result = await createEmployee({ ...body, addedBy: 'admin' })
       await logAudit({
         actorId: authUser.id,
         action: 'create_employee',
         targetType: 'user',
         targetId: result.id,
         details: {
-          email: body.email,
+          workspaceEmail: body.workspaceEmail,
+          personalEmail: body.personalEmail,
           provisioningStatus: result.provisioningStatus,
           ...(result.provisioningError ? { provisioningError: result.provisioningError } : {}),
         },
@@ -151,6 +182,7 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       body: employeeBody,
       response: {
         200: t.Any(),
+        400: t.Object({ message: t.String() }),
       },
     },
   )
@@ -231,8 +263,6 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
     const [user] = await db
       .select({
         id: identityUsers.id,
-        email: identityUsers.email,
-        personalEmail: identityUsers.personalEmail,
         name: identityUsers.name,
         phone: identityUsers.phone,
         department: identityUsers.department,
@@ -255,29 +285,33 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       set.status = 404
       return { message: 'Not found' }
     }
-    return user
+    // Attach email entries from identity_user_emails
+    const { getEmailEntries } = await import('../services/email-resolution')
+    const emails = await getEmailEntries(params.id)
+    return { ...user, emails }
   }, { response: { 200: t.Any(), 404: t.Object({ message: t.String() }) } })
 
   .patch(
     '/:id',
     async ({ params, body, authUser, requestId, actorIp }) => {
-      const needsExistingUser = body.email !== undefined || body.portalRole !== undefined
+      // TODO(PR D): email management (workspaceEmail/personalEmail changes) moves to
+      // the admin user-detail and self-service profile surfaces. For PR A, only
+      // non-email identity_users fields are writable via this endpoint.
+      const { workspaceEmail: _ws, personalEmail: _pe, ...identityFieldsOnly } = body
+
+      const needsExistingUser = body.portalRole !== undefined
       const existingUser = needsExistingUser
         ? await db.query.identityUsers.findFirst({ where: eq(identityUsers.id, params.id) })
         : undefined
 
-      if (body.email !== undefined && existingUser?.gipUid && existingUser.email !== body.email) {
-        await updateGipUserEmail(existingUser.gipUid, body.email)
+      if (Object.keys(identityFieldsOnly).length > 0) {
+        await db
+          .update(identityUsers)
+          .set({ ...identityFieldsOnly, updatedAt: new Date() })
+          .where(eq(identityUsers.id, params.id))
       }
 
-      await db
-        .update(identityUsers)
-        .set({ ...body, updatedAt: new Date() })
-        .where(eq(identityUsers.id, params.id))
-
-      if (body.portalRole && existingUser?.gipUid) {
-        await resolveAndSyncClaims(existingUser.gipUid, params.id)
-      }
+      // Claims are recomputed from DB per-request post-Q-claims; no GIP-side sync needed.
 
       await logAudit({
         actorId: authUser.id,
@@ -289,9 +323,9 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         actorIp,
       })
 
-      // Compute changedFields from request body keys (only fields present in body)
-      const changedFields = Object.keys(body).filter(
-        (k) => body[k as keyof typeof body] !== undefined,
+      // Compute changedFields from non-email body keys
+      const changedFields = Object.keys(identityFieldsOnly).filter(
+        (k) => identityFieldsOnly[k as keyof typeof identityFieldsOnly] !== undefined,
       )
       if (changedFields.length > 0) {
         emitUserUpdated(params.id, changedFields).catch((err) => {
@@ -353,8 +387,13 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
       set.status = 400
       return { message: 'Employee has not been provisioned yet' }
     }
-    await generatePasswordResetLink(employee.email)
-    return { ok: true, email: employee.email }
+    const displayEmail = await getDisplayEmail(params.id)
+    if (!displayEmail) {
+      set.status = 400
+      return { message: 'Employee has no email address' }
+    }
+    await generatePasswordResetLink(displayEmail)
+    return { ok: true, email: displayEmail }
   }, { response: { 200: t.Object({ ok: t.Literal(true), email: t.String() }), 400: t.Object({ message: t.String() }), 404: t.Object({ message: t.String() }) } })
 
   .post(
@@ -374,11 +413,13 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         return { message: 'Employee already has a Google Workspace account' }
       }
 
-      // Check workspace email is not already taken
+      const newWorkspaceEmailNorm = body.workspaceEmail.toLowerCase().trim()
+
+      // Check workspace email is not already taken in identity_user_emails
       const emailTaken = await db
-        .select({ id: identityUsers.id })
-        .from(identityUsers)
-        .where(eq(identityUsers.email, body.workspaceEmail.toLowerCase()))
+        .select({ id: identityUserEmails.id })
+        .from(identityUserEmails)
+        .where(eq(identityUserEmails.emailNormalized, newWorkspaceEmailNorm))
         .limit(1)
 
       if (emailTaken.length > 0) {
@@ -386,34 +427,53 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         return { message: `Email ${body.workspaceEmail} is already in use by another employee` }
       }
 
-      // Preserve current email as personalEmail if not already set
-      const personalEmail = employee.personalEmail ?? employee.email
+      const now = new Date()
+      const changedFields = ['workspaceEmail', 'hasGoogleWorkspace', 'source']
 
-      // Build update fields
-      const updates: Record<string, unknown> = {
-        email: body.workspaceEmail.toLowerCase(),
-        personalEmail,
+      // Capture the previous display email for the audit log BEFORE any changes
+      const previousEmail = await getDisplayEmail(params.id)
+
+      // Update identity_users row (no email columns — just flags and profile fields)
+      const identityUpdates: Record<string, unknown> = {
         hasGoogleWorkspace: true,
         source: 'csv_import',
-        updatedAt: new Date(),
+        updatedAt: now,
       }
+      if (body.name) { identityUpdates.name = body.name; changedFields.push('name') }
+      if (body.department) { identityUpdates.department = body.department; changedFields.push('department') }
+      if (body.position) { identityUpdates.position = body.position; changedFields.push('position') }
+      if (body.phone) { identityUpdates.phone = body.phone; changedFields.push('phone') }
 
-      const changedFields = ['email', 'personalEmail', 'hasGoogleWorkspace', 'source']
+      // Demote any existing isPrimary=true personal email row BEFORE inserting the
+      // workspace row — the unique partial index (identityUserId WHERE isPrimary=true)
+      // allows only one primary per user; we must clear the old one first.
+      await db
+        .update(identityUserEmails)
+        .set({ isPrimary: false, updatedAt: now })
+        .where(
+          and(
+            eq(identityUserEmails.identityUserId, params.id),
+            eq(identityUserEmails.isPrimary, true),
+          ),
+        )
 
-      if (body.name) { updates.name = body.name; changedFields.push('name') }
-      if (body.department) { updates.department = body.department; changedFields.push('department') }
-      if (body.position) { updates.position = body.position; changedFields.push('position') }
-      if (body.phone) { updates.phone = body.phone; changedFields.push('phone') }
+      // Insert workspace email row — becomes the new primary per Q8a.
+      await db.insert(identityUserEmails).values({
+        identityUserId: params.id,
+        email: body.workspaceEmail,
+        emailNormalized: newWorkspaceEmailNorm,
+        kind: 'workspace',
+        isPrimary: true,
+        verifiedAt: now,
+        addedBy: 'admin',
+      })
 
       // Update GIP email if provisioned
       if (employee.gipUid) {
-        await updateGipUserEmail(employee.gipUid, body.workspaceEmail.toLowerCase())
+        await updateGipUserEmail(employee.gipUid, newWorkspaceEmailNorm)
       }
 
-      await db
-        .update(identityUsers)
-        .set(updates)
-        .where(eq(identityUsers.id, params.id))
+      await db.update(identityUsers).set(identityUpdates).where(eq(identityUsers.id, params.id))
 
       await logAudit({
         actorId: authUser.id,
@@ -421,7 +481,7 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         targetType: 'user',
         targetId: params.id,
         details: {
-          previousEmail: employee.email,
+          previousEmail,
           workspaceEmail: body.workspaceEmail,
         },
         requestId,

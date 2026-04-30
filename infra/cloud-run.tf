@@ -58,6 +58,16 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         value = var.sheets_personal_email_tab
       }
 
+      # ── Bootstrap admin (spec-06) ───────────────────────────────
+      env {
+        name  = "BOOTSTRAP_ADMIN_EMAIL"
+        value = var.bootstrap_admin_email
+      }
+      env {
+        name  = "BOOTSTRAP_ADMIN_NAME"
+        value = var.bootstrap_admin_name
+      }
+
       # ── Cloud Tasks (webhook delivery) ──────────────────────────
       env {
         name  = "GCP_PROJECT_ID"

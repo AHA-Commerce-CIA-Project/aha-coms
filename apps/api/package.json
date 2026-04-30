@@ -18,11 +18,12 @@
     "test": "find src -name '*.test.ts' | sort | xargs -I{} -n1 -P 4 bun test {}",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed-admin": "bun scripts/seed-admin.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v0.1.1",
-    "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.4.1",
+    "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.5.0",
     "@elysiajs/cors": "^1.4.2",
     "@elysiajs/static": "^1.2",
     "@elysiajs/swagger": "^1.3.1",

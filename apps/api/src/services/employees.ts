@@ -1,7 +1,6 @@
 import { db } from '~/db'
-import { identityUsers, teamMembers } from '~/db/schema'
+import { identityUsers, teamMembers, identityUserEmails } from '~/db/schema'
 import { eq, inArray } from 'drizzle-orm'
-import { resolveAndSyncClaims } from './claims'
 import type { NewIdentityUser, IdentityUserSource } from '~/db/schema'
 import { setGipUserDisabled } from '../gip-admin'
 import { processEmployeeProvisioning } from './employee-provisioning'
@@ -11,8 +10,12 @@ import { seedAppUserConfigForUser } from './app-user-config'
 import { logger } from '~/logger'
 
 export async function createEmployee(data: {
-  email: string
+  /** Workspace (Google) email. Optional per Q4a — at least one of workspaceEmail/personalEmail required. */
+  workspaceEmail?: string
+  /** Personal email. Optional per Q4a — at least one of workspaceEmail/personalEmail required. */
   personalEmail?: string
+  /** @deprecated Pass workspaceEmail instead. Kept for backward-compat call-sites during migration. */
+  email?: string
   name: string
   phone?: string
   department?: string
@@ -25,13 +28,22 @@ export async function createEmployee(data: {
   teamId?: string
   hasGoogleWorkspace?: boolean
   source?: IdentityUserSource
+  /** Override the addedBy value for identity_user_emails rows. Defaults to 'admin'. */
+  addedBy?: 'admin' | 'csv_import' | 'sheet_sync' | 'bootstrap'
 }): Promise<{ id: string; provisioningStatus: string; provisioningError?: string }> {
+  // Normalise: callers may pass `email` (workspace) or `workspaceEmail`. Prefer workspaceEmail.
+  const resolvedWorkspaceEmail = data.workspaceEmail ?? data.email ?? undefined
+  const resolvedPersonalEmail = data.personalEmail ?? undefined
+  const addedBy = data.addedBy ?? 'admin'
+
+  if (!resolvedWorkspaceEmail && !resolvedPersonalEmail) {
+    throw new Error('At least one of workspaceEmail or personalEmail is required (Q4a)')
+  }
+
   const [user] = await db.transaction(async (tx) => {
     const insertedUsers = await tx
       .insert(identityUsers)
       .values({
-        email: data.email,
-        personalEmail: data.personalEmail,
         name: data.name,
         phone: data.phone,
         department: data.department,
@@ -49,6 +61,33 @@ export async function createEmployee(data: {
       .returning({ id: identityUsers.id })
 
     const [insertedUser] = insertedUsers
+    const now = new Date()
+
+    // Insert email row(s) per Q4b/c: admin-entered emails are trusted on entry.
+    // Per Q8a: workspace takes isPrimary precedence; if both present, workspace=primary.
+    if (resolvedWorkspaceEmail) {
+      await tx.insert(identityUserEmails).values({
+        identityUserId: insertedUser.id,
+        email: resolvedWorkspaceEmail,
+        emailNormalized: resolvedWorkspaceEmail.toLowerCase().trim(),
+        kind: 'workspace',
+        isPrimary: true,
+        verifiedAt: now,
+        addedBy,
+      })
+    }
+    if (resolvedPersonalEmail) {
+      await tx.insert(identityUserEmails).values({
+        identityUserId: insertedUser.id,
+        email: resolvedPersonalEmail,
+        emailNormalized: resolvedPersonalEmail.toLowerCase().trim(),
+        kind: 'personal',
+        // isPrimary only if no workspace email (workspace takes precedence per Q8a)
+        isPrimary: !resolvedWorkspaceEmail,
+        verifiedAt: now,
+        addedBy,
+      })
+    }
 
     if (data.teamId) {
       await tx.insert(teamMembers).values({ teamId: data.teamId, userId: insertedUser.id })
@@ -124,17 +163,12 @@ export async function batchUpdateEmployees(
 
   if (field === 'portalRole') {
     const users = await db
-      .select({ id: identityUsers.id, gipUid: identityUsers.gipUid })
+      .select({ id: identityUsers.id })
       .from(identityUsers)
       .where(inArray(identityUsers.id, ids))
 
-    await Promise.all(
-      users
-        .filter((u) => u.gipUid)
-        .map((u) => resolveAndSyncClaims(u.gipUid as string, u.id)),
-    )
-
-    // Fan out user.updated for each affected user — fire-and-forget
+    // Claims are recomputed from DB per-request post-Q-claims; no GIP-side sync needed.
+    // Fan out user.updated for each affected user — fire-and-forget.
     for (const u of users) {
       emitUserUpdated(u.id, ['portalRole']).catch((err) => {
         logger.error({ err, userId: u.id }, '[provisioning-events] emitUserUpdated failed')

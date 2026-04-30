@@ -30,7 +30,7 @@ export function mockSpecs(specs: string[], factory: () => unknown): void {
   }
 }
 
-export function fullSchemaBarrelMock(): Record<string, Record<string, string>> {
+export function fullSchemaBarrelMock(): Record<string, Record<string, string> | readonly string[]> {
   return {
     appRegistry: {
       id: 'appRegistry.id',
@@ -43,7 +43,8 @@ export function fullSchemaBarrelMock(): Record<string, Record<string, string>> {
     identityUsers: {
       id: 'identityUsers.id',
       gipUid: 'identityUsers.gipUid',
-      email: 'identityUsers.email',
+      // email and personalEmail removed by spec-06 PR A migration 0029.
+      // Display email now resolves via identityUserEmails (multi-row).
       name: 'identityUsers.name',
       portalRole: 'identityUsers.portalRole',
       status: 'identityUsers.status',
@@ -53,6 +54,46 @@ export function fullSchemaBarrelMock(): Record<string, Record<string, string>> {
       createdAt: 'identityUsers.createdAt',
       updatedAt: 'identityUsers.updatedAt',
     },
+    identityUserEmails: {
+      id: 'identityUserEmails.id',
+      identityUserId: 'identityUserEmails.identityUserId',
+      email: 'identityUserEmails.email',
+      emailNormalized: 'identityUserEmails.emailNormalized',
+      kind: 'identityUserEmails.kind',
+      isPrimary: 'identityUserEmails.isPrimary',
+      verifiedAt: 'identityUserEmails.verifiedAt',
+      addedBy: 'identityUserEmails.addedBy',
+      createdAt: 'identityUserEmails.createdAt',
+      updatedAt: 'identityUserEmails.updatedAt',
+    },
+    identityUserEmailsHistory: {
+      id: 'identityUserEmailsHistory.id',
+      formerIdentityUserId: 'identityUserEmailsHistory.formerIdentityUserId',
+      email: 'identityUserEmailsHistory.email',
+      emailNormalized: 'identityUserEmailsHistory.emailNormalized',
+      kind: 'identityUserEmailsHistory.kind',
+      addedBy: 'identityUserEmailsHistory.addedBy',
+      addedAt: 'identityUserEmailsHistory.addedAt',
+      removedAt: 'identityUserEmailsHistory.removedAt',
+      removedBy: 'identityUserEmailsHistory.removedBy',
+      removedReason: 'identityUserEmailsHistory.removedReason',
+    },
+    authSessions: {
+      id: 'authSessions.id',
+      identityUserId: 'authSessions.identityUserId',
+      authMethod: 'authSessions.authMethod',
+      emailUsed: 'authSessions.emailUsed',
+      deviceLabel: 'authSessions.deviceLabel',
+      ipAddress: 'authSessions.ipAddress',
+      createdAt: 'authSessions.createdAt',
+      expiresAt: 'authSessions.expiresAt',
+      revokedAt: 'authSessions.revokedAt',
+      revokedReason: 'authSessions.revokedReason',
+    },
+    IDENTITY_USER_EMAIL_KINDS: ['workspace', 'personal'],
+    IDENTITY_USER_EMAIL_ADDED_BY: ['admin', 'self', 'csv_import', 'sheet_sync', 'backfill', 'bootstrap'],
+    AUTH_METHODS: ['workspace_oidc', 'personal_otp', 'admin_bypass'],
+    SESSION_REVOKED_REASONS: ['logout', 'logout_other_device', 'logout_all_other', 'admin_revoke', 'status_change', 'superseded'],
     teams: { id: 'teams.id', name: 'teams.name' },
     teamMembers: { teamId: 'teamMembers.teamId', userId: 'teamMembers.userId' },
     teamAppAccess: { teamId: 'teamAppAccess.teamId', appId: 'teamAppAccess.appId' },

@@ -1,18 +1,23 @@
 import { Elysia } from 'elysia'
-import { verifySessionCookie } from '../gip-admin'
 import type { PortalClaims } from '@coms-portal/shared'
 import { db } from '~/db'
-import { identityUsers, teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
+import { teamMembers, teamAppAccess, appRegistry } from '~/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { getSessionCookieValue } from './session-cookie'
-import type { DecodedToken } from '../gip-admin'
+import { validateSession, type SessionUser } from '../services/sessions'
+import { getDisplayEmail } from '../services/email-resolution'
 
 export interface AuthUser {
   id: string
   gipUid: string
   email: string
   name: string
-  portalRole: PortalClaims['portalRole']
+  /**
+   * The portal role for this user. `super_admin` is an internal portal concept
+   * not surfaced in PortalClaims to relying-party apps. For claim-forwarding
+   * purposes treat it the same as 'admin' (highest rank wins in hasPortalRole).
+   */
+  portalRole: PortalClaims['portalRole'] | 'super_admin'
   teamIds: string[]
   apps: string[]
 }
@@ -26,25 +31,20 @@ export class AuthResolutionError extends Error {
   }
 }
 
-export async function resolveAuthUser(decoded: DecodedToken): Promise<AuthUser> {
-  const user = await db.query.identityUsers.findFirst({
-    where: eq(identityUsers.gipUid, decoded.uid),
-  })
-
-  if (!user) {
-    throw new AuthResolutionError('User not found', 401)
-  }
-
-  if (user.status !== 'active') {
-    throw new AuthResolutionError('Account is inactive or suspended', 403)
-  }
-
+/**
+ * Enrich a validated SessionUser with teamIds, appSlugs, and display email.
+ *
+ * The identity status check and session validity check are already done by
+ * `validateSession`; we trust the SessionUser and only resolve the relational
+ * data that `authPlugin` consumers need (teamIds, apps, email).
+ */
+export async function resolveAuthUser(sessionUser: SessionUser): Promise<AuthUser> {
   // Resolve teamIds and apps from DB so changes take effect immediately
   // without requiring the user to re-login.
   const memberships = await db
     .select({ teamId: teamMembers.teamId })
     .from(teamMembers)
-    .where(eq(teamMembers.userId, user.id))
+    .where(eq(teamMembers.userId, sessionUser.id))
 
   const teamIds = memberships.map((m) => m.teamId)
 
@@ -67,21 +67,24 @@ export async function resolveAuthUser(decoded: DecodedToken): Promise<AuthUser> 
     }
   }
 
+  // Resolve display email per Q8a: workspace > primary personal > first personal
+  const email = await getDisplayEmail(sessionUser.id)
+
   return {
-    id: user.id,
-    gipUid: user.gipUid ?? decoded.uid,
-    email: user.email,
-    name: user.name,
-    portalRole: user.portalRole as PortalClaims['portalRole'],
+    id: sessionUser.id,
+    gipUid: sessionUser.gipUid ?? '',
+    email: email ?? '',
+    name: sessionUser.name,
+    portalRole: sessionUser.portalRole as AuthUser['portalRole'],
     teamIds,
     apps: appSlugs,
   }
 }
 
 /**
- * Elysia plugin that verifies the __session cookie on every request to /api/v1/*.
- * Injects `authUser` into the Elysia context.
- * Returns 401 if cookie is missing or invalid.
+ * Elysia plugin that validates the portal session cookie on every request.
+ * Injects `authUser` and `sessionId` into the Elysia context.
+ * Returns 401 if cookie is missing, invalid, expired, or revoked.
  */
 export const authPlugin = new Elysia({ name: 'auth-plugin' }).derive(
   { as: 'scoped' },
@@ -93,16 +96,15 @@ export const authPlugin = new Elysia({ name: 'auth-plugin' }).derive(
       throw status(401, { message: 'No session cookie' })
     }
 
-    let decoded: DecodedToken
-    try {
-      decoded = await verifySessionCookie(sessionCookie)
-    } catch {
+    const sessionUser = await validateSession(sessionCookie)
+    if (!sessionUser) {
       throw status(401, { message: 'Invalid or expired session' })
     }
 
     try {
-      const authUser = await resolveAuthUser(decoded)
-      return { authUser }
+      const authUser = await resolveAuthUser(sessionUser)
+      // Expose sessionId so logout and other routes know which session to revoke
+      return { authUser, sessionId: sessionUser.sessionId }
     } catch (error) {
       if (error instanceof AuthResolutionError) {
         throw status(error.statusCode, { message: error.message })

@@ -1,6 +1,7 @@
 import { inArray, eq } from 'drizzle-orm'
 import { findBestMatch } from './name-matching'
 import { logger } from '~/logger'
+import { getDisplayEmail } from './email-resolution'
 
 export interface ParsedGoogleAdminUserRow {
   rowNumber: number
@@ -166,12 +167,13 @@ export async function importEmployeesFromGoogleAdminCsv(
   csv: string,
   options?: { preview?: boolean },
 ): Promise<EmployeeCsvImportResult> {
-  const [{ db }, { identityUsers }, { createEmployee }, { emitUserProvisioned }] = await Promise.all([
-    import('~/db'),
-    import('~/db/schema'),
-    import('./employees'),
-    import('./provisioning-events'),
-  ])
+  const [{ db }, { identityUsers, identityUserEmails }, { createEmployee }, { emitUserProvisioned }] =
+    await Promise.all([
+      import('~/db'),
+      import('~/db/schema'),
+      import('./employees'),
+      import('./provisioning-events'),
+    ])
 
   const mode = options?.preview ? 'preview' : 'commit'
   const rows = parseGoogleAdminUsersCsv(csv)
@@ -181,22 +183,26 @@ export async function importEmployeesFromGoogleAdminCsv(
   const flagged: EmployeeCsvImportResult['flagged'] = []
   const errors: EmployeeCsvImportResult['errors'] = []
 
+  // Collision detection now queries identity_user_emails.email_normalized (Q5a).
+  // The CSV imports workspace emails only, so we look for workspace-kind matches.
   const validRows = rows.filter((row) => row.email)
-  const uniqueEmails = [...new Set(validRows.map((row) => row.email))]
-  const [existingUsers, nonWorkspaceUsers] = await Promise.all([
-    uniqueEmails.length
+  const uniqueEmailsNormalized = [...new Set(validRows.map((row) => row.email.toLowerCase().trim()))]
+  const [existingEmailRows, nonWorkspaceUsers] = await Promise.all([
+    uniqueEmailsNormalized.length
       ? db
-          .select({ email: identityUsers.email })
-          .from(identityUsers)
-          .where(inArray(identityUsers.email, uniqueEmails))
+          .select({ emailNormalized: identityUserEmails.emailNormalized, identityUserId: identityUserEmails.identityUserId })
+          .from(identityUserEmails)
+          .where(inArray(identityUserEmails.emailNormalized, uniqueEmailsNormalized))
       : Promise.resolve([]),
+    // For name-collision flagging: load non-workspace users with their display email.
+    // We fetch id+name here; email is resolved lazily per matched row below.
     db
-      .select({ id: identityUsers.id, name: identityUsers.name, email: identityUsers.email })
+      .select({ id: identityUsers.id, name: identityUsers.name })
       .from(identityUsers)
       .where(eq(identityUsers.hasGoogleWorkspace, false)),
   ])
 
-  const existingEmails = new Set(existingUsers.map((user) => user.email.toLowerCase()))
+  const existingEmails = new Set(existingEmailRows.map((r) => r.emailNormalized))
 
   const pendingRows: ParsedGoogleAdminUserRow[] = []
 
@@ -216,13 +222,15 @@ export async function importEmployeesFromGoogleAdminCsv(
       continue
     }
 
-    if (existingEmails.has(row.email)) {
+    if (existingEmails.has(row.email.toLowerCase().trim())) {
       skipped.push({ rowNumber: row.rowNumber, email: row.email, reason: 'Employee already exists' })
       continue
     }
 
     const { match: nwMatch, score: nwScore, ambiguous: nwAmbiguous } = findBestMatch(row.fullName, nonWorkspaceUsers)
     if (nwScore > 0) {
+      // Resolve display email for the matched non-workspace user
+      const matchedEmail = nwAmbiguous ? '(ambiguous)' : await getDisplayEmail(nwMatch!.id).then((e) => e ?? '(no email)')
       flagged.push({
         rowNumber: row.rowNumber,
         csvEmail: row.email,
@@ -232,7 +240,7 @@ export async function importEmployeesFromGoogleAdminCsv(
         csvPhone: row.phone,
         existingId: nwAmbiguous ? '' : nwMatch!.id,
         existingName: nwAmbiguous ? '(multiple matches)' : nwMatch!.name,
-        existingEmail: nwAmbiguous ? '(ambiguous)' : nwMatch!.email,
+        existingEmail: matchedEmail,
       })
       continue
     }
@@ -255,7 +263,7 @@ export async function importEmployeesFromGoogleAdminCsv(
     const results = await Promise.allSettled(
       batch.map(async (row) => {
         const result = await createEmployee({
-          email: row.email,
+          workspaceEmail: row.email,
           name: row.fullName,
           phone: row.phone,
           department: row.department,
@@ -263,6 +271,7 @@ export async function importEmployeesFromGoogleAdminCsv(
           portalRole: 'employee',
           hasGoogleWorkspace: true,
           source: 'csv_import',
+          addedBy: 'csv_import',
         })
         return { row, result }
       }),

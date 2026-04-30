@@ -79,6 +79,15 @@ mock.module('../../gip-admin', () => ({ revokeRefreshTokens }))
 const dispatchPortalWebhook = mock(async () => undefined)
 mock.module('../portal-webhook-fanout', () => ({ dispatchPortalWebhook }))
 
+// Mock email-resolution so getDisplayEmail doesn't trigger the select/orderBy
+// chain. The test asserts on the webhook payload shape; returning a fixed email
+// is sufficient and keeps the test hermetic.
+mock.module('../email-resolution', () => ({
+  getDisplayEmail: async (_userId: string) =>
+    currentUser ? (currentUser as { email: string }).email : null,
+  getEmailEntries: async (_userId: string) => [],
+}))
+
 const { revokePortalSession } = await import('../session-revocation')
 
 // ---------------------------------------------------------------------------
