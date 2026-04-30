@@ -6,7 +6,7 @@
 
 ---
 
-## Status — 2026-04-29
+## Status — 2026-04-30
 
 **Phase 1 (lift docs + cut standalone repos): done** — see §Migration / Rollout.
 
@@ -14,9 +14,14 @@
 
 **Phase 3 (chrome package): shipped portal-side.** `@coms-portal/ui` v1.0.0 published at https://github.com/mrdoorba/coms-ui. `src/chrome/{ServiceBar,Sidebar,MobileTopBar,MobileBottomNav}.svelte` lifted from Heroes' canonical layout, refactored to be host-agnostic (props for `navItems` / `services` / `user` / `theme` / `currentPath` + `right` snippet for widget mount). `Header.svelte` deliberately excluded — app-level concern (search/notifications/i18n), not chrome. Portal `apps/web` consumes the package; old local layout files deleted.
 
-**Phase 4 (primitives): shipped portal-side 2026-04-29.** `@coms-portal/ui` v1.2.0 published at https://github.com/mrdoorba/coms-ui. 15 shadcn-svelte v3 primitive families lifted verbatim from Heroes' `packages/web/src/lib/components/ui/` (avatar, badge, button, card, dialog, dropdown-menu, input, label, select, separator, sheet, skeleton, table, tabs, textarea), with `cn()` helper + four type helpers co-lifted as `src/utils.ts`. New direct dependencies: `bits-ui`, `clsx`, `tailwind-merge`, `tailwind-variants`, `lucide-svelte` (batteries-included — consumer adds `@coms-portal/ui` and deps come along). Portal `apps/web` consumes v1.2.0 across all 13 admin pages — second consumer materialized, Phase 4 trigger fired by portal itself. Compositions remain stub: Heroes' `HeroGreeting`/`SummaryCard`/`NotificationsBadge` are dashboard-specific (Heroes brand gradients, gold/silver/bronze brand scales) and were deliberately not lifted as platform compositions; the `compositions/` export entry is preserved for a future shared candidate.
+**Phase 4 (primitives): shipped end-to-end across portal + Heroes 2026-04-29 → 2026-04-30.** `@coms-portal/ui` v1.2.0 published at https://github.com/mrdoorba/coms-ui (commit `744f887`, tag `v1.2.0` at SHA `8afee43...`). 15 shadcn-svelte v3 primitive families lifted verbatim from Heroes' original `packages/web/src/lib/components/ui/` (avatar, badge, button, card, dialog, dropdown-menu, input, label, select, separator, sheet, skeleton, table, tabs, textarea), with `cn()` helper + four type helpers co-lifted as `src/utils.ts`. New direct dependencies: `bits-ui`, `clsx`, `tailwind-merge`, `tailwind-variants`, `lucide-svelte` (batteries-included — consumer adds `@coms-portal/ui` and deps come along).
 
-**Phase 5: still deferred.** Trigger (real third H-app onboarding) has not fired. Heroes-side adoption of v1.2.0 primitives is a follow-up: Heroes already authors the source, so it's a delete-and-import operation, not a rewrite.
+- **Portal `apps/web` adoption (2026-04-29):** all 13 admin pages + 3 lib components + 2 auth pages refactored to v1.2.0 primitives — `commit ce53bf5` (initial wave) + `8b2d476` (employees list follow-up). Second consumer materialized; Phase 4 trigger fired by portal itself.
+- **Heroes adoption (2026-04-30):** the workshop returns its tools. 24 Heroes files rewritten from `$lib/components/ui/<family>` to flat `@coms-portal/ui/primitives` barrel imports; namespace usage (`<Dialog.Root>`, `<Card.Header>`, `<Table.Body>`) flattened to aliased forms; `PullToRefresh.svelte` moved to `lib/components/` (not part of v1.2.0 lift); `cn()` + four type helpers stripped from Heroes' `utils.ts`; `packages/web/src/lib/components/ui/` directory deleted entirely (103 files, 2,276 lines net). `commit b7b7431` on `mrdoorba/coms-aha-heroes`. The fork risk between Heroes' local `ui/` and the platform package is permanently closed — future primitive changes happen upstream once and propagate by tag bump.
+
+Compositions remain stub: Heroes' `HeroGreeting`/`SummaryCard`/`NotificationsBadge` are dashboard-specific (Heroes brand gradients, gold/silver/bronze brand scales) and were deliberately not lifted as platform compositions; the `compositions/` export entry is preserved for a future shared candidate.
+
+**Phase 5: still deferred.** Trigger (real third H-app onboarding) has not fired. Heroes adoption is no longer a pending follow-up — it shipped 2026-04-30 (see Phase 4 status above).
 
 ---
 
@@ -163,7 +168,7 @@ Implementation of the token + UI packages is **deferred**. There is no fixed tim
 - Account widget (Spec 01) ships and needs a documented mount point in the service bar / mobile top bar. Phase 3 codifies the slot contract.
 - Heroes or portal needs a chrome change (e.g. add a tenant switcher to the service bar). Doing it once in `@coms-portal/ui` beats doing it twice.
 
-**Triggers for Phase 4 (primitives + compositions): TRIGGERED 2026-04-29.** Portal `apps/web` itself materialized as the second consumer when it adopted v1.2.0 primitives across all 13 admin pages. Compositions deliberately remained stub — see §Status.
+**Triggers for Phase 4 (primitives + compositions): TRIGGERED 2026-04-29; HEROES ADOPTED 2026-04-30.** Portal `apps/web` itself materialized as the second consumer when it adopted v1.2.0 primitives across all 13 admin pages. Heroes followed the next day with full adoption — local `ui/` directory deleted, all 24 imports rewired to `@coms-portal/ui/primitives`. Compositions deliberately remained stub — see §Status.
 
 **Triggers for Phase 5 (onboarding exercise):**
 - A real third H-app starts onboarding. Phases 2–4 should be in place by then.
