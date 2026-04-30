@@ -30,7 +30,13 @@
     })),
   ])
 
-  const isAdmin = $derived(user ? hasPortalRole(user.portalRole, ['admin']) : false)
+  // super_admin is an internal portal role; collapse to 'admin' for hasPortalRole,
+  // which is typed against the public PortalRole taxonomy ('employee' | 'admin').
+  const isAdmin = $derived(
+    user
+      ? hasPortalRole(user.portalRole === 'super_admin' ? 'admin' : user.portalRole, ['admin'])
+      : false,
+  )
 
   const sidebarSections = $derived(
     isAdmin

@@ -93,7 +93,9 @@ jobs:
             -input=false \
             -lock-timeout=5m \
             -no-color \
-            -var="service_url=${{ vars.SERVICE_URL }}"
+            -var="service_url=${{ vars.SERVICE_URL }}" \
+            -var="bootstrap_admin_email=${{ vars.BOOTSTRAP_ADMIN_EMAIL }}" \
+            -var="bootstrap_admin_name=${{ vars.BOOTSTRAP_ADMIN_NAME }}"
 
   deploy:
     name: Build, Migrate & Deploy
