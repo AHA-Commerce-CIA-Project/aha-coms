@@ -1,6 +1,12 @@
 # Rev 3 Spec 01 + Spec 02 — Heroes integration handoff
 
-> **Heroes-side adoption is paused as of 2026-04-30 — pending Spec 06.** Owner directive: portal-side dual-email auth (`spec-06-dual-email-auth.md`) ships fully → Spec 06 PR F sweeps spec updates → THEN Heroes-side rev3 adoption begins per this document and §Appendix A of `spec-03-user-identity-alias-layer.md`. Wipe-and-reprovision is the locked path (vs. alias backfill) — pre-real-users on Heroes makes the wipe a no-op. See `spec-00-implementation-timeline.md` for the at-a-glance status of the entire Rev 3 program. The body of this document below remains the canonical reference for Heroes' Rev 3 adoption once unblocked.
+> **Heroes-side adoption is paused — pending Spec 06 PRs B–F.**
+>
+> **Spec 06 PR A (portal-side foundation) shipped 2026-04-30, commit `049008d`.** The schema change is in: `identity_users.email` and `identity_users.personal_email` have been dropped and replaced by the multi-row `identity_user_emails` table. Webhook payloads (`user.provisioned`, `user.updated`) now carry an additive `emails: UserEmailEntry[]` field via `@coms-portal/shared` v1.5.0. Existing Heroes consumer compiles unchanged — the additive field requires no Heroes-side code change. The widget continues to receive a scalar `email` from `/api/userinfo` (derived as workspace > personal-primary > first-personal per Spec 06 §Q8a); Heroes consumes only that scalar and is unaffected.
+>
+> **PRs B–E (OTP service, login UI, profile UI, extras) and the final spec sweep (PR F) are still pending.** Heroes-side rev3 implementation remains paused until PR F lands.
+>
+> Owner directive: portal-side PRs B–E ship the remaining feature work → PR F sweeps spec updates → THEN Heroes-side rev3 adoption begins per this document and §Appendix A of `spec-03-user-identity-alias-layer.md`. Wipe-and-reprovision is the locked path (vs. alias backfill) — pre-real-users on Heroes makes the wipe a no-op. See `spec-00-implementation-timeline.md` for the at-a-glance status of the entire Rev 3 program. The body of this document below remains the canonical reference for Heroes' Rev 3 adoption once unblocked.
 >
 > ---
 >

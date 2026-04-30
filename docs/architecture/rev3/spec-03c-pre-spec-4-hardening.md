@@ -6,7 +6,7 @@
 > Scope (shipped): Portal `apps/api` + `apps/web` + new sibling repo `@coms-portal/sdk` (created locally, pushed to GitHub as **public** at `github.com/mrdoorba/coms-sdk`) + `@coms-portal/shared` v1.4.1 deprecation bump. No Heroes-side work in this spec; Heroes consumes the SDK in a follow-up.
 > Prerequisites: Specs 01 + 02 (Phases 1–3) + 03 + 03b shipped portal-side.
 >
-> **Forward-looking note (2026-04-30):** Spec 06 (`spec-06-dual-email-auth.md`) is orthogonal to this spec — no overlap with launcher migration, observability, audit-log columns, or `@coms-portal/sdk` extraction. Both specs touch `identity_users` (this spec added `actor_app_id` + `target_app_id` to the audit-log writer; Spec 06 removes the `email` and `personal_email` columns). Migrations apply in journal order — no conflict expected. Heroes-side rev3 adoption (paused pending Spec 06 PR F) does include Heroes consuming `@coms-portal/sdk` in a follow-up. See `spec-00-implementation-timeline.md` for the at-a-glance status.
+> **Cross-reference note (2026-04-30):** Spec 06 (`spec-06-dual-email-auth.md`) is orthogonal to this spec — no overlap with launcher migration, observability, audit-log columns, or `@coms-portal/sdk` extraction. Both specs touched `identity_users` (this spec added `actor_app_id` + `target_app_id` to the audit-log writer; Spec 06 PR A, shipped 2026-04-30 at commit `049008d`, removed the `email` and `personal_email` columns and replaced them with the multi-row `identity_user_emails` table). Migrations applied in journal order — no conflict. Heroes-side rev3 adoption (paused pending Spec 06 PR F) does include Heroes consuming `@coms-portal/sdk` in a follow-up. See `spec-00-implementation-timeline.md` for the at-a-glance status.
 
 ---
 

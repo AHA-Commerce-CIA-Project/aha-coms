@@ -224,6 +224,12 @@ No fallback to old name-matching path. No `INGESTION_USE_ALIAS_API` flag. Heroes
 
 ## Schema
 
+### Portal: `identity_user_emails` (as of spec-06 PR A)
+
+> **Note:** As of Spec 06 PR A (shipped 2026-04-30, commit `049008d`), `identity_users.email` and `identity_users.personal_email` (the pre-Spec-06 single-column model described in this spec's prose and status section) were replaced by the multi-row `identity_user_emails` table with a `kind` discriminator (`'workspace' | 'personal'`), per-row `verifiedAt`, and `addedBy` provenance. The pattern mirrors this spec's own `user_aliases` shape — one FK into `identity_users`, one discriminator per row, one history/tombstone trail. User aliases (`user_aliases`) — display-name aliases for sheet ingestion — are unrelated to email aliases and remain governed by this spec.
+
+---
+
 ### Portal: `user_aliases`
 
 ```ts
