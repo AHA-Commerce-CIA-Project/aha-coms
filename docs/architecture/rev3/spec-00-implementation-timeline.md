@@ -2,14 +2,14 @@
 
 > Coordination plan for Rev 3 specs. Rev 3 is the **suite-UX hardening pass** that turns the federation from "SSO works" into "the apps feel like one product."
 >
-> **Last updated:** 2026-04-29
+> **Last updated:** 2026-04-30
 > **Prerequisites:** Rev 2 closed end-to-end (RS256/JWKS, OIDC discovery, webhook + introspect via Google OIDC). Identity ownership is now firmly in the portal; Rev 3 builds the user-facing surface that makes that ownership visible.
 
 ---
 
-## Status — 2026-04-29 (Specs 01 + 02 + 03 + 03b + 03c portal-side shipped; Heroes adoption pending)
+## Status — 2026-04-30 (Specs 01 + 02 + 03 + 03b + 03c portal-side shipped; Spec 02 Phase 4 Heroes adoption shipped; Spec 01 + 03 Heroes adoption pending)
 
-Portal/COMS team landed Specs 01 + 02 (Phases 2 + 3) + 03 (portal-side, all twelve effects) end-to-end on 2026-04-28; Spec 03b test-gate cleanup followed on 2026-04-29 (locally green). The Spec 03 merge is on `main`; the deploy gate clears on the next push.
+Portal/COMS team landed Specs 01 + 02 (Phases 1 + 2 + 3) + 03 (portal-side, all twelve effects) end-to-end on 2026-04-28; Spec 03b test-gate cleanup followed on 2026-04-29 (locally green); Spec 03c pre-Spec-4 hardening shipped 2026-04-29; Spec 02 Phase 4 (primitives lift) shipped portal-side 2026-04-29 and Heroes-side 2026-04-30 — the round-trip is complete and `@coms-portal/ui v1.2.0` is now the single source of truth for primitives across both consumers. Phase 5 (onboarding exercise) and Specs 04/05 remain deferred.
 
 **Shipped (public GitHub repos, consumed via `git+url`):**
 
@@ -52,7 +52,7 @@ After Rev 3, identity is *centrally owned* (Rev 2), *centrally surfaced* (Spec 0
 |------|-------|-------|--------|-------------------|----------------|
 | 00 | Implementation Timeline (this doc) | Portal | — | — | — |
 | 01 | Shared Account Widget | Portal | Medium | Yes — H1 (adoption) | Yes — UX surface |
-| 02 | Design System (skeleton + spec) | Portal | Phases 1+2+3 done portal-side (2026-04-28); Phase 4+5 deferred | Phase 2 token consumption + Phase 3 chrome adoption | No — deferred until trigger |
+| 02 | Design System (skeleton + spec) | Portal + Heroes | Phases 1+2+3 done portal-side (2026-04-28); Phase 4 shipped end-to-end 2026-04-29 portal-side + 2026-04-30 Heroes-side (primitives, compositions stub); Phase 5 deferred | ✅ Phase 4 Heroes adoption shipped 2026-04-30 (commit `b7b7431`); Phase 2/3 still pending | No — deferred until trigger |
 | 03 | User Identity Ownership & Alias Layer | Portal + Heroes | Portal-side shipped 2026-04-28 (twelve effects on `main`); test-gate cleared 2026-04-29 (Spec 03b) | Yes — H1 (rename, ingestion rewrite, caches, webhook consumers) | **Yes — must land before real users** |
 | 03b | Spec 03 Test-Gate Cleanup | Portal | Shipped 2026-04-29 — single PR; root cause was Bun mock-pollution, not real fixture bugs | No | Resolved |
 | 03c | Pre-Spec-4 Hardening (launcher migration, observability, SDK extraction) | Portal | Queued — ~3 days | No (Heroes consumes new SDK in a follow-up) | **Yes — blocks Spec 4/5 debugging** |
@@ -71,7 +71,7 @@ Every Rev 3 spec touches Heroes eventually, but only Specs 01 + 03 are scheduled
 | Spec | Heroes work | Effort (Heroes) | When | Trigger |
 |------|-------------|-----------------|------|---------|
 | 01 | Adopt `@coms-portal/account-widget`; refactor `ServiceBar` / `MobileTopBar` to mount the widget in the right slot; remove existing avatar dropdown + sign-out button | ~1 week | **Now** (parallel with Spec 03) | Scheduled |
-| 02 | Phase 1: nothing (done portal-side). Phase 2+: consume `@coms-portal/design-tokens` Tailwind preset; Phase 3: migrate chrome to `@coms-portal/ui/chrome`; Phase 4: primitives + compositions | Phase 2: ~½ day · Phase 3: ~3–5 days · Phase 4: incremental | **Deferred** | 3rd H-app onboards, token value change, or drift detected |
+| 02 | Phase 1: nothing (done portal-side). Phase 2+: consume `@coms-portal/design-tokens` Tailwind preset (still pending — Heroes' own app.css owns tokens locally); Phase 3: migrate chrome to `@coms-portal/ui/chrome` (pending); Phase 4: ✅ shipped 2026-04-30 — `commit b7b7431` deleted Heroes' local `packages/web/src/lib/components/ui/*` (103 files, 2,276 lines) and rewired all 24 importers to `@coms-portal/ui/primitives` | **Phase 4 SHIPPED 2026-04-30** | Spec 02 Phase 4 round-trip complete |
 | 03 | Rename `users` → `heroes_profiles`; drop all user-creation paths; ingestion rewrite (resolve-batch + pending queue + audit log + alias_cache); webhook consumer; DB-role REVOKE | ~2 weeks engineering + portal cutover coordination | **Now — critical-path** | Must land before real users |
 | 04 | Read `coms_prefs` claim from ID token; apply theme + locale on render; remove Heroes' standalone theme toggle (widget popover from Spec 01 owns it) | ~½ day | **Deferred** | 3rd H-app onboards, drift report, or Spec 02 Phase 2+ ships |
 | 05 | Register Heroes searchables (heroes, courses, cohorts) with portal search registry; expose `POST /search/provider` endpoint | ~1 day | **Deferred (optional)** | N > 6 apps, first cross-app search request, or Heroes ops asks |
@@ -80,6 +80,8 @@ Every Rev 3 spec touches Heroes eventually, but only Specs 01 + 03 are scheduled
 
 - **2026-04-28 (single session):** Spec 03 portal-side built end-to-end — twelve effects across alias layer, per-app config, admin UIs, webhooks, gated REVOKE migration. Merged to `main` as commits `b6e3bd1` through `e296ab5` (Mr. Door commit format), with a follow-up svelte-check fix at `b407682` and Spec 03b doc at `7f059fa`.
 - **2026-04-29 — Spec 03b shipped:** CI test gate cleared. Single PR — diagnostic work showed every failing file passed in isolation, so the planned Class A/B/C three-PR phasing collapsed once the dominant root cause (Bun `mock.module` cross-file contamination) was identified. New shared helper at `apps/api/src/test-helpers/schema-barrel-mock.ts`; snapshot+restore mock-isolation pattern adopted across 8 test files; `OAuth2Client.prototype.verifyIdToken` patched directly in the verifyGoogleIdToken test. 261 pass / 0 fail / 0 typecheck errors. Pattern enforced via `.codebase-memory/adr.md` §7.
+- **2026-04-29 — Spec 02 Phase 4 shipped portal-side:** `@coms-portal/ui v1.2.0` published with 15 shadcn-svelte primitive families (button, badge, card, label, input, textarea, separator, skeleton, table, avatar, tabs, dialog, dropdown-menu, select, sheet) lifted from Heroes verbatim. New direct deps: bits-ui, clsx, tailwind-merge, tailwind-variants, lucide-svelte. Portal `apps/web` second-consumer adoption across all 13 admin pages — trigger fired by portal itself. Compositions deliberately stub. Mission artefacts at `.nelson/missions/2026-04-29_094141_e71c70c4/`.
+- **2026-04-30 — Spec 02 Phase 4 round-trip complete (Heroes adoption + portal employees-list follow-up):** Heroes adopted v1.2.0 — 24 files rewritten to flat `@coms-portal/ui/primitives` imports, namespace-style usage flattened, `PullToRefresh.svelte` moved out of `ui/`, `cn()` + four type helpers stripped from Heroes' `utils.ts`, local `ui/` directory deleted (103 files, 2,276 lines net) — `commit b7b7431` on `mrdoorba/coms-aha-heroes`. Fork risk between Heroes' local primitives and the platform package permanently closed. Portal `admin/employees/+page.svelte` (the one out-of-scope file from the main mission) refactored — `commit 8b2d476` on `coms_portal`. `coms-ui` ONBOARDING.md Step 4a documents the canonical `<span>` inside `<SelectTrigger>` pattern — `commit 6f7f8c2`. See `.nelson/missions/2026-04-29_094141_e71c70c4/followup.md`.
 - **Now — Spec 01 Heroes adoption:** Heroes mounts `@coms-portal/account-widget` per `heroes-integration-handoff.md`. Independent of the test gate; ships on Heroes' deploy pipeline.
 - **Soon — Spec 03 Heroes adoption (now unblocked by 03b):** Heroes Phase 0 prep + Phase 1 ingestion rewrite per spec-03 §Appendix A. ~2 weeks Heroes engineering. Cutover (Phase 3) is a coordinated <30-minute window with portal — truncate Heroes' projection tables, portal admin reprovisions users via existing CSV/Sheet/manual flows, Heroes ops re-runs sheet ingestion for points data, Deploy C applies the gated REVOKE.
 - **Rev 3 closes** when spec-00 §Success Criteria are green: widget renders identically in portal + Heroes from one package version; Heroes' DB role cannot write `identity_users`; sheet ingestion mints zero new user rows.
