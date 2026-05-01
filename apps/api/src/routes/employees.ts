@@ -10,6 +10,12 @@ import { processEmployeeProvisioning } from '../services/employee-provisioning'
 import { logAudit } from '../services/audit'
 import { emitUserUpdated } from '../services/provisioning-events'
 import { getDisplayEmail } from '../services/email-resolution'
+import {
+  adminAddEmailToUser,
+  adminEditEmailAddress,
+  adminSetEmailPrimary,
+  adminRemoveEmail,
+} from '../services/admin-emails'
 import { logger } from '~/logger'
 
 // Per Q4a: both workspaceEmail and personalEmail are optional; at least one required.
@@ -507,6 +513,226 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         400: t.Object({ message: t.String() }),
         404: t.Object({ message: t.String() }),
         409: t.Object({ message: t.String() }),
+      },
+    },
+  )
+
+  // ---------------------------------------------------------------------------
+  // /v1/employees/:id/emails — admin email management (Spec 06 PR D §618-628)
+  //
+  // Admin posture: trusted-on-entry (verifiedAt=NOW(), addedBy='admin'),
+  // collision response REVEALS the colliding identity (admin must resolve),
+  // workspace-kind add/edit/remove allowed.
+  // ---------------------------------------------------------------------------
+
+  .post(
+    '/:id/emails',
+    async ({ params, body, authUser, requestId, actorIp, set }) => {
+      const result = await adminAddEmailToUser({
+        targetIdentityUserId: params.id,
+        email: body.email,
+        kind: body.kind,
+      })
+      switch (result.outcome) {
+        case 'target_user_not_found':
+          set.status = 404
+          return { error: 'TARGET_NOT_FOUND' as const, message: 'User not found' }
+        case 'email_in_use':
+          set.status = 409
+          return {
+            error: 'EMAIL_IN_USE' as const,
+            collisionUserId: result.collisionUserId,
+            collisionUserName: result.collisionUserName,
+          }
+        case 'added':
+          await logAudit({
+            actorId: authUser.id,
+            action: 'admin_add_email',
+            targetType: 'user',
+            targetId: params.id,
+            details: { email: body.email, kind: body.kind, isPrimary: result.isPrimary },
+            requestId,
+            actorIp,
+          })
+          emitUserUpdated(params.id, ['emails']).catch((err) => {
+            logger.error({ err, userId: params.id }, '[admin-emails] emitUserUpdated failed')
+          })
+          return { ok: true as const, emailId: result.emailId, isPrimary: result.isPrimary }
+      }
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        email: t.String({ format: 'email', maxLength: 255 }),
+        kind: t.Union([t.Literal('workspace'), t.Literal('personal')]),
+      }),
+      response: {
+        200: t.Object({
+          ok: t.Literal(true),
+          emailId: t.String(),
+          isPrimary: t.Boolean(),
+        }),
+        404: t.Object({ error: t.Literal('TARGET_NOT_FOUND'), message: t.String() }),
+        409: t.Object({
+          error: t.Literal('EMAIL_IN_USE'),
+          collisionUserId: t.String(),
+          collisionUserName: t.String(),
+        }),
+      },
+    },
+  )
+
+  .patch(
+    '/:id/emails/:emailId',
+    async ({ params, body, authUser, requestId, actorIp, set }) => {
+      // Two distinct operations behind one endpoint: edit address, set primary.
+      // Mutually exclusive — body carries either { email } or { isPrimary: true }.
+      if (body.isPrimary === true) {
+        const result = await adminSetEmailPrimary({
+          targetIdentityUserId: params.id,
+          emailId: params.emailId,
+        })
+        switch (result.outcome) {
+          case 'updated':
+            await logAudit({
+              actorId: authUser.id,
+              action: 'admin_set_email_primary',
+              targetType: 'user',
+              targetId: params.id,
+              details: { emailId: params.emailId },
+              requestId,
+              actorIp,
+            })
+            emitUserUpdated(params.id, ['emails']).catch((err) => {
+              logger.error({ err, userId: params.id }, '[admin-emails] emitUserUpdated failed')
+            })
+            return { ok: true as const }
+          case 'email_not_found':
+          case 'wrong_target_user':
+            set.status = 404
+            return { error: 'EMAIL_NOT_FOUND' as const, message: 'Email row not found on this user' }
+          case 'not_verified':
+            set.status = 400
+            return {
+              error: 'NOT_VERIFIED' as const,
+              message: 'Verify this email before setting it as primary.',
+            }
+          case 'email_in_use':
+            // Unreachable — set-primary doesn't change address. Defensive.
+            set.status = 409
+            return {
+              error: 'EMAIL_IN_USE' as const,
+              collisionUserId: result.collisionUserId,
+              collisionUserName: result.collisionUserName,
+            }
+        }
+      }
+      if (body.email) {
+        const result = await adminEditEmailAddress({
+          targetIdentityUserId: params.id,
+          emailId: params.emailId,
+          newEmail: body.email,
+        })
+        switch (result.outcome) {
+          case 'updated':
+            await logAudit({
+              actorId: authUser.id,
+              action: 'admin_edit_email',
+              targetType: 'user',
+              targetId: params.id,
+              details: { emailId: params.emailId, newEmail: body.email },
+              requestId,
+              actorIp,
+            })
+            emitUserUpdated(params.id, ['emails']).catch((err) => {
+              logger.error({ err, userId: params.id }, '[admin-emails] emitUserUpdated failed')
+            })
+            return { ok: true as const }
+          case 'email_not_found':
+          case 'wrong_target_user':
+            set.status = 404
+            return { error: 'EMAIL_NOT_FOUND' as const, message: 'Email row not found on this user' }
+          case 'email_in_use':
+            set.status = 409
+            return {
+              error: 'EMAIL_IN_USE' as const,
+              collisionUserId: result.collisionUserId,
+              collisionUserName: result.collisionUserName,
+            }
+          case 'not_verified':
+            // Unreachable for the address-edit path. Defensive.
+            set.status = 400
+            return { error: 'NOT_VERIFIED' as const, message: 'Email is not verified' }
+        }
+      }
+      set.status = 400
+      return {
+        error: 'INVALID_BODY' as const,
+        message: 'Provide { email } to change address or { isPrimary: true } to promote.',
+      }
+    },
+    {
+      params: t.Object({ id: t.String(), emailId: t.String() }),
+      body: t.Object({
+        email: t.Optional(t.String({ format: 'email', maxLength: 255 })),
+        isPrimary: t.Optional(t.Boolean()),
+      }),
+      response: {
+        200: t.Object({ ok: t.Literal(true) }),
+        400: t.Union([
+          t.Object({ error: t.Literal('INVALID_BODY'), message: t.String() }),
+          t.Object({ error: t.Literal('NOT_VERIFIED'), message: t.String() }),
+        ]),
+        404: t.Object({ error: t.Literal('EMAIL_NOT_FOUND'), message: t.String() }),
+        409: t.Object({
+          error: t.Literal('EMAIL_IN_USE'),
+          collisionUserId: t.String(),
+          collisionUserName: t.String(),
+        }),
+      },
+    },
+  )
+
+  .delete(
+    '/:id/emails/:emailId',
+    async ({ params, authUser, requestId, actorIp, set }) => {
+      const result = await adminRemoveEmail({
+        targetIdentityUserId: params.id,
+        emailId: params.emailId,
+      })
+      switch (result.outcome) {
+        case 'removed':
+          await logAudit({
+            actorId: authUser.id,
+            action: 'admin_remove_email',
+            targetType: 'user',
+            targetId: params.id,
+            details: { emailId: params.emailId },
+            requestId,
+            actorIp,
+          })
+          emitUserUpdated(params.id, ['emails']).catch((err) => {
+            logger.error({ err, userId: params.id }, '[admin-emails] emitUserUpdated failed')
+          })
+          return { ok: true as const }
+        case 'email_not_found':
+        case 'wrong_target_user':
+          set.status = 404
+          return { error: 'EMAIL_NOT_FOUND' as const, message: 'Email row not found on this user' }
+        case 'last_verified_email':
+          set.status = 409
+          return {
+            error: 'LAST_VERIFIED_EMAIL' as const,
+            message: 'Cannot remove the user\'s only verified sign-in email.',
+          }
+      }
+    },
+    {
+      params: t.Object({ id: t.String(), emailId: t.String() }),
+      response: {
+        200: t.Object({ ok: t.Literal(true) }),
+        404: t.Object({ error: t.Literal('EMAIL_NOT_FOUND'), message: t.String() }),
+        409: t.Object({ error: t.Literal('LAST_VERIFIED_EMAIL'), message: t.String() }),
       },
     },
   )
