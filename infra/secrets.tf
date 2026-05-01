@@ -24,6 +24,18 @@ resource "google_secret_manager_secret" "gip_api_key" {
 # No secret_version for gip_api_key — populate manually:
 #   echo -n "YOUR_API_KEY" | gcloud secrets versions add coms-portal-gip-api-key --data-file=-
 
+# ── BREVO_API_KEY (manually populated; spec-06 PR B2) ────────────
+resource "google_secret_manager_secret" "brevo_api_key" {
+  secret_id = "coms-portal-brevo-api-key"
+
+  replication {
+    auto {}
+  }
+}
+
+# No secret_version for brevo_api_key — populate manually:
+#   echo -n "YOUR_BREVO_API_KEY" | gcloud secrets versions add coms-portal-brevo-api-key --data-file=-
+
 # ── PORTAL_BROKER_SIGNING_SECRET (HS256 shared with relying-party apps) ──
 resource "random_password" "portal_broker_signing_secret" {
   length  = 48

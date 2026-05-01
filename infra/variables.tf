@@ -77,10 +77,16 @@ variable "bootstrap_admin_name" {
 
 variable "mail_transport" {
   type        = string
-  description = "Outbound mail transport. 'stdout' for dev (logs only — forbidden in prod), 'brevo' for production. PR B1 lands as 'stdout'; PR B2 will flip to 'brevo' once secrets are wired."
+  description = "Outbound mail transport. 'stdout' for dev (logs only — forbidden in prod), 'brevo' for production. PR B1 lands as 'stdout'; PR B2 wires Brevo and the deploy var flips to 'brevo' once the API-key secret is populated via gcloud."
   default     = "stdout"
   validation {
     condition     = contains(["stdout", "brevo"], var.mail_transport)
     error_message = "mail_transport must be 'stdout' or 'brevo'. The 'memory' value is test-only."
   }
+}
+
+variable "brevo_from" {
+  type        = string
+  description = "Verified Brevo sender address used as the FROM on outbound mail. Dev posture (no DNS for ahacommerce.net per Q3-DNS): the operator's Brevo single-sender. Production: noreply@ahacommerce.net once DNS is wired. Empty string allowed when mail_transport='stdout' (Phase 1 of PR B2)."
+  default     = ""
 }
