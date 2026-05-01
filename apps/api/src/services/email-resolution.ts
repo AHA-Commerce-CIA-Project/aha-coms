@@ -45,3 +45,32 @@ export async function getEmailEntries(identityUserId: string): Promise<UserEmail
     addedBy: r.addedBy as UserEmailAddedBy,
   }))
 }
+
+/**
+ * Same shape as getEmailEntries but with the row id attached. The id is needed
+ * by /api/userinfo so the profile-management UI can call PATCH/DELETE without
+ * a second round-trip; it is NOT included in webhook payloads (UserEmailEntry
+ * is the cross-app shape) — admin-managed identifiers do not leak to H-apps.
+ */
+export interface UserEmailEntryWithId extends UserEmailEntry {
+  emailId: string
+}
+
+export async function getEmailEntriesWithIds(
+  identityUserId: string,
+): Promise<UserEmailEntryWithId[]> {
+  const rows = await db
+    .select()
+    .from(identityUserEmails)
+    .where(eq(identityUserEmails.identityUserId, identityUserId))
+    .orderBy(asc(identityUserEmails.createdAt))
+
+  return rows.map((r) => ({
+    emailId: r.id,
+    address: r.email,
+    kind: r.kind as UserEmailKind,
+    isPrimary: r.isPrimary,
+    verified: r.verifiedAt !== null,
+    addedBy: r.addedBy as UserEmailAddedBy,
+  }))
+}
