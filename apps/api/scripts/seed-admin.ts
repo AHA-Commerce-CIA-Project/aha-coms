@@ -68,8 +68,38 @@ async function main() {
       }
 
       console.log(
-        `[seed-admin] Bootstrap admin already exists (identity_users.id=${linkedUser[0].id}, status=${linkedUser[0].status}); nothing to do.`,
+        `[seed-admin] Bootstrap admin already exists (identity_users.id=${linkedUser[0].id}, status=${linkedUser[0].status}).`,
       )
+
+      // Workspace row already in place; ensure the personal-email row is also
+      // present if BOOTSTRAP_ADMIN_PERSONAL_EMAIL is set. Lets a fresh personal
+      // email be added later without re-bootstrapping the whole identity.
+      if (personalEmail) {
+        const personalNormalized = personalEmail.toLowerCase()
+        const existingPersonal = await tx
+          .select({ id: identityUserEmails.id })
+          .from(identityUserEmails)
+          .where(sql`LOWER(TRIM(${identityUserEmails.email})) = ${personalNormalized}`)
+          .limit(1)
+
+        if (existingPersonal.length > 0) {
+          console.log(`[seed-admin] Personal email row already exists for ${personalEmail}; nothing to do.`)
+          return
+        }
+
+        await tx
+          .insert(identityUserEmails)
+          .values({
+            identityUserId: linkedUser[0].id,
+            email: personalEmail,
+            kind: 'personal',
+            addedBy: 'bootstrap',
+            verifiedAt: sql`NOW()`,
+            isPrimary: false,
+          } as Partial<typeof identityUserEmails.$inferInsert> as typeof identityUserEmails.$inferInsert)
+
+        console.log(`[seed-admin] Inserted personal email row: ${personalEmail}`)
+      }
       return
     }
 
