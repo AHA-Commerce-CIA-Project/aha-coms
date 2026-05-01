@@ -44,7 +44,11 @@
   async function handleMergeAll() {
     if (!importResult?.flagged) return
     mergingAll = true
-    const mergeable = importResult.flagged.filter((f) => f.existingId && !mergedIds.has(f.existingId))
+    // Only name-collision rows are mergeable. Email collisions need manual
+    // resolution by editing one side or the other (admin-emails surface).
+    const mergeable = importResult.flagged.filter(
+      (f) => f.collisionKind !== 'email_collision' && f.existingId && !mergedIds.has(f.existingId),
+    )
     for (const flagged of mergeable) {
       await handleMergeOne(flagged)
     }
@@ -97,7 +101,23 @@
     skippedCount: number
     errorCount: number
     flaggedCount: number
-    flagged: Array<{ rowNumber: number; csvEmail: string; csvName: string; csvDepartment?: string; csvPosition?: string; csvPhone?: string; existingId: string; existingName: string; existingEmail: string }>
+    flagged: Array<{
+      rowNumber: number
+      csvEmail: string
+      csvWorkspaceEmail?: string
+      csvPersonalEmail?: string
+      csvName: string
+      csvDepartment?: string
+      csvPosition?: string
+      csvPhone?: string
+      collisionKind?: 'email_collision' | 'name_collision'
+      collisionEmail?: string
+      collisionUserId?: string
+      collisionUserName?: string
+      existingId: string
+      existingName: string
+      existingEmail: string
+    }>
     preview: Array<{ rowNumber: number; email: string; name: string }>
     created: Array<{ rowNumber: number; id: string; email: string; name: string }>
     skipped: Array<{ rowNumber: number; email?: string; reason: string }>
@@ -350,7 +370,7 @@
           <div>
             <div class="mb-2 flex items-center justify-between">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-status-pending">Needs Review</h3>
-              {#if importResult.flagged.some((f) => f.existingId && !mergedIds.has(f.existingId))}
+              {#if importResult.flagged.some((f) => f.collisionKind !== 'email_collision' && f.existingId && !mergedIds.has(f.existingId))}
                 <Button
                   type="button"
                   variant="destructive"
@@ -362,27 +382,44 @@
                 </Button>
               {/if}
             </div>
-            <p class="mb-2 text-xs text-muted-foreground">These CSV rows match a non-workspace user by name. Merge to upgrade the existing employee with their workspace email.</p>
+            <p class="mb-2 text-xs text-muted-foreground">These rows need attention before they can be imported. Email collisions surface the conflicting user; name matches against non-workspace users can be merged.</p>
             <div class="space-y-2 text-sm text-muted-foreground">
               {#each importResult.flagged as row}
                 {#if mergedIds.has(row.existingId)}
                   <p class="text-status-active">Row {row.rowNumber} — {row.csvName} merged successfully</p>
                 {:else}
                   <div class="flex items-start justify-between gap-3">
-                    <p>Row {row.rowNumber} — <span class="text-foreground">{row.csvName}</span> ({row.csvEmail}) matches existing: <span class="text-primary">{row.existingName}</span> ({row.existingEmail})</p>
-                    {#if row.existingId}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onclick={() => handleMergeOne(row)}
-                        disabled={$upgradeMutation.isPending}
-                        class="shrink-0"
-                      >
-                        Merge
-                      </Button>
+                    {#if row.collisionKind === 'email_collision'}
+                      <p>
+                        Row {row.rowNumber} — <span class="text-foreground">{row.csvName}</span>
+                        {#if row.csvPersonalEmail}
+                          ({row.csvWorkspaceEmail ?? row.csvEmail}, personal: {row.csvPersonalEmail})
+                        {:else}
+                          ({row.csvEmail})
+                        {/if}
+                        — <span class="text-destructive">email collision:</span>
+                        <span class="text-foreground">{row.collisionEmail}</span> already belongs to
+                        <a href="/admin/employees/{row.collisionUserId}" class="text-primary hover:underline">
+                          {row.collisionUserName}
+                        </a>
+                      </p>
+                      <span class="shrink-0 text-xs text-muted-foreground">Resolve manually</span>
                     {:else}
-                      <span class="shrink-0 text-xs text-muted-foreground">Ambiguous</span>
+                      <p>Row {row.rowNumber} — <span class="text-foreground">{row.csvName}</span> ({row.csvEmail}) matches existing: <span class="text-primary">{row.existingName}</span> ({row.existingEmail})</p>
+                      {#if row.existingId}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onclick={() => handleMergeOne(row)}
+                          disabled={$upgradeMutation.isPending}
+                          class="shrink-0"
+                        >
+                          Merge
+                        </Button>
+                      {:else}
+                        <span class="shrink-0 text-xs text-muted-foreground">Ambiguous</span>
+                      {/if}
                     {/if}
                   </div>
                   {#if mergeErrors.has(row.existingId)}
