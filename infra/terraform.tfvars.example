@@ -11,5 +11,10 @@ sheets_personal_email_id  = "REPLACE_ME"
 sheets_personal_email_tab = "REPLACE_ME"
 bootstrap_admin_email     = "handers.the@ahacommerce.net"
 bootstrap_admin_name      = "Mr. Door"
-# Outbound mail transport. PR B1 leaves this as "stdout"; flip to "brevo" once Brevo secrets are wired in PR B2.
+# Outbound mail transport. PR B2 wired the Brevo secret + Cloud Run env. To flip,
+# populate the `coms-portal-brevo-api-key` secret via `gcloud secrets versions add`,
+# then set the MAIL_TRANSPORT GitHub Actions repo variable to "brevo" and re-deploy.
 mail_transport            = "stdout"
+# Verified Brevo single-sender (your personal Gmail in dev posture; noreply@ahacommerce.net once DNS lands).
+# Drives the BREVO_FROM Cloud Run env. In CI this is supplied via the BREVO_FROM GitHub Actions repo var.
+brevo_from                = "REPLACE_ME"

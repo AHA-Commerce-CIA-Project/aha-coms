@@ -103,6 +103,10 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         name  = "MAIL_TRANSPORT"
         value = var.mail_transport
       }
+      env {
+        name  = "BREVO_FROM"
+        value = var.brevo_from
+      }
 
       # ── Secrets ─────────────────────────────────────────────────
       env {
@@ -129,6 +133,22 @@ resource "google_cloud_run_v2_service" "coms_portal" {
           secret_key_ref {
             secret  = google_secret_manager_secret.portal_broker_signing_secret.secret_id
             version = "latest"
+          }
+        }
+      }
+      # BREVO_API_KEY only wired when transport is brevo — Cloud Run v2
+      # rejects secret_key_ref with version="latest" if no version exists yet,
+      # so Phase 1 of PR B2 (transport=stdout, secret resource created but
+      # not yet populated) has to leave this env entry off.
+      dynamic "env" {
+        for_each = var.mail_transport == "brevo" ? [1] : []
+        content {
+          name = "BREVO_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.brevo_api_key.secret_id
+              version = "latest"
+            }
           }
         }
       }

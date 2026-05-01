@@ -7,7 +7,7 @@
 > **Implementation status:**
 > - **PR A — shipped 2026-04-30** at commit `049008d`. Foundation: `identity_user_emails` (multi-row), `identity_user_emails_history` (DELETE-trigger tombstone), `auth_sessions` (portal-native opaque-UUID cookie). Session vehicle pivoted off GIP-managed cookie; GIP narrows to OIDC verifier role. Bootstrap-admin seed script wired into deploy. `coms-shared` bumped to v1.5.0 with additive `emails: UserEmailEntry[]` on user-provisioning/update payloads.
 > - **PR B1 — shipped 2026-05-01** at commit `6938553`. Code-only half of OTP infrastructure: schema (`otp_codes`, `otp_request_log`, `one_time_login_links` — migration `0030_famous_pretty_boy`), three-mode mail service (`stdout|brevo|memory` with hard-fail-in-prod guard on stdout, lazy Brevo SDK import), `services/otp.ts` with `requestOtp`/`verifyOtp` discriminated-union outcomes, routes `POST /api/auth/otp/{request,verify}` + `POST /api/internal/cleanup/otp` (OIDC-protected), Terraform Cloud Scheduler job at 03:17 UTC, `parseDeviceLabel` exported from `services/sessions.ts`. 363 tests pass; no Brevo wiring yet.
-> - **PR B2 — pending.** Brevo SaaS wiring: verified single-sender, three Secret Manager entries (`coms-portal-brevo-api-key|from|reply-to`), `infra/secrets.tf` blocks, flip `mail_transport = "brevo"` in tfvars, real-email smoke test on deployed Cloud Run. Blocked on operator finishing Brevo signup.
+> - **PR B2 — shipped 2026-05-01.** Brevo SaaS wiring: one Secret Manager entry (`coms-portal-brevo-api-key`, populated manually via `gcloud`), `BREVO_FROM` as plain Cloud Run env from `var.brevo_from`, `MAIL_TRANSPORT` + `BREVO_FROM` driven by GitHub Actions repo vars (`MAIL_TRANSPORT`, `BREVO_FROM`) passed as `-var=` flags in `deploy.yml`, dynamic env block on `BREVO_API_KEY` so Phase 1 (transport=stdout, secret unpopulated) still applies cleanly, boot-time guard in `mail/index.ts` for misconfigured Brevo. Deviates from this spec's "three secrets" wording — `BREVO_REPLY_TO` deferred until DNS lands; FROM is config not a secret. See updated §Email infrastructure.
 > - **PRs C–E — pending.** C (login surfaces), D (profile + admin UIs + CSV import collision rules), E (extras: sign-out-everywhere, active-sessions panel, OTP-bypass).
 > - **PR F — partial.** Initial spec-update sweep landed alongside PR A, hold for the rest until B–E ship.
 >
@@ -693,15 +693,21 @@ On admin user-detail (#5):
 
 ### Brevo setup (development phase, no DNS access)
 
+As shipped in PR B2, the Brevo wiring uses **one** Secret Manager entry (the API key, which is genuinely sensitive) and treats the FROM address as plain config:
+
 1. Owner signs up at `brevo.com` with their personal email.
 2. Adds a single sender (e.g., the owner's personal Gmail) — Brevo emails a verification link, click to confirm. No DNS edits.
 3. Generates an API key in Brevo dashboard → Settings → SMTP & API.
-4. Adds three secrets to GCP Secret Manager:
-   - `coms-portal-brevo-api-key` — the API key
-   - `coms-portal-brevo-from` — the verified sender address
-   - (Optionally) `coms-portal-brevo-reply-to` — if different from `from`
-5. Wires as Cloud Run env vars in `infra/cloud-run.tf` env block (same pattern as `DATABASE_URL`).
-6. Cloud Run service account gets `roles/secretmanager.secretAccessor` on those secrets.
+4. Sets two GitHub Actions repo variables for the deploy workflow:
+   - `BREVO_FROM` — the verified sender address (passed as `-var="brevo_from=..."` to tofu).
+   - `MAIL_TRANSPORT` — `stdout` for Phase 1, then `brevo` for Phase 2.
+5. Phase 1 deploy: tofu creates `google_secret_manager_secret.brevo_api_key` (no version yet) and the IAM binding; Cloud Run env wires `BREVO_FROM`; transport stays `stdout`. The `BREVO_API_KEY` env entry is gated by a `dynamic` block on `var.mail_transport == "brevo"` so the missing-version case doesn't fail revision creation.
+6. Operator populates the API key:
+   - `echo -n "<brevo-api-key>" | gcloud secrets versions add coms-portal-brevo-api-key --data-file=-`
+7. Operator flips the GH Actions repo var: `gh variable set MAIL_TRANSPORT --body "brevo"` and re-runs the deploy workflow.
+8. Phase 2 deploy: dynamic env block emits `BREVO_API_KEY` from secret; `mail/index.ts` boot guard verifies both `BREVO_API_KEY` and `BREVO_FROM` are set; transport flips to brevo.
+
+`BREVO_REPLY_TO` is deferred — in dev posture FROM = REPLY_TO = the operator's personal Gmail. Wire it when DNS lands and FROM moves to `noreply@ahacommerce.net`.
 
 ### Brevo setup (production gate, requires DNS access for `ahacommerce.net`)
 
@@ -901,9 +907,9 @@ Validated 2026-04-30:
 - [x] No real users on the system; cookie-format change is harmless to humans.
 - [x] Self-merge PR posture; no staging.
 
-**For PR B (deferred validation):**
-- [ ] Brevo account with verified single-sender (dev posture, no DNS access for `ahacommerce.net` per Q3-DNS).
-- [ ] Three Brevo secrets in GCP Secret Manager: `coms-portal-brevo-api-key`, `coms-portal-brevo-from`, `coms-portal-brevo-reply-to` (optional).
+**For PR B (validated 2026-05-01):**
+- [x] Brevo account with verified single-sender (dev posture, no DNS access for `ahacommerce.net` per Q3-DNS).
+- [x] One Brevo secret in GCP Secret Manager: `coms-portal-brevo-api-key`. `BREVO_FROM` lives as `var.brevo_from` (GH Actions repo var `BREVO_FROM`); `BREVO_REPLY_TO` deferred until DNS lands.
 
 **For PR E (deferred validation):**
 - [ ] `super_admin` value added to `portalRole` enum (extend `identity-users.ts`, `routes/employees.ts` t.Union, RBAC middleware, shared types in coms-shared if any).

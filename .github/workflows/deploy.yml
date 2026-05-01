@@ -95,7 +95,9 @@ jobs:
             -no-color \
             -var="service_url=${{ vars.SERVICE_URL }}" \
             -var="bootstrap_admin_email=${{ vars.BOOTSTRAP_ADMIN_EMAIL }}" \
-            -var="bootstrap_admin_name=${{ vars.BOOTSTRAP_ADMIN_NAME }}"
+            -var="bootstrap_admin_name=${{ vars.BOOTSTRAP_ADMIN_NAME }}" \
+            -var="mail_transport=${{ vars.MAIL_TRANSPORT || 'stdout' }}" \
+            -var="brevo_from=${{ vars.BREVO_FROM }}"
 
   deploy:
     name: Build, Migrate & Deploy

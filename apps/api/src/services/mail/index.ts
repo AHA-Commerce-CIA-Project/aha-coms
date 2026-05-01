@@ -27,6 +27,19 @@ function getTransport(): MailTransport {
       '[mail] MAIL_TRANSPORT=stdout is forbidden in production (would leak OTP codes to logs)',
     )
   }
+  // Hard-fail at boot when brevo is configured but the credentials it needs
+  // are missing — surfaces the misconfig in startup logs instead of silently
+  // 500ing on the first OTP send.
+  if (t === 'brevo') {
+    const missing: string[] = []
+    if (!process.env.BREVO_API_KEY) missing.push('BREVO_API_KEY')
+    if (!process.env.BREVO_FROM) missing.push('BREVO_FROM')
+    if (missing.length > 0) {
+      throw new Error(
+        `[mail] MAIL_TRANSPORT=brevo requires ${missing.join(' and ')} to be set`,
+      )
+    }
+  }
   return t
 }
 
