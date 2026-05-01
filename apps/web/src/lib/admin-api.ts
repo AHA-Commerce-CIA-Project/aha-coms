@@ -31,20 +31,30 @@ export interface WebhookTestResult {
   error?: string
 }
 
+export interface EmployeeEmailEntry {
+  emailId?: string
+  address: string
+  kind: 'workspace' | 'personal'
+  isPrimary: boolean
+  verified: boolean
+  addedBy?: string
+}
+
 export interface EmployeeRecord {
   id: string
-  email: string
-  personalEmail: string | null
   name: string
   phone: string | null
   department: string | null
   position: string | null
   branch: string | null
+  birthDate?: string | null
+  leaderName?: string | null
   portalRole: PortalRole
   status: string
   provisioningStatus: 'ready' | 'pending' | 'processing' | 'failed'
   provisioningError: string | null
   hasGoogleWorkspace: boolean
+  emails: EmployeeEmailEntry[]
 }
 
 export interface EmployeesListResponse {
@@ -248,7 +258,7 @@ export const adminApi = {
     return requestJson<EmployeeRecord>(`/api/v1/employees/${id}`)
   },
   createEmployee(body: {
-    email: string
+    workspaceEmail?: string
     personalEmail?: string
     name: string
     phone?: string
@@ -257,17 +267,118 @@ export const adminApi = {
     branch?: 'Indonesia' | 'Thailand'
     portalRole?: PortalRole
     teamId?: string
+    birthDate?: string
+    leaderName?: string
   }) {
     return requestJson<CreateEmployeeResult>(`/api/v1/employees`, {
       method: 'POST',
       body: JSON.stringify(body),
     })
   },
-  updateEmployee(id: string, body: { portalRole?: string; email?: string; hasGoogleWorkspace?: boolean }) {
+  updateEmployee(
+    id: string,
+    body: {
+      portalRole?: string
+      hasGoogleWorkspace?: boolean
+      name?: string
+      phone?: string
+      department?: string
+      position?: string
+      branch?: 'Indonesia' | 'Thailand'
+      birthDate?: string
+      leaderName?: string
+      teamId?: string
+    },
+  ) {
     return requestJson<{ ok: true }>(`/api/v1/employees/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     })
+  },
+  // ---- Admin email management (PR D) ---------------------------------------
+  // requestJson throws on non-2xx so the structured 409 collision body is lost;
+  // these wrappers do raw fetch and return discriminated unions.
+  async addEmployeeEmail(
+    id: string,
+    body: { email: string; kind: 'workspace' | 'personal' },
+  ): Promise<
+    | { kind: 'added'; emailId: string; isPrimary: boolean }
+    | { kind: 'email_in_use'; collisionUserId: string; collisionUserName: string }
+    | { kind: 'target_not_found' }
+    | { kind: 'network_error'; message: string }
+  > {
+    const res = await fetch(`/api/v1/employees/${id}/emails`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    if (res.ok && json.ok === true) {
+      return { kind: 'added', emailId: String(json.emailId ?? ''), isPrimary: Boolean(json.isPrimary) }
+    }
+    if (res.status === 409 && json.error === 'EMAIL_IN_USE') {
+      return {
+        kind: 'email_in_use',
+        collisionUserId: String(json.collisionUserId ?? ''),
+        collisionUserName: String(json.collisionUserName ?? ''),
+      }
+    }
+    if (res.status === 404 && json.error === 'TARGET_NOT_FOUND') {
+      return { kind: 'target_not_found' }
+    }
+    return { kind: 'network_error', message: String(json.message ?? `Request failed (${res.status})`) }
+  },
+  async updateEmployeeEmail(
+    id: string,
+    emailId: string,
+    body: { email?: string; isPrimary?: boolean },
+  ): Promise<
+    | { kind: 'updated' }
+    | { kind: 'email_in_use'; collisionUserId: string; collisionUserName: string }
+    | { kind: 'not_found' }
+    | { kind: 'not_verified'; message: string }
+    | { kind: 'network_error'; message: string }
+  > {
+    const res = await fetch(`/api/v1/employees/${id}/emails/${emailId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    if (res.ok && json.ok === true) return { kind: 'updated' }
+    if (res.status === 409 && json.error === 'EMAIL_IN_USE') {
+      return {
+        kind: 'email_in_use',
+        collisionUserId: String(json.collisionUserId ?? ''),
+        collisionUserName: String(json.collisionUserName ?? ''),
+      }
+    }
+    if (res.status === 404) return { kind: 'not_found' }
+    if (json.error === 'NOT_VERIFIED') {
+      return { kind: 'not_verified', message: String(json.message ?? '') }
+    }
+    return { kind: 'network_error', message: String(json.message ?? `Request failed (${res.status})`) }
+  },
+  async removeEmployeeEmail(
+    id: string,
+    emailId: string,
+  ): Promise<
+    | { kind: 'removed' }
+    | { kind: 'last_verified_email'; message: string }
+    | { kind: 'not_found' }
+    | { kind: 'network_error'; message: string }
+  > {
+    const res = await fetch(`/api/v1/employees/${id}/emails/${emailId}`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+    })
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    if (res.ok && json.ok === true) return { kind: 'removed' }
+    if (res.status === 409 && json.error === 'LAST_VERIFIED_EMAIL') {
+      return { kind: 'last_verified_email', message: String(json.message ?? '') }
+    }
+    if (res.status === 404) return { kind: 'not_found' }
+    return { kind: 'network_error', message: String(json.message ?? `Request failed (${res.status})`) }
   },
   deleteEmployee(id: string) {
     return requestJson<{ ok: true }>(`/api/v1/employees/${id}`, {

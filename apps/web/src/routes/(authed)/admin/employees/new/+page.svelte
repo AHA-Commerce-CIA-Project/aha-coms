@@ -9,7 +9,7 @@
   const teams = teamsQuery()
 
   let form = $state({
-    email: '',
+    workspaceEmail: '',
     personalEmail: '',
     name: '',
     phone: '',
@@ -27,10 +27,14 @@
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
     error = null
+    if (!form.workspaceEmail.trim() && !form.personalEmail.trim()) {
+      error = 'At least one of Workspace Email or Personal Email is required.'
+      return
+    }
     try {
       const result = await $mutation.mutateAsync({
-        email: form.email,
-        personalEmail: form.personalEmail || undefined,
+        workspaceEmail: form.workspaceEmail.trim() || undefined,
+        personalEmail: form.personalEmail.trim() || undefined,
         name: form.name,
         phone: form.phone || undefined,
         position: form.position || undefined,
@@ -63,16 +67,29 @@
     <CardContent>
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>
-          <Label for="employee-email" class="mb-1 block text-xs text-muted-foreground">Email</Label>
-          <Input id="employee-email" type="email" bind:value={form.email} required class="w-full" />
+          <Label for="employee-workspace-email" class="mb-1 block text-xs text-muted-foreground">Workspace Email</Label>
+          <Input
+            id="employee-workspace-email"
+            type="email"
+            placeholder="name@ahacommerce.net"
+            bind:value={form.workspaceEmail}
+            class="w-full"
+          />
+        </div>
+        <div>
+          <Label for="employee-personal-email" class="mb-1 block text-xs text-muted-foreground">Personal Email</Label>
+          <Input
+            id="employee-personal-email"
+            type="email"
+            placeholder="name@gmail.com"
+            bind:value={form.personalEmail}
+            class="w-full"
+          />
+          <p class="mt-1 text-[10px] text-muted-foreground">At least one of Workspace or Personal email is required.</p>
         </div>
         <div>
           <Label for="employee-name" class="mb-1 block text-xs text-muted-foreground">Name</Label>
           <Input id="employee-name" type="text" bind:value={form.name} required class="w-full" />
-        </div>
-        <div>
-          <Label for="employee-personal-email" class="mb-1 block text-xs text-muted-foreground">Personal Email</Label>
-          <Input id="employee-personal-email" type="email" bind:value={form.personalEmail} class="w-full" />
         </div>
         <div class="grid grid-cols-2 gap-4">
           <div>

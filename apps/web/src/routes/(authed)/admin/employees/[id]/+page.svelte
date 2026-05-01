@@ -65,12 +65,6 @@
   let positionPending = $state(false)
   let positionError = $state<string | null>(null)
 
-  // Personal Email
-  let editingPersonalEmail = $state(false)
-  let personalEmailValue = $state('')
-  let personalEmailPending = $state(false)
-  let personalEmailError = $state<string | null>(null)
-
   // Leader
   let editingLeader = $state(false)
   let leaderValue = $state('')
@@ -88,6 +82,122 @@
   let branchValue = $state<'Indonesia' | 'Thailand' | ''>('')
   let branchPending = $state(false)
   let branchError = $state<string | null>(null)
+
+  // Email management (PR D)
+  let addEmailKind = $state<'workspace' | 'personal'>('personal')
+  let addEmailValue = $state('')
+  let addEmailPending = $state(false)
+  let addEmailError = $state<string | null>(null)
+  let editingEmailId = $state<string | null>(null)
+  let editEmailValue = $state('')
+  let emailRowError = $state<string | null>(null)
+  let confirmRemoveEmailId = $state<string | null>(null)
+
+  function displayEmail(e: { emails?: { address: string; kind: string; isPrimary: boolean }[] }): string {
+    if (!e.emails || e.emails.length === 0) return '(no email)'
+    const ws = e.emails.find((x) => x.kind === 'workspace')
+    if (ws) return ws.address
+    const primary = e.emails.find((x) => x.isPrimary)
+    if (primary) return primary.address
+    return e.emails[0].address
+  }
+
+  async function refetchEmployee() {
+    await queryClient.invalidateQueries({ queryKey: ['employees', id] })
+  }
+
+  async function handleAddEmail() {
+    addEmailError = null
+    if (!addEmailValue.trim()) {
+      addEmailError = 'Email is required.'
+      return
+    }
+    addEmailPending = true
+    const result = await adminApi.addEmployeeEmail(id, { email: addEmailValue.trim(), kind: addEmailKind })
+    addEmailPending = false
+    switch (result.kind) {
+      case 'added':
+        addEmailValue = ''
+        await refetchEmployee()
+        return
+      case 'email_in_use':
+        addEmailError = `This email already belongs to ${result.collisionUserName} (${result.collisionUserId.slice(0, 8)}…). Resolve the collision first.`
+        return
+      case 'target_not_found':
+        addEmailError = 'User not found.'
+        return
+      case 'network_error':
+        addEmailError = result.message
+        return
+    }
+  }
+
+  async function handleSaveEditEmail(emailId: string) {
+    emailRowError = null
+    if (!editEmailValue.trim()) {
+      emailRowError = 'Email is required.'
+      return
+    }
+    const result = await adminApi.updateEmployeeEmail(id, emailId, { email: editEmailValue.trim() })
+    switch (result.kind) {
+      case 'updated':
+        editingEmailId = null
+        editEmailValue = ''
+        await refetchEmployee()
+        return
+      case 'email_in_use':
+        emailRowError = `This email already belongs to ${result.collisionUserName}.`
+        return
+      case 'not_found':
+        emailRowError = 'Email row not found.'
+        return
+      case 'not_verified':
+      case 'network_error':
+        emailRowError = result.message
+        return
+    }
+  }
+
+  async function handleSetEmailPrimaryAdmin(emailId: string) {
+    emailRowError = null
+    const result = await adminApi.updateEmployeeEmail(id, emailId, { isPrimary: true })
+    if (result.kind === 'updated') {
+      await refetchEmployee()
+      return
+    }
+    if (result.kind === 'not_verified') {
+      emailRowError = result.message
+      return
+    }
+    if (result.kind === 'not_found') {
+      emailRowError = 'Email row not found.'
+      return
+    }
+    if (result.kind === 'network_error') {
+      emailRowError = result.message
+    }
+  }
+
+  async function handleRemoveEmail(emailId: string) {
+    emailRowError = null
+    const result = await adminApi.removeEmployeeEmail(id, emailId)
+    confirmRemoveEmailId = null
+    if (result.kind === 'removed') {
+      await refetchEmployee()
+      return
+    }
+    if (result.kind === 'last_verified_email') {
+      emailRowError = result.message
+      return
+    }
+    if (result.kind === 'not_found') {
+      emailRowError = 'Email row not found.'
+      return
+    }
+    if (result.kind === 'network_error') {
+      emailRowError = result.message
+    }
+  }
 
   // Sync selectedRole when data loads
   $effect(() => {
@@ -136,7 +246,11 @@
     workspaceError = null
     workspacePending = true
     try {
-      await $mutation.mutateAsync({ id, data: { email: workspaceEmail, hasGoogleWorkspace: true } })
+      await adminApi.upgradeEmployeeWorkspace(id, { workspaceEmail })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['employees', id] }),
+        queryClient.invalidateQueries({ queryKey: ['employees'] }),
+      ])
       editingWorkspace = false
       workspaceEmail = ''
     } catch (error) {
@@ -207,19 +321,6 @@
     }
   }
 
-  async function handleSavePersonalEmail() {
-    personalEmailError = null
-    personalEmailPending = true
-    try {
-      await $mutation.mutateAsync({ id, data: { personalEmail: personalEmailValue } })
-      editingPersonalEmail = false
-    } catch (error) {
-      personalEmailError = error instanceof Error ? error.message : 'Failed to save'
-    } finally {
-      personalEmailPending = false
-    }
-  }
-
   async function handleSaveLeader() {
     leaderError = null
     leaderPending = true
@@ -271,7 +372,7 @@
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="text-xl font-semibold">{emp.name}</h1>
-        <p class="text-sm text-muted-foreground">{emp.email}</p>
+        <p class="text-sm text-muted-foreground">{displayEmail(emp)}</p>
         {#if provisioningFailedFromCreate}
           <p class="mt-2 text-xs text-status-pending">Employee was created, but provisioning failed. Retry provisioning below.</p>
         {/if}
@@ -508,51 +609,8 @@
           </div>
         </div>
 
-        <!-- Personal Email (editable) -->
-        <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
-          <span class="text-xs text-muted-foreground">Personal Email</span>
-          <div class="text-right">
-            {#if editingPersonalEmail}
-              <div class="flex flex-col items-end gap-2">
-                <Input
-                  type="email"
-                  bind:value={personalEmailValue}
-                  class="rounded-lg"
-                />
-                {#if personalEmailError}
-                  <p class="text-xs text-destructive">{personalEmailError}</p>
-                {/if}
-                <div class="flex gap-2">
-                  <Button
-                    size="sm"
-                    onclick={handleSavePersonalEmail}
-                    disabled={personalEmailPending}
-                  >
-                    {personalEmailPending ? 'Saving…' : 'Save'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onclick={() => { editingPersonalEmail = false; personalEmailError = null }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            {:else}
-              <div class="flex items-center gap-2">
-                <span class="text-sm">{(emp as any).personalEmail ?? '-'}</span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onclick={() => { editingPersonalEmail = true; personalEmailValue = (emp as any).personalEmail ?? '' }}
-                >
-                  Edit
-                </Button>
-              </div>
-            {/if}
-          </div>
-        </div>
+        <!-- Email management moved to its own card below — see "Email addresses" -->
+
 
         <!-- Leader (editable) -->
         <div class="flex items-start justify-between gap-4 border-b border-border pb-2">
@@ -809,6 +867,129 @@
               </Button>
             {/if}
           </div>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card class="mt-6 max-w-lg">
+      <CardContent class="space-y-4 pt-6">
+        <div>
+          <h2 class="text-base font-semibold">Email addresses</h2>
+          <p class="text-xs text-muted-foreground">
+            Workspace emails sign in with Google. Personal emails sign in with a code. Admin-entered emails are trusted on entry.
+          </p>
+        </div>
+
+        {#if emp.emails && emp.emails.length > 0}
+          <ul class="divide-y divide-border">
+            {#each emp.emails as entry (entry.emailId ?? entry.address)}
+              <li class="flex items-start justify-between gap-4 py-3">
+                <div class="min-w-0 space-y-1">
+                  {#if editingEmailId === entry.emailId}
+                    <Input type="email" bind:value={editEmailValue} class="w-full" />
+                  {:else}
+                    <div class="flex items-center gap-2">
+                      <span class="truncate text-sm font-medium">{entry.address}</span>
+                      {#if entry.isPrimary}
+                        <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">Primary</span>
+                      {/if}
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span class="rounded-full bg-muted px-2 py-0.5">
+                        {entry.kind === 'workspace' ? 'Workspace' : 'Personal'}
+                      </span>
+                      {#if entry.verified}
+                        <span class="text-status-active">✓ Verified</span>
+                      {:else}
+                        <span class="text-status-pending">Unverified</span>
+                      {/if}
+                      {#if entry.addedBy}
+                        <span class="text-[10px]">added by {entry.addedBy}</span>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+                <div class="flex items-center gap-2">
+                  {#if editingEmailId === entry.emailId}
+                    <Button size="sm" onclick={() => entry.emailId && handleSaveEditEmail(entry.emailId)}>Save</Button>
+                    <Button size="sm" variant="outline" onclick={() => { editingEmailId = null; emailRowError = null }}>Cancel</Button>
+                  {:else}
+                    {#if !entry.isPrimary && entry.verified}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onclick={() => entry.emailId && handleSetEmailPrimaryAdmin(entry.emailId)}
+                      >
+                        Set primary
+                      </Button>
+                    {/if}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onclick={() => { editingEmailId = entry.emailId ?? null; editEmailValue = entry.address; emailRowError = null }}
+                    >
+                      Edit
+                    </Button>
+                    {#if confirmRemoveEmailId === entry.emailId}
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onclick={() => entry.emailId && handleRemoveEmail(entry.emailId)}
+                      >
+                        Confirm
+                      </Button>
+                      <Button size="sm" variant="outline" onclick={() => { confirmRemoveEmailId = null }}>Cancel</Button>
+                    {:else}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onclick={() => { confirmRemoveEmailId = entry.emailId ?? null; emailRowError = null }}
+                      >
+                        Remove
+                      </Button>
+                    {/if}
+                  {/if}
+                </div>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="text-sm text-muted-foreground">No email addresses on file.</p>
+        {/if}
+
+        {#if emailRowError}
+          <p class="text-xs text-destructive">{emailRowError}</p>
+        {/if}
+
+        <div class="space-y-2 border-t border-border pt-3">
+          <p class="text-xs font-medium">Add an email</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <Select
+              type="single"
+              value={addEmailKind}
+              onValueChange={(v) => { if (v) addEmailKind = v as 'workspace' | 'personal' }}
+            >
+              <SelectTrigger size="sm" class="w-32">
+                <span>{addEmailKind === 'workspace' ? 'Workspace' : 'Personal'}</span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="personal" label="Personal" />
+                <SelectItem value="workspace" label="Workspace" />
+              </SelectContent>
+            </Select>
+            <Input
+              type="email"
+              placeholder={addEmailKind === 'workspace' ? 'name@ahacommerce.net' : 'name@gmail.com'}
+              bind:value={addEmailValue}
+              class="flex-1 min-w-[180px]"
+            />
+            <Button size="sm" onclick={handleAddEmail} disabled={addEmailPending}>
+              {addEmailPending ? 'Adding…' : 'Add'}
+            </Button>
+          </div>
+          {#if addEmailError}
+            <p class="text-xs text-destructive">{addEmailError}</p>
+          {/if}
         </div>
       </CardContent>
     </Card>
