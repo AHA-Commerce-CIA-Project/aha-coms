@@ -125,6 +125,7 @@ const EMAIL_RESOLUTION_SPECS = ['../services/email-resolution', '../../services/
 mockSpecs(EMAIL_RESOLUTION_SPECS, () => ({
   getDisplayEmail: async () => mockUser?.email ?? null,
   getEmailEntries: async () => mockUser ? [{ address: mockUser.email, kind: 'workspace', isPrimary: true, verified: true, addedBy: 'admin' }] : [],
+  getEmailEntriesWithIds: async () => mockUser ? [{ emailId: 'email-1', address: mockUser.email, kind: 'workspace', isPrimary: true, verified: true, addedBy: 'admin' }] : [],
 }))
 
 // resolveAuthUser: stub returns the configured mockUser as a SessionUser

@@ -5,7 +5,7 @@ import { appRegistry } from '~/db/schema'
 import { getSessionCookieValue } from '../middleware/session-cookie'
 import { resolveAuthUser } from '../middleware/auth'
 import { validateSession } from '../services/sessions'
-import { getEmailEntries } from '../services/email-resolution'
+import { getEmailEntriesWithIds } from '../services/email-resolution'
 
 /**
  * GET /api/userinfo
@@ -68,8 +68,10 @@ export const userinfoRoutes = new Elysia()
         launcherApps = rows.map((r) => ({ slug: r.slug, label: r.name, url: r.url }))
       }
 
-      // Q8b: full email entries array
-      const emails = await getEmailEntries(authUser.id)
+      // Q8b: full email entries array, with row ids so the profile UI can
+      // address rows directly via PATCH/DELETE without a second round-trip.
+      // The id is NOT included in webhook payloads (different surface).
+      const emails = await getEmailEntriesWithIds(authUser.id)
 
       // identity_users has no avatar_url column today. Field is in the contract
       // for forward-compat with spec-04 (user preferences) which may add one.
@@ -91,6 +93,7 @@ export const userinfoRoutes = new Elysia()
           email: t.String(),
           emails: t.Array(
             t.Object({
+              emailId: t.String(),
               address: t.String(),
               kind: t.Union([t.Literal('workspace'), t.Literal('personal')]),
               isPrimary: t.Boolean(),

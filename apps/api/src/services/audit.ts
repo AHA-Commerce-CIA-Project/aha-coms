@@ -30,6 +30,10 @@ export type AuditAction =
   | 'alias_queue_resolve'
   | 'alias_queue_reject'
   | 'update_app_user_config'
+  | 'admin_add_email'
+  | 'admin_edit_email'
+  | 'admin_set_email_primary'
+  | 'admin_remove_email'
 
 export type AuditTargetType = 'user' | 'team' | 'app' | 'personal_email_sync' | 'employee_info_sync' | 'alias_collision_queue' | 'app_user_config'
 
