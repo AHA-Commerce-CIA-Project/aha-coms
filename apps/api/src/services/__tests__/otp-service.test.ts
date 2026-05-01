@@ -461,6 +461,25 @@ describe('requestOtp — case 1: personal email → sent', () => {
   })
 })
 
+describe('requestOtp — case 1b: verify_personal_email template (PR D binding flow)', () => {
+  test('template=verify_personal_email sends verify subject, otherwise identical to login', async () => {
+    emailStore.push(makeEmailRow({ kind: 'personal' }))
+    userStore.push(makeUserRow())
+
+    const result = await requestOtp({
+      email: 'alice@example.com',
+      requestIp: '1.2.3.4',
+      template: 'verify_personal_email',
+    })
+
+    expect(result.outcome).toBe('sent')
+    expect(otpCodeStore).toHaveLength(1)
+    expect(__memoryInbox).toHaveLength(1)
+    expect(__memoryInbox[0].subject).toBe('Verify your personal email for COMS portal')
+    expect(__memoryInbox[0].textContent).toMatch(/\d{6}/)
+  })
+})
+
 describe('requestOtp — case 2: workspace email → wrong_login_path', () => {
   test('returns wrong_login_path, no code, no email, logs outcome', async () => {
     emailStore.push(makeEmailRow({ kind: 'workspace' }))
