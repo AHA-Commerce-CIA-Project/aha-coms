@@ -457,8 +457,14 @@
             <TableCell>
               <a href="/admin/employees/{employee.id}" class="text-primary hover:text-primary/80">{employee.name}</a>
             </TableCell>
-            <TableCell class="text-muted-foreground">{employee.email}</TableCell>
-            <TableCell class="text-muted-foreground">{employee.personalEmail ?? '—'}</TableCell>
+            <TableCell class="text-muted-foreground">
+              {employee.emails?.find((e) => e.kind === 'workspace')?.address ?? '—'}
+            </TableCell>
+            <TableCell class="text-muted-foreground">
+              {employee.emails?.find((e) => e.kind === 'personal' && e.isPrimary)?.address
+                ?? employee.emails?.find((e) => e.kind === 'personal')?.address
+                ?? '—'}
+            </TableCell>
             <TableCell>
               <Badge variant="secondary">{employee.portalRole}</Badge>
             </TableCell>

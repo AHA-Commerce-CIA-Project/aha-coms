@@ -20,7 +20,7 @@ export function createEmployeeMutation() {
   const queryClient = useQueryClient()
   return createMutation({
     mutationFn: (body: {
-      email: string
+      workspaceEmail?: string
       personalEmail?: string
       name: string
       phone?: string
@@ -46,16 +46,15 @@ export function updateEmployeeMutation() {
       id: string
       data: {
         portalRole?: string
-        email?: string
         hasGoogleWorkspace?: boolean
         phone?: string
-  
         birthDate?: string
         leaderName?: string
         position?: string
-        personalEmail?: string
         teamId?: string
         branch?: 'Indonesia' | 'Thailand'
+        name?: string
+        department?: string
       }
     }) => {
       return adminApi.updateEmployee(id, data)

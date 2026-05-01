@@ -82,7 +82,34 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         db.select({ count: sql<number>`count(*)` }).from(identityUsers).where(where),
       ])
 
-      return { data: rows, total: Number(count), page, limit }
+      // Attach emails per row so the list view can render kind badges and the
+      // primary address without a per-row userinfo round-trip. Single query
+      // bulk-resolves all rows on this page.
+      const ids = rows.map((r) => r.id)
+      const emailRows = ids.length
+        ? await db
+            .select()
+            .from(identityUserEmails)
+            .where(inArray(identityUserEmails.identityUserId, ids))
+        : []
+      const emailsByUser = new Map<string, typeof emailRows>()
+      for (const e of emailRows) {
+        const list = emailsByUser.get(e.identityUserId) ?? []
+        list.push(e)
+        emailsByUser.set(e.identityUserId, list)
+      }
+      const data = rows.map((r) => ({
+        ...r,
+        emails: (emailsByUser.get(r.id) ?? []).map((e) => ({
+          emailId: e.id,
+          address: e.email,
+          kind: e.kind,
+          isPrimary: e.isPrimary,
+          verified: e.verifiedAt !== null,
+          addedBy: e.addedBy,
+        })),
+      }))
+      return { data, total: Number(count), page, limit }
     },
     {
       query: t.Object({
