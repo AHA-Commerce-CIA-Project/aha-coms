@@ -648,4 +648,36 @@ export const adminApi = {
   downloadAppConfigCsv(appId: string) {
     return fetch(`/api/v1/admin/app-config/csv?appId=${encodeURIComponent(appId)}`)
   },
+  // Spec 06 PR E §9 — admin sign-out-everywhere
+  signOutAllSessions(userId: string) {
+    return requestJson<{ revoked: number }>(`/api/v1/employees/${userId}/sign-out-all`, {
+      method: 'POST',
+    })
+  },
+  // Spec 06 PR E §11 — super_admin one-time login link
+  issueOneTimeLoginLink(
+    userId: string,
+    body: {
+      reason: 'lost_email_access' | 'support_handoff' | 'identity_recovery' | 'other'
+      reasonText?: string
+    },
+  ) {
+    return requestJson<{ id: string; url: string; expiresAt: string }>(
+      `/api/v1/employees/${userId}/login-link`,
+      { method: 'POST', body: JSON.stringify(body) },
+    )
+  },
+  listOneTimeLoginLinks(userId: string) {
+    return requestJson<{
+      links: Array<{
+        id: string
+        issuedBy: { id: string; name: string }
+        reason: string
+        reasonText: string | null
+        expiresAt: string
+        consumedAt: string | null
+        createdAt: string
+      }>
+    }>(`/api/v1/employees/${userId}/login-links`)
+  },
 }

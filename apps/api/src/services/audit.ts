@@ -34,6 +34,9 @@ export type AuditAction =
   | 'admin_edit_email'
   | 'admin_set_email_primary'
   | 'admin_remove_email'
+  | 'admin_sign_out_all'
+  | 'one_time_link_issued'
+  | 'one_time_link_consumed'
 
 export type AuditTargetType = 'user' | 'team' | 'app' | 'personal_email_sync' | 'employee_info_sync' | 'alias_collision_queue' | 'app_user_config'
 

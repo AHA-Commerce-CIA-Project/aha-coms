@@ -1,12 +1,17 @@
 import { api } from '$lib/api'
 import type { PortalRole } from '@coms-portal/shared'
 
+export interface SessionUserCapabilities {
+  canIssueOneTimeLoginLinks: boolean
+}
+
 export interface SessionUser {
   id: string
   email: string
   name: string
   portalRole: PortalRole
   apps: string[]
+  capabilities?: SessionUserCapabilities
 }
 
 export async function fetchMe(): Promise<SessionUser | null> {
