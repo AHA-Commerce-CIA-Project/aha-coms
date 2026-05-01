@@ -66,15 +66,11 @@ function isUuid(value: string): boolean {
 }
 
 /**
- * Crude User-Agent → device label.
- * "Mac · Safari" / "Windows · Chrome" / "iPhone · Mobile Safari"
- * Good enough for the active-sessions panel — not worth a full UA library.
+ * Crude User-Agent → device label used internally by createPortalSession.
+ * Delegates to the exported parseDeviceLabel below.
  */
-function parseDeviceLabel(ua: string | null): string {
-  if (!ua) return 'Unknown device'
-  const browser = /(Edge|Chrome|Firefox|Safari)/.exec(ua)?.[1] ?? 'Browser'
-  const os = /(Mac|Windows|Linux|iPhone|Android)/.exec(ua)?.[1] ?? 'Device'
-  return `${os} · ${browser}`
+function parseDeviceLabelInternal(ua: string | null): string {
+  return parseDeviceLabel(ua)
 }
 
 /**
@@ -318,4 +314,52 @@ export async function insertSessionCutoff(
   })
 
   logger.info({ userId, reason }, '[sessions] inserted session cutoff row')
+}
+
+// ---------------------------------------------------------------------------
+// parseDeviceLabel (exported — used by OTP verify route to populate deviceLabel)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parses a User-Agent header into a short device label for the active-sessions panel.
+ * Examples: "Mac · Safari 18", "Windows · Chrome 130", "iPhone · Safari", "Linux · Firefox".
+ * Falls back to "Unknown device" if UA is empty or unrecognizable.
+ *
+ * Note: a simpler `parseDeviceLabel` exists as a private helper above. This
+ * exported version adds major-version numbers and a wider browser/OS coverage
+ * table. The private helper is retained for `createPortalSession` (no breaking
+ * change); callers that need the richer label (e.g. the OTP verify route) use
+ * this export.
+ */
+export function parseDeviceLabel(userAgent: string | null | undefined): string {
+  if (!userAgent) return 'Unknown device'
+
+  // OS detection — order matters: iPhone/iPad before Mac (iPhone UA contains "Mac OS X")
+  let os = 'Unknown'
+  if (/iPhone/i.test(userAgent)) os = 'iPhone'
+  else if (/iPad/i.test(userAgent)) os = 'iPad'
+  else if (/Mac OS X|Macintosh/i.test(userAgent)) os = 'Mac'
+  else if (/Windows/i.test(userAgent)) os = 'Windows'
+  else if (/Android/i.test(userAgent)) os = 'Android'
+  else if (/Linux/i.test(userAgent)) os = 'Linux'
+
+  // Browser detection — order matters:
+  //   Edge before Chrome (Edge UA contains "Chrome")
+  //   Chrome before Safari (Chrome UA contains "Safari")
+  let browser = 'Unknown'
+  let version = ''
+  const m = (re: RegExp) => userAgent.match(re)
+  const edgeM = m(/Edg\/(\d+)/)
+  const firefoxM = m(/Firefox\/(\d+)/)
+  const chromeM = m(/Chrome\/(\d+)/)
+  const versionSafariM = m(/Version\/(\d+).*Safari/)
+  const safariM = m(/Safari\/(\d+)/)
+  if (edgeM) { browser = 'Edge'; version = edgeM[1] }
+  else if (firefoxM) { browser = 'Firefox'; version = firefoxM[1] }
+  else if (chromeM) { browser = 'Chrome'; version = chromeM[1] }
+  else if (versionSafariM) { browser = 'Safari'; version = versionSafariM[1] }
+  else if (safariM) { browser = 'Safari'; version = safariM[1] }
+
+  if (os === 'Unknown' && browser === 'Unknown') return 'Unknown device'
+  return `${os} · ${browser}${version ? ' ' + version : ''}`.trim()
 }

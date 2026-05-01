@@ -5,9 +5,11 @@
  * SERVICE_URL and whose `email` claim matches CLOUD_TASKS_SA_EMAIL.
  */
 import { Elysia, t } from 'elysia'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { db } from '~/db'
 import { appWebhookEndpoints } from '~/db/schema/app-webhook-endpoints'
+import { otpCodes } from '~/db/schema/otp-codes'
+import { otpRequestLog } from '~/db/schema/otp-request-log'
 import { deliverWebhook } from '~/services/webhook-dispatcher'
 import { verifyGoogleOidcToken } from '~/services/oidc-verifier'
 import type { PortalWebhookEvent } from '@coms-portal/shared'
@@ -191,5 +193,52 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
         occurredAt: t.String({ minLength: 1 }),
         requestId: t.Optional(t.String()),
       }),
+    },
+  )
+
+  /**
+   * POST /api/internal/cleanup/otp
+   * Invoked by Cloud Scheduler. Prunes expired OTP data:
+   *   - otp_codes rows where expiresAt < NOW() - 7 days
+   *   - otp_request_log rows where requestedAt < NOW() - 24 hours
+   *
+   * Protected by Google OIDC ID token whose email must match
+   * OTP_CLEANUP_SCHEDULER_SA_EMAIL (a dedicated Scheduler service account).
+   */
+  .post(
+    '/cleanup/otp',
+    async ({ request, set }) => {
+      const serviceUrl = process.env.SERVICE_URL ?? ''
+      const cleanupSaEmail = process.env.OTP_CLEANUP_SCHEDULER_SA_EMAIL ?? ''
+      if (!cleanupSaEmail) {
+        set.status = 500
+        return { message: 'OTP_CLEANUP_SCHEDULER_SA_EMAIL not configured' }
+      }
+      const authResult = await authenticateOidcRequest(
+        request.headers.get('authorization'),
+        serviceUrl,
+        cleanupSaEmail,
+      )
+      if (authResult) {
+        set.status = authResult.status
+        return { message: authResult.message }
+      }
+      // Prune expired otp_codes (>7d past expiry) and otp_request_log (>24h old)
+      const codesDeleted = await db
+        .delete(otpCodes)
+        .where(sql`${otpCodes.expiresAt} < now() - interval '7 days'`)
+        .returning({ id: otpCodes.id })
+      const logDeleted = await db
+        .delete(otpRequestLog)
+        .where(sql`${otpRequestLog.requestedAt} < now() - interval '24 hours'`)
+        .returning({ id: otpRequestLog.id })
+      logger.info(
+        { otpCodesDeleted: codesDeleted.length, otpRequestLogDeleted: logDeleted.length },
+        '[internal] otp cleanup complete',
+      )
+      return {
+        otpCodesDeleted: codesDeleted.length,
+        otpRequestLogDeleted: logDeleted.length,
+      }
     },
   )
