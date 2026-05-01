@@ -177,8 +177,10 @@
     void attemptVerify()
   }
 
-  function handleOtpInput(value: string) {
-    otp = value.replace(/\D/g, '').slice(0, 6)
+  function handleOtpInput(event: Event) {
+    const target = event.currentTarget as HTMLInputElement
+    otp = target.value.replace(/\D/g, '').slice(0, 6)
+    target.value = otp
     if (otp.length === 6 && !loading && !inactiveUser) {
       void attemptVerify()
     }
@@ -414,7 +416,7 @@
               pattern="\d{6}"
               maxlength={6}
               value={otp}
-              oninput={(e) => handleOtpInput((e.currentTarget as HTMLInputElement).value)}
+              oninput={handleOtpInput}
               disabled={loading || inactiveUser}
               placeholder="••••••"
               class="block w-full rounded-md border border-gray-300 px-4 py-3 text-center text-2xl font-semibold tabular-nums shadow-sm transition-all focus:border-[#3B68E5] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#3B68E5]/20 disabled:bg-gray-50"
