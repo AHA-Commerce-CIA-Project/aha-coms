@@ -23,6 +23,7 @@ import { identityUserEmails } from '~/db/schema/identity-user-emails'
 import { identityUsers } from '~/db/schema/identity-users'
 import { sendMail } from '~/services/mail'
 import { renderOtpEmail } from '~/services/mail/templates/otp'
+import { renderVerifyPersonalEmail } from '~/services/mail/templates/verify-personal-email'
 
 // ---------------------------------------------------------------------------
 // Public constants
@@ -38,9 +39,18 @@ export const OTP_PER_IP_MAX_REQUESTS = 30
 // Public types
 // ---------------------------------------------------------------------------
 
+export type OtpTemplateKind = 'login' | 'verify_personal_email'
+
 export type RequestOtpArgs = {
   email: string
   requestIp: string
+  /**
+   * Which mail template to send when a code is issued. Login is the default
+   * (Workspace OIDC alternative); 'verify_personal_email' is used by the
+   * self-service binding flow at POST /api/me/emails to confirm address ownership.
+   * Branching, rate-limit, and supersede semantics are identical for both.
+   */
+  template?: OtpTemplateKind
   /** Clock injection for testing. Defaults to `() => new Date()`. */
   now?: () => Date
 }
@@ -180,11 +190,17 @@ export async function requestOtp(args: RequestOtpArgs): Promise<RequestOtpResult
   })
 
   // Send email
-  const { subject, textContent, htmlContent } = renderOtpEmail({
-    code,
-    ttlMinutes: OTP_CODE_TTL_MINUTES,
+  const template = args.template ?? 'login'
+  const rendered =
+    template === 'verify_personal_email'
+      ? renderVerifyPersonalEmail({ code, ttlMinutes: OTP_CODE_TTL_MINUTES })
+      : renderOtpEmail({ code, ttlMinutes: OTP_CODE_TTL_MINUTES })
+  await sendMail({
+    to: emailNormalized,
+    subject: rendered.subject,
+    textContent: rendered.textContent,
+    htmlContent: rendered.htmlContent,
   })
-  await sendMail({ to: emailNormalized, subject, textContent, htmlContent })
 
   // Log outcome
   await logOutcome(emailNormalized, requestIp, 'sent')
