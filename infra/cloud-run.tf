@@ -94,6 +94,16 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         value = var.service_url
       }
 
+      # ── OTP cleanup (spec-06) ───────────────────────────────────
+      env {
+        name  = "OTP_CLEANUP_SCHEDULER_SA_EMAIL"
+        value = google_service_account.otp_cleanup_scheduler.email
+      }
+      env {
+        name  = "MAIL_TRANSPORT"
+        value = var.mail_transport
+      }
+
       # ── Secrets ─────────────────────────────────────────────────
       env {
         name = "DATABASE_URL"

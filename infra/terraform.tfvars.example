@@ -11,3 +11,5 @@ sheets_personal_email_id  = "REPLACE_ME"
 sheets_personal_email_tab = "REPLACE_ME"
 bootstrap_admin_email     = "handers.the@ahacommerce.net"
 bootstrap_admin_name      = "Mr. Door"
+# Outbound mail transport. PR B1 leaves this as "stdout"; flip to "brevo" once Brevo secrets are wired in PR B2.
+mail_transport            = "stdout"

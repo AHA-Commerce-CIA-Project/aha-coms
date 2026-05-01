@@ -1,7 +1,9 @@
-# COMS Portal
+## graphify
 
-## Database Migrations
+This project has a graphify knowledge graph at graphify-out/.
 
-- **Never hand-write Drizzle migration files or journal entries.** Always use `drizzle-kit generate` to produce migrations from schema changes. Drizzle manages the `when` timestamps in `meta/_journal.json` — manually setting them causes silent migration skips in production due to Drizzle's high-water-mark comparison.
-- If you need a data-only migration (e.g. `UPDATE` statements with no schema change), make a trivial schema annotation change so `drizzle-kit generate` creates the journal entry, then replace the SQL content in the generated `.sql` file. This ensures the `when` timestamp is correct.
-- Run migrations via CI (`bun run --cwd apps/api db:migrate`). The deploy workflow handles Cloud SQL Auth Proxy setup automatically.
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
+- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)

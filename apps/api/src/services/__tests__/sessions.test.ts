@@ -211,6 +211,7 @@ const {
   revokeAllSessionsForUser,
   insertSessionCutoff,
   SESSION_TTL_MS,
+  parseDeviceLabel,
 } = await import('../sessions')
 
 // ---------------------------------------------------------------------------
@@ -517,5 +518,39 @@ describe('insertSessionCutoff', () => {
     await insertSessionCutoff('user-1', 'gip-uid-abc', 'status_change')
 
     expect(cutoffStore[0].gipUid).toBe('gip-uid-abc')
+  })
+})
+
+describe('parseDeviceLabel', () => {
+  test('Mac + Safari UA returns Mac · Safari with version', () => {
+    const ua =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15'
+    expect(parseDeviceLabel(ua)).toBe('Mac · Safari 18')
+  })
+
+  test('Windows + Chrome UA returns Windows · Chrome with version', () => {
+    const ua =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+    expect(parseDeviceLabel(ua)).toBe('Windows · Chrome 130')
+  })
+
+  test('iPhone + Safari UA returns iPhone · Safari with version', () => {
+    const ua =
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+    expect(parseDeviceLabel(ua)).toBe('iPhone · Safari 17')
+  })
+
+  test('null UA returns "Unknown device"', () => {
+    expect(parseDeviceLabel(null)).toBe('Unknown device')
+  })
+
+  test('empty string UA returns "Unknown device"', () => {
+    expect(parseDeviceLabel('')).toBe('Unknown device')
+  })
+
+  test('Linux + Firefox UA returns Linux · Firefox with version', () => {
+    const ua =
+      'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/109.0'
+    expect(parseDeviceLabel(ua)).toBe('Linux · Firefox 109')
   })
 })

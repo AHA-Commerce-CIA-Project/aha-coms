@@ -31,6 +31,7 @@ import {
   revokeSession,
 } from '../services/sessions'
 import { getDisplayEmail } from '../services/email-resolution'
+import { requestOtp, verifyOtp } from '../services/otp'
 
 const SELF_AUDIENCE = PORTAL_ORIGIN
 
@@ -688,5 +689,94 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         401: t.Object({ message: t.String() }),
         404: t.Object({ message: t.String() }),
       },
+    },
+  )
+
+  /**
+   * POST /api/auth/otp/request
+   * Request an OTP code for personal-email sign-in.
+   *
+   * Spec 06 §§433-476 — enumeration resistance (Q7g): identical 200 response
+   * shape for both 'sent' and 'unknown_email' outcomes.
+   * Returns 200 with structured error for 'wrong_login_path' (frontend renders
+   * "Switch to Google sign-in" CTA).
+   * Returns 429 with Retry-After for email-level cooldown, plain 429 for IP cap.
+   */
+  .post(
+    '/otp/request',
+    async ({ body, request, set }) => {
+      const requestIp =
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        ?? request.headers.get('x-real-ip')
+        ?? 'unknown'
+      const result = await requestOtp({ email: body.email, requestIp })
+      switch (result.outcome) {
+        case 'sent':
+        case 'unknown_email':
+          // Q7g enumeration resistance: same shape for both.
+          return { message: "If this email is registered, you'll receive a code shortly. The code is valid for 10 minutes." }
+        case 'wrong_login_path':
+          // 200 with structured error — frontend uses error code to render "Switch to Google sign-in" CTA.
+          return { error: 'WRONG_LOGIN_PATH' as const, message: 'This email is for Google sign-in. Use the "Sign in with Google" button.' }
+        case 'rate_limited_email':
+          set.status = 429
+          set.headers['retry-after'] = '60'
+          return { error: 'RATE_LIMITED' as const, message: 'Please wait a moment before requesting another code.' }
+        case 'rate_limited_ip':
+          set.status = 429
+          return { error: 'RATE_LIMITED' as const, message: 'Too many requests. Please try again later.' }
+      }
+    },
+    {
+      body: t.Object({ email: t.String({ format: 'email', maxLength: 255 }) }),
+    },
+  )
+
+  /**
+   * POST /api/auth/otp/verify
+   * Verify an OTP code and mint a portal session.
+   *
+   * Spec 06 §§446-476 — on success, sets the portal session cookie (same
+   * cookie name + options used by the workspace OIDC path).
+   */
+  .post(
+    '/otp/verify',
+    async ({ body, request, set, cookie }) => {
+      const result = await verifyOtp({ email: body.email, code: body.code })
+      switch (result.outcome) {
+        case 'invalid_or_expired':
+          set.status = 400
+          return result.attemptsRemaining !== undefined
+            ? { error: 'INVALID_OR_EXPIRED' as const, attemptsRemaining: result.attemptsRemaining }
+            : { error: 'INVALID_OR_EXPIRED' as const }
+        case 'inactive_user':
+          set.status = 403
+          return { error: 'INACTIVE_USER' as const, message: 'This account is no longer active.' }
+        case 'verified': {
+          // Mint portal-native session
+          const { sessionId, expiresAt } = await createPortalSession({
+            identityUserId: result.identityUserId,
+            authMethod: 'personal_otp',
+            emailUsed: result.emailNormalized,
+            request,
+          })
+          // Set cookie — same name + options as the workspace OIDC path above
+          cookie[SESSION_COOKIE_OPTIONS.name].set({
+            value: sessionId,
+            path: SESSION_COOKIE_OPTIONS.path,
+            httpOnly: SESSION_COOKIE_OPTIONS.httpOnly,
+            secure: SESSION_COOKIE_OPTIONS.secure,
+            sameSite: SESSION_COOKIE_OPTIONS.sameSite,
+            maxAge: Math.floor((expiresAt.getTime() - Date.now()) / 1000),
+          })
+          return { ok: true as const }
+        }
+      }
+    },
+    {
+      body: t.Object({
+        email: t.String({ format: 'email', maxLength: 255 }),
+        code: t.String({ minLength: 6, maxLength: 6, pattern: '^\\d{6}$' }),
+      }),
     },
   )

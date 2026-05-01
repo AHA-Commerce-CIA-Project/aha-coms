@@ -74,3 +74,13 @@ variable "bootstrap_admin_name" {
   description = "Display name for the bootstrap admin identity row (spec-06)."
   type        = string
 }
+
+variable "mail_transport" {
+  type        = string
+  description = "Outbound mail transport. 'stdout' for dev (logs only — forbidden in prod), 'brevo' for production. PR B1 lands as 'stdout'; PR B2 will flip to 'brevo' once secrets are wired."
+  default     = "stdout"
+  validation {
+    condition     = contains(["stdout", "brevo"], var.mail_transport)
+    error_message = "mail_transport must be 'stdout' or 'brevo'. The 'memory' value is test-only."
+  }
+}
