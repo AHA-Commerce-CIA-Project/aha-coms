@@ -5,6 +5,7 @@ import { requestIdPlugin } from './middleware/request-id'
 import { logger } from './logger'
 import { probeHealth } from './services/health'
 import { authRoutes } from './routes/auth'
+import { meEmailRoutes } from './routes/me-emails'
 import { userinfoRoutes } from './routes/userinfo'
 import { employeeRoutes } from './routes/employees'
 import { teamRoutes } from './routes/teams'
@@ -105,6 +106,7 @@ export const app = new Elysia({ prefix: '/api' })
   // Public, unauthenticated — JWKS + OIDC discovery (Rev 2 §01 + §02)
   .use(wellKnownRoutes)
   .use(authRoutes)
+  .use(meEmailRoutes)
   .use(userinfoRoutes)
   .use(internalRoutes)
   .use(aliasesRoutes)
