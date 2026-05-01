@@ -13,6 +13,14 @@
   } from '$lib/auth'
   import { PORTAL_ROLE_LABELS } from '@coms-portal/shared'
   import { Button, Input, Label, Card, CardContent } from '@coms-portal/ui/primitives'
+  import {
+    listSessions,
+    revokeSessionById,
+    signOutAllOtherDevices,
+    formatRelativeFromNow,
+    authMethodLabel,
+    type ActiveSession,
+  } from '$lib/sessions'
 
   const getUser = getContext<() => SessionUser | null>('user')
   const user = $derived(getUser())
@@ -20,13 +28,63 @@
   let userinfo = $state<UserinfoResponse | null>(null)
   let loading = $state(true)
 
+  // ----- Active sessions panel state (Spec 06 PR E §10) ---------------------
+  let sessions = $state<ActiveSession[]>([])
+  let sessionsLoading = $state(true)
+  let sessionsError = $state<string | null>(null)
+  let sessionRowBusy = $state<string | null>(null)
+  let signOutOthersBusy = $state(false)
+
   async function refreshUserinfo() {
     userinfo = await fetchUserinfo()
   }
 
+  async function refreshSessions() {
+    sessionsError = null
+    const result = await listSessions()
+    if (result.kind === 'ok') {
+      sessions = result.sessions
+    } else {
+      sessionsError = 'Could not load sessions.'
+    }
+  }
+
+  async function handleRevokeSession(id: string) {
+    sessionRowBusy = id
+    sessionsError = null
+    const result = await revokeSessionById(id)
+    sessionRowBusy = null
+    if (result.kind === 'revoked') {
+      if (result.clearedCookie) {
+        // Caller signed out their own current session — bounce to login.
+        window.location.assign('/login')
+        return
+      }
+      await refreshSessions()
+    } else if (result.kind === 'not_found') {
+      // Already gone — refresh quietly.
+      await refreshSessions()
+    } else {
+      sessionsError = 'Network error. Try again.'
+    }
+  }
+
+  async function handleSignOutOthers() {
+    signOutOthersBusy = true
+    sessionsError = null
+    const result = await signOutAllOtherDevices()
+    signOutOthersBusy = false
+    if (result.kind === 'ok') {
+      await refreshSessions()
+    } else {
+      sessionsError = 'Network error. Try again.'
+    }
+  }
+
   onMount(async () => {
-    await refreshUserinfo()
+    await Promise.all([refreshUserinfo(), refreshSessions()])
     loading = false
+    sessionsLoading = false
   })
 
   // ----------- Add personal email + verify modal state -----------------------
@@ -314,6 +372,72 @@
           {#if rowError}
             <p class="text-xs text-destructive">{rowError}</p>
           {/if}
+        {/if}
+      </CardContent>
+    </Card>
+
+    <Card class="mt-6 max-w-2xl">
+      <CardContent class="space-y-4 pt-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-semibold">Active sessions</h2>
+            <p class="text-xs text-muted-foreground">Devices currently signed in to your portal account.</p>
+          </div>
+          {#if sessions.filter((s) => !s.isCurrent).length > 0}
+            <Button
+              size="sm"
+              variant="outline"
+              onclick={handleSignOutOthers}
+              disabled={signOutOthersBusy}
+            >
+              {signOutOthersBusy ? 'Signing out…' : 'Sign out all other devices'}
+            </Button>
+          {/if}
+        </div>
+
+        {#if sessionsLoading}
+          <p class="text-sm text-muted-foreground">Loading…</p>
+        {:else if sessionsError}
+          <p class="text-sm text-destructive">{sessionsError}</p>
+        {:else if sessions.length === 0}
+          <p class="text-sm text-muted-foreground">No active sessions.</p>
+        {:else}
+          <ul class="divide-y divide-border">
+            {#each sessions as s (s.id)}
+              <li class="flex items-start justify-between gap-4 py-3">
+                <div class="min-w-0 space-y-1">
+                  <div class="flex items-center gap-2">
+                    <span class="truncate text-sm font-medium">
+                      {s.deviceLabel ?? 'Unknown device'}
+                    </span>
+                    {#if s.isCurrent}
+                      <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                        This device
+                      </span>
+                    {/if}
+                  </div>
+                  <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span class="rounded-full bg-muted px-2 py-0.5">{authMethodLabel(s.authMethod)}</span>
+                    <span>Started {formatRelativeFromNow(s.createdAt)}</span>
+                    {#if s.ipAddress}
+                      <span aria-hidden="true">·</span>
+                      <span class="font-mono">{s.ipAddress}</span>
+                    {/if}
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={s.isCurrent ? 'destructive' : 'ghost'}
+                    onclick={() => handleRevokeSession(s.id)}
+                    disabled={sessionRowBusy === s.id}
+                  >
+                    {sessionRowBusy === s.id ? 'Signing out…' : s.isCurrent ? 'Sign out this device' : 'Sign out'}
+                  </Button>
+                </div>
+              </li>
+            {/each}
+          </ul>
         {/if}
       </CardContent>
     </Card>

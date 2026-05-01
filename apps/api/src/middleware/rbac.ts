@@ -27,3 +27,44 @@ export function requireRole(...roles: PortalRole[]) {
       return { authUser }
     })
 }
+
+/**
+ * Pure predicate for the super_admin capability gate.  Exposed for unit testing the
+ * decision in isolation; the Elysia middleware below wraps this and throws.
+ *
+ * Returns:
+ *   { ok: true }  — caller may proceed
+ *   { ok: false, status, message } — caller must respond with the indicated status
+ */
+export function checkSuperAdmin(authUser: { portalRole?: string } | null | undefined):
+  | { ok: true }
+  | { ok: false; status: 401 | 403; message: string } {
+  if (!authUser) return { ok: false, status: 401, message: 'Unauthorized' }
+  if (authUser.portalRole !== 'super_admin') {
+    return { ok: false, status: 403, message: 'Insufficient portal role' }
+  }
+  return { ok: true }
+}
+
+/**
+ * Strict super_admin capability gate.  Bypasses the collapse-to-admin in `requireRole`
+ * — only `portalRole === 'super_admin'` passes.  Used by spec-06 §11 (one-time login
+ * link issuance) and any future portal-private capability that must not be reachable
+ * by ordinary admins.
+ *
+ * super_admin remains internal: external surfaces (session JWT, webhooks, H-apps) still
+ * see the role collapsed to 'admin'.  This middleware is the only place the distinction
+ * is enforced at the route layer.
+ */
+export function requireSuperAdmin() {
+  return new Elysia({ name: 'rbac-super-admin' })
+    .use(requestIdPlugin)
+    .use(authPlugin)
+    .derive({ as: 'scoped' }, async ({ authUser, status }) => {
+      const decision = checkSuperAdmin(authUser)
+      if (!decision.ok) {
+        throw status(decision.status, { message: decision.message })
+      }
+      return { authUser }
+    })
+}

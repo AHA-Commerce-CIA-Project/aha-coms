@@ -2,10 +2,13 @@ import { Elysia } from 'elysia'
 import cors from '@elysiajs/cors'
 import swagger from '@elysiajs/swagger'
 import { requestIdPlugin } from './middleware/request-id'
+import { handleApiError } from './middleware/api-error-handler'
 import { logger } from './logger'
 import { probeHealth } from './services/health'
 import { authRoutes } from './routes/auth'
+import { oneTimeAuthRoutes } from './routes/auth/one-time'
 import { meEmailRoutes } from './routes/me-emails'
+import { meSessionRoutes } from './routes/me-sessions'
 import { userinfoRoutes } from './routes/userinfo'
 import { employeeRoutes } from './routes/employees'
 import { teamRoutes } from './routes/teams'
@@ -59,20 +62,7 @@ export const app = new Elysia({ prefix: '/api' })
   // client — Drizzle / Postgres errors include the failing SQL + parameters,
   // which is an information-disclosure footgun on a public endpoint.
   .use(requestIdPlugin)
-  .onError((context) => {
-    const { error, code, path, set } = context
-    // requestId is available when requestIdPlugin's global derive ran before the throw.
-    const requestId = (context as Record<string, unknown>).requestId as string | undefined
-    if (requestId) set.headers['x-coms-request-id'] = requestId
-    logger.error({ err: error, path, requestId }, '[API Error]')
-    if (code === 'VALIDATION') {
-      // Elysia's typebox validation errors are safe to surface — they describe
-      // the request shape, not internal state.
-      return { message: error instanceof Error ? error.message : 'Bad request' }
-    }
-    set.status = 500
-    return { message: 'Internal error' }
-  })
+  .onError(handleApiError)
   .use(swagger({
     path: '/docs',
     specPath: '/openapi.json',
@@ -106,7 +96,9 @@ export const app = new Elysia({ prefix: '/api' })
   // Public, unauthenticated — JWKS + OIDC discovery (Rev 2 §01 + §02)
   .use(wellKnownRoutes)
   .use(authRoutes)
+  .use(oneTimeAuthRoutes)
   .use(meEmailRoutes)
+  .use(meSessionRoutes)
   .use(userinfoRoutes)
   .use(internalRoutes)
   .use(aliasesRoutes)

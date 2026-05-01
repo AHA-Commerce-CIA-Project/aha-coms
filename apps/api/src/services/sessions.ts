@@ -74,6 +74,27 @@ function parseDeviceLabelInternal(ua: string | null): string {
 }
 
 /**
+ * Truncate an IP address for display (active-sessions panel).  Last IPv4 octet → 'xxx';
+ * last IPv6 group → 'xxxx'.  Preserves enough information for the user to recognise
+ * "this is from my office network" without leaking the precise address to anyone with
+ * access to a screenshot of the panel.
+ */
+export function truncateIpForDisplay(ip: string | null | undefined): string | null {
+  if (!ip) return null
+  if (ip.includes(':')) {
+    const parts = ip.split(':')
+    parts[parts.length - 1] = 'xxxx'
+    return parts.join(':')
+  }
+  const parts = ip.split('.')
+  if (parts.length === 4) {
+    parts[3] = 'xxx'
+    return parts.join('.')
+  }
+  return ip
+}
+
+/**
  * Extract the originating IP from proxy headers, falling back to null for
  * local dev environments that don't set forwarding headers.
  */
@@ -314,6 +335,84 @@ export async function insertSessionCutoff(
   })
 
   logger.info({ userId, reason }, '[sessions] inserted session cutoff row')
+}
+
+// ---------------------------------------------------------------------------
+// listActiveSessionsForUser — Spec 06 PR E §10
+// ---------------------------------------------------------------------------
+
+export interface ActiveSessionRow {
+  id: string
+  authMethod: AuthMethod
+  deviceLabel: string | null
+  ipAddress: string | null
+  createdAt: Date
+  expiresAt: Date
+}
+
+/**
+ * List active (not-revoked, not-expired) sessions for a user, newest first.  Used by
+ * the profile active-sessions panel.  Note: this does NOT consult `session_revocations`
+ * cutoff rows because the per-row `revokedAt` is set whenever a cutoff is issued by the
+ * admin path (see `revokeAllSessionsForUser` for `admin_revoke` / `status_change` —
+ * both write per-row UPDATE alongside the cutoff insert).
+ */
+export async function listActiveSessionsForUser(userId: string): Promise<ActiveSessionRow[]> {
+  const rows = await db
+    .select({
+      id: authSessions.id,
+      authMethod: authSessions.authMethod,
+      deviceLabel: authSessions.deviceLabel,
+      ipAddress: authSessions.ipAddress,
+      createdAt: authSessions.createdAt,
+      expiresAt: authSessions.expiresAt,
+    })
+    .from(authSessions)
+    .where(
+      and(
+        eq(authSessions.identityUserId, userId),
+        isNull(authSessions.revokedAt),
+        gt(authSessions.expiresAt, new Date()),
+      ),
+    )
+
+  return rows
+    .map((r) => ({
+      id: r.id,
+      authMethod: r.authMethod as AuthMethod,
+      deviceLabel: r.deviceLabel,
+      ipAddress: r.ipAddress,
+      createdAt: r.createdAt,
+      expiresAt: r.expiresAt,
+    }))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/**
+ * Look up a single active session row owned by the given user.  Used by the per-row
+ * delete handler to enforce ownership: a user cannot revoke another user's session id
+ * even if they happen to know it.  Returns null for revoked, expired, missing, or
+ * cross-user rows so the caller can respond with a uniform 404 (no leak that the row
+ * exists under a different owner).
+ */
+export async function getOwnedSession(
+  userId: string,
+  sessionId: string,
+): Promise<{ id: string } | null> {
+  if (!isUuid(sessionId)) return null
+  const rows = await db
+    .select({ id: authSessions.id })
+    .from(authSessions)
+    .where(
+      and(
+        eq(authSessions.id, sessionId),
+        eq(authSessions.identityUserId, userId),
+        isNull(authSessions.revokedAt),
+        gt(authSessions.expiresAt, new Date()),
+      ),
+    )
+    .limit(1)
+  return rows[0] ?? null
 }
 
 // ---------------------------------------------------------------------------

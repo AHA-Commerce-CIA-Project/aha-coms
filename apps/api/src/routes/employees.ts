@@ -8,6 +8,15 @@ import { createEmployee, deactivateEmployee, batchUpdateEmployees } from '../ser
 import { importEmployeesFromGoogleAdminCsv } from '../services/employee-import'
 import { processEmployeeProvisioning } from '../services/employee-provisioning'
 import { logAudit } from '../services/audit'
+import { revokeAllSessionsForUser } from '../services/sessions'
+import { authSessions } from '~/db/schema'
+import { isNull } from 'drizzle-orm'
+import {
+  issueOneTimeLoginLink,
+  listOneTimeLoginLinksForUser,
+} from '../services/one-time-login-links'
+import { ONE_TIME_LOGIN_LINK_REASONS } from '~/db/schema/one-time-login-links'
+import { checkSuperAdmin } from '../middleware/rbac'
 import { emitUserUpdated } from '../services/provisioning-events'
 import { getDisplayEmail } from '../services/email-resolution'
 import {
@@ -760,6 +769,166 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         200: t.Object({ ok: t.Literal(true) }),
         404: t.Object({ error: t.Literal('EMAIL_NOT_FOUND'), message: t.String() }),
         409: t.Object({ error: t.Literal('LAST_VERIFIED_EMAIL'), message: t.String() }),
+      },
+    },
+  )
+
+  // ---------------------------------------------------------------------------
+  // POST /v1/employees/:id/sign-out-all — Spec 06 PR E §9
+  //
+  // Admin sign-out-everywhere on a target user.  revokeAllSessionsForUser writes both
+  // the per-row UPDATE on auth_sessions AND the session_revocations cutoff row when
+  // reason='admin_revoke' (see services/sessions.ts), so this handler is a thin wrapper
+  // that adds target-user verification, the active-session count for the audit details,
+  // and the audit-log entry.
+  // ---------------------------------------------------------------------------
+  .post(
+    '/:id/sign-out-all',
+    async ({ params, authUser, requestId, actorIp, set }) => {
+      const target = await db
+        .select({ id: identityUsers.id })
+        .from(identityUsers)
+        .where(eq(identityUsers.id, params.id))
+        .limit(1)
+      if (target.length === 0) {
+        set.status = 404
+        return { error: 'TARGET_NOT_FOUND' as const, message: 'User not found' }
+      }
+
+      const activeBefore = await db
+        .select({ id: authSessions.id })
+        .from(authSessions)
+        .where(and(eq(authSessions.identityUserId, params.id), isNull(authSessions.revokedAt)))
+
+      const revoked = activeBefore.length
+
+      await revokeAllSessionsForUser({ userId: params.id, reason: 'admin_revoke' })
+
+      await logAudit({
+        actorId: authUser.id,
+        action: 'admin_sign_out_all',
+        targetType: 'user',
+        targetId: params.id,
+        details: { revoked },
+        requestId,
+        actorIp,
+      })
+
+      return { revoked }
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: {
+        200: t.Object({ revoked: t.Number() }),
+        404: t.Object({ error: t.Literal('TARGET_NOT_FOUND'), message: t.String() }),
+      },
+    },
+  )
+
+  // ---------------------------------------------------------------------------
+  // POST /v1/employees/:id/login-link — Spec 06 PR E §11 (super_admin only)
+  //
+  // Issue a one-time login link.  The route is mounted under the admin gate
+  // (`requireRole('admin')` is the parent .use), so we layer the strict
+  // super_admin check inline via `checkSuperAdmin` — the spec-locked design keeps
+  // super_admin internal and avoids exporting it via PORTAL_ROLES.
+  //
+  // Returns the URL once.  The plaintext token never appears in storage; the
+  // service hashes SHA-256 before insert.
+  // ---------------------------------------------------------------------------
+  .post(
+    '/:id/login-link',
+    async ({ params, body, authUser, requestId, actorIp, set }) => {
+      const decision = checkSuperAdmin(authUser)
+      if (!decision.ok) {
+        set.status = decision.status
+        return { error: 'INSUFFICIENT_ROLE' as const, message: decision.message }
+      }
+
+      const target = await db
+        .select({ id: identityUsers.id })
+        .from(identityUsers)
+        .where(eq(identityUsers.id, params.id))
+        .limit(1)
+      if (target.length === 0) {
+        set.status = 404
+        return { error: 'TARGET_NOT_FOUND' as const, message: 'User not found' }
+      }
+
+      const issued = await issueOneTimeLoginLink({
+        targetIdentityUserId: params.id,
+        issuedBy: authUser.id,
+        reason: body.reason,
+        reasonText: body.reasonText ?? null,
+        requestIp: actorIp ?? null,
+      })
+
+      await logAudit({
+        actorId: authUser.id,
+        action: 'one_time_link_issued',
+        targetType: 'user',
+        targetId: params.id,
+        details: { linkId: issued.id, reason: body.reason, reasonText: body.reasonText ?? null },
+        requestId,
+        actorIp,
+      })
+
+      return {
+        id: issued.id,
+        url: issued.url,
+        expiresAt: issued.expiresAt.toISOString(),
+      }
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        reason: t.Union(ONE_TIME_LOGIN_LINK_REASONS.map((r) => t.Literal(r))),
+        reasonText: t.Optional(t.String({ maxLength: 1000 })),
+      }),
+      response: {
+        200: t.Object({ id: t.String(), url: t.String(), expiresAt: t.String() }),
+        403: t.Object({ error: t.Literal('INSUFFICIENT_ROLE'), message: t.String() }),
+        404: t.Object({ error: t.Literal('TARGET_NOT_FOUND'), message: t.String() }),
+      },
+    },
+  )
+
+  // ---------------------------------------------------------------------------
+  // GET /v1/employees/:id/login-links — read-only history of one-time link issuances
+  // for the user-detail audit table (admin-readable; non-secret metadata only).
+  // ---------------------------------------------------------------------------
+  .get(
+    '/:id/login-links',
+    async ({ params }) => {
+      const rows = await listOneTimeLoginLinksForUser(params.id)
+      return {
+        links: rows.map((r) => ({
+          id: r.id,
+          issuedBy: r.issuedBy,
+          reason: r.reason,
+          reasonText: r.reasonText,
+          expiresAt: r.expiresAt.toISOString(),
+          consumedAt: r.consumedAt?.toISOString() ?? null,
+          createdAt: r.createdAt.toISOString(),
+        })),
+      }
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: {
+        200: t.Object({
+          links: t.Array(
+            t.Object({
+              id: t.String(),
+              issuedBy: t.Object({ id: t.String(), name: t.String() }),
+              reason: t.String(),
+              reasonText: t.Union([t.String(), t.Null()]),
+              expiresAt: t.String(),
+              consumedAt: t.Union([t.String(), t.Null()]),
+              createdAt: t.String(),
+            }),
+          ),
+        }),
       },
     },
   )

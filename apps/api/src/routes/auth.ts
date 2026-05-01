@@ -541,13 +541,33 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     '/me',
     async ({ request, set }) => {
       try {
-        const user = await resolveSessionUser(request)
+        // We need the underlying portalRole *before* collapse to compute capabilities,
+        // so we resolve the auth user directly here rather than going through
+        // resolveSessionUser (which collapses super_admin → admin for broker forwarding).
+        const cookieHeader = request.headers.get('cookie') ?? ''
+        const sessionCookie = getSessionCookieValue(cookieHeader)
+        if (!sessionCookie) {
+          set.status = 401
+          return { message: 'Invalid session' }
+        }
+        const sessionUser = await validateSession(sessionCookie)
+        if (!sessionUser) {
+          set.status = 401
+          return { message: 'Invalid session' }
+        }
+        const authUser = await resolveAuthUser(sessionUser)
+        const isSuperAdmin = authUser.portalRole === 'super_admin'
+        const collapsedRole = (isSuperAdmin ? 'admin' : authUser.portalRole) as PortalSessionUser['portalRole']
         return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          portalRole: user.portalRole,
-          apps: user.apps,
+          id: authUser.id,
+          email: authUser.email,
+          name: authUser.name,
+          portalRole: collapsedRole,
+          apps: authUser.apps,
+          // Spec 06 PR E §11: super_admin is a portal-internal capability.  The flag
+          // is the only signal the web client gets — `portalRole` stays collapsed so
+          // existing consumers of /api/auth/me are unaffected.
+          capabilities: { canIssueOneTimeLoginLinks: isSuperAdmin },
         }
       } catch {
         set.status = 401
@@ -562,6 +582,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           name: t.String(),
           portalRole: t.String(),
           apps: t.Array(t.String()),
+          capabilities: t.Object({ canIssueOneTimeLoginLinks: t.Boolean() }),
         }),
         401: t.Object({ message: t.String() }),
       },
