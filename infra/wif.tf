@@ -73,6 +73,16 @@ resource "google_project_iam_member" "cloud_tasks_admin" {
   member  = "serviceAccount:${google_service_account.github_actions.email}"
 }
 
+# Required for tofu to manage the OTP cleanup Cloud Scheduler job declared in
+# cloud-scheduler.tf. Added in PR B2 alongside the rest of the Brevo wiring;
+# the cloud-scheduler.tf resource itself landed in PR B1 but its CI never
+# applied due to the lock drift, so this grant follows here.
+resource "google_project_iam_member" "cloud_scheduler_admin" {
+  project = var.project_id
+  role    = "roles/cloudscheduler.admin"
+  member  = "serviceAccount:${google_service_account.github_actions.email}"
+}
+
 # Required for tofu to create / modify the cloud_tasks_invoker SA and to
 # attach IAM bindings to it.
 resource "google_project_iam_member" "service_account_admin" {
