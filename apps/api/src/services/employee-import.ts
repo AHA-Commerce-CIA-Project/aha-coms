@@ -9,6 +9,8 @@ export interface ParsedGoogleAdminUserRow {
   lastName: string
   fullName: string
   email: string
+  /** Optional Personal Email column (PR D Spec 06). Empty string when absent. */
+  personalEmail: string
   status: string
   department?: string
   position?: string
@@ -28,11 +30,23 @@ export interface EmployeeCsvImportResult {
   skipped: Array<{ rowNumber: number; email?: string; reason: string }>
   flagged: Array<{
     rowNumber: number
+    /** @deprecated Use csvWorkspaceEmail. Kept for back-compat with consumers from PR A. */
     csvEmail: string
+    csvWorkspaceEmail?: string
+    csvPersonalEmail?: string
     csvName: string
     csvDepartment?: string
     csvPosition?: string
     csvPhone?: string
+    /** Discriminates between an email-collision row and a name-collision row. */
+    collisionKind: 'email_collision' | 'name_collision'
+    /** PR D — populated for email_collision rows. The exact address that already exists. */
+    collisionEmail?: string
+    /** PR D — populated for email_collision rows. Identity user id of the colliding row owner. */
+    collisionUserId?: string
+    /** PR D — populated for email_collision rows. Display name of the colliding row owner. */
+    collisionUserName?: string
+    /** Populated for name_collision rows (existing PR A behaviour). */
     existingId: string
     existingName: string
     existingEmail: string
@@ -51,6 +65,8 @@ const HEADER_KEYS = {
   position: 'employee title',
   workPhone: 'work phone',
   mobilePhone: 'mobile phone',
+  /** PR D Spec 06 — optional column. When present, captured as the row's personal email candidate. */
+  personalEmail: 'personal email',
 } as const
 
 function normalizeHeader(value: string): string {
@@ -155,6 +171,7 @@ export function parseGoogleAdminUsersCsv(csv: string): ParsedGoogleAdminUserRow[
       lastName,
       fullName,
       email: getValue(row, HEADER_KEYS.email).toLowerCase(),
+      personalEmail: getValue(row, HEADER_KEYS.personalEmail).toLowerCase(),
       status: getValue(row, HEADER_KEYS.status),
       department: getValue(row, HEADER_KEYS.department) || undefined,
       position: getValue(row, HEADER_KEYS.position) || undefined,
@@ -183,14 +200,25 @@ export async function importEmployeesFromGoogleAdminCsv(
   const flagged: EmployeeCsvImportResult['flagged'] = []
   const errors: EmployeeCsvImportResult['errors'] = []
 
-  // Collision detection now queries identity_user_emails.email_normalized (Q5a).
-  // The CSV imports workspace emails only, so we look for workspace-kind matches.
+  // PR D Spec 06: collision detection now scans BOTH workspace and personal emails
+  // (the CSV may now carry an optional Personal Email column). Rows where any
+  // candidate address already exists go to flagged[] (not skipped[]) carrying
+  // collisionUserId and collisionUserName so the admin can resolve the conflict.
   const validRows = rows.filter((row) => row.email)
-  const uniqueEmailsNormalized = [...new Set(validRows.map((row) => row.email.toLowerCase().trim()))]
+  const allCandidateEmails = [
+    ...validRows.map((row) => row.email.toLowerCase().trim()),
+    ...validRows
+      .map((row) => row.personalEmail?.toLowerCase().trim())
+      .filter((e): e is string => !!e),
+  ]
+  const uniqueEmailsNormalized = [...new Set(allCandidateEmails)]
   const [existingEmailRows, nonWorkspaceUsers] = await Promise.all([
     uniqueEmailsNormalized.length
       ? db
-          .select({ emailNormalized: identityUserEmails.emailNormalized, identityUserId: identityUserEmails.identityUserId })
+          .select({
+            emailNormalized: identityUserEmails.emailNormalized,
+            identityUserId: identityUserEmails.identityUserId,
+          })
           .from(identityUserEmails)
           .where(inArray(identityUserEmails.emailNormalized, uniqueEmailsNormalized))
       : Promise.resolve([]),
@@ -202,6 +230,19 @@ export async function importEmployeesFromGoogleAdminCsv(
       .where(eq(identityUsers.hasGoogleWorkspace, false)),
   ])
 
+  // emailNormalized → identityUserId map for resolving collision target user
+  const collisionByEmail = new Map<string, string>()
+  for (const r of existingEmailRows) collisionByEmail.set(r.emailNormalized, r.identityUserId)
+  // identityUserId → display name (look up once per affected user)
+  const collisionUserIds = [...new Set([...collisionByEmail.values()])]
+  let collisionUserNameById = new Map<string, string>()
+  if (collisionUserIds.length > 0) {
+    const userRows = await db
+      .select({ id: identityUsers.id, name: identityUsers.name })
+      .from(identityUsers)
+      .where(inArray(identityUsers.id, collisionUserIds))
+    collisionUserNameById = new Map(userRows.map((u) => [u.id, u.name]))
+  }
   const existingEmails = new Set(existingEmailRows.map((r) => r.emailNormalized))
 
   const pendingRows: ParsedGoogleAdminUserRow[] = []
@@ -222,8 +263,36 @@ export async function importEmployeesFromGoogleAdminCsv(
       continue
     }
 
-    if (existingEmails.has(row.email.toLowerCase().trim())) {
-      skipped.push({ rowNumber: row.rowNumber, email: row.email, reason: 'Employee already exists' })
+    const workspaceNorm = row.email.toLowerCase().trim()
+    const personalNorm = row.personalEmail?.toLowerCase().trim() ?? ''
+
+    // PR D: email collision flagging — surface the conflicting target user so the
+    // admin can decide whether to merge identities, change the address, or skip.
+    const collidingEmail = existingEmails.has(workspaceNorm)
+      ? workspaceNorm
+      : personalNorm && existingEmails.has(personalNorm)
+        ? personalNorm
+        : null
+    if (collidingEmail) {
+      const collisionUserId = collisionByEmail.get(collidingEmail) ?? ''
+      const collisionUserName = collisionUserNameById.get(collisionUserId) ?? '(unknown)'
+      flagged.push({
+        rowNumber: row.rowNumber,
+        csvEmail: row.email,
+        csvWorkspaceEmail: row.email,
+        csvPersonalEmail: row.personalEmail || undefined,
+        csvName: row.fullName,
+        csvDepartment: row.department,
+        csvPosition: row.position,
+        csvPhone: row.phone,
+        collisionKind: 'email_collision',
+        collisionEmail: collidingEmail,
+        collisionUserId,
+        collisionUserName,
+        existingId: collisionUserId,
+        existingName: collisionUserName,
+        existingEmail: collidingEmail,
+      })
       continue
     }
 
@@ -234,10 +303,13 @@ export async function importEmployeesFromGoogleAdminCsv(
       flagged.push({
         rowNumber: row.rowNumber,
         csvEmail: row.email,
+        csvWorkspaceEmail: row.email,
+        csvPersonalEmail: row.personalEmail || undefined,
         csvName: row.fullName,
         csvDepartment: row.department,
         csvPosition: row.position,
         csvPhone: row.phone,
+        collisionKind: 'name_collision',
         existingId: nwAmbiguous ? '' : nwMatch!.id,
         existingName: nwAmbiguous ? '(multiple matches)' : nwMatch!.name,
         existingEmail: matchedEmail,
@@ -264,6 +336,7 @@ export async function importEmployeesFromGoogleAdminCsv(
       batch.map(async (row) => {
         const result = await createEmployee({
           workspaceEmail: row.email,
+          personalEmail: row.personalEmail || undefined,
           name: row.fullName,
           phone: row.phone,
           department: row.department,
