@@ -80,6 +80,8 @@ export async function createLocalSessionForPortalUser(portalUser: PortalSessionU
     token,
     userId: authUserId,
     expiresAt,
+    portalRole: portalUser.portalRole,
+    apps: portalUser.apps,
   })
 
   return { token, expiresAt }
@@ -95,6 +97,8 @@ export type LocalSessionRecord = {
   userId: string
   expiresAt: Date
   email: string
+  portalRole: string
+  apps: string[]
 }
 
 export async function getLocalSessionByToken(token: string): Promise<LocalSessionRecord | null> {
@@ -105,6 +109,8 @@ export async function getLocalSessionByToken(token: string): Promise<LocalSessio
       userId: authSession.userId,
       expiresAt: authSession.expiresAt,
       email: authUser.email,
+      portalRole: authSession.portalRole,
+      apps: authSession.apps,
     })
     .from(authSession)
     .innerJoin(authUser, eq(authSession.userId, authUser.id))

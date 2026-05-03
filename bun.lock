@@ -43,7 +43,7 @@
       "name": "@coms/shared",
       "version": "0.1.0",
       "dependencies": {
-        "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.1.0",
+        "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.5.0",
         "@sinclair/typebox": "^0.34.0",
         "drizzle-orm": "^0.45.0",
         "drizzle-typebox": "^0.2.0",
@@ -54,6 +54,9 @@
       "name": "@coms/web",
       "version": "0.1.0",
       "dependencies": {
+        "@coms-portal/account-widget": "git+https://github.com/mrdoorba/coms-account-widget.git#v0.2.0",
+        "@coms-portal/design-tokens": "git+https://github.com/mrdoorba/coms-design-tokens.git#v1.1.0",
+        "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.5.0",
         "@coms-portal/ui": "git+https://github.com/mrdoorba/coms-ui.git#v1.2.0",
         "@coms/server": "workspace:*",
         "@coms/shared": "workspace:*",
@@ -283,7 +286,11 @@
 
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
-    "@coms-portal/shared": ["@coms-portal/shared@github:mrdoorba/coms-shared#9678dbf", {}, "mrdoorba-coms-shared-9678dbf", "sha512-hyJU9PjKYaMXKwcZ33VdiolTelU5fvcMGM6h2QqNWam8hP8MwpD5sr0Aukn+QSChChfwJ1SFYFpAizi9s8fKEw=="],
+    "@coms-portal/account-widget": ["@coms-portal/account-widget@github:mrdoorba/coms-account-widget#191489e", { "peerDependencies": { "svelte": "^5.0.0" } }, "mrdoorba-coms-account-widget-191489e", "sha512-dQJkEB/dHmXeAyob+2SgJ/uoUpoA+vNOnBCZu01+3Ns7+U/rR9/cSDzPFauhJ8M83RV3HiBFlTV713jdTf1prA=="],
+
+    "@coms-portal/design-tokens": ["@coms-portal/design-tokens@github:mrdoorba/coms-design-tokens#2ab5f3d", {}, "mrdoorba-coms-design-tokens-2ab5f3d", "sha512-w7PZKFIVxM3nYINH0FXpECBjRME/VR3jInp0my4g9MjNxE4kfpGAAnrEXxIk+tua5RTbX8gm8BTLKpq4jIRO6w=="],
+
+    "@coms-portal/shared": ["@coms-portal/shared@github:mrdoorba/coms-shared#3c2155d", {}, "mrdoorba-coms-shared-3c2155d", "sha512-8+8AkXPusMrY1J5QLT7NwF9F/RA0D6liEWxHpraQuDKc2sCQmjcTHtcegSKkDTyLJIO4gkIZBsmpO7227gi2tg=="],
 
     "@coms-portal/ui": ["@coms-portal/ui@github:mrdoorba/coms-ui#8afee43", { "dependencies": { "bits-ui": "^2.16.3", "clsx": "^2.1.1", "lucide-svelte": "^0.460.0", "tailwind-merge": "^3.5.0", "tailwind-variants": "^3.2.2" }, "peerDependencies": { "svelte": "^5.0.0" } }, "mrdoorba-coms-ui-8afee43", "sha512-axQuj3Zdctm8k81Xr2YT6pAr+zKLFTxCzIvGEdE/FWmPk5aVGsEvzKX3gej1KX7KryndLSB5W192H9OppBLbFA=="],
 

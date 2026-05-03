@@ -79,7 +79,13 @@ const auth: Handle = async ({ event, resolve }) => {
     }
   }
 
-  event.locals.user = (appUser as AuthUser) ?? null
+  event.locals.user = appUser
+    ? ({
+        ...appUser,
+        portalRole: session.portalRole,
+        apps: session.apps,
+      } as AuthUser)
+    : null
   event.locals.session = {
     id: session.sessionId,
     userId: session.userId,

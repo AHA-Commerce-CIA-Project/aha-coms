@@ -11,6 +11,8 @@
 
 @import "tailwindcss";
 @import "@coms-portal/ui/styles.css";
+@import "@coms-portal/design-tokens/css";
+@import "@coms-portal/account-widget/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -21,18 +23,10 @@
  */
 
 @theme {
-  /* AHA HEROES brand colors (direct usage via bg-gold, text-sky-blue, etc.) */
-  --color-primary-dark: #1D388B;
-  --color-primary-light: #96ADF5;
-  --color-deep-navy: #0F0E7F;
-  --color-gold: #F4C144;
-  --color-gold-light: #FFD97D;
+  /* Heroes-only brand extensions (tokens covers primary-dark/light/deep-navy/gold/gold-light/purple/penalti/sky-blue) */
   --color-gold-dark: #7a5800;
-  --color-purple: #6D50B8;
   --color-purple-light: #9B7FE8;
-  --color-penalti: #C73E3E;
   --color-penalti-light: #E06B6B;
-  --color-sky-blue: #759EEE;
   --color-chrome-navy: #0d1229;
 
   /* Medal accents — leaderboard rank 2/3 (rank 1 uses gold) */
@@ -42,30 +36,9 @@
   --color-bronze-light: #E8A862;
   --color-bronze-dark: #8B5E00;
 
-  /* Status colors (text colors per guideline) */
-  --color-status-approved: #16a34a;
-  --color-status-pending: #a07700;
-  --color-status-challenged: #6D50B8;
-  --color-status-rejected: #dc2626;
-
-  /* Status background colors */
-  --color-status-approved-bg: rgba(34, 197, 94, 0.15);
-  --color-status-pending-bg: rgba(244, 193, 68, 0.15);
-  --color-status-challenged-bg: rgba(109, 80, 184, 0.15);
-  --color-status-rejected-bg: rgba(239, 68, 68, 0.1);
-
-  /* Shadows — deeper, more layered */
-  --shadow-card: 0 2px 12px rgba(15, 14, 127, 0.10), 0 1px 3px rgba(0,0,0,0.06);
-  --shadow-card-hover: 0 8px 28px rgba(15, 14, 127, 0.16), 0 2px 8px rgba(0,0,0,0.08);
-  --shadow-modal: 0 8px 32px rgba(15, 14, 127, 0.18), 0 2px 8px rgba(0,0,0,0.10);
-  --shadow-glow-gold: 0 0 20px rgba(244, 193, 68, 0.35), 0 4px 12px rgba(244, 193, 68, 0.20);
-  --shadow-glow-blue: 0 0 20px rgba(50, 95, 236, 0.30), 0 4px 12px rgba(50, 95, 236, 0.18);
+  /* Heroes-only shadows (tokens covers card/card-hover/modal/glow-gold/glow-blue) */
   --shadow-glow-red: 0 0 20px rgba(199, 62, 62, 0.35), 0 4px 12px rgba(199, 62, 62, 0.20);
   --shadow-glow-purple: 0 0 20px rgba(109, 80, 184, 0.35), 0 4px 12px rgba(109, 80, 184, 0.20);
-
-  /* Font family — Manrope, not Geist */
-  --font-sans: 'Manrope', sans-serif;
-  --font-manrope: 'Manrope', sans-serif;
 }
 
 @theme inline {
@@ -112,36 +85,11 @@
 }
 
 :root {
-  /* shadcn semantic colors mapped to AHA HEROES palette */
-  /* Slightly warm cool tint — feels light but distinctive */
-  --background: oklch(0.970 0.010 258);
-  --foreground: oklch(0.13 0.02 265);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.13 0.02 265);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.13 0.02 265);
-  /* Primary = AHA blue #325FEC */
-  --primary: oklch(0.51 0.22 264);
-  --primary-foreground: oklch(1 0 0);
-  /* Secondary = light blue tint */
-  --secondary: oklch(0.94 0.025 264);
-  --secondary-foreground: oklch(0.25 0.08 264);
-  --muted: oklch(0.96 0.008 264);
-  --muted-foreground: oklch(0.50 0.04 264);
-  --accent: oklch(0.94 0.025 264);
-  --accent-foreground: oklch(0.25 0.08 264);
-  /* Destructive = status-rejected #EF4444 */
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.910 0.012 264);
-  --input: oklch(0.910 0.012 264);
-  --ring: oklch(0.51 0.22 264);
-  /* Charts mapped to brand colors */
-  --chart-1: oklch(0.51 0.22 264);
-  --chart-2: oklch(0.78 0.14 85);
-  --chart-3: oklch(0.50 0.17 293);
-  --chart-4: oklch(0.70 0.12 255);
-  --chart-5: oklch(0.35 0.12 264);
-  --radius: 0.625rem;
+  /* Semantic colors (primary/background/foreground/card/popover/secondary/muted/
+     accent/destructive/border/input/ring/radius) are provided by
+     @coms-portal/design-tokens — do not redefine here. */
+
+  /* Sidebar (not in tokens) */
   --sidebar: oklch(0.195 0.055 264);
   --sidebar-foreground: oklch(0.95 0.01 264);
   --sidebar-primary: oklch(0.78 0.14 85);
@@ -150,6 +98,13 @@
   --sidebar-accent-foreground: oklch(0.95 0.01 264);
   --sidebar-border: oklch(0.28 0.06 264);
   --sidebar-ring: oklch(0.63 0.20 264);
+
+  /* Charts (not in tokens) */
+  --chart-1: oklch(0.51 0.22 264);
+  --chart-2: oklch(0.78 0.14 85);
+  --chart-3: oklch(0.50 0.17 293);
+  --chart-4: oklch(0.70 0.12 255);
+  --chart-5: oklch(0.35 0.12 264);
 
   /* ── Gradients ── */
   --gradient-hero: linear-gradient(135deg, #1D388B, #2550C8, #325FEC);
@@ -175,28 +130,6 @@
   /* Sticky bottom action bar — upward-facing blue-tinted shadow */
   --shadow-sticky-up: 0 -4px 20px rgba(15, 14, 127, 0.08);
 
-  /* ── Layout ── */
-  --page-max-width: 1024px;
-  --content-max-width: 640px;
-  --service-bar-height: 36px;
-  --header-height: 56px;
-  --sidebar-collapsed-width: 64px;
-  --sidebar-expanded-width: 256px;
-  --mobile-nav-height: 64px;
-  --touch-target-min: 44px;
-
-  /* ── Spacing Scale ── */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-
   /* ── Motion ── */
   --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-fast: 150ms;
@@ -206,30 +139,16 @@
   --duration-stagger: 40ms;
 }
 
+/* Semantic surface colors in .dark are provided by @coms-portal/design-tokens.
+   Only Heroes-specific dark-mode overrides live here (sidebar — not in tokens). */
 .dark {
-  --background: oklch(0.12 0.025 265);
-  --foreground: oklch(0.985 0.005 265);
-  --card: oklch(0.18 0.022 265);
-  --card-foreground: oklch(0.985 0.005 265);
-  --popover: oklch(0.18 0.022 265);
-  --popover-foreground: oklch(0.985 0.005 265);
-  --primary: oklch(0.65 0.20 264);
-  --primary-foreground: oklch(0.15 0.03 265);
-  --secondary: oklch(0.22 0.025 265);
-  --secondary-foreground: oklch(0.90 0.01 265);
-  --muted: oklch(0.24 0.018 265);
-  --muted-foreground: oklch(0.60 0.025 265);
-  --accent: oklch(0.22 0.025 265);
-  --accent-foreground: oklch(0.90 0.01 265);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.28 0.025 265);
-  --input: oklch(0.28 0.025 265);
-  --ring: oklch(0.65 0.20 264);
+  /* Charts dark-mode */
   --chart-1: oklch(0.65 0.20 264);
   --chart-2: oklch(0.78 0.14 85);
   --chart-3: oklch(0.60 0.17 293);
   --chart-4: oklch(0.70 0.12 255);
   --chart-5: oklch(0.45 0.12 264);
+  /* Sidebar dark-mode (not in tokens) */
   --sidebar: oklch(0.14 0.030 265);
   --sidebar-foreground: oklch(0.90 0.01 265);
   --sidebar-primary: oklch(0.78 0.14 85);

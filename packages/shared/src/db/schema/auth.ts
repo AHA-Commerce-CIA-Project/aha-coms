@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import {
   pgTable,
   text,
@@ -30,6 +31,8 @@ export const authSession = pgTable('session', {
   userId: text('user_id')
     .notNull()
     .references(() => authUser.id, { onDelete: 'cascade' }),
+  portalRole: text('portal_role').notNull().default('employee'),
+  apps: text('apps').array().notNull().default(sql`ARRAY[]::text[]`),
 })
 
 export const authAccount = pgTable('account', {

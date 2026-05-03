@@ -71,6 +71,13 @@
       "when": 1776676643000,
       "tag": "0009_portal_webhook_events",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777771924771,
+      "tag": "0010_dear_kabuki",
+      "breakpoints": true
     }
   ]
 }
