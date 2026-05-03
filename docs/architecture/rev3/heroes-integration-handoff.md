@@ -1,12 +1,12 @@
 # Rev 3 Spec 01 + Spec 02 — Heroes integration handoff
 
-> **Heroes-side adoption is paused — pending Spec 06 PRs B–F.**
+> **Heroes-side adoption unblocks on Spec 06 PR F's merge — portal-side feature work is complete.**
 >
-> **Spec 06 PR A (portal-side foundation) shipped 2026-04-30, commit `049008d`.** The schema change is in: `identity_users.email` and `identity_users.personal_email` have been dropped and replaced by the multi-row `identity_user_emails` table. Webhook payloads (`user.provisioned`, `user.updated`) now carry an additive `emails: UserEmailEntry[]` field via `@coms-portal/shared` v1.5.0. Existing Heroes consumer compiles unchanged — the additive field requires no Heroes-side code change. The widget continues to receive a scalar `email` from `/api/userinfo` (derived as workspace > personal-primary > first-personal per Spec 06 §Q8a); Heroes consumes only that scalar and is unaffected.
+> **Spec 06 PRs A → E shipped portal-side end-to-end (2026-04-30 → 2026-05-03).** PR E commit `212e103`, CI run `25265594527`. The schema change is in: `identity_users.email` and `identity_users.personal_email` were dropped and replaced by the multi-row `identity_user_emails` table; OTP-based personal-email auth, login + profile + admin UIs, sign-out-everywhere, active-sessions panel, and the super-admin one-time login link are all live in production. Webhook payloads (`user.provisioned`, `user.updated`) carry the additive `emails: UserEmailEntry[]` field via `@coms-portal/shared` v1.5.0. Existing Heroes consumer compiles unchanged — the field is purely additive, no Heroes-side code change required. The widget still receives a scalar `email` from `/api/userinfo` (derived as workspace > personal-primary > first-personal per Spec 06 §Q8a); Heroes consumes only that scalar and is unaffected. **`super_admin` stays portal-internal** — `coms-shared` `PORTAL_ROLES` remains `['employee', 'admin']`; no Heroes-side enum change needed.
 >
-> **PRs B–E (OTP service, login UI, profile UI, extras) and the final spec sweep (PR F) are still pending.** Heroes-side rev3 implementation remains paused until PR F lands.
+> **PR F (the spec-update sweep) is in flight.** This banner is part of it. Once F merges, Heroes-side rev3 adoption begins per this document and §Appendix A of `spec-03-user-identity-alias-layer.md`.
 >
-> Owner directive: portal-side PRs B–E ship the remaining feature work → PR F sweeps spec updates → THEN Heroes-side rev3 adoption begins per this document and §Appendix A of `spec-03-user-identity-alias-layer.md`. Wipe-and-reprovision is the locked path (vs. alias backfill) — pre-real-users on Heroes makes the wipe a no-op. See `spec-00-implementation-timeline.md` for the at-a-glance status of the entire Rev 3 program. The body of this document below remains the canonical reference for Heroes' Rev 3 adoption once unblocked.
+> Owner directive: PR F finalises spec text → Heroes-side rev3 adoption begins immediately after. Wipe-and-reprovision is the locked path (vs. alias backfill) — pre-real-users on Heroes makes the wipe a no-op. See `spec-00-implementation-timeline.md` for the at-a-glance status of the entire Rev 3 program. The body of this document below remains the canonical reference for Heroes' Rev 3 adoption.
 >
 > ---
 >
