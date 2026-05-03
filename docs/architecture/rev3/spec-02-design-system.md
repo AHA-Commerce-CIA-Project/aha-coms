@@ -21,7 +21,9 @@
 
 Compositions remain stub: Heroes' `HeroGreeting`/`SummaryCard`/`NotificationsBadge` are dashboard-specific (Heroes brand gradients, gold/silver/bronze brand scales) and were deliberately not lifted as platform compositions; the `compositions/` export entry is preserved for a future shared candidate.
 
-**Phase 5: still deferred.** Trigger (real third H-app onboarding) has not fired. Heroes adoption is no longer a pending follow-up — it shipped 2026-04-30 (see Phase 4 status above).
+**Phase 2 + 3 — Heroes adoption SHIPPED 2026-05-03** (PR #2 on `mrdoorba/coms-aha-heroes`, deploy run `25267737871`). Heroes' `packages/web/src/app.css` now imports `@coms-portal/design-tokens/css` (v1.1.0) — duplicated brand palette / status colors / fonts / shadows stripped, semantic `:root` and `.dark` blocks deleted (tokens owns them); Heroes-only entries kept (medal silver/bronze, chrome-navy, gold-dark, purple-light, penalti-light, glow-red, glow-purple, gradients, motion vars, all utility classes). Tailwind v4 cascade now sources from tokens with Heroes-specific overrides on top — a single yaml edit on `coms-design-tokens/src/tokens.yaml` reaches both portal and Heroes via package bump. The fork risk between Heroes' local tokens and the platform tokens is permanently closed; the chrome subpath was already adopted as part of Phase 4 (commit `b7b7431` 2026-04-30) and got a prop-shape consolidation in this round (Sidebar `sections` + slot pattern, MobileTopBar `brand`/`leading`/`trailing`/`right` slots).
+
+**Phase 5: still deferred.** Trigger (real third H-app onboarding) has not fired.
 
 > **Contributing UI changes?** This spec is the architectural intent. The contribution workflow — where to PR, how to test locally before opening a PR, versioning rules, reviewer expectations — lives in [`/DESIGN_SYSTEM.md`](../../../DESIGN_SYSTEM.md) at the repo root. Hand that doc to teams adopting the design system.
 
