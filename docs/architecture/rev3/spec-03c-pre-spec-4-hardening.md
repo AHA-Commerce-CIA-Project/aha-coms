@@ -5,6 +5,8 @@
 > **Superapp intent (added 2026-04-29):** This spec is the foundation that makes the portal feel like a "mini-GCP/AWS/Azure" rather than a stitched set of apps — easy onboarding, one stable contract, one observable request flow. Items 6–9 folded in the four zero-cost gaps that were missing for that intent (domain-readiness, SDK semver policy, public OpenAPI, tenant-scoped audit read).
 > Scope (shipped): Portal `apps/api` + `apps/web` + new sibling repo `@coms-portal/sdk` (created locally, pushed to GitHub as **public** at `github.com/mrdoorba/coms-sdk`) + `@coms-portal/shared` v1.4.1 deprecation bump. No Heroes-side work in this spec; Heroes consumes the SDK in a follow-up.
 > Prerequisites: Specs 01 + 02 (Phases 1–3) + 03 + 03b shipped portal-side.
+>
+> **Cross-reference note (2026-05-03):** Spec 06 (`spec-06-dual-email-auth.md`) shipped end-to-end (PRs A → F) on 2026-05-03 (PR F commit `8f13c64`) — orthogonal to this spec, no overlap with launcher migration, observability, audit-log columns, or `@coms-portal/sdk` extraction. Both specs touched `identity_users` (this spec added `actor_app_id` + `target_app_id` to the audit-log writer; Spec 06 removed the `email` and `personal_email` columns and replaced them with the multi-row `identity_user_emails` table; Spec 06 PR E extended the audit-log writer with three new `AuditAction` strings — `admin_sign_out_all`, `one_time_link_issued`, `one_time_link_consumed`). Migrations applied in journal order — no conflict. Heroes-side rev3 adoption (unblocked 2026-05-03 on Spec 06 PR F's merge) includes Heroes consuming `@coms-portal/sdk` in a follow-up. See `spec-00-implementation-timeline.md` for the at-a-glance status.
 
 ---
 

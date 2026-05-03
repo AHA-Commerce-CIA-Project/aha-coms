@@ -3,6 +3,37 @@
 > Priority: **Critical-path. Must land before Heroes (or any H-app) takes real users.**
 > Scope: Portal (alias table, per-app config, app manifests, resolve API, provisioning + config webhooks, admin UI for single + bulk config edits, DB-role lockdown) + every H-app (drop user-creation paths, drop role/eligibility columns, add ingestion + provisioning + config webhook consumers, add caches).
 > Prerequisites: Rev 2 closed (portal owns identity end-to-end). Rev 3 Spec 01 in flight (the account widget surfaces identity; this spec hardens the writer side of identity and extends portal to own per-app config).
+>
+> **Spec 06 status (2026-05-03):** Spec 06 (`spec-06-dual-email-auth.md`) shipped end-to-end (PRs A → F) on 2026-05-03 (PR F commit `8f13c64`). The §Schema section below still describes pre-Spec-06 state for historical reference; the live schema is the multi-row `identity_user_emails` table with kind discriminator (`'workspace' | 'personal'`), per-row `verifiedAt`, `addedBy` provenance, plus `identity_user_emails_history` (DELETE-trigger tombstone) and `auth_sessions` (portal-native opaque-UUID session vehicle). The OTP-based auth path for personal-email and admin/self-service session management are live. `identity_users.email` and `identity_users.personal_email` are gone. User aliases (`user_aliases`) — *display-name* aliases for sheet ingestion — remain unrelated to email aliases and unchanged by Spec 06. Heroes-side adoption per §Appendix A is now unblocked. See `spec-00-implementation-timeline.md` for the at-a-glance status. Wipe-and-reprovision (vs. data-preserving alias backfill) remains the locked path for Heroes-side cutover; pre-real-users state makes the wipe a no-op.
+
+---
+
+## Status (2026-04-29) — portal-side shipped on `main`; test-gate clean
+
+All twelve portal-side effects of this spec landed in a single coordinated session on 2026-04-28 and are merged to `main`. The schema migrations, services, routes, webhooks, admin UIs, and the gated REVOKE migration are all in place; the merge ships as commits `b6e3bd1` through `e296ab5` plus follow-up `b407682` (svelte-check fix). The `@coms-portal/shared` package is at `v1.4.0` with new event types and the additive `appConfig` payload extension.
+
+**Test-gate cleanup (Spec 03b) shipped 2026-04-29.** All 261 API tests pass locally; the CI deploy gate is ready to unblock on the next push to `main`. See `docs/architecture/rev3/spec-03b-test-gate-cleanup.md` for the full resolution shape — root cause was Bun `mock.module` process-global cross-file contamination (not real fixture bugs); fix introduced `apps/api/src/test-helpers/schema-barrel-mock.ts` and a snapshot+restore mock-isolation pattern now enforced via `.codebase-memory/adr.md` §7.
+
+**What ships portal-side:**
+
+- `user_aliases` table with Postgres `GENERATED ALWAYS AS` for `alias_normalized`; partial unique on `is_primary`; backfill seeded for every active `identity_users` row.
+- `alias_collision_queue` table + admin UI at `/admin/aliases` for resolve / reject actions.
+- Alias service (`apps/api/src/services/aliases.ts`): `resolveAliases`, `createAlias`, `renamePrimaryAlias` (transactional demote → promote), `detectCollision` (Levenshtein ≤ 2 OR token-set match per spec).
+- `POST /api/aliases/resolve-batch` — body cap 1000 names / 256 KB; auth via inbound app SA token middleware (Google OIDC ID token → `app_registry.serviceAccountEmail` lookup); per-app token bucket (20 RPS, burst 40, in-memory single-instance — multi-instance limitation documented in source).
+- Webhooks: `alias.resolved` / `alias.updated` / `alias.deleted` riding the existing Rev 2 Spec 03 dispatcher + Cloud Tasks retries + DLQ.
+- `app_manifests` (config_schema only — webhook URL/secret remain on `app_webhook_endpoints`), `app_user_config`, `bulk_edit_locks`. Heroes manifest registered at boot from `apps/api/src/services/manifests/heroes.json`.
+- `app_user_config` seeded inside the `createEmployee` transaction for every CSV/Sheet/manual create path; sheet-sync `emitUserProvisioned` gap fix; `user.provisioned` payload extended with optional per-recipient `appConfig` slice.
+- `app_config.updated` webhook with `batchId` for bulk; `GET /api/users/:portalSub/config/:appId` (auth via `requireAppToken`, 403 on app-slug mismatch).
+- Admin app config UI at `/admin/app-config` — manifest-rendered single edit, selection-bulk via `BatchToolbar`, CSV-bulk preview-then-commit with diff display and `bulk_edit_locks` enforcement.
+- `apps/api/src/db/migrations/cutover/0001_revoke_heroes_writes.sql` is staged (NOT auto-applied) with cutover runbook in `cutover/README.md`. Apply at Deploy C.
+
+**Naming reconciliation (vs. spec prose):** the spec calls webhook events `user.created` / `user.updated` / `user.deactivated`. Reconnaissance found Rev 2 already publishes `user.provisioned` / `user.updated` / `user.offboarded`. The implementation reuses the Rev 2 names (additive `appConfig` extension on `user.provisioned`); the spec's prose names should be read as synonyms.
+
+**Known debt — Spec 03b cleared 2026-04-29.** CI's test gate (red on `main` since this spec's merge) is locally green at 261 pass / 0 fail. Resolution turned out to be cross-file Bun `mock.module` contamination, not real fixture bugs; details in `spec-03b-test-gate-cleanup.md`. Deploy job expected to run on the next push to `main`.
+
+**What remains — Heroes-side (out of portal scope):** the Heroes-side adoption work in §Appendix A — rename `users` → `heroes_profiles`, drop role/eligibility columns, ingestion rewrite via the new `POST /api/aliases/resolve-batch`, alias + user-config caches, webhook consumers, audit log routing. The Phase 3 cutover (truncate + reprovision + apply the gated REVOKE) is a coordinated <30-minute window with portal.
+
+Mission artefacts (red-cell review, captain's log, lessons): `.nelson/missions/2026-04-28_050010_1b5c498e/`.
 
 ---
 
@@ -192,6 +223,12 @@ No fallback to old name-matching path. No `INGESTION_USE_ALIAS_API` flag. Heroes
 ---
 
 ## Schema
+
+### Portal: `identity_user_emails` (as of spec-06 PR A)
+
+> **Note:** As of Spec 06 PR A (shipped 2026-04-30, commit `049008d`), `identity_users.email` and `identity_users.personal_email` (the pre-Spec-06 single-column model described in this spec's prose and status section) were replaced by the multi-row `identity_user_emails` table with a `kind` discriminator (`'workspace' | 'personal'`), per-row `verifiedAt`, and `addedBy` provenance. The pattern mirrors this spec's own `user_aliases` shape — one FK into `identity_users`, one discriminator per row, one history/tombstone trail. User aliases (`user_aliases`) — display-name aliases for sheet ingestion — are unrelated to email aliases and remain governed by this spec.
+
+---
 
 ### Portal: `user_aliases`
 
@@ -556,6 +593,22 @@ Captured here so they aren't lost between spec finalization and implementation:
 - **Real-time ingestion.** This spec assumes batch (sheets). Streaming ingestion (a hypothetical real-time event source) needs its own design — likely event-sourced and not alias-shaped.
 - **Self-service per-app config (user-facing).** Users do not edit their own per-app config in v1. Admin-only. Self-service is a future spec if it's ever needed.
 - **Manifest type system beyond v1.** v1 supports `enum`, `boolean`, `integer`, `string`. Compound types (lists, nested objects), conditional defaults, cross-key validation rules — all out of scope; add when an app actually needs them.
+
+---
+
+## Known limitations (post-shipping verification)
+
+Captured 2026-04-29 from a verification pass against the shipped Spec 03 codebase. None of these block Heroes adoption; they are documented so future readers don't mistake them for bugs and so Spec 03c (pre-Spec-4 hardening) has a clean punch list.
+
+- **Webhook DLQ implementation drift.** `apps/api/src/services/webhook-dispatcher.ts:12` — the design comment refers to `/api/internal/webhook-dlq` as the dead-letter handler. That route does not exist. Terminal-attempt logic is inline in `/api/internal/webhook-delivery` at `apps/api/src/routes/internal.ts:144–182` (sets the endpoint to `disabled` when `retryCountNum === MAX_ATTEMPTS - 1`). Functionally correct; the abstraction in the comment is aspirational. **Spec 03c** either builds the standalone route as a Pub/Sub-triggered handler or corrects the comment (recommend the latter).
+
+- **Webhook secret storage is plaintext.** `apps/api/src/db/schema/app-webhook-endpoints.ts:14` stores `secret` as `text(...)` with the explicit comment "stored as-is (not hashed) — portal needs to sign outbound payloads with it". Accepted because a one-way hash would make the portal unable to mint HMAC signatures at delivery time. Migration path = envelope-encrypt with KMS, decrypt at delivery. Not blocking today; promote when an external tenant requires per-secret trust isolation.
+
+- **Single global broker signing key.** `apps/api/src/services/signing-keys.ts` enforces a single ACTIVE row in `portal_broker_signing_keys` (unique partial index on `status='active'`); `apps/api/src/services/auth-broker.ts:218–228` (`signES256BrokerToken`) loads it without per-app derivation. The HS256 path retains a per-app fallback (`auth-broker.ts:148`) but that is the legacy mode. Per-tenant signing key derivation is deferred until tenant #3 (external) requires cryptographic trust isolation — at that point, derive a per-app `kid` via HKDF from the global root and rotate per-app independently.
+
+- **`compliance_status` enforced at registration only.** `apps/api/src/services/apps.ts:46–79` (`validateAppIntegrationMetadata`) enforces manifest path + `lastVerifiedAt` at registration time; `apps/api/src/services/auth-broker.ts:296–384` (`createBrokerHandoff`) does not check `compliance_status` during token issuance — only `app.status !== 'active'` and the user→app access list. So the field is decorative for the broker flow today. Promote to enforcement at token issuance when compliance gating is required (likely when an external tenant is onboarded under SOC 2 / ISO 27001 obligations).
+
+- **Audit log gaps.** `apps/api/src/db/schema/audit.ts:5–15` defines `access_audit_log` with columns `id, actor_id, action, target_type, target_id, details, created_at`. Missing: `actor_ip`, `request_id`, failure events (the `AuditAction` enum only contains success-side actions), Cloud Logging sink, retention policy. **Spec 03c** adds the `actor_ip` and `request_id` columns (Drizzle migration via `drizzle-kit generate` per the project's standing rule) and wires the columns into all audit-write call sites. The Cloud Logging sink and retention policy stay deferred until a compliance review forces them.
 
 ---
 

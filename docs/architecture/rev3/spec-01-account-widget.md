@@ -3,6 +3,8 @@
 > Priority: **1 (only Rev 3 spec; foundation for any future suite-UX work)**
 > Scope: Portal (widget package, userinfo endpoint, RP-initiated logout) + Heroes (widget adoption, header refactor)
 > Prerequisites: Rev 2 Spec 01–04 (RS256/JWKS, OIDC discovery, webhook + introspect via Google OIDC). Identity is portal-owned; this spec surfaces it.
+>
+> **Spec 06 status (2026-05-03):** Spec 06 (`spec-06-dual-email-auth.md`) shipped end-to-end (PRs A → F) on 2026-05-03 — PR E commit `212e103`, CI run `25265594527`; PR F commit `8f13c64`. The schema restructure is in: `identity_users.email` and `identity_users.personal_email` were dropped and replaced by the multi-row `identity_user_emails` table; an OTP-based auth path for personal-email + admin sign-out-everywhere + active-sessions panel + super-admin one-time login link are live. **Widget-side impact remains zero** — `/api/userinfo` still exposes a scalar `email` (derived as "workspace if present, else personal-primary, else first-personal" per Spec 06 §Q8a) alongside the additive `emails` array. `@coms-portal/shared` is at v1.5.0 with `emails: UserEmailEntry[]` on `UserProvisionedPayload`. Heroes-side adoption per `heroes-integration-handoff.md` is now unblocked. See `spec-00-implementation-timeline.md` for the at-a-glance status.
 
 ---
 
@@ -57,13 +59,13 @@ The widget does **not** call portal endpoints itself. The host app passes in the
 
 ### App-switcher data source
 
-The portal's `user.apps` array (already present on `SessionUser`) is the source of truth for which apps the user can launch. Heroes already gets this via the OIDC ID token claims (Rev 2 Spec 01 carried `apps` into the standard claims). The widget renders `appSwitcher` as a prop: an array of `{ slug, label, url }` that the host derives from `user.apps`.
+`/api/userinfo` is the source of truth for which apps the user can launch and how to render them. The endpoint already returns `apps: [{slug, label, url}]` from `app_registry` (see `apps/api/src/routes/userinfo.ts:33–89`); the OIDC ID token's `apps` claim is a coarse access list, but the userinfo response carries the launcher-ready label + URL fields. The widget renders `appSwitcher` as a prop: an array of `{ slug, label, url }` that the host derives from `/api/userinfo`.
 
 This means:
 
-- Portal passes `appSwitcher` from its own session.
-- Heroes passes `appSwitcher` derived from the OIDC claims it already verifies.
-- No new endpoint needed in this spec. If a later spec needs richer app metadata (icons, "last accessed"), add a `/.well-known/coms-apps.json` or similar; out of scope here.
+- Portal passes `appSwitcher` from its own server-loaded userinfo response.
+- Heroes calls `/api/userinfo` (or proxies it through its own SSR layer) to derive `appSwitcher`.
+- No new endpoint needed — the existing `/api/userinfo` is already the rich payload. The transitional `APP_LAUNCHER` constant in `@coms-portal/shared` is being retired in Spec 03c (the chrome currently consumes the constant; the migration to the userinfo response is queued).
 
 ### Service-bar list vs. popover app list — both, by design
 
@@ -86,7 +88,7 @@ This redundancy is **intentional**, not duplication. Microsoft 365 has it (suite
 
 - `services` prop on `<ServiceBar>` carries the minimum fields needed for inline tabs: `{ slug, label, url }`.
 - `appSwitcher` prop on `<AccountWidget>` carries the same plus richer fields: `{ slug, label, url, lastAccessedAt?, role?, notificationCount? }`.
-- Both derive from the host's `user.apps` (and, when a portal-served `/api/me/apps` lands per the open question below, both consume the richer payload from the same endpoint).
+- Both derive from the host's `/api/userinfo` response — the endpoint already returns `apps: [{slug, label, url}]`, which is the same shape the open question below originally proposed. The chrome's current consumption of the static `APP_LAUNCHER` constant is the gap Spec 03c closes.
 
 A future maintainer should not "deduplicate" these two surfaces by removing one. They solve different problems.
 
@@ -178,6 +180,8 @@ The widget renders, right-to-left in the host header:
    - Section: "Sign out" button — triggers RP-initiated logout.
 3. **Optional left-of-logo product label** — when `currentApp !== "portal"`, render the app's label (e.g. "Heroes") as a subtle prefix next to the portal mark. Mirrors Microsoft's M365 suite-header pattern.
 
+> **As of Spec 06 PR A (shipped 2026-04-30, commit `049008d`):** `/api/userinfo` includes an additive `emails: UserEmailEntry[]` array alongside the existing scalar `email` field. The scalar `email` is derived per Spec 06 §Q8a (workspace email if present, else personal-primary, else first-personal). Widget v1 consumes only the scalar `email` field and is behaviorally unchanged; future widget versions may surface a "manage all emails" inline action using the `emails` array.
+
 Design tokens come from `@coms-portal/shared` (already used by both portal and Heroes), so the widget inherits the existing palette without a separate theming layer.
 
 ---
@@ -213,9 +217,11 @@ Update `apps/api/src/routes/auth/logout.ts` (or wherever the portal's logout han
 
 **Allowlist enforcement is mandatory** — without it, `post_logout_redirect_uri` becomes an open-redirect vector. Same model the OIDC spec mandates and Auth0 / Entra enforce.
 
-### New endpoint (optional, can defer)
+### Launcher endpoint (already shipped as `/api/userinfo`)
 
-`/api/me/apps` returning the user's launcher list with labels and URLs. Today the host can derive this from `user.apps` slugs + a hardcoded slug→URL map in `@coms-portal/shared`, which is enough for Rev 3. Add the endpoint when a third H-app ships and the slug→URL map starts feeling like config that should live server-side.
+`GET /api/userinfo` already returns `apps: [{slug, label, url}]` from `app_registry` (`apps/api/src/routes/userinfo.ts:33–89`) — it is the OIDC userinfo response and doubles as the launcher source. The original "deferred until third H-app" framing assumed a separate `/api/me/apps` endpoint; that endpoint is unnecessary because `/api/userinfo` is already the rich payload.
+
+The remaining work is a chrome-side migration: `apps/web/src/routes/(authed)/+layout.svelte:59–69` currently consumes the static `APP_LAUNCHER` constant from `@coms-portal/shared` and silently filters apps not in the constant. The migration to consume `/api/userinfo` is tracked in **Spec 03c**.
 
 ---
 
@@ -305,5 +311,5 @@ No big-bang migration. Phase 1 and Phase 2 each ship as standalone PRs; suite-wi
 ## Open Questions
 
 1. **Should the widget render the role chip, or only the role name?** Portal's `/profile` page uses a chip (`apps/web/src/routes/(authed)/profile/+page.svelte:38`); the widget should match. Confirmed: chip.
-2. **Where does the slug→URL map for `appSwitcher` live?** Proposed: `@coms-portal/shared` constant. Alternative: portal-served `/api/me/apps`. Recommend constant for Rev 3, endpoint when N-apps ≥ 3.
+2. ~~**Where does the slug→URL map for `appSwitcher` live?**~~ **Closed (2026-04-29).** `/api/userinfo` already returns the rich payload (`apps: [{slug, label, url}]` from `app_registry`); no separate `/api/me/apps` endpoint is needed. The static `APP_LAUNCHER` constant in `@coms-portal/shared` is a transitional artifact; chrome migration to the userinfo response is tracked in **Spec 03c**.
 3. **Does the widget need a loading state?** No — host passes `user` server-side already; if `user` is null the host should not be rendering the widget at all. Widget treats null `user` as a programming error and renders nothing.
