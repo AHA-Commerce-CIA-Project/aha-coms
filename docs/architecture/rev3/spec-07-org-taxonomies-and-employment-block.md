@@ -1,6 +1,6 @@
 # Rev 3 — Spec 07: Org Taxonomies & Employment Block
 
-> Status: **Drafted 2026-05-04 from /grill-with-docs session.** Not yet approved.
+> Status: **Active — PR 07-1 + PR 07-2 SHIPPED 2026-05-04. PRs 07-3 → 07-5 remaining (~3 days portal-side).**
 > Priority: **Critical-path. Precondition for Spec 08 (Heroes Spec 03 cutover) and for onboarding any second/third H-app.**
 > Scope: Portal (`org_taxonomies` schema + admin UI + webhook fan-out + manifest extension + `@coms-portal/shared` v1.6.0 contract bump). Every H-app consumes via the projection pattern documented here.
 > Prerequisites: Spec 03 shipped portal-side (already on `main`). Spec 06 shipped (already on `main`).
@@ -119,6 +119,20 @@ The events the dispatcher accepts now include (additive — does not affect exis
 - `taxonomy.upserted`
 - `taxonomy.deleted`
 - `employment.updated`
+
+### Portal: `taxonomy_edit_locks` (PR 07-2)
+
+Per-taxonomy advisory lock for the admin bulk-edit flow. Distinct from `bulk_edit_locks` because that table's primary key FKs to `app_manifests.appId`; per-taxonomy locks are scoped to a `taxonomy_id` slug, not an app.
+
+```ts
+export const taxonomyEditLocks = pgTable('taxonomy_edit_locks', {
+  taxonomyId: varchar('taxonomy_id', { length: 64 }).primaryKey(),
+  acquiredBy: uuid('acquired_by').notNull().references(() => identityUsers.id),
+  acquiredAt: timestamp('acquired_at', { withTimezone: true }).notNull().defaultNow(),
+})
+```
+
+Lock acquisition: `INSERT … ON CONFLICT DO NOTHING RETURNING` — winner gets the row, others read the existing `acquiredBy`. Released by the bulk-apply handler on completion or error.
 
 ---
 
@@ -279,15 +293,17 @@ This bounds the race to "DLQ retry consumes the taxonomy event in between" — t
 
 ## Success Criteria
 
-1. `org_taxonomies` exists, seeded with current branches + teams + departments.
-2. `app_manifests` carries `taxonomies` array; Heroes manifest registers `["branches", "teams", "departments"]`.
-3. `GET /api/taxonomies/sync` returns the full set for the calling app's subscribed taxonomies.
-4. `taxonomy.upserted` / `taxonomy.deleted` webhooks fire on admin edits.
-5. `employment.updated` webhook fires on `createEmployee` / `updateEmployee` HR-field changes.
-6. `user.provisioned` payload carries `employment`, `contactEmail`, `appConfig` blocks.
-7. Portal dual-emits legacy + new payload shape during gap window.
-8. `@coms-portal/shared` v1.6.0 published with new types.
-9. Heroes can consume the new contract end-to-end (proven by Spec 08 Phase 3 cutover).
+1. ✅ `org_taxonomies` exists, seeded with current branches + departments (PR 07-1). Teams seeded empty per cutover pre-flight.
+2. ✅ `app_manifests` carries `taxonomies` array; Heroes manifest registers `["branches", "teams", "departments"]` (PR 07-1).
+3. ✅ `GET /api/taxonomies/sync` returns the full set for the calling app's subscribed taxonomies (PR 07-2).
+4. ⚙️ `taxonomy.upserted` / `taxonomy.deleted` emit machinery exists, gated by `ENABLE_TAXONOMY_EVENTS` env flag (PR 07-2). Admin-route callers wire in PR 07-3; flag flips to `true` once payloads validated against staging.
+5. ⚙️ `employment.updated` emit machinery exists, gated by the same flag (PR 07-2). `createEmployee` / `updateEmployee` callers wire in PR 07-3.
+6. ⏳ `user.provisioned` payload carries `employment`, `contactEmail`, `appConfig` blocks (PR 07-3).
+7. ⏳ Portal dual-emits legacy + new payload shape during gap window (PR 07-3).
+8. ⏳ `@coms-portal/shared` v1.6.0 published with new types (PR 07-4).
+9. ⏳ Heroes can consume the new contract end-to-end (proven by Spec 08 Phase 3 cutover).
+
+Legend: ✅ shipped • ⚙️ machinery shipped, gated off pending caller wiring • ⏳ not yet started.
 
 ---
 

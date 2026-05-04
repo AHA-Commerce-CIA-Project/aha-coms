@@ -44,11 +44,14 @@ Repo: `coms_portal`
 ### PR 07-3 — Wire emit + dual-emit window
 Repo: `coms_portal`
 
-- [ ] `createEmployee` / `updateEmployee` fire `employment.updated` on HR-field changes (branch/team/department/position/phone/employmentStatus/talentaId/attendanceName/leaderName/birthDate).
-- [ ] `user.provisioned` payload extended with `employment`, `contactEmail`, `appConfig` blocks per Spec 07 §API contract.
-- [ ] **Dual-emit:** legacy top-level fields (`email`, `appRole`, `branch`) ALSO emitted alongside the new envelope so today's Heroes handler keeps working.
-- [ ] Admin UI on taxonomy creation flow: emit `taxonomy.upserted` BEFORE any `employment.updated` that references new keys (Spec 07 §Race window).
-- [ ] Flip the env flag from PR 07-2 ON in production after staging burn-in.
+Dependencies (already in place from PR 07-2): `emitTaxonomyUpserted` / `emitTaxonomyDeleted` / `emitEmploymentUpdated` in `apps/api/src/services/taxonomy-events.ts`, gated by `ENABLE_TAXONOMY_EVENTS` env flag (default `false`). Admin route mutations conditionally call the gated emitters today; `createEmployee` / `updateEmployee` do not.
+
+- [ ] `createEmployee` / `updateEmployee` fire `emitEmploymentUpdated` on HR-field changes (branch/team/department/position/phone/employmentStatus/talentaId/attendanceName/leaderName/birthDate). Compute `previousEmployment` delta against the pre-update row; full block on creation.
+- [ ] `user.provisioned` payload extended with `employment`, `contactEmail`, `appConfig` blocks per Spec 07 §API contract. `contactEmail` resolves workspace-first, personal-fallback per Spec 06 precedence.
+- [ ] **Dual-emit:** legacy top-level fields (`email`, `appRole`, `branch`) ALSO emitted alongside the new envelope so today's Heroes handler keeps working. Removed in PR 07-5.
+- [ ] Admin UI on taxonomy creation flow: emit `taxonomy.upserted` BEFORE any `employment.updated` that references new keys (Spec 07 §Race window). Bulk path already batches into one envelope per `(taxonomyId, batchId)`.
+- [ ] Flip `ENABLE_TAXONOMY_EVENTS=true` in production after staging burn-in. Verify in staging: (a) admin upsert triggers a single delivery to Heroes' webhook endpoint, (b) `createEmployee` triggers `user.provisioned` with the new envelope, (c) `updateEmployee` to a HR field triggers `employment.updated` with delta, (d) no double-emit for non-HR field changes.
+- [ ] Tests: provisioning emits envelope on create; HR-field update emits delta + previous; non-HR update does not emit; flag-off path remains silent across all callers.
 
 ### PR 07-4 — Publish `@coms-portal/shared` v1.6.0
 Repo: `coms-shared` (separate GitHub repo per `project_shared_packages.md`)
@@ -181,7 +184,8 @@ Repo: `coms_aha_heroes`
 ## When stuck
 
 - Stuck on a Drizzle migration shape: read `feedback_drizzle_migrations.md` in user memory.
-- Stuck on a webhook event payload shape: Spec 07 §API contract is authoritative.
+- Stuck on a webhook event payload shape: Spec 07 §API contract is authoritative. Local payload types live at `apps/api/src/services/taxonomy-events.ts` until PR 07-4 promotes them to `@coms-portal/shared` v1.6.0.
+- Webhook events not firing in dev: check `ENABLE_TAXONOMY_EVENTS` env var. Default off (PR 07-2 emit machinery is gated). Set `ENABLE_TAXONOMY_EVENTS=true` in `.env.local` to test end-to-end.
 - Stuck on a Heroes-side decision not in the spec: Heroes `CONTEXT.md` glossary first, then ADR 0001.
 - Webhook ordering race (taxonomy event arrives after employment event): handler re-throws → DLQ retry → idempotency on `eventId` covers it. Don't add a sleep loop.
 - A locked decision feels wrong: raise before changing. Re-grill with `/grill-with-docs` if it really is wrong.
