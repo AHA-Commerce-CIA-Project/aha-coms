@@ -38,10 +38,10 @@ Repo: `coms_portal`
 
 - [x] `GET /api/taxonomies/sync` endpoint per Spec 07 §API contract — `apps/api/src/routes/taxonomies.ts`. Auth: existing `requireAppToken`. Filters by calling app's manifest `taxonomies` field.
 - [x] Admin UI `/admin/taxonomies` per Spec 07 §Admin UI — `apps/web/src/routes/(authed)/admin/taxonomies/+page.svelte`. Sidebar (taxonomy IDs + entry counts) + right-panel CRUD table + CSV bulk upload + add/edit/delete dialogs. Per-taxonomy lock via new `taxonomy_edit_locks` table (migration `0032_yielding_vance_astro.sql`) instead of overloading `bulk_edit_locks` whose FK targets `app_manifests.appId`.
-- [x] Webhook event types added (gated by `ENABLE_TAXONOMY_EVENTS` env flag, off by default): `taxonomy.upserted`, `taxonomy.deleted`, `employment.updated` — `apps/api/src/services/taxonomy-events.ts`. Payload types defined locally; promoted to `@coms-portal/shared` v1.6.0 in PR 07-4. No emit callers wired (PR 07-3).
+- [x] Webhook event types added (gated by `ENABLE_TAXONOMY_EVENTS` env flag, off by default): `taxonomy.upserted`, `taxonomy.deleted`, `employment.updated` — `apps/api/src/services/taxonomy-events.ts`. Payload types defined locally; promoted to `@coms-portal/shared` v1.6.0 in PR 07-4. Admin route callers wired here; `employment.updated` caller wired in PR 07-3.
 - [x] Tests: 41 across 4 new files — `taxonomies.test.ts` (service 12), `taxonomy-events.test.ts` (events 13), `routes/__tests__/taxonomies.test.ts` (sync endpoint 6), `routes/admin/__tests__/taxonomies.test.ts` (admin CRUD 10). Full API suite 495 pass / 0 fail. `tsc --noEmit` clean (api + web). `db:generate` reports no schema drift.
 
-### PR 07-3 — Wire emit + dual-emit window ✅ SHIPPED 2026-05-04
+### PR 07-3 — Wire emit + dual-emit window ✅ SHIPPED 2026-05-04 (commit `8ca124c`)
 Repo: `coms_portal`
 
 Dependencies (already in place from PR 07-2): `emitTaxonomyUpserted` / `emitTaxonomyDeleted` / `emitEmploymentUpdated` in `apps/api/src/services/taxonomy-events.ts`, gated by `ENABLE_TAXONOMY_EVENTS` env flag (default `false`). Admin route mutations conditionally call the gated emitters today; `createEmployee` / `updateEmployee` do not.
@@ -185,6 +185,7 @@ Repo: `coms_aha_heroes`
 
 - Stuck on a Drizzle migration shape: read `feedback_drizzle_migrations.md` in user memory.
 - Stuck on a webhook event payload shape: Spec 07 §API contract is authoritative. Local payload types live at `apps/api/src/services/taxonomy-events.ts` until PR 07-4 promotes them to `@coms-portal/shared` v1.6.0.
+- Stuck on the employment block — what does it carry, what counts as an HR edit: read `apps/api/src/services/employment-resolution.ts`. `HR_FIELD_NAMES` is the source of truth for which identity_users columns trigger `employment.updated`. `getEmploymentBlock(userId)` resolves taxonomy refs; `diffEmployment(prev,next)` is reused by any caller that needs a delta.
 - Webhook events not firing in dev: check `ENABLE_TAXONOMY_EVENTS` env var. Default off (PR 07-2 emit machinery is gated). Set `ENABLE_TAXONOMY_EVENTS=true` in `.env.local` to test end-to-end.
 - Stuck on a Heroes-side decision not in the spec: Heroes `CONTEXT.md` glossary first, then ADR 0001.
 - Webhook ordering race (taxonomy event arrives after employment event): handler re-throws → DLQ retry → idempotency on `eventId` covers it. Don't add a sleep loop.
