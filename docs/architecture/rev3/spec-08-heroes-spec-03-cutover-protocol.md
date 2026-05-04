@@ -1,6 +1,6 @@
 # Rev 3 — Spec 08: Heroes Spec 03 Cutover Protocol
 
-> Status: **Active — Heroes-side PR A1 SHIPPED 2026-05-04 (commit `57fd523` on `coms_aha_heroes/main`). PR A2 (behaviour rewrite, ~1 week) remaining; cutover gated on A2 + portal PR 07-5.**
+> Status: **Heroes-side ALL SHIPPED 2026-05-04. PR A1 (commit `57fd523`) + PR A2 (8 slices across 11 commits, final `8b4e2ad`). Final verification gate green: typecheck=0, tests=67 pass / 0 fail, ci:check-no-illegal-inserts=0 across 174 files. Heroes Deploy A is READY. Cutover window + portal PR 07-5 are the only remaining work.**
 > Priority: **Critical-path. Must land before Heroes takes real users.**
 > Scope: Heroes (`/Users/mac/HT/Project/coms_aha_heroes`). One-time migration plan; this spec is single-use.
 > Prerequisites: Spec 03 portal-side shipped (already on `main`); Spec 07 portal-side shipped (`@coms-portal/shared` v1.6.0 published). Spec 06 cleared the email model.
