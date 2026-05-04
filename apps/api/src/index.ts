@@ -27,7 +27,9 @@ import { wellKnownRoutes } from './routes/well-known'
 import { adminSigningKeyRoutes } from './routes/admin/signing-keys'
 import { aliasQueueRoutes } from './routes/admin/alias-queue'
 import { adminAppConfigRoutes } from './routes/admin/app-config'
+import { adminTaxonomiesRoutes } from './routes/admin/taxonomies'
 import { aliasesRoutes } from './routes/aliases'
+import { taxonomiesRoutes } from './routes/taxonomies'
 import { userRoutes } from './routes/users'
 import { auditLogRoutes } from './routes/audit-log'
 import { registerManifest } from './services/manifests'
@@ -102,6 +104,7 @@ export const app = new Elysia({ prefix: '/api' })
   .use(userinfoRoutes)
   .use(internalRoutes)
   .use(aliasesRoutes)
+  .use(taxonomiesRoutes)
   .use(userRoutes)
   .group('/v1', (app) =>
     app
@@ -118,7 +121,7 @@ export const app = new Elysia({ prefix: '/api' })
       // by combining the adminRoutes prefix (/admin) implicitly via the group
       // path /admin/signing-keys.
       .group('/admin', (adminGroup) =>
-        adminGroup.use(adminSigningKeyRoutes).use(aliasQueueRoutes).use(adminAppConfigRoutes),
+        adminGroup.use(adminSigningKeyRoutes).use(aliasQueueRoutes).use(adminAppConfigRoutes).use(adminTaxonomiesRoutes),
       ),
   )
   // Broker-token authenticated routes — separate /v1 group so session-cookie

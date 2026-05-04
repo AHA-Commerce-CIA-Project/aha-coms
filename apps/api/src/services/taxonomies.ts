@@ -1,0 +1,208 @@
+/**
+ * Taxonomy DB service layer.
+ * Pure data access — no HTTP, no event emission.
+ */
+
+import { db } from '~/db'
+import { orgTaxonomies } from '~/db/schema/org-taxonomies'
+import { appManifests } from '~/db/schema/app-manifests'
+import { eq, inArray } from 'drizzle-orm'
+import type { OrgTaxonomy } from '~/db/schema/org-taxonomies'
+
+export type { OrgTaxonomy }
+
+// ---------------------------------------------------------------------------
+// getTaxonomyEntriesForApp
+// ---------------------------------------------------------------------------
+
+export interface TaxonomyGroup {
+  taxonomyId: string
+  entries: Array<{ key: string; value: string; metadata: Record<string, unknown> | null }>
+}
+
+export interface TaxonomySyncResult {
+  taxonomies: TaxonomyGroup[]
+  syncedAt: string
+}
+
+/**
+ * Returns all taxonomy entries for every taxonomy the given app subscribes to.
+ * The app's manifest `taxonomies` field drives which taxonomy_ids are included.
+ */
+export async function getTaxonomyEntriesForApp(appId: string): Promise<TaxonomySyncResult> {
+  const syncedAt = new Date().toISOString()
+
+  // Load the manifest to get subscribed taxonomy IDs
+  const [manifest] = await db
+    .select({ taxonomies: appManifests.taxonomies })
+    .from(appManifests)
+    .where(eq(appManifests.appId, appId))
+    .limit(1)
+
+  if (!manifest || !manifest.taxonomies || (manifest.taxonomies as string[]).length === 0) {
+    return { taxonomies: [], syncedAt }
+  }
+
+  const subscribedIds = manifest.taxonomies as string[]
+
+  // Fetch all entries for subscribed taxonomies in one query
+  const rows = await db
+    .select({
+      id: orgTaxonomies.id,
+      taxonomyId: orgTaxonomies.taxonomyId,
+      key: orgTaxonomies.key,
+      value: orgTaxonomies.value,
+      metadata: orgTaxonomies.metadata,
+      createdAt: orgTaxonomies.createdAt,
+      updatedAt: orgTaxonomies.updatedAt,
+      updatedBy: orgTaxonomies.updatedBy,
+    })
+    .from(orgTaxonomies)
+    .where(inArray(orgTaxonomies.taxonomyId, subscribedIds))
+
+  // Group by taxonomyId maintaining the subscribed order
+  const grouped = new Map<string, TaxonomyGroup>()
+  for (const id of subscribedIds) {
+    grouped.set(id, { taxonomyId: id, entries: [] })
+  }
+  for (const row of rows) {
+    const group = grouped.get(row.taxonomyId)
+    if (group) {
+      group.entries.push({
+        key: row.key,
+        value: row.value,
+        metadata: row.metadata as Record<string, unknown> | null,
+      })
+    }
+  }
+
+  return {
+    taxonomies: Array.from(grouped.values()),
+    syncedAt,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// listAllTaxonomyIds
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the distinct union of all taxonomy IDs from all app manifests.
+ * Used to populate the admin sidebar.
+ */
+export async function listAllTaxonomyIds(): Promise<string[]> {
+  const rows = await db
+    .select({ taxonomies: appManifests.taxonomies })
+    .from(appManifests)
+
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const ids = (row.taxonomies ?? []) as string[]
+    for (const id of ids) {
+      seen.add(id)
+    }
+  }
+  return Array.from(seen)
+}
+
+// ---------------------------------------------------------------------------
+// listTaxonomyEntries
+// ---------------------------------------------------------------------------
+
+export async function listTaxonomyEntries(taxonomyId: string): Promise<OrgTaxonomy[]> {
+  return db
+    .select()
+    .from(orgTaxonomies)
+    .where(eq(orgTaxonomies.taxonomyId, taxonomyId))
+    .orderBy(orgTaxonomies.key)
+}
+
+// ---------------------------------------------------------------------------
+// upsertTaxonomyEntry
+// ---------------------------------------------------------------------------
+
+export interface UpsertTaxonomyEntryInput {
+  taxonomyId: string
+  key: string
+  value: string
+  metadata?: Record<string, unknown> | null
+  updatedBy: string
+}
+
+export async function upsertTaxonomyEntry(input: UpsertTaxonomyEntryInput): Promise<OrgTaxonomy> {
+  const [row] = await db
+    .insert(orgTaxonomies)
+    .values({
+      taxonomyId: input.taxonomyId,
+      key: input.key,
+      value: input.value,
+      metadata: input.metadata ?? null,
+      updatedBy: input.updatedBy,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [orgTaxonomies.taxonomyId, orgTaxonomies.key],
+      set: {
+        value: input.value,
+        metadata: input.metadata ?? null,
+        updatedBy: input.updatedBy,
+        updatedAt: new Date(),
+      },
+    })
+    .returning()
+
+  return row
+}
+
+// ---------------------------------------------------------------------------
+// bulkUpsertTaxonomyEntries
+// ---------------------------------------------------------------------------
+
+export interface BulkEntry {
+  key: string
+  value: string
+  metadata?: Record<string, unknown> | null
+}
+
+export async function bulkUpsertTaxonomyEntries(
+  taxonomyId: string,
+  entries: BulkEntry[],
+  updatedBy: string,
+): Promise<{ upserted: number; entries: OrgTaxonomy[] }> {
+  if (entries.length === 0) {
+    return { upserted: 0, entries: [] }
+  }
+
+  const results: OrgTaxonomy[] = []
+  for (const entry of entries) {
+    const row = await upsertTaxonomyEntry({
+      taxonomyId,
+      key: entry.key,
+      value: entry.value,
+      metadata: entry.metadata ?? null,
+      updatedBy,
+    })
+    results.push(row)
+  }
+
+  return { upserted: results.length, entries: results }
+}
+
+// ---------------------------------------------------------------------------
+// deleteTaxonomyEntries
+// ---------------------------------------------------------------------------
+
+export async function deleteTaxonomyEntries(
+  taxonomyId: string,
+  keys: string[],
+): Promise<{ deleted: number }> {
+  if (keys.length === 0) return { deleted: 0 }
+
+  await db
+    .delete(orgTaxonomies)
+    .where(
+      inArray(orgTaxonomies.key, keys),
+    )
+
+  return { deleted: keys.length }
+}
