@@ -34,7 +34,7 @@ export async function writeAuditLog(entry: AuditEntry, tx?: DbClient) {
     : { _actor: actorSnapshot }
 
   await db.insert(auditLogs).values({
-    branchId: entry.actor.branchId,
+    branchId: entry.actor.branchKey,
     actorId: entry.actor.id,
     action: entry.action,
     entityType: entry.entityType,

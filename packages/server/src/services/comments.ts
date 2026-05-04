@@ -32,7 +32,7 @@ export async function createComment(
 
     const created = await commentsRepo.create(
       {
-        branchId: ctx.actor.branchId,
+        branchId: ctx.actor.branchKey,
         entityType: input.entityType,
         entityId: input.entityId,
         authorId: ctx.actor.id,

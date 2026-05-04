@@ -75,7 +75,7 @@ async function getPendingCount(
   if (role === 'employee') return 0
 
   if (role === 'leader') {
-    const actorTeamKey = ctx.actor.teamId
+    const actorTeamKey = ctx.actor.teamKey
     if (!actorTeamKey) return 0
 
     const rows = await db
@@ -92,13 +92,15 @@ async function getPendingCount(
   }
 
   // hr / admin — all pending in branch
+  const actorBranchKey = ctx.actor.branchKey
   const rows = await db
     .select({ cnt: count() })
     .from(achievementPoints)
+    .innerJoin(heroesProfiles, eq(achievementPoints.userId, heroesProfiles.id))
     .where(
       and(
         eq(achievementPoints.status, 'pending'),
-        eq(achievementPoints.branchId, ctx.actor.branchId),
+        actorBranchKey !== null ? eq(heroesProfiles.branchKey, actorBranchKey) : undefined,
       ),
     )
   return Number(rows[0]?.cnt ?? 0)
@@ -125,7 +127,11 @@ export async function getRecentActivity(ctx: ServiceContext): Promise<ActivityIt
       .innerJoin(heroesProfiles, eq(achievementPoints.userId, heroesProfiles.id))
       .innerJoin(submitter, eq(achievementPoints.submittedBy, submitter.id))
       .innerJoin(pointCategories, eq(achievementPoints.categoryId, pointCategories.id))
-      .where(eq(achievementPoints.branchId, ctx.actor.branchId))
+      .where(
+        ctx.actor.branchKey !== null
+          ? eq(heroesProfiles.branchKey, ctx.actor.branchKey)
+          : undefined,
+      )
       .orderBy(desc(achievementPoints.createdAt))
       .limit(10)
 

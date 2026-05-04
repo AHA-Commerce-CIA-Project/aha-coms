@@ -1,7 +1,7 @@
 import Elysia from 'elysia'
 import { eq } from 'drizzle-orm'
 import { db } from '@coms/shared/db'
-import { users, userEmails } from '@coms/shared/db/schema'
+import { heroesProfiles, emailCache, userConfigCache } from '@coms/shared/db/schema'
 import {
   getLocalSessionByToken,
   readSessionCookieFromHeaders,
@@ -13,8 +13,10 @@ export type AuthUser = {
   readonly email: string
   readonly name: string
   readonly role: UserRole
-  readonly branchId: string
-  readonly teamId: string | null
+  readonly branchKey: string | null
+  readonly branchValueSnapshot: string | null
+  readonly teamKey: string | null
+  readonly teamValueSnapshot: string | null
   readonly canSubmitPoints: boolean
   readonly mustChangePassword: boolean
 }
@@ -32,47 +34,25 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
       throw new AuthError(401, 'UNAUTHORIZED', 'Authentication required')
     }
 
-    let [appUser] = await db
+    const [raw] = await db
       .select({
-        id: users.id,
-        email: users.email,
-        name: users.name,
-        role: users.role,
-        branchId: users.branchId,
-        teamId: users.teamId,
-        canSubmitPoints: users.canSubmitPoints,
-        mustChangePassword: users.mustChangePassword,
+        id: heroesProfiles.id,
+        name: heroesProfiles.name,
+        branchKey: heroesProfiles.branchKey,
+        branchValueSnapshot: heroesProfiles.branchValueSnapshot,
+        teamKey: heroesProfiles.teamKey,
+        teamValueSnapshot: heroesProfiles.teamValueSnapshot,
+        mustChangePassword: heroesProfiles.mustChangePassword,
+        email: emailCache.contactEmail,
+        configJson: userConfigCache.config,
       })
-      .from(users)
-      .where(eq(users.email, session.email))
+      .from(heroesProfiles)
+      .leftJoin(emailCache, eq(heroesProfiles.id, emailCache.portalSub))
+      .leftJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
+      .where(eq(heroesProfiles.id, session.userId))
       .limit(1)
 
-    if (!appUser) {
-      const [secondary] = await db
-        .select({ userId: userEmails.userId })
-        .from(userEmails)
-        .where(eq(userEmails.email, session.email))
-        .limit(1)
-
-      if (secondary) {
-        ;[appUser] = await db
-          .select({
-            id: users.id,
-            email: users.email,
-            name: users.name,
-            role: users.role,
-            branchId: users.branchId,
-            teamId: users.teamId,
-            canSubmitPoints: users.canSubmitPoints,
-            mustChangePassword: users.mustChangePassword,
-          })
-          .from(users)
-          .where(eq(users.id, secondary.userId))
-          .limit(1)
-      }
-    }
-
-    if (!appUser) {
+    if (!raw) {
       throw new AuthError(
         403,
         'USER_NOT_FOUND',
@@ -80,11 +60,27 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
       )
     }
 
-    if (!appUser.role) {
+    const cfg = raw.configJson as Record<string, unknown> | null
+    const role = cfg?.role as UserRole | undefined
+
+    if (!role) {
       throw new AuthError(403, 'NO_ROLE', 'User has no assigned role')
     }
 
-    return { authUser: appUser as AuthUser }
+    const appUser: AuthUser = {
+      id: raw.id,
+      email: raw.email ?? '',
+      name: raw.name,
+      role,
+      branchKey: raw.branchKey ?? null,
+      branchValueSnapshot: raw.branchValueSnapshot ?? null,
+      teamKey: raw.teamKey ?? null,
+      teamValueSnapshot: raw.teamValueSnapshot ?? null,
+      canSubmitPoints: (cfg?.canSubmitPoints as boolean | undefined) ?? false,
+      mustChangePassword: raw.mustChangePassword,
+    }
+
+    return { authUser: appUser }
   },
 )
 

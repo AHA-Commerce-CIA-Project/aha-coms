@@ -16,7 +16,7 @@ export function getDb(tx?: DbClient): DbClient {
   return tx ?? (defaultDb as unknown as DbClient)
 }
 
-export type RlsContext = Pick<AuthUser, 'id' | 'branchId' | 'role' | 'teamId'>
+export type RlsContext = Pick<AuthUser, 'id' | 'branchKey' | 'role' | 'teamKey'>
 
 /**
  * Wraps a database operation in a short-lived transaction with RLS
@@ -33,9 +33,9 @@ export async function withRLS<T>(
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT
       set_config('app.current_user_id', ${rlsCtx.id}, true),
-      set_config('app.current_branch_id', ${rlsCtx.branchId}, true),
+      set_config('app.current_branch_id', ${rlsCtx.branchKey ?? ''}, true),
       set_config('app.current_role', ${rlsCtx.role}, true),
-      set_config('app.current_team_id', ${rlsCtx.teamId ?? ''}, true)`)
+      set_config('app.current_team_id', ${rlsCtx.teamKey ?? ''}, true)`)
     return fn(tx as unknown as DbClient)
   })
 }

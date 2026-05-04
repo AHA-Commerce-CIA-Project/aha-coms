@@ -40,7 +40,6 @@ export async function fileAppeal(
 
     const created = await appealsRepo.create(
       {
-        branchId: ctx.actor.branchId,
         achievementId,
         appellantId: ctx.actor.id,
         reason: input.reason,
@@ -78,7 +77,7 @@ export async function fileAppeal(
       .innerJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
       .where(
         and(
-          eq(heroesProfiles.branchKey, ctx.actor.branchId),
+          ctx.actor.branchKey !== null ? eq(heroesProfiles.branchKey, ctx.actor.branchKey) : undefined,
           sql`${userConfigCache.config}->>'role' = 'hr'`,
           eq(heroesProfiles.isActive, true),
         ),
@@ -87,7 +86,7 @@ export async function fileAppeal(
     for (const hr of hrUsers) {
       await createNotification(
         {
-          branchId: ctx.actor.branchId,
+          branchId: ctx.actor.branchKey,
           userId: hr.id,
           type: 'appeal_needs_resolution',
           title: `${ctx.actor.name} has appealed a Penalti — needs resolution`,
@@ -167,7 +166,7 @@ export async function resolveAppeal(
     // Notify appellant
     await createNotification(
       {
-        branchId: ctx.actor.branchId,
+        branchId: ctx.actor.branchKey,
         userId: appellant.id,
         type: 'appeal_resolved',
         title: `Your appeal has been ${statusLabel}`,

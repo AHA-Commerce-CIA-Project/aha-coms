@@ -3,7 +3,7 @@ import type { DbClient } from '../repositories/base'
 import { getDb } from '../repositories/base'
 
 type CreateNotification = {
-  readonly branchId: string
+  readonly branchId?: string | null
   readonly userId: string
   readonly type: string
   readonly title: string

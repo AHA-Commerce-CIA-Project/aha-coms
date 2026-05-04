@@ -71,7 +71,7 @@ export async function submitPoint(input: SubmitPointInput, ctx: ServiceContext) 
 
     const created = await pointsRepo.createPoint(
       {
-        branchId: ctx.actor.branchId,
+        branchId: ctx.actor.branchKey,
         userId: input.userId,
         categoryId: category.id,
         points: input.points,
@@ -109,7 +109,7 @@ export async function submitPoint(input: SubmitPointInput, ctx: ServiceContext) 
       // Notify the submitter that their submission is pending
       await createNotification(
         {
-          branchId: ctx.actor.branchId,
+          branchId: ctx.actor.branchKey,
           userId: ctx.actor.id,
           type: 'point_pending',
           title: `Your ${getCategoryLabel(input.categoryCode)} submission is pending approval`,
@@ -123,7 +123,7 @@ export async function submitPoint(input: SubmitPointInput, ctx: ServiceContext) 
       // Notify the target user about the point they received
       await createNotification(
         {
-          branchId: ctx.actor.branchId,
+          branchId: ctx.actor.branchKey,
           userId: input.userId,
           type: 'point_received',
           title: `You received ${input.points} ${getCategoryLabel(input.categoryCode)} from ${ctx.actor.name}`,

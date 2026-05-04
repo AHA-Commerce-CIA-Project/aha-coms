@@ -39,7 +39,6 @@ export async function fileChallenge(
 
     const created = await challengesRepo.create(
       {
-        branchId: ctx.actor.branchId,
         achievementId,
         challengerId: ctx.actor.id,
         reason: input.reason,
@@ -74,7 +73,7 @@ export async function fileChallenge(
     // Notify penalized user
     await createNotification(
       {
-        branchId: ctx.actor.branchId,
+        branchId: ctx.actor.branchKey,
         userId: penalizedUser.id,
         type: 'challenge_filed',
         title: `Your Penalti has been challenged by ${ctx.actor.name}`,
@@ -91,7 +90,7 @@ export async function fileChallenge(
       .innerJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
       .where(
         and(
-          eq(heroesProfiles.branchKey, ctx.actor.branchId),
+          ctx.actor.branchKey !== null ? eq(heroesProfiles.branchKey, ctx.actor.branchKey) : undefined,
           sql`${userConfigCache.config}->>'role' = 'hr'`,
           eq(heroesProfiles.isActive, true),
         ),
@@ -100,7 +99,7 @@ export async function fileChallenge(
     for (const hr of hrUsers) {
       await createNotification(
         {
-          branchId: ctx.actor.branchId,
+          branchId: ctx.actor.branchKey,
           userId: hr.id,
           type: 'challenge_needs_resolution',
           title: `A Penalti challenge has been filed by ${ctx.actor.name} — needs resolution`,
@@ -184,7 +183,7 @@ export async function resolveChallenge(
     // Notify challenger
     await createNotification(
       {
-        branchId: ctx.actor.branchId,
+        branchId: ctx.actor.branchKey,
         userId: challenger.id,
         type: 'challenge_resolved',
         title: `Your challenge has been ${statusLabel}`,
@@ -198,7 +197,7 @@ export async function resolveChallenge(
     if (penalizedUserId && penalizedUserId !== challenger.id) {
       await createNotification(
         {
-          branchId: ctx.actor.branchId,
+          branchId: ctx.actor.branchKey,
           userId: penalizedUserId,
           type: 'challenge_resolved',
           title: `Challenge on your Penalti has been ${statusLabel}`,

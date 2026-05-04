@@ -33,59 +33,49 @@ const auth: Handle = async ({ event, resolve }) => {
     return resolve(event)
   }
 
-  const [{ db }, { users, userEmails }, { eq }] = await Promise.all([
+  const [{ db }, { heroesProfiles, emailCache, userConfigCache }, { eq }] = await Promise.all([
     import('@coms/shared/db'),
     import('@coms/shared/db/schema'),
     import('drizzle-orm'),
   ])
 
-  let [appUser] = await db
+  const [raw] = await db
     .select({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-      role: users.role,
-      branchId: users.branchId,
-      teamId: users.teamId,
-      canSubmitPoints: users.canSubmitPoints,
-      mustChangePassword: users.mustChangePassword,
+      id: heroesProfiles.id,
+      name: heroesProfiles.name,
+      branchKey: heroesProfiles.branchKey,
+      branchValueSnapshot: heroesProfiles.branchValueSnapshot,
+      teamKey: heroesProfiles.teamKey,
+      teamValueSnapshot: heroesProfiles.teamValueSnapshot,
+      mustChangePassword: heroesProfiles.mustChangePassword,
+      email: emailCache.contactEmail,
+      configJson: userConfigCache.config,
     })
-    .from(users)
-    .where(eq(users.email, session.email))
+    .from(heroesProfiles)
+    .leftJoin(emailCache, eq(heroesProfiles.id, emailCache.portalSub))
+    .leftJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
+    .where(eq(heroesProfiles.id, session.userId))
     .limit(1)
 
-  if (!appUser) {
-    const [secondary] = await db
-      .select({ userId: userEmails.userId })
-      .from(userEmails)
-      .where(eq(userEmails.email, session.email))
-      .limit(1)
-
-    if (secondary) {
-      ;[appUser] = await db
-        .select({
-          id: users.id,
-          email: users.email,
-          name: users.name,
-          role: users.role,
-          branchId: users.branchId,
-          teamId: users.teamId,
-          canSubmitPoints: users.canSubmitPoints,
-          mustChangePassword: users.mustChangePassword,
-        })
-        .from(users)
-        .where(eq(users.id, secondary.userId))
-        .limit(1)
+  if (raw) {
+    const cfg = raw.configJson as Record<string, unknown> | null
+    event.locals.user = {
+      id: raw.id,
+      email: raw.email ?? '',
+      name: raw.name,
+      role: (cfg?.role as AuthUser['role']) ?? 'employee',
+      branchKey: raw.branchKey ?? null,
+      branchValueSnapshot: raw.branchValueSnapshot ?? null,
+      teamKey: raw.teamKey ?? null,
+      teamValueSnapshot: raw.teamValueSnapshot ?? null,
+      canSubmitPoints: (cfg?.canSubmitPoints as boolean | undefined) ?? false,
+      mustChangePassword: raw.mustChangePassword,
+      portalRole: session.portalRole,
+      apps: session.apps,
     }
+  } else {
+    event.locals.user = null
   }
-
-  event.locals.user = appUser
-    ? ({
-        ...appUser,
-        portalRole: session.portalRole,
-        apps: session.apps,
-      } as AuthUser)
-    : null
   event.locals.session = {
     id: session.sessionId,
     userId: session.userId,

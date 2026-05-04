@@ -7,8 +7,10 @@ export type AuthUser = {
   readonly email: string
   readonly name: string
   readonly role: UserRole
-  readonly branchId: string
-  readonly teamId: string | null
+  readonly branchKey: string | null
+  readonly branchValueSnapshot: string | null
+  readonly teamKey: string | null
+  readonly teamValueSnapshot: string | null
   readonly canSubmitPoints: boolean
   readonly mustChangePassword: boolean
   readonly portalRole: string

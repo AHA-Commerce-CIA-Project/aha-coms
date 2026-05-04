@@ -41,13 +41,12 @@ export async function getLeaderboard(
   }
 
   return withRLS(ctx.actor, async (db) => {
+    const branchCondition =
+      ctx.actor.branchKey !== null ? eq(heroesProfiles.branchKey, ctx.actor.branchKey) : undefined
+
     const whereConditions = input.teamId
-      ? and(
-          eq(pointSummaries.branchId, ctx.actor.branchId),
-          eq(heroesProfiles.isActive, true),
-          eq(heroesProfiles.teamKey, input.teamId),
-        )
-      : and(eq(pointSummaries.branchId, ctx.actor.branchId), eq(heroesProfiles.isActive, true))
+      ? and(branchCondition, eq(heroesProfiles.isActive, true), eq(heroesProfiles.teamKey, input.teamId))
+      : and(branchCondition, eq(heroesProfiles.isActive, true))
 
     // Compute poinAhaBalance in SQL so we can ORDER BY and LIMIT/OFFSET in the DB
     const poinAhaBalanceExpr = sql<number>`(
@@ -167,7 +166,7 @@ async function getLeaderboardFiltered(
 
     const baseWhere = sql`
       ${heroesProfiles.isActive} = true
-      AND ${heroesProfiles.branchKey} = ${ctx.actor.branchId}
+      AND ${heroesProfiles.branchKey} = ${ctx.actor.branchKey}
       ${teamCondition}
       AND ${achievementPoints.createdAt} >= ${sinceDate}
     `
