@@ -53,17 +53,18 @@ Dependencies (already in place from PR 07-2): `emitTaxonomyUpserted` / `emitTaxo
 - [ ] **OPS step (post-merge):** flip `ENABLE_TAXONOMY_EVENTS=true` in production after staging burn-in. Verify in staging: (a) admin upsert triggers a single delivery to Heroes' webhook endpoint, (b) `createEmployee` triggers `user.provisioned` with the new envelope, (c) `updateEmployee` to a HR field triggers `employment.updated` with delta, (d) no double-emit for non-HR field changes.
 - [x] Tests: 29 new across 3 files — `services/__tests__/employment-resolution.test.ts` (10), `__tests__/employees-patch-employment-emit.test.ts` (6), `__tests__/webhook-payload-shape.test.ts` Spec 07 envelope cases (+6). Existing `provisioning-events.test.ts` + `taxonomy-events.test.ts` regressions clean. Full isolated API suite: 519 pass / 0 fail. `tsc --noEmit` clean (api + web). `db:generate` reports no schema drift.
 
-### PR 07-4 — Publish `@coms-portal/shared` v1.6.0
+### PR 07-4 — Publish `@coms-portal/shared` v1.6.0 ✅ SHIPPED 2026-05-04 (commit `19cf057`, tag `v1.6.0`)
 Repo: `coms-shared` (separate GitHub repo per `project_shared_packages.md`)
 
-- [ ] Add types: `EmploymentBlock`, `TaxonomyEvent` (upserted + deleted variants), `AppConfigEvent`, `ContactEmail`, `WebhookUserEnvelope`.
-- [ ] Extend `AppManifest` with `taxonomies: string[]`.
-- [ ] Bump version to v1.6.0; tag and push.
-- [ ] Verify no breaking changes for existing consumers (Heroes still on v1.5.0 must compile).
+- [x] Add types: `EmploymentBlock`, `TaxonomyRef`, `TaxonomyEvent` (upserted + deleted variants), `TaxonomyUpsertedPayload`, `TaxonomyDeletedPayload`, `EmploymentUpdatedPayload`, `AppConfigEvent` (alias of existing `AppConfigUpdatedPayload`), `ContactEmail`, `WebhookUserEnvelope`. Three new event names added to `PORTAL_WEBHOOK_EVENTS`: `taxonomy.upserted`, `taxonomy.deleted`, `employment.updated`.
+- [x] Extend `PortalIntegrationManifest` with optional `taxonomies?: string[]`.
+- [x] Bump version to v1.6.0; tagged `v1.6.0` and pushed to `origin/main`.
+- [x] Verified no breaking changes — locked by `src/__tests__/v1_5_0-backcompat.test.ts` (12 tests exercising every v1.5.0 name and shape verbatim). Full suite: 28/28 pass; `tsc --noEmit` clean.
 
 ### PR 07-5 — Drop legacy emit (after Heroes Deploy A confirmed)
 Repo: `coms_portal`
 
+- [ ] Bump `@coms-portal/shared` git+url pin from v1.5.0 → v1.6.0 in `apps/api/package.json` (and any other consumers in the workspace). Replace the local payload type declarations in `apps/api/src/services/taxonomy-events.ts` (`TaxonomyUpsertedPayload`, `TaxonomyDeletedPayload`, `EmploymentUpdatedPayload`) and `apps/api/src/services/employment-resolution.ts` (`TaxonomyRef`, `EmploymentBlock`) with imports from `@coms-portal/shared`. Same for the inline envelope type in `provisioning-events.ts` → `WebhookUserEnvelope`.
 - [ ] Remove legacy top-level fields (`email`, `appRole`, `branch`) from `user.provisioned` / `user.updated` payloads.
 - [ ] Force manifest `schemaVersion: 2` on all registered apps.
 
@@ -71,21 +72,31 @@ Repo: `coms_portal`
 
 ## Heroes — Spec 08 (after portal v1.6.0 publishes)
 
-### PR A1 — Schema migration (mechanical, ~1 day)
+### PR A1 — Schema migration (mechanical, ~1 day) ✅ SHIPPED 2026-05-04 (commit `57fd523` on `coms_aha_heroes/main`)
 Repo: `coms_aha_heroes`
 
-- [ ] Pin `@coms-portal/shared` v1.6.0 in `packages/web/package.json` and `packages/shared/package.json`.
-- [ ] `drizzle-kit generate` covering ALL of the following in one migration:
-  - [ ] Rename `users` → `heroes_profiles`. Change `id` from `uuid().defaultRandom()` → `uuid()` (no default; portal supplies).
-  - [ ] Drop columns from `heroes_profiles`: `email`, `personal_email`, `branchId`, `teamId`, `role`, `canSubmitPoints`.
-  - [ ] Add columns to `heroes_profiles`: `branch_key varchar(128)`, `branch_value_snapshot varchar(255)`, `team_key varchar(128)`, `team_value_snapshot varchar(255)`, `department_key varchar(128)`, `department_value_snapshot varchar(255)`.
-  - [ ] Rewire FKs from `users` → `heroes_profiles` in 11 schemas: `comments`, `point-summaries`, `sheet-sync-jobs`, `challenges`, `redemptions`, `appeals`, `notifications`, `audit-logs`, `achievement-points`, `system-settings`, `user_emails` (drop `user_emails` entirely — replaced by `email_cache`).
-  - [ ] Add 6 new tables: `pending_alias_resolution`, `alias_cache`, `taxonomy_cache`, `user_config_cache`, `email_cache`, `deactivated_user_ingest_audit`. Schemas per Spec 03 §Schema (heroes side) and Spec 07 §Schema.
-  - [ ] Drop `branches` and `teams` local tables.
-  - [ ] Drop `authUser` table; `authSession.userId` FK retargeted to `heroes_profiles.id`.
-- [ ] Update `packages/shared/src/db/schema/index.ts` exports.
-- [ ] Verify `bun run db:generate` produces no phantom diffs after the migration.
-- [ ] Manual review of generated SQL before commit (Drizzle does not always pick the right rename heuristic; prefer drop+create over surprise data preservation).
+- [x] Pin `@coms-portal/shared` v1.6.0 in `packages/web/package.json` and `packages/shared/package.json`. Lockfile updated; v1.6.0 tag (`0af3637`) verified reachable on `mrdoorba/coms-shared`.
+- [x] `drizzle-kit generate` produced one consolidated migration `packages/shared/src/db/migrations/0011_sparkling_black_bolt.sql` covering ALL of:
+  - [x] Rename `users` → `heroes_profiles`. `id` is now `uuid('id').primaryKey()` with no default; portal supplies the `portal_sub` UUID at insert time. Drop+create chosen over drizzle-kit's auto-rename heuristic per spec direction (the column shape changed materially — auto-rename would have been misleading).
+  - [x] Drop columns from `heroes_profiles`: `email`, `branch_id`, `team_id`, `role`, `can_submit_points`. (`personal_email` was never present in the heroes-side `users` table; only the portal-side `identity_users` carried it pre-Spec-06.)
+  - [x] Add columns to `heroes_profiles`: `branch_key varchar(128)`, `branch_value_snapshot varchar(255)`, `team_key varchar(128)`, `team_value_snapshot varchar(255)`, `department_key varchar(128)`, `department_value_snapshot varchar(255)` plus btree indexes on each `*_key` column.
+  - [x] Rewire FKs from `users` → `heroes_profiles` in 10 dependent schemas: `comments`, `point-summaries`, `sheet-sync-jobs`, `challenges`, `redemptions`, `appeals`, `notifications`, `audit-logs`, `achievement-points`, `system-settings`. `user_emails` dropped entirely — replaced by `email_cache`.
+  - [x] Add 6 new tables: `pending_alias_resolution`, `alias_cache`, `taxonomy_cache` (composite PK `(taxonomy_id, key)`), `user_config_cache`, `email_cache`, `deactivated_user_ingest_audit`. Schemas match Spec 03 §Schema (heroes side) + Spec 07 §Schema verbatim.
+  - [x] Drop `branches` and `teams` local tables (CASCADE drops also remove their dependent FK constraints across the 10 schemas above; the dependent `branch_id` columns remain as nullable plain `uuid` for A2 to drop or denormalize).
+  - [x] Drop `authUser` table. `authSession.userId` and `authAccount.userId` retargeted to `heroes_profiles.id` (column type changed `text → uuid`). `authVerification` untouched (no user FK).
+- [x] `packages/shared/src/db/schema/index.ts` exports updated; `packages/shared/scripts/generate-schemas.ts` regenerated to drop dropped tables, add 7 new ones, and rename `safeUserSchema` → `safeHeroesProfileSchema`.
+- [x] `bun run db:generate` second-run reports "No schema changes, nothing to migrate" — no phantom diffs.
+- [x] Manual review + warding of generated SQL: added `IF EXISTS` to every `DROP CONSTRAINT` (the preceding `DROP TABLE … CASCADE` already removed those constraints; without `IF EXISTS` the migration would fail). Inserted a single `TRUNCATE TABLE … RESTART IDENTITY CASCADE` between the `DROP TABLE` block and the `ALTER COLUMN … SET DATA TYPE uuid` / `ADD CONSTRAINT … REFERENCES heroes_profiles` block — required because (a) `text → uuid` on `session.user_id`/`account.user_id` would fail on existing better-auth-shaped string IDs, and (b) the new FKs would fail validation against orphan rows referencing deleted users. Pre-real-users posture makes the in-migration TRUNCATE a no-op in spirit (cutover plan TRUNCATEs anyway).
+- [x] **A1 stubs (kept `@coms/shared` typecheck clean so the schema slice can ship independently):**
+  - `packages/shared/src/auth/session.ts` — every function except `readSessionCookieFromHeaders` throws `[spec-08-pr-a1] requires the PR A2 broker-exchange rewrite`. PR A2 reimplements directly against `heroes_profiles.id`.
+  - `packages/shared/src/db/seed/auth.ts` — no-op (identity moves to portal `user.provisioned` webhook).
+  - `packages/shared/src/db/seed/base.ts` — branches insert removed (taxonomies are projected, not seeded).
+  - `packages/shared/src/db/seed/dev.ts` — no-op (PR A2 reintroduces dev fixtures against `heroes_profiles` + taxonomy_cache).
+
+**A1 → A2 handoff (known breakage A2 must resolve):**
+- ~25 files across `packages/server` + `packages/web` still import dropped symbols (`users`, `userEmails`, `branches`, `teams`, `authUser`). Server typecheck reports 29 errors. All in A2's rewrite surface (webhook handler split, broker exchange, sheet-sync rewrite, repositories, services).
+- `fn_sync_point_summary` trigger function (defined in migration `0002_triggers.sql`) still references the dropped `users` table. The `BEFORE UPDATE` trigger fires on `achievement_points` / `challenges` / `appeals` / `comments` / `rewards` / `redemptions` / `system_settings` updates — but A1's migration TRUNCATEs `achievement_points`, so no rows will trigger it until A2 re-introduces ingestion. A2 must either DROP and recreate this function against `heroes_profiles`, or drop it entirely if the point-summary materialisation moves to application code.
+- `idx_*_branch` indexes on the 10 dependent tables now reference an unconstrained `branch_id` column. Indexes still work; A2 decides whether to drop them or rebuild on a different column (e.g., a denormalised `branch_key`).
 
 ### PR A2 — Behaviour (~1 week)
 Repo: `coms_aha_heroes`

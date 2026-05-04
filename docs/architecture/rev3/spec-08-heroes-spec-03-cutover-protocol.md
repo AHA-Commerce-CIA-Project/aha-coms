@@ -1,10 +1,10 @@
 # Rev 3 — Spec 08: Heroes Spec 03 Cutover Protocol
 
-> Status: **Drafted 2026-05-04 from /grill-with-docs session.** Not yet approved.
+> Status: **Active — Heroes-side PR A1 SHIPPED 2026-05-04 (commit `57fd523` on `coms_aha_heroes/main`). PR A2 (behaviour rewrite, ~1 week) remaining; cutover gated on A2 + portal PR 07-5.**
 > Priority: **Critical-path. Must land before Heroes takes real users.**
 > Scope: Heroes (`/Users/mac/HT/Project/coms_aha_heroes`). One-time migration plan; this spec is single-use.
 > Prerequisites: Spec 03 portal-side shipped (already on `main`); Spec 07 portal-side shipped (`@coms-portal/shared` v1.6.0 published). Spec 06 cleared the email model.
-> Companion docs: [`coms_aha_heroes/CONTEXT.md`](../../../../coms_aha_heroes/CONTEXT.md), [`coms_aha_heroes/docs/adr/0001-portal-owned-org-taxonomies.md`](../../../../coms_aha_heroes/docs/adr/0001-portal-owned-org-taxonomies.md), [Spec 03](./spec-03-user-identity-alias-layer.md), [Spec 07](./spec-07-org-taxonomies-and-employment-block.md).
+> Companion docs: [`coms_aha_heroes/CONTEXT.md`](../../../../coms_aha_heroes/CONTEXT.md), [`coms_aha_heroes/docs/adr/0001-portal-owned-org-taxonomies.md`](../../../../coms_aha_heroes/docs/adr/0001-portal-owned-org-taxonomies.md), [Spec 03](./spec-03-user-identity-alias-layer.md), [Spec 07](./spec-07-org-taxonomies-and-employment-block.md), [TODO](./TODO-spec-07-08-cutover.md).
 
 ---
 
@@ -73,15 +73,18 @@ This cutover collapses `authUser` into `heroes_profiles`:
 
 Two PRs, both shipped before cutover. Single Drizzle migration via `drizzle-kit generate` (per project standing rule: never hand-edit the journal).
 
-### PR A1 — Schema migration (mechanical, ~one-frigate-day)
+### PR A1 — Schema migration (mechanical, ~one-frigate-day) ✅ SHIPPED 2026-05-04 (commit `57fd523`)
 
-- Pin `@coms-portal/shared` v1.6.0 in `packages/web/package.json` and `packages/shared/package.json`.
-- Single Drizzle migration:
-  - Rename `users` → `heroes_profiles`. Change `id` from `uuid().defaultRandom()` → `uuid()` (no default; portal supplies). Drop columns: `email`, `personal_email`, `branchId`, `teamId`, `role`, `canSubmitPoints`. Add columns: `branch_key varchar(128)`, `branch_value_snapshot varchar(255)`, `team_key varchar(128)`, `team_value_snapshot varchar(255)`, `department_key varchar(128)`, `department_value_snapshot varchar(255)`.
-  - Rewire 11 dependent schemas' FKs from `users` → `heroes_profiles`: `comments`, `point-summaries`, `sheet-sync-jobs`, `challenges`, `redemptions`, `appeals`, `notifications`, `audit-logs`, `achievement-points`, `system-settings`, `user_emails` (drop entirely — replaced by `email_cache`).
-  - Add 6 new tables: `pending_alias_resolution`, `alias_cache`, `taxonomy_cache`, `user_config_cache`, `email_cache`, `deactivated_user_ingest_audit`.
-  - Drop `branches` and `teams` local tables.
-  - Drop `authUser` table; retarget better-auth to `heroes_profiles`. `authSession.userId` FK → `heroes_profiles.id`.
+- ✅ Pinned `@coms-portal/shared` v1.6.0 in `packages/web/package.json` and `packages/shared/package.json`.
+- ✅ Single Drizzle migration `packages/shared/src/db/migrations/0011_sparkling_black_bolt.sql`:
+  - Renamed `users` → `heroes_profiles` via drop+create (auto-rename declined per spec). `id` is now plain `uuid` (no default). Dropped: `email`, `branch_id`, `team_id`, `role`, `can_submit_password`. Added: `branch_key`, `branch_value_snapshot`, `team_key`, `team_value_snapshot`, `department_key`, `department_value_snapshot` (varchar(128) + varchar(255) pairs) plus btree indexes on each `*_key`. (Heroes-side `users` never carried a `personal_email` column — that lived only in portal `identity_users` pre-Spec-06; nothing to drop on heroes side.)
+  - Rewired 10 dependent schemas' FKs from `users` → `heroes_profiles`: `comments`, `point-summaries`, `sheet-sync-jobs`, `challenges`, `redemptions`, `appeals`, `notifications`, `audit-logs`, `achievement-points`, `system-settings`. `user_emails` dropped entirely — replaced by `email_cache`.
+  - Added 6 new tables: `pending_alias_resolution`, `alias_cache`, `taxonomy_cache` (composite PK), `user_config_cache`, `email_cache`, `deactivated_user_ingest_audit`.
+  - Dropped `branches` and `teams` local tables (CASCADE removed dependent FK constraints; the `branch_id` columns on dependent tables remain as nullable plain `uuid` — A2 decides drop vs. denormalise as `branch_key`).
+  - Dropped `authUser`; `authSession.userId` and `authAccount.userId` retargeted to `heroes_profiles.id` with column type change `text → uuid`.
+- ✅ Manual SQL warding applied: `IF EXISTS` on every `DROP CONSTRAINT` (CASCADE already removed them); a single `TRUNCATE … RESTART IDENTITY CASCADE` inserted between the `DROP TABLE` and `ALTER COLUMN`/`ADD CONSTRAINT` blocks so the `text → uuid` conversion succeeds and so the new FKs validate against an empty row set.
+- ✅ Re-run of `bun run db:generate` reports "No schema changes" — clean.
+- ⚠️ **Known A1 → A2 handoff:** ~25 files in `packages/server` + `packages/web` still import dropped symbols (`users`, `userEmails`, `branches`, `teams`, `authUser`); 29 server typecheck errors. All in A2's rewrite surface. `packages/shared/src/auth/session.ts` and `packages/shared/src/db/seed/{auth,base,dev}.ts` were stubbed in A1 to keep `@coms/shared` typechecking; A2 reimplements them. The `fn_sync_point_summary` trigger function (from migration `0002_triggers.sql`) still references the dropped `users` table — A2 either DROPs it or rewrites it against `heroes_profiles`.
 
 ### PR A2 — Behaviour (~one frigate-week)
 
