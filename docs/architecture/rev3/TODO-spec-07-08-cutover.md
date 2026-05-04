@@ -98,10 +98,16 @@ Repo: `coms_aha_heroes`
 - `fn_sync_point_summary` trigger function (defined in migration `0002_triggers.sql`) still references the dropped `users` table. The `BEFORE UPDATE` trigger fires on `achievement_points` / `challenges` / `appeals` / `comments` / `rewards` / `redemptions` / `system_settings` updates — but A1's migration TRUNCATEs `achievement_points`, so no rows will trigger it until A2 re-introduces ingestion. A2 must either DROP and recreate this function against `heroes_profiles`, or drop it entirely if the point-summary materialisation moves to application code.
 - `idx_*_branch` indexes on the 10 dependent tables now reference an unconstrained `branch_id` column. Indexes still work; A2 decides whether to drop them or rebuild on a different column (e.g., a denormalised `branch_key`).
 
-### PR A2 — Behaviour (~1 week, IN PROGRESS — 6/8 slices SHIPPED 2026-05-04)
+### PR A2 — Behaviour ✅ SHIPPED 2026-05-04 (8/8 slices across 11 commits)
 Repo: `coms_aha_heroes`
 
-A2 is being delivered in 8 slices. 6 SHIPPED across 4 commits (`b289dbd`, `44f856c`, `5392d98`); 2 remain (Slice 6 sheet-sync rewrite, Slice 8 typecheck cleanup). All shipped slices follow TDD with bun:test and commit via /mr-door-commit.
+A2 is delivered in 8 slices. ALL SHIPPED across 11 commits (`b289dbd`, `44f856c`, `5392d98`, `257d021`, `c0d026d`, `feccc27`, `7c2cf7f`, `75621df`, `0e20355`, `da0cc09`, `d9e0c31`, `6989f1d`, `8b4e2ad`). All slices followed TDD with bun:test and committed via /mr-door-commit.
+
+**Final verification gate (commit `8b4e2ad`):**
+- `bun run --filter=@coms/server typecheck` → 0 errors (down from 27 baseline)
+- `bun test packages/server scripts` → 67 pass / 0 fail (up from 49 — Slice 6 added 18 tests)
+- `bun run ci:check-no-illegal-inserts` → 0 violations across 174 files (down from 3)
+- Heroes Deploy A is **READY**. Coordinate with portal team for cutover window.
 
 **Webhook handler split (Slice 1+2+3 SHIPPED commit `b289dbd`):**
 - [x] `packages/server/src/routes/portal-webhooks.ts` refactored 187 → 61 lines: HTTP + OIDC + idempotency dedupe + body parse + `dispatchPortalEvent`.
@@ -135,24 +141,20 @@ A2 is being delivered in 8 slices. 6 SHIPPED across 4 commits (`b289dbd`, `44f85
 - [x] `POST /api/admin/pending-aliases/sweep` (`packages/server/src/routes/admin-pending-aliases.ts`) — drains pending queue via `resolveAliasesBatch` (1000-name batches), routes outcomes to `deactivated_user_ingest_audit` / status='resolved' / retry++. Auth: OIDC SA bearer (operationally callable today; Slice 8 may convert to user-role gate once middleware is restored).
 - [x] `bun run ci:check-no-illegal-inserts` (`scripts/check-no-illegal-inserts.ts`) — 10 unit tests; flags `INSERT INTO users` anywhere and `INSERT INTO heroes_profiles` outside the two-entry whitelist (handle-user-provisioned + session.ts). First run found 3 real violations in `repositories/users.ts` + `services/sheet-sync.ts` — Slice 6/8 will excise them.
 
-**Sheet-sync rewrite (Slice 6 — NEXT-SESSION FOCUS B):**
+**Sheet-sync rewrite (Slice 6 ✅ SHIPPED 2026-05-04 across 5 commits):**
 
-Repo: `coms_aha_heroes`. Independent of Slice 8; can run in parallel.
+Repo: `coms_aha_heroes`. Commits: `0e20355` (6A+6B test grid + reroute), `da0cc09` (6C replay), `d9e0c31` (6D sweep refactor), `6989f1d` (6E trigger drop), `8b4e2ad` (6F CI guard whitelist).
 
-- [ ] Rewrite `packages/server/src/services/sheet-sync.ts` (945 lines) ingestion path:
-  - [ ] Per sheet upload: collect normalized names, batch-call `resolveAliasesBatch({ rawNames })` (1000 names per call, parallelize for >1000). Client is already wired in `packages/server/src/lib/portal-api-client.ts` — its response shape is `{ resolved: [{rawNameNormalized, aliasId, portalSub, isPrimary, tombstoned, deactivatedAt}], unresolved: string[] }`.
-  - [ ] Resolved + not tombstoned → write points to `heroes_profiles`-keyed domain rows.
-  - [ ] Resolved + tombstoned → `deactivated_user_ingest_audit` (table exists; schema: `id, sheet_id, sheet_row_number, portal_sub, raw_payload, received_at`). Do NOT ingest.
-  - [ ] Unresolved → `pending_alias_resolution` (table exists; schema: `id, sheet_id, sheet_row_number, raw_name, raw_name_normalized, raw_payload, first_seen_at, last_retry_at, retry_count, status`). Do NOT auto-create user.
-- [ ] Delete every legacy `INSERT INTO users` code path. CI guard `bun run ci:check-no-illegal-inserts` will fail until both are gone (currently surfaces `services/sheet-sync.ts:128` and `services/sheet-sync.ts:268`, plus `repositories/users.ts:70` from Slice 8 surface).
-- [ ] Replace the stub `drainPendingAliasQueue` in `packages/server/src/services/sheet-sync-pending.ts` with the actual replay (re-run ingestion using the resolved portal_sub against the cached `rawPayload`). Slice 3's `handle-alias-resolved.ts` and `handle-alias-updated.ts` already call this function — they expect rows with `status='resolved'` to be marked AND domain rows to be written.
-- [ ] The `POST /api/admin/pending-aliases/sweep` endpoint (`routes/admin-pending-aliases.ts`, shipped in Slice 7) currently marks rows resolved without writing domain rows; once Slice 6 lands, refactor it to call the same replay path.
-- [ ] `services/sheet-sync.ts` test suite covers all four outcomes per row (resolved-active / resolved-tombstoned / unresolved / batch-failure).
-- [ ] DROP or rewrite the `fn_sync_point_summary` trigger function from migration `0002_triggers.sql` — it still references the dropped `users` table. Decide whether point-summary materialisation moves to application code (preferred) or is rebuilt as a trigger against `heroes_profiles`.
+- [x] `packages/server/src/services/sheet-sync.ts` rewritten — ingestion now batches normalized names through `resolveAliasesBatch` (1000-row chunks, parallelized for >1000) and routes 4 outcomes: active→domain row keyed on heroes_profiles.id; tombstoned→`deactivated_user_ingest_audit` with raw_payload; unresolved→`pending_alias_resolution` with raw_payload; batch-failure→retry with surfaced error.
+- [x] `findOrCreateUsersBatch` + `getOrCreateInactiveTeam` + `preloadUserCache` + `placeholder.local` email pattern all excised. CI guard `bun run ci:check-no-illegal-inserts` reports 0 violations across 174 files.
+- [x] `drainPendingAliasQueue` in `packages/server/src/services/sheet-sync-pending.ts` replaced with real replay — reads pending rows, looks up alias_cache for portal_sub, re-runs domain insert against cached rawPayload, marks status='resolved'/'failed' with retry_count++.
+- [x] `POST /api/admin/pending-aliases/sweep` (`routes/admin-pending-aliases.ts`) refactored to call `drainPendingAliasQueue` — sweep now writes domain rows.
+- [x] sheet-sync test suite covers all 4 outcomes per ingestion path (syncEmployees / syncPoints / syncRedemptions). 18 new tests; total `bun test packages/server scripts` now 67 pass / 0 fail.
+- [x] `fn_sync_point_summary` trigger DROPPED via new migration (`6989f1d`). Decision: point-summary materialization moves to application code (`recalculatePointSummaries` already handled it). Trigger removal eliminates the `users` table reference and the in-database business logic.
 
-**Repos/services typecheck cleanup (Slice 8 — NEXT-SESSION FOCUS A):**
+**Repos/services typecheck cleanup (Slice 8 ✅ SHIPPED 2026-05-04 across 5 commits):**
 
-Repo: `coms_aha_heroes`. **Deployment blocker** — `bun run --filter=server typecheck` reports 27 errors across ~20 files. Run `cd packages/server && bunx tsc --noEmit 2>&1 | grep "error TS"` for the live list.
+Repo: `coms_aha_heroes`. Commits: `257d021` (A delete dead auth-sync), `c0d026d` (B repo layer), `feccc27` (C service layer), `7c2cf7f` (C-cleanup reports + scheduler), `75621df` (D middleware/auth.ts + hooks.server.ts AuthUser lynchpin reshape). Sub-slice E (frontend cascade) was implicitly satisfied — preserving `branchKey`-as-string semantics in AuthUser meant only `locals.user.role` reads survived in authed routes, and `role` is preserved unchanged. Final typecheck: 27→0 errors.
 
 All errors trace to A1's dropped imports of `users`, `branches`, `teams`, `userEmails` from `@coms/shared/db/schema`. The data model collapsed: `users JOIN branches` → `heroes_profiles.branchKey/branchValueSnapshot` denormalized; `users.role` / `users.canSubmitPoints` → `user_config_cache.config.{role,canSubmitPoints}`; `users.email` → `email_cache.contactEmail`; `teams` table → `heroes_profiles.teamKey/teamValueSnapshot` denormalized (no enumerable team table on heroes side anymore).
 
