@@ -12,6 +12,8 @@ export const PROFILES_INSERT_WHITELIST: readonly string[] = [
   'packages/shared/src/auth/session.ts',
   // sheet-sync writes portal-resolved profile snapshots for active (non-tombstoned) aliases
   'packages/server/src/services/sheet-sync.ts',
+  // sheet-sync-pending replays profile upserts for previously unresolved aliases, using cached portalSub
+  'packages/server/src/services/sheet-sync-pending.ts',
 ]
 
 export interface ScanInput {
