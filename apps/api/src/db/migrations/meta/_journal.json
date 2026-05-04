@@ -218,6 +218,13 @@
       "when": 1777607377737,
       "tag": "0030_famous_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1777863821429,
+      "tag": "0031_opposite_beast",
+      "breakpoints": true
     }
   ]
 }

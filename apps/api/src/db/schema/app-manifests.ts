@@ -9,6 +9,7 @@ export const appManifests = pgTable('app_manifests', {
   displayName: varchar('display_name', { length: 128 }).notNull(),
   configSchema: jsonb('config_schema').notNull(),
   schemaVersion: integer('schema_version').notNull().default(1),
+  taxonomies: jsonb('taxonomies').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
