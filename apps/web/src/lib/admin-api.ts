@@ -177,6 +177,38 @@ export interface AliasQueueResponse {
   groups: AliasQueueGroup[]
 }
 
+// ---------------------------------------------------------------------------
+// Taxonomy types
+// ---------------------------------------------------------------------------
+
+export interface TaxonomyEntry {
+  id: string
+  key: string
+  value: string
+  metadata: Record<string, unknown> | null
+  updatedAt: string
+}
+
+export interface TaxonomyListItem {
+  taxonomyId: string
+  entryCount: number
+}
+
+export interface TaxonomyListResponse {
+  taxonomies: TaxonomyListItem[]
+}
+
+export interface TaxonomyEntriesResponse {
+  taxonomyId: string
+  entries: TaxonomyEntry[]
+}
+
+export interface TaxonomyBulkResponse {
+  ok: true
+  batchId: string
+  upserted: number
+}
+
 export interface AppConfigManifest {
   appId: string
   displayName: string
@@ -679,5 +711,33 @@ export const adminApi = {
         createdAt: string
       }>
     }>(`/api/v1/employees/${userId}/login-links`)
+  },
+
+  // ---------------------------------------------------------------------------
+  // Taxonomies
+  // ---------------------------------------------------------------------------
+
+  listTaxonomies() {
+    return requestJson<TaxonomyListResponse>('/api/v1/admin/taxonomies')
+  },
+  listTaxonomyEntries(taxonomyId: string) {
+    return requestJson<TaxonomyEntriesResponse>(`/api/v1/admin/taxonomies/${encodeURIComponent(taxonomyId)}`)
+  },
+  upsertTaxonomyEntry(taxonomyId: string, body: { key: string; value: string; metadata?: Record<string, unknown> | null }) {
+    return requestJson<{ ok: true; entry: TaxonomyEntry }>(`/api/v1/admin/taxonomies/${encodeURIComponent(taxonomyId)}/single`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+  bulkUpsertTaxonomyEntries(taxonomyId: string, entries: Array<{ key: string; value: string; metadata?: Record<string, unknown> | null }>) {
+    return requestJson<TaxonomyBulkResponse>(`/api/v1/admin/taxonomies/${encodeURIComponent(taxonomyId)}/bulk`, {
+      method: 'POST',
+      body: JSON.stringify({ entries }),
+    })
+  },
+  deleteTaxonomyEntry(taxonomyId: string, key: string) {
+    return requestJson<{ ok: true; deleted: number }>(`/api/v1/admin/taxonomies/${encodeURIComponent(taxonomyId)}/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    })
   },
 }
