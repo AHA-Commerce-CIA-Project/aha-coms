@@ -1,12 +1,13 @@
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import {
-  users,
-  teams,
+  heroesProfiles,
   achievementPoints,
   pointCategories,
   redemptions,
   rewards,
   pointSummaries,
+  pendingAliasResolution,
+  deactivatedUserIngestAudit,
 } from '@coms/shared/db/schema'
 import { db as defaultDb } from '@coms/shared/db'
 import { readSheet } from './google-sheets'
@@ -22,36 +23,68 @@ import {
 import type { DbClient } from '../repositories/base'
 import { getDb } from '../repositories/base'
 import { buildHeaderIndex, parseReward, parseTimestamp } from './sheet-sync-helpers'
+import { resolveAliasesBatch as defaultResolveAliasesBatch } from '../lib/portal-api-client'
 
-type SyncResult = {
+// ── Public types ────────────────────────────────────────────────────────────
+
+export type SyncResult = {
   processed: number
   failed: number
   errors: Array<{ tab: string; row: number; name: string; error: string }>
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────
+/** A row extracted from a sheet, ready for alias resolution. */
+export type SheetRow = {
+  rawName: string
+  rawNameNormalized: string
+  rowIdx: number
+  rawPayload: Record<string, unknown>
+}
+
+/** One resolved+active alias. */
+export type ActiveRow = {
+  row: SheetRow
+  portalSub: string
+}
+
+/** One resolved+tombstoned alias. */
+export type TombstonedRow = {
+  row: SheetRow
+  portalSub: string
+}
+
+/** One row whose alias could not be resolved. */
+export type UnresolvedRow = {
+  row: SheetRow
+  rawNameNormalized: string
+}
+
+/** Result bucket returned by resolveAndRouteRows. */
+export type RoutedRows = {
+  active: ActiveRow[]
+  tombstoned: TombstonedRow[]
+  unresolved: UnresolvedRow[]
+}
+
+/** Dependency injection seam for tests. */
+export type ResolveAndRouteDeps = {
+  resolver?: (input: { rawNames: string[] }) => Promise<{
+    resolved: Array<{
+      rawNameNormalized: string
+      aliasId: string
+      portalSub: string
+      isPrimary: boolean
+      tombstoned: boolean
+      deactivatedAt: string | null
+    }>
+    unresolved: string[]
+  }>
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 const BATCH_SIZE = 100
-
-async function getOrCreateInactiveTeam(
-  branchId: string,
-  db: ReturnType<typeof getDb>,
-): Promise<string> {
-  const [existing] = await db
-    .select({ id: teams.id })
-    .from(teams)
-    .where(and(eq(teams.branchId, branchId), eq(teams.name, 'Inactive')))
-    .limit(1)
-
-  if (existing) return existing.id
-
-  const [created] = await db
-    .insert(teams)
-    .values({ branchId, name: 'Inactive' })
-    .returning({ id: teams.id })
-
-  return created.id
-}
+const ALIAS_BATCH_SIZE = 1000
 
 type TabNames = {
   employees: string
@@ -61,94 +94,142 @@ type TabNames = {
   redeem: string
 }
 
-// ── Pre-load user cache for name-based lookups ──────────────────────
+// ── resolveAndRouteRows ─────────────────────────────────────────────────────
+//
+// Core portal-identity consumer. Extracts unique normalised names from rows,
+// calls resolveAliasesBatch (chunked into 1000-name batches in parallel),
+// then splits into 4 buckets per the contract:
+//   1. active   — resolved + !tombstoned
+//   2. tombstoned — resolved + tombstoned
+//   3. unresolved — not found in portal
+//   4. batch failure — throws to caller
+//
+export async function resolveAndRouteRows(
+  rows: SheetRow[],
+  _sheetId: string,
+  _tabName: string,
+  deps: ResolveAndRouteDeps = {},
+): Promise<RoutedRows> {
+  const resolver = deps.resolver ?? defaultResolveAliasesBatch
 
-type UserCache = {
-  byEmail: Map<string, { id: string }>
-  byName: Map<string, { id: string }>
-  byAttendanceName: Map<string, { id: string }>
-}
+  // Unique normalised names across all rows
+  const uniqueNames = [...new Set(rows.map((r) => r.rawNameNormalized))]
 
-async function preloadUserCache(
-  branchId: string,
-  db: ReturnType<typeof getDb>,
-): Promise<UserCache> {
-  const allUsers = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-      attendanceName: users.attendanceName,
-    })
-    .from(users)
-    .where(eq(users.branchId, branchId))
+  // Chunk into ≤1000 batches, call in parallel (batch failure → throw)
+  const chunks: string[][] = []
+  for (let i = 0; i < uniqueNames.length; i += ALIAS_BATCH_SIZE) {
+    chunks.push(uniqueNames.slice(i, i + ALIAS_BATCH_SIZE))
+  }
 
-  const byEmail = new Map<string, { id: string }>()
-  const byName = new Map<string, { id: string }>()
-  const byAttendanceName = new Map<string, { id: string }>()
+  const chunkResults = await Promise.all(chunks.map((batch) => resolver({ rawNames: batch })))
 
-  for (const u of allUsers) {
-    byEmail.set(u.email.toLowerCase(), { id: u.id })
-    byName.set(u.name.toLowerCase(), { id: u.id })
-    if (u.attendanceName) {
-      byAttendanceName.set(u.attendanceName.toLowerCase(), { id: u.id })
+  // Merge chunk results into lookup maps
+  const resolvedMap = new Map<
+    string,
+    { portalSub: string; tombstoned: boolean }
+  >()
+  const unresolvedSet = new Set<string>()
+
+  for (const res of chunkResults) {
+    for (const r of res.resolved) {
+      resolvedMap.set(r.rawNameNormalized, {
+        portalSub: r.portalSub,
+        tombstoned: r.tombstoned,
+      })
+    }
+    for (const u of res.unresolved) {
+      unresolvedSet.add(u)
     }
   }
 
-  return { byEmail, byName, byAttendanceName }
+  // Route rows into buckets
+  const active: ActiveRow[] = []
+  const tombstoned: TombstonedRow[] = []
+  const unresolved: UnresolvedRow[] = []
+
+  for (const row of rows) {
+    const resolution = resolvedMap.get(row.rawNameNormalized)
+    if (resolution) {
+      if (resolution.tombstoned) {
+        tombstoned.push({ row, portalSub: resolution.portalSub })
+      } else {
+        active.push({ row, portalSub: resolution.portalSub })
+      }
+    } else {
+      unresolved.push({ row, rawNameNormalized: row.rawNameNormalized })
+    }
+  }
+
+  return { active, tombstoned, unresolved }
 }
 
-async function findOrCreateUsersBatch(
-  names: string[],
-  branchId: string,
-  userCache: UserCache,
+// ── writePendingRows ────────────────────────────────────────────────────────
+//
+// Persists unresolved rows to pending_alias_resolution.
+// Called by each sync path for outcome 3.
+//
+async function writePendingRows(
+  unresolvedRows: UnresolvedRow[],
+  sheetId: string,
   db: ReturnType<typeof getDb>,
 ): Promise<void> {
-  const missing = [...new Set(names.map((n) => n.toLowerCase()))].filter(
-    (n) => !userCache.byName.has(n),
-  )
-  if (missing.length === 0) return
+  if (unresolvedRows.length === 0) return
 
-  const inactiveTeamId = await getOrCreateInactiveTeam(branchId, db)
-
-  const newUsers = missing.map((name) => ({
-    name,
-    email: `former-${name.replace(/\s+/g, '.')}@placeholder.local`,
-    branchId,
-    teamId: inactiveTeamId,
-    department: 'Inactive',
-    role: 'employee' as const,
-    isActive: false,
-    mustChangePassword: true,
+  const values = unresolvedRows.map((u) => ({
+    sheetId,
+    sheetRowNumber: u.row.rowIdx + 2, // 1-indexed + header row
+    rawName: u.row.rawName,
+    rawNameNormalized: u.row.rawNameNormalized,
+    rawPayload: u.row.rawPayload,
+    status: 'pending' as const,
   }))
 
-  // Insert in batches, skip conflicts
-  for (let i = 0; i < newUsers.length; i += BATCH_SIZE) {
+  for (let i = 0; i < values.length; i += BATCH_SIZE) {
     await db
-      .insert(users)
-      .values(newUsers.slice(i, i + BATCH_SIZE))
+      .insert(pendingAliasResolution)
+      .values(values.slice(i, i + BATCH_SIZE))
       .onConflictDoNothing()
-  }
-
-  // Refresh cache for newly created users
-  const created = await db
-    .select({ id: users.id, name: users.name, email: users.email })
-    .from(users)
-    .where(and(eq(users.branchId, branchId), inArray(sql`LOWER(${users.name})`, missing)))
-
-  for (const u of created) {
-    userCache.byEmail.set(u.email.toLowerCase(), { id: u.id })
-    userCache.byName.set(u.name.toLowerCase(), { id: u.id })
   }
 }
 
-// ── syncEmployees ───────────────────────────────────────────────────
+// ── writeTombstonedRows ─────────────────────────────────────────────────────
+//
+// Persists tombstoned rows to deactivated_user_ingest_audit.
+// Called by each sync path for outcome 2.
+//
+async function writeTombstonedRows(
+  tombstonedRows: TombstonedRow[],
+  sheetId: string,
+  db: ReturnType<typeof getDb>,
+): Promise<void> {
+  if (tombstonedRows.length === 0) return
+
+  const values = tombstonedRows.map((t) => ({
+    sheetId,
+    sheetRowNumber: t.row.rowIdx + 2,
+    portalSub: t.portalSub,
+    rawPayload: t.row.rawPayload,
+  }))
+
+  for (let i = 0; i < values.length; i += BATCH_SIZE) {
+    await db.insert(deactivatedUserIngestAudit).values(values.slice(i, i + BATCH_SIZE))
+  }
+}
+
+// ── syncEmployees ───────────────────────────────────────────────────────────
+//
+// Employees tab: identity is portal-owned. Sheet provides metadata only.
+// Active rows → upsert heroes_profiles row keyed on portalSub.
+// Tombstoned → deactivated_user_ingest_audit.
+// Unresolved → pending_alias_resolution.
+//
 
 export async function syncEmployees(
   sheetId: string,
   tabName: string,
   branchId: string,
   tx?: DbClient,
+  deps: ResolveAndRouteDeps = {},
 ): Promise<SyncResult> {
   const db = getDb(tx)
   const rows = await readSheet(sheetId, tabName)
@@ -161,25 +242,10 @@ export async function syncEmployees(
   let failed = 0
   const errors: SyncResult['errors'] = []
 
-  // 1. Pre-load all existing users by email (single query)
-  const userCache = await preloadUserCache(branchId, db)
-
-  // 2. Pre-load all existing teams by name (single query)
-  const existingTeams = await db
-    .select({ id: teams.id, name: teams.name })
-    .from(teams)
-    .where(eq(teams.branchId, branchId))
-  const teamByName = new Map(existingTeams.map((t) => [t.name, t.id]))
-
-  // 3. Collect team names and leader mappings from data
-  const teamNames = new Set<string>()
-  const leaderMap = new Map<string, string>() // attendanceName -> teamName
-
-  // Parse all rows first, collect what we need
+  // 1. Parse sheet rows into SheetRow + metadata
+  // Teams are stored as value snapshots on heroesProfiles — no FK table.
   type ParsedEmployee = {
-    rowIdx: number
-    name: string
-    email: string
+    sheetRow: SheetRow
     attendanceName?: string
     phone?: string
     teamName?: string
@@ -191,28 +257,34 @@ export async function syncEmployees(
 
   for (const [i, row] of dataRows.entries()) {
     const name = row[headerIndex.NAME]?.trim()
-    const email = row[headerIndex.EMAIL]?.trim().toLowerCase()
     const attendanceName = row[headerIndex.ATTENDANCE_NAME]?.trim()
     const phone = row[headerIndex.PHONE]?.trim()
     const teamName = row[headerIndex.TEAM]?.trim()
     const position = row[headerIndex.POSITION]?.trim()
     const employmentStatus = row[headerIndex.STATUS]?.trim()
-    const leaderAttendanceName = row[headerIndex.LEADER]?.trim()
     const talentaId = row[headerIndex.TALENTA_ID]?.trim()
 
-    if (!name || !email) {
+    if (!name) {
       failed++
-      errors.push({ tab: tabName, row: i + 2, name: name ?? '', error: 'Missing name or email' })
+      errors.push({ tab: tabName, row: i + 2, name: '', error: 'Missing name' })
       continue
     }
 
-    if (teamName) teamNames.add(teamName)
-    if (leaderAttendanceName && teamName) leaderMap.set(leaderAttendanceName, teamName)
+    const rawPayload: Record<string, unknown> = { name }
+    if (attendanceName) rawPayload.attendanceName = attendanceName
+    if (phone) rawPayload.phone = phone
+    if (teamName) rawPayload.teamName = teamName
+    if (position) rawPayload.position = position
+    if (employmentStatus) rawPayload.employmentStatus = employmentStatus
+    if (talentaId) rawPayload.talentaId = talentaId
 
     parsed.push({
-      rowIdx: i,
-      name,
-      email,
+      sheetRow: {
+        rawName: name,
+        rawNameNormalized: name.toLowerCase().trim(),
+        rowIdx: i,
+        rawPayload,
+      },
       attendanceName,
       phone,
       teamName,
@@ -222,105 +294,87 @@ export async function syncEmployees(
     })
   }
 
-  // 4. Create missing teams in batch
-  const missingTeams = [...teamNames].filter((n) => !teamByName.has(n))
-  if (missingTeams.length > 0) {
-    const created = await db
-      .insert(teams)
-      .values(missingTeams.map((name) => ({ branchId, name })))
-      .onConflictDoNothing()
-      .returning({ id: teams.id, name: teams.name })
-    for (const t of created) teamByName.set(t.name, t.id)
-
-    // If onConflictDoNothing skipped some, re-fetch
-    if (created.length < missingTeams.length) {
-      const refetch = await db
-        .select({ id: teams.id, name: teams.name })
-        .from(teams)
-        .where(and(eq(teams.branchId, branchId), inArray(teams.name, missingTeams)))
-      for (const t of refetch) teamByName.set(t.name, t.id)
-    }
+  // 2. Resolve all names via portal alias system
+  let routed: RoutedRows
+  try {
+    routed = await resolveAndRouteRows(
+      parsed.map((p) => p.sheetRow),
+      sheetId,
+      tabName,
+      deps,
+    )
+  } catch (err) {
+    errors.push({
+      tab: tabName,
+      row: 0,
+      name: '',
+      error: `resolveAliasesBatch failed: ${err instanceof Error ? err.message : String(err)}`,
+    })
+    return { processed, failed: failed + parsed.length, errors }
   }
 
-  // 5. Upsert employees — use cache to avoid SELECT per row
-  for (const emp of parsed) {
+  // 3. Outcome 3 — write unresolved to pending queue
+  await writePendingRows(routed.unresolved, sheetId, db)
+  failed += routed.unresolved.length
+
+  // 4. Outcome 2 — write tombstoned to audit table
+  await writeTombstonedRows(routed.tombstoned, sheetId, db)
+  // tombstoned counts as "processed" (we handled it correctly)
+  processed += routed.tombstoned.length
+
+  // 5. Outcome 1 — upsert active heroes_profiles rows
+  // Build quick lookup: normalised name → parsed metadata
+  const parsedByNorm = new Map(parsed.map((p) => [p.sheetRow.rawNameNormalized, p]))
+
+  for (const activeRow of routed.active) {
+    const meta = parsedByNorm.get(activeRow.row.rawNameNormalized)
+    if (!meta) continue
+
     try {
-      const existing = userCache.byEmail.get(emp.email)
-
-      if (existing) {
-        await db
-          .update(users)
-          .set({
-            name: emp.name,
-            ...(emp.attendanceName && { attendanceName: emp.attendanceName }),
-            ...(emp.phone && { phone: emp.phone }),
-            ...(emp.employmentStatus && { employmentStatus: emp.employmentStatus }),
-            ...(emp.talentaId && { talentaId: emp.talentaId }),
-            ...(emp.position && { position: emp.position }),
-            ...(emp.teamName ? { teamId: teamByName.get(emp.teamName) ?? null } : {}),
-            isActive: true,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, existing.id))
-      } else {
-        const teamId = emp.teamName ? (teamByName.get(emp.teamName) ?? null) : null
-        const [created] = await db
-          .insert(users)
-          .values({
-            name: emp.name,
-            email: emp.email,
-            attendanceName: emp.attendanceName || null,
-            phone: emp.phone || null,
-            employmentStatus: emp.employmentStatus || null,
-            talentaId: emp.talentaId || null,
-            position: emp.position || null,
-            teamId,
-            branchId,
-            role: 'employee',
-            isActive: true,
-            mustChangePassword: true,
-          })
-          .returning({ id: users.id })
-
-        // Update cache
-        userCache.byEmail.set(emp.email, { id: created.id })
-        userCache.byName.set(emp.name.toLowerCase(), { id: created.id })
-        if (emp.attendanceName) {
-          userCache.byAttendanceName.set(emp.attendanceName.toLowerCase(), { id: created.id })
-        }
-      }
+      await db
+        .insert(heroesProfiles)
+        .values({
+          id: activeRow.portalSub,
+          branchKey: branchId,
+          branchValueSnapshot: branchId,
+          name: activeRow.row.rawName,
+          ...(meta.attendanceName ? { attendanceName: meta.attendanceName } : {}),
+          ...(meta.employmentStatus ? { employmentStatus: meta.employmentStatus } : {}),
+          ...(meta.phone ? { phone: meta.phone } : {}),
+          ...(meta.position ? { position: meta.position } : {}),
+          ...(meta.talentaId ? { talentaId: meta.talentaId } : {}),
+          teamValueSnapshot: meta.teamName ?? null,
+          mustChangePassword: false,
+        })
+        .onConflictDoUpdate({
+          target: heroesProfiles.id,
+          set: {
+            name: activeRow.row.rawName,
+            ...(meta.attendanceName ? { attendanceName: meta.attendanceName } : {}),
+            ...(meta.employmentStatus ? { employmentStatus: meta.employmentStatus } : {}),
+            ...(meta.phone ? { phone: meta.phone } : {}),
+            ...(meta.position ? { position: meta.position } : {}),
+            ...(meta.talentaId ? { talentaId: meta.talentaId } : {}),
+            teamValueSnapshot: meta.teamName ?? null,
+          },
+        })
 
       processed++
     } catch (err) {
       failed++
       errors.push({
         tab: tabName,
-        row: emp.rowIdx + 2,
-        name: emp.name,
+        row: activeRow.row.rowIdx + 2,
+        name: activeRow.row.rawName,
         error: err instanceof Error ? err.message : String(err),
       })
     }
   }
 
-  // 6. Resolve leaders — use pre-loaded cache instead of per-leader queries
-  // Refresh cache to include newly created users
-  const freshCache = await preloadUserCache(branchId, db)
-
-  for (const [leaderAttendanceName, teamName] of leaderMap.entries()) {
-    const teamId = teamByName.get(teamName)
-    if (!teamId) continue
-    const leader = freshCache.byAttendanceName.get(leaderAttendanceName.toLowerCase())
-    if (!leader) continue
-    await db
-      .update(teams)
-      .set({ leaderId: leader.id, updatedAt: new Date() })
-      .where(eq(teams.id, teamId))
-  }
-
   return { processed, failed, errors }
 }
 
-// ── syncPoints ──────────────────────────────────────────────────────
+// ── syncPoints ──────────────────────────────────────────────────────────────
 
 export async function syncPoints(
   sheetId: string,
@@ -328,6 +382,7 @@ export async function syncPoints(
   categoryCode: string,
   branchId: string,
   tx?: DbClient,
+  deps: ResolveAndRouteDeps = {},
 ): Promise<SyncResult> {
   const db = getDb(tx)
   const rows = await readSheet(sheetId, tabName)
@@ -361,20 +416,9 @@ export async function syncPoints(
   let failed = 0
   const errors: SyncResult['errors'] = []
 
-  // 1. Pre-load user cache (single query)
-  const userCache = await preloadUserCache(branchId, db)
-
-  // 2. Find system admin user for submittedBy fallback (single query)
-  const [adminUser] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.branchId, branchId), eq(users.role, 'admin')))
-    .limit(1)
-
-  // 3. Parse all rows first, collect names that need user creation
+  // 1. Parse all rows first, collect names that need resolution
   type ParsedPoint = {
-    rowIdx: number
-    name: string
+    sheetRow: SheetRow
     reason: string
     screenshotUrl: string | null
     points: number
@@ -382,7 +426,6 @@ export async function syncPoints(
     createdAt: Date
   }
   const parsedRows: ParsedPoint[] = []
-  const allNames: string[] = []
 
   for (const [i, row] of dataRows.entries()) {
     const timestampRaw = row[headerIndex.TIMESTAMP]?.trim()
@@ -430,10 +473,21 @@ export async function syncPoints(
       if (isNaN(points) || points <= 0) points = 1
     }
 
-    allNames.push(nameRaw)
-    parsedRows.push({
-      rowIdx: i,
+    const rawPayload: Record<string, unknown> = {
       name: nameRaw,
+      timestamp: timestampRaw,
+      reason: reasonRaw ?? '',
+      screenshot: screenshotRaw ?? null,
+      points,
+    }
+
+    parsedRows.push({
+      sheetRow: {
+        rawName: nameRaw,
+        rawNameNormalized: nameRaw.toLowerCase().trim(),
+        rowIdx: i,
+        rawPayload,
+      },
       reason: reasonRaw ?? '',
       screenshotUrl: screenshotRaw || null,
       points,
@@ -442,14 +496,45 @@ export async function syncPoints(
     })
   }
 
-  // 4. Batch-create missing users (instead of findOrCreateUser per row)
+  // 2. Resolve all names via portal alias system
+  let routed: RoutedRows
   try {
-    await findOrCreateUsersBatch(allNames, branchId, userCache, db)
-  } catch {
-    // Non-fatal — individual rows will fail below
+    routed = await resolveAndRouteRows(
+      parsedRows.map((p) => p.sheetRow),
+      sheetId,
+      tabName,
+      deps,
+    )
+  } catch (err) {
+    errors.push({
+      tab: tabName,
+      row: 0,
+      name: '',
+      error: `resolveAliasesBatch failed: ${err instanceof Error ? err.message : String(err)}`,
+    })
+    return { processed, failed: failed + parsedRows.length, errors }
   }
 
-  // 5. Pre-load existing points for dedup (single query)
+  // 3. Outcome 3 — write unresolved to pending queue
+  await writePendingRows(routed.unresolved, sheetId, db)
+  failed += routed.unresolved.length
+
+  // 4. Outcome 2 — write tombstoned to audit table
+  await writeTombstonedRows(routed.tombstoned, sheetId, db)
+  processed += routed.tombstoned.length
+
+  // 5. Outcome 1 — insert achievement_points for active rows
+  // Build lookup: normalised name → parsed data
+  const parsedByNorm = new Map(parsedRows.map((p) => [p.sheetRow.rawNameNormalized, p]))
+
+  // Find system admin user for submittedBy fallback (single query)
+  const [adminProfile] = await db
+    .select({ id: heroesProfiles.id })
+    .from(heroesProfiles)
+    .where(eq(heroesProfiles.branchKey, branchId))
+    .limit(1)
+
+  // Pre-load existing points for dedup (single query)
   const existingPoints = await db
     .select({
       userId: achievementPoints.userId,
@@ -460,17 +545,14 @@ export async function syncPoints(
     .from(achievementPoints)
     .where(and(eq(achievementPoints.branchId, branchId), eq(achievementPoints.categoryId, cat.id)))
 
-  // Count occurrences per dedup key already in the DB
   const dbCounts = new Map<string, number>()
   for (const p of existingPoints) {
     const key = `${p.userId}|${p.reason}|${p.points}|${p.createdSecond}`
     dbCounts.set(key, (dbCounts.get(key) ?? 0) + 1)
   }
 
-  // Track how many times each key appears in this sheet batch
   const sheetCounts = new Map<string, number>()
 
-  // 6. Insert new points in batches
   const toInsert: Array<{
     branchId: string
     userId: string
@@ -485,44 +567,35 @@ export async function syncPoints(
     updatedAt: Date
   }> = []
 
-  for (const row of parsedRows) {
-    const user = userCache.byName.get(row.name.toLowerCase())
-    if (!user) {
-      failed++
-      errors.push({
-        tab: tabName,
-        row: row.rowIdx + 2,
-        name: row.name,
-        error: `Could not find or create user: ${row.name}`,
-      })
-      continue
-    }
+  for (const activeRow of routed.active) {
+    const meta = parsedByNorm.get(activeRow.row.rawNameNormalized)
+    if (!meta) continue
 
-    const createdSecond = `${row.createdAt.getUTCFullYear()}-${String(row.createdAt.getUTCMonth() + 1).padStart(2, '0')}-${String(row.createdAt.getUTCDate()).padStart(2, '0')} ${String(row.createdAt.getUTCHours()).padStart(2, '0')}:${String(row.createdAt.getUTCMinutes()).padStart(2, '0')}:${String(row.createdAt.getUTCSeconds()).padStart(2, '0')}`
-    const dedupKey = `${user.id}|${row.reason}|${row.points}|${createdSecond}`
+    const createdSecond = `${meta.createdAt.getUTCFullYear()}-${String(meta.createdAt.getUTCMonth() + 1).padStart(2, '0')}-${String(meta.createdAt.getUTCDate()).padStart(2, '0')} ${String(meta.createdAt.getUTCHours()).padStart(2, '0')}:${String(meta.createdAt.getUTCMinutes()).padStart(2, '0')}:${String(meta.createdAt.getUTCSeconds()).padStart(2, '0')}`
+    const dedupKey = `${activeRow.portalSub}|${meta.reason}|${meta.points}|${createdSecond}`
 
     const seenInSheet = (sheetCounts.get(dedupKey) ?? 0) + 1
     sheetCounts.set(dedupKey, seenInSheet)
 
-    // Only skip if DB already has enough copies of this entry
     if (seenInSheet <= (dbCounts.get(dedupKey) ?? 0)) {
       processed++
       continue
     }
 
-    const submittedBy = categoryCode === 'BINTANG' ? user.id : (adminUser?.id ?? user.id)
+    const submittedBy =
+      categoryCode === 'BINTANG' ? activeRow.portalSub : (adminProfile?.id ?? activeRow.portalSub)
 
     toInsert.push({
       branchId,
-      userId: user.id,
+      userId: activeRow.portalSub,
       categoryId: cat.id,
-      points: row.points,
-      reason: row.reason,
-      screenshotUrl: row.screenshotUrl,
-      kittaComponent: row.kittaComponent as 'K' | 'I' | 'T1' | 'T2' | 'A' | null,
+      points: meta.points,
+      reason: meta.reason,
+      screenshotUrl: meta.screenshotUrl,
+      kittaComponent: meta.kittaComponent as 'K' | 'I' | 'T1' | 'T2' | 'A' | null,
       status: 'active',
       submittedBy,
-      createdAt: row.createdAt,
+      createdAt: meta.createdAt,
       updatedAt: new Date(),
     })
 
@@ -534,7 +607,6 @@ export async function syncPoints(
     try {
       await db.insert(achievementPoints).values(toInsert.slice(i, i + BATCH_SIZE))
     } catch {
-      // If batch fails, fall back to individual inserts for this chunk
       for (const row of toInsert.slice(i, i + BATCH_SIZE)) {
         try {
           await db.insert(achievementPoints).values(row)
@@ -555,13 +627,14 @@ export async function syncPoints(
   return { processed, failed, errors }
 }
 
-// ── syncRedemptions ─────────────────────────────────────────────────
+// ── syncRedemptions ─────────────────────────────────────────────────────────
 
 export async function syncRedemptions(
   sheetId: string,
   tabName: string,
   branchId: string,
   tx?: DbClient,
+  deps: ResolveAndRouteDeps = {},
 ): Promise<SyncResult> {
   const db = getDb(tx)
   const rows = await readSheet(sheetId, tabName)
@@ -574,16 +647,13 @@ export async function syncRedemptions(
   let failed = 0
   const errors: SyncResult['errors'] = []
 
-  // 1. Pre-load user cache (single query)
-  const userCache = await preloadUserCache(branchId, db)
-
-  // 2. Pre-load all rewards (single query)
+  // 1. Pre-load all rewards (single query)
   const existingRewards = await db
     .select({ id: rewards.id, name: rewards.name, pointCost: rewards.pointCost })
     .from(rewards)
   const rewardMap = new Map(existingRewards.map((r) => [`${r.name}|${r.pointCost}`, r.id]))
 
-  // 3. Pre-load existing redemptions for dedup (single query)
+  // 2. Pre-load existing redemptions for dedup (single query)
   const existingRedemptionRows = await db
     .select({
       userId: redemptions.userId,
@@ -597,23 +667,19 @@ export async function syncRedemptions(
     existingRedemptionRows.map((r) => `${r.userId}|${r.rewardId}|${r.createdSecond}`),
   )
 
-  // 4. Parse rows, collect missing user names
+  // 3. Parse rows
   type ParsedRedemption = {
-    rowIdx: number
-    name: string
-    email?: string
+    sheetRow: SheetRow
     createdAt: Date
     reward: { name: string; cost: number }
     notes: string | null
   }
   const parsedRows: ParsedRedemption[] = []
-  const allNames: string[] = []
 
   for (const [i, row] of dataRows.entries()) {
     const timestampRaw = row[headerIndex.TIMESTAMP]?.trim()
     const nameRaw = row[headerIndex.NAME]?.trim()
     const rewardRaw = row[headerIndex.REWARD]?.trim()
-    const emailRaw = row[headerIndex.EMAIL]?.trim().toLowerCase()
     const notesRaw = row[headerIndex.NOTES]?.trim()
 
     if (!timestampRaw || !nameRaw || !rewardRaw) {
@@ -655,28 +721,61 @@ export async function syncRedemptions(
       continue
     }
 
-    allNames.push(nameRaw)
-    parsedRows.push({
-      rowIdx: i,
+    const rawPayload: Record<string, unknown> = {
       name: nameRaw,
-      email: emailRaw || undefined,
+      timestamp: timestampRaw,
+      reward: rewardRaw,
+      notes: notesRaw ?? null,
+    }
+
+    parsedRows.push({
+      sheetRow: {
+        rawName: nameRaw,
+        rawNameNormalized: nameRaw.toLowerCase().trim(),
+        rowIdx: i,
+        rawPayload,
+      },
       createdAt,
       reward: parsedReward,
       notes: notesRaw || null,
     })
   }
 
-  // 5. Batch-create missing users
+  // 4. Resolve all names via portal alias system
+  let routed: RoutedRows
   try {
-    await findOrCreateUsersBatch(allNames, branchId, userCache, db)
-  } catch {
-    // Non-fatal
+    routed = await resolveAndRouteRows(
+      parsedRows.map((p) => p.sheetRow),
+      sheetId,
+      tabName,
+      deps,
+    )
+  } catch (err) {
+    errors.push({
+      tab: tabName,
+      row: 0,
+      name: '',
+      error: `resolveAliasesBatch failed: ${err instanceof Error ? err.message : String(err)}`,
+    })
+    return { processed, failed: failed + parsedRows.length, errors }
   }
 
-  // 6. Collect and batch-create missing rewards
+  // 5. Outcome 3 — write unresolved to pending queue
+  await writePendingRows(routed.unresolved, sheetId, db)
+  failed += routed.unresolved.length
+
+  // 6. Outcome 2 — write tombstoned to audit table
+  await writeTombstonedRows(routed.tombstoned, sheetId, db)
+  processed += routed.tombstoned.length
+
+  // 7. Collect and batch-create missing rewards
+  const parsedByNorm = new Map(parsedRows.map((p) => [p.sheetRow.rawNameNormalized, p]))
+
   const missingRewardKeys = new Set<string>()
-  for (const row of parsedRows) {
-    const key = `${row.reward.name}|${row.reward.cost}`
+  for (const activeRow of routed.active) {
+    const meta = parsedByNorm.get(activeRow.row.rawNameNormalized)
+    if (!meta) continue
+    const key = `${meta.reward.name}|${meta.reward.cost}`
     if (!rewardMap.has(key)) missingRewardKeys.add(key)
   }
 
@@ -696,7 +795,6 @@ export async function syncRedemptions(
       rewardMap.set(`${r.name}|${r.pointCost}`, r.id)
     }
 
-    // Re-fetch if some were skipped by onConflictDoNothing
     if (created.length < newRewards.length) {
       const refetch = await db
         .select({ id: rewards.id, name: rewards.name, pointCost: rewards.pointCost })
@@ -707,7 +805,7 @@ export async function syncRedemptions(
     }
   }
 
-  // 7. Build insert batch
+  // 8. Outcome 1 — insert redemptions for active rows
   const toInsert: Array<{
     branchId: string
     userId: string
@@ -719,42 +817,25 @@ export async function syncRedemptions(
     updatedAt: Date
   }> = []
 
-  for (const row of parsedRows) {
-    // Resolve user: try email first, then name
-    let user: { id: string } | undefined
-    if (row.email) {
-      user = userCache.byEmail.get(row.email)
-    }
-    if (!user) {
-      user = userCache.byName.get(row.name.toLowerCase())
-    }
+  for (const activeRow of routed.active) {
+    const meta = parsedByNorm.get(activeRow.row.rawNameNormalized)
+    if (!meta) continue
 
-    if (!user) {
-      failed++
-      errors.push({
-        tab: tabName,
-        row: row.rowIdx + 2,
-        name: row.name,
-        error: `Could not find or create user: ${row.name}`,
-      })
-      continue
-    }
-
-    const rewardKey = `${row.reward.name}|${row.reward.cost}`
+    const rewardKey = `${meta.reward.name}|${meta.reward.cost}`
     const rewardId = rewardMap.get(rewardKey)
     if (!rewardId) {
       failed++
       errors.push({
         tab: tabName,
-        row: row.rowIdx + 2,
-        name: row.name,
-        error: `Reward not found: ${row.reward.name}`,
+        row: activeRow.row.rowIdx + 2,
+        name: activeRow.row.rawName,
+        error: `Reward not found: ${meta.reward.name}`,
       })
       continue
     }
 
-    const createdSecond = `${row.createdAt.getUTCFullYear()}-${String(row.createdAt.getUTCMonth() + 1).padStart(2, '0')}-${String(row.createdAt.getUTCDate()).padStart(2, '0')} ${String(row.createdAt.getUTCHours()).padStart(2, '0')}:${String(row.createdAt.getUTCMinutes()).padStart(2, '0')}:${String(row.createdAt.getUTCSeconds()).padStart(2, '0')}`
-    const dedupKey = `${user.id}|${rewardId}|${createdSecond}`
+    const createdSecond = `${meta.createdAt.getUTCFullYear()}-${String(meta.createdAt.getUTCMonth() + 1).padStart(2, '0')}-${String(meta.createdAt.getUTCDate()).padStart(2, '0')} ${String(meta.createdAt.getUTCHours()).padStart(2, '0')}:${String(meta.createdAt.getUTCMinutes()).padStart(2, '0')}:${String(meta.createdAt.getUTCSeconds()).padStart(2, '0')}`
+    const dedupKey = `${activeRow.portalSub}|${rewardId}|${createdSecond}`
 
     if (redemptionDedupSet.has(dedupKey)) {
       processed++
@@ -763,12 +844,12 @@ export async function syncRedemptions(
 
     toInsert.push({
       branchId,
-      userId: user.id,
+      userId: activeRow.portalSub,
       rewardId,
-      pointsSpent: row.reward.cost,
-      notes: row.notes,
+      pointsSpent: meta.reward.cost,
+      notes: meta.notes,
       status: 'approved',
-      createdAt: row.createdAt,
+      createdAt: meta.createdAt,
       updatedAt: new Date(),
     })
 
@@ -801,33 +882,34 @@ export async function syncRedemptions(
   return { processed, failed, errors }
 }
 
-// ── recalculatePointSummaries ───────────────────────────────────────
+// ── recalculatePointSummaries ───────────────────────────────────────────────
 
 export async function recalculatePointSummaries(branchId: string, tx?: DbClient): Promise<void> {
   const db = getDb(tx)
 
   // Single SQL: compute all summaries and upsert in one shot
+  // Uses heroesProfiles (not users) as the identity source.
   await db.execute(sql`
     INSERT INTO point_summaries (id, user_id, branch_id, bintang_count, penalti_points_sum, direct_poin_aha, redeemed_total, updated_at)
     SELECT
       gen_random_uuid(),
-      u.id,
-      u.branch_id,
+      hp.id,
+      hp.branch_key,
       COALESCE(SUM(CASE WHEN pc.code = 'BINTANG' AND ap.status = 'active' THEN 1 ELSE 0 END), 0)::int,
       COALESCE(SUM(CASE WHEN pc.code = 'PENALTI' AND ap.status = 'active' THEN ap.points ELSE 0 END), 0)::int,
       COALESCE(SUM(CASE WHEN pc.code = 'POIN_AHA' AND ap.status = 'active' THEN ap.points ELSE 0 END), 0)::int,
       COALESCE(rd.redeemed, 0)::int,
       NOW()
-    FROM users u
-    LEFT JOIN achievement_points ap ON ap.user_id = u.id
+    FROM heroes_profiles hp
+    LEFT JOIN achievement_points ap ON ap.user_id = hp.id
     LEFT JOIN point_categories pc ON pc.id = ap.category_id
     LEFT JOIN LATERAL (
       SELECT COALESCE(SUM(r.points_spent), 0)::int AS redeemed
       FROM redemptions r
-      WHERE r.user_id = u.id AND r.status = 'approved'
+      WHERE r.user_id = hp.id AND r.status = 'approved'
     ) rd ON TRUE
-    WHERE u.branch_id = ${branchId}
-    GROUP BY u.id, u.branch_id, rd.redeemed
+    WHERE hp.branch_key = ${branchId}
+    GROUP BY hp.id, hp.branch_key, rd.redeemed
     ON CONFLICT (user_id) DO UPDATE SET
       bintang_count = EXCLUDED.bintang_count,
       penalti_points_sum = EXCLUDED.penalti_points_sum,
@@ -837,7 +919,7 @@ export async function recalculatePointSummaries(branchId: string, tx?: DbClient)
   `)
 }
 
-// ── runFullSync ─────────────────────────────────────────────────────
+// ── runFullSync ─────────────────────────────────────────────────────────────
 
 export async function runFullSync(
   sheetIds: { points: string; employees: string },

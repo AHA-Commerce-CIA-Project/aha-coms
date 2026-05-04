@@ -12,8 +12,9 @@ import {
   readSessionCookieFromHeaders,
 } from '@coms/shared/auth/session'
 import { db } from '@coms/shared/db'
-import { users } from '@coms/shared/db/schema'
+import { heroesProfiles, emailCache, userConfigCache } from '@coms/shared/db/schema'
 import { eq } from 'drizzle-orm'
+import type { UserRole } from '@coms/shared/constants'
 import type { AuthUser } from '../middleware/auth'
 
 type Ctx = { authUser: AuthUser }
@@ -45,12 +46,21 @@ export const sheetSyncTriggerRoute = new Elysia().post(
     }
 
     const [appUser] = await db
-      .select({ id: users.id, role: users.role })
-      .from(users)
-      .where(eq(users.email, session.email))
+      .select({
+        id: heroesProfiles.id,
+        configJson: userConfigCache.config,
+      })
+      .from(heroesProfiles)
+      .leftJoin(emailCache, eq(heroesProfiles.id, emailCache.portalSub))
+      .leftJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
+      .where(eq(emailCache.contactEmail, session.email))
       .limit(1)
 
-    if (!appUser || appUser.role !== 'admin') {
+    const role = (appUser?.configJson as Record<string, unknown> | null)?.role as
+      | UserRole
+      | undefined
+
+    if (!appUser || role !== 'admin') {
       set.status = 403
       return {
         success: false,

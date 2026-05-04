@@ -10,6 +10,8 @@ export const ILLEGAL_PROFILES_INSERT_PATTERN =
 export const PROFILES_INSERT_WHITELIST: readonly string[] = [
   'packages/server/src/services/portal-events/handle-user-provisioned.ts',
   'packages/shared/src/auth/session.ts',
+  // sheet-sync writes portal-resolved profile snapshots for active (non-tombstoned) aliases
+  'packages/server/src/services/sheet-sync.ts',
 ]
 
 export interface ScanInput {
