@@ -46,6 +46,7 @@ export const achievementPoints = pgTable(
   (t) => [
     index('idx_points_branch').on(t.branchId),
     index('idx_points_branch_created').on(t.branchId, t.createdAt.desc()),
+    index('idx_points_branch_user').on(t.branchId, t.userId),
     index('idx_points_user').on(t.userId),
     index('idx_points_status').on(t.status),
     index('idx_points_category').on(t.categoryId),
