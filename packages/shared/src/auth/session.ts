@@ -1,11 +1,8 @@
-// Spec 08 PR A1 stub.
-// The pre-A1 implementation looked up sessions by joining authSession ↔ authUser ↔ users.email.
-// PR A1 dropped authUser, the users table, and userEmails; the broker exchange (rewritten in
-// PR A2) becomes the single insertion point for heroes_profiles + authSession.
-// These stubs keep tsc green so PR A1 can ship the schema migration; PR A2 reimplements the
-// session lifecycle directly against heroes_profiles.id (= portal_sub).
-
+import { randomBytes } from 'crypto'
+import { eq } from 'drizzle-orm'
 import type { PortalSessionUser } from '@coms-portal/shared/contracts/auth'
+import { db } from '../db'
+import { authSession, emailCache, heroesProfiles } from '../db/schema'
 
 export type { PortalSessionUser }
 
@@ -13,8 +10,8 @@ export const PORTAL_SESSION_COOKIE = 'coms_session'
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7
 
 export class PortalSessionDeniedError extends Error {
-  constructor(public readonly email: string) {
-    super(`No heroes account for ${email}`)
+  constructor(public readonly portalSub: string) {
+    super(`No heroes account for ${portalSub}`)
     this.name = 'PortalSessionDeniedError'
   }
 }
@@ -28,28 +25,105 @@ export type LocalSessionRecord = {
   apps: string[]
 }
 
-function notImplemented(fn: string): never {
-  throw new Error(
-    `[spec-08-pr-a1] ${fn} requires the PR A2 broker-exchange rewrite (heroes_profiles upsert from portal handoff).`,
-  )
+function generateToken(): string {
+  return randomBytes(32).toString('base64url')
+}
+
+function generateSessionId(): string {
+  return randomBytes(16).toString('hex')
 }
 
 export async function createLocalSessionForPortalUser(
-  _portalUser: PortalSessionUser,
+  portalUser: PortalSessionUser,
 ): Promise<{ token: string; expiresAt: Date }> {
-  return notImplemented('createLocalSessionForPortalUser')
+  await db
+    .insert(heroesProfiles)
+    .values({
+      id: portalUser.id,
+      name: portalUser.name,
+      isActive: true,
+    })
+    .onConflictDoUpdate({
+      target: heroesProfiles.id,
+      set: {
+        name: portalUser.name,
+        isActive: true,
+        updatedAt: new Date(),
+      },
+    })
+
+  if (portalUser.email) {
+    await db
+      .insert(emailCache)
+      .values({
+        portalSub: portalUser.id,
+        contactEmail: portalUser.email,
+      })
+      .onConflictDoUpdate({
+        target: emailCache.portalSub,
+        set: { contactEmail: portalUser.email, cachedAt: new Date() },
+      })
+  }
+
+  const token = generateToken()
+  const sessionId = generateSessionId()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000)
+
+  await db.insert(authSession).values({
+    id: sessionId,
+    token,
+    userId: portalUser.id,
+    expiresAt,
+    portalRole: portalUser.portalRole,
+    apps: portalUser.apps,
+  })
+
+  return { token, expiresAt }
 }
 
-export async function destroyLocalSessionByToken(_token: string): Promise<void> {
-  return notImplemented('destroyLocalSessionByToken')
+export async function getLocalSessionByToken(
+  token: string,
+): Promise<LocalSessionRecord | null> {
+  const [row] = await db
+    .select({
+      sessionId: authSession.id,
+      userId: authSession.userId,
+      expiresAt: authSession.expiresAt,
+      portalRole: authSession.portalRole,
+      apps: authSession.apps,
+      contactEmail: emailCache.contactEmail,
+    })
+    .from(authSession)
+    .leftJoin(emailCache, eq(emailCache.portalSub, authSession.userId))
+    .where(eq(authSession.token, token))
+    .limit(1)
+
+  if (!row) return null
+  if (row.expiresAt.getTime() <= Date.now()) {
+    await db.delete(authSession).where(eq(authSession.token, token))
+    return null
+  }
+
+  return {
+    sessionId: row.sessionId,
+    userId: row.userId,
+    expiresAt: row.expiresAt,
+    email: row.contactEmail ?? '',
+    portalRole: row.portalRole,
+    apps: row.apps,
+  }
 }
 
-export async function getLocalSessionByToken(_token: string): Promise<LocalSessionRecord | null> {
-  return notImplemented('getLocalSessionByToken')
+export async function destroyLocalSessionByToken(token: string): Promise<void> {
+  await db.delete(authSession).where(eq(authSession.token, token))
 }
 
-export async function destroySessionsForUserEmail(_email: string): Promise<number> {
-  return notImplemented('destroySessionsForUserEmail')
+export async function destroySessionsForPortalSub(portalSub: string): Promise<number> {
+  const deleted = await db
+    .delete(authSession)
+    .where(eq(authSession.userId, portalSub))
+    .returning({ id: authSession.id })
+  return deleted.length
 }
 
 export function readSessionCookieFromHeaders(headers: Headers): string | null {

@@ -25,6 +25,7 @@ import { auditLogsRoute } from './routes/audit-logs'
 import { reportsRoute } from './routes/reports'
 import { sheetSyncRoute, sheetSyncTriggerRoute } from './routes/sheet-sync'
 import { portalWebhooksRoute } from './routes/portal-webhooks'
+import { pullTaxonomiesOnBoot } from './services/portal-bootstrap'
 
 const app = new Elysia()
   .onError(errorHandler)
@@ -113,6 +114,9 @@ const port = Number(process.env.PORT) || 8080
 
 app.listen(port, () => {
   console.log(`[server] listening on :${port}`)
+  void pullTaxonomiesOnBoot().catch((err) => {
+    console.warn(`[server] taxonomy bootstrap encountered an unexpected error: ${(err as Error).message}`)
+  })
 })
 
 export { app }
