@@ -159,11 +159,11 @@ ALTER TABLE "sheet_sync_jobs" DROP CONSTRAINT IF EXISTS "sheet_sync_jobs_started
 --> statement-breakpoint
 ALTER TABLE "system_settings" DROP CONSTRAINT IF EXISTS "system_settings_updated_by_users_id_fk";
 --> statement-breakpoint
-ALTER TABLE "account" ALTER COLUMN "user_id" SET DATA TYPE uuid;--> statement-breakpoint
+ALTER TABLE "account" ALTER COLUMN "user_id" SET DATA TYPE uuid USING "user_id"::uuid;--> statement-breakpoint
 ALTER TABLE "achievement_points" ALTER COLUMN "branch_id" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "appeals" ALTER COLUMN "branch_id" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "audit_logs" ALTER COLUMN "branch_id" DROP NOT NULL;--> statement-breakpoint
-ALTER TABLE "session" ALTER COLUMN "user_id" SET DATA TYPE uuid;--> statement-breakpoint
+ALTER TABLE "session" ALTER COLUMN "user_id" SET DATA TYPE uuid USING "user_id"::uuid;--> statement-breakpoint
 ALTER TABLE "challenges" ALTER COLUMN "branch_id" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "comments" ALTER COLUMN "branch_id" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "notifications" ALTER COLUMN "branch_id" DROP NOT NULL;--> statement-breakpoint
