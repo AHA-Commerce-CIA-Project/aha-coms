@@ -33,13 +33,13 @@ Repo: `coms_portal`
 - [x] Stage rollback migration `apps/api/src/db/migrations/cutover/0002_restore_heroes_writes.sql` (companion to 0001 — Spec 08 §Rollback). Cutover README extended with rollback section.
 - [x] Tests: `manifests.test.ts` 12/12 green (incl. new shape + defaults-to-`[]` cases). `db:generate` clean. `tsc --noEmit` clean.
 
-### PR 07-2 — Read endpoint + admin UI + emit (gated off)
+### PR 07-2 — Read endpoint + admin UI + emit (gated off) ✅ SHIPPED 2026-05-04 (commit `66b0a52`)
 Repo: `coms_portal`
 
-- [ ] `GET /api/taxonomies/sync` endpoint per Spec 07 §API contract. Auth: existing `requireAppToken`. Filters by calling app's manifest `taxonomies` field.
-- [ ] Admin UI `/admin/taxonomies` per Spec 07 §Admin UI. Reuse `BatchToolbar` + manifest-rendered editor primitives from `/admin/app-config`. Per-taxonomy `bulk_edit_locks`.
-- [ ] Webhook event types added (gated by env flag, off by default): `taxonomy.upserted`, `taxonomy.deleted`, `employment.updated`. Implementation only — no firing yet.
-- [ ] Tests: taxonomy CRUD, sync endpoint filtering by manifest, bulk edit lock, webhook payload shape.
+- [x] `GET /api/taxonomies/sync` endpoint per Spec 07 §API contract — `apps/api/src/routes/taxonomies.ts`. Auth: existing `requireAppToken`. Filters by calling app's manifest `taxonomies` field.
+- [x] Admin UI `/admin/taxonomies` per Spec 07 §Admin UI — `apps/web/src/routes/(authed)/admin/taxonomies/+page.svelte`. Sidebar (taxonomy IDs + entry counts) + right-panel CRUD table + CSV bulk upload + add/edit/delete dialogs. Per-taxonomy lock via new `taxonomy_edit_locks` table (migration `0032_yielding_vance_astro.sql`) instead of overloading `bulk_edit_locks` whose FK targets `app_manifests.appId`.
+- [x] Webhook event types added (gated by `ENABLE_TAXONOMY_EVENTS` env flag, off by default): `taxonomy.upserted`, `taxonomy.deleted`, `employment.updated` — `apps/api/src/services/taxonomy-events.ts`. Payload types defined locally; promoted to `@coms-portal/shared` v1.6.0 in PR 07-4. No emit callers wired (PR 07-3).
+- [x] Tests: 41 across 4 new files — `taxonomies.test.ts` (service 12), `taxonomy-events.test.ts` (events 13), `routes/__tests__/taxonomies.test.ts` (sync endpoint 6), `routes/admin/__tests__/taxonomies.test.ts` (admin CRUD 10). Full API suite 495 pass / 0 fail. `tsc --noEmit` clean (api + web). `db:generate` reports no schema drift.
 
 ### PR 07-3 — Wire emit + dual-emit window
 Repo: `coms_portal`
