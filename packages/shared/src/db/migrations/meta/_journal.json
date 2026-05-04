@@ -78,6 +78,13 @@
       "when": 1777771924771,
       "tag": "0010_dear_kabuki",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1777876567946,
+      "tag": "0011_sparkling_black_bolt",
+      "breakpoints": true
     }
   ]
 }

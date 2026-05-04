@@ -1,19 +1,14 @@
 import { db } from '../index'
-import { branches, pointCategories, pointCategoryTranslations, systemSettings } from '../schema'
+import { pointCategories, pointCategoryTranslations, systemSettings } from '../schema'
+
+// Spec 08 PR A1 note:
+// Branch + team taxonomies are now portal-owned (`org_taxonomies`) and projected into
+// `taxonomy_cache` via the `taxonomy.upserted` webhook. The pre-A1 hard-coded branches
+// seed has been removed; downstream code that needed branch IDs (rewards, dev seed)
+// reimplements against the projection in PR A2.
 
 export async function seedBase() {
   console.log('Seeding base data...')
-
-  // 2 branches
-  const [branchID, branchTH] = await db
-    .insert(branches)
-    .values([
-      { code: 'ID', name: 'Indonesia', timezone: 'Asia/Jakarta', locale: 'id' },
-      { code: 'TH', name: 'Thailand', timezone: 'Asia/Bangkok', locale: 'th' },
-    ])
-    .returning()
-
-  console.log(`  Created branches: ${branchID.code}, ${branchTH.code}`)
 
   // 3 point categories
   const [catBintang, catPenalti, catPoinAha] = await db
@@ -79,5 +74,5 @@ export async function seedBase() {
 
   console.log('  Created system settings defaults')
 
-  return { branchID, branchTH, catBintang, catPenalti, catPoinAha }
+  return { catBintang, catPenalti, catPoinAha }
 }

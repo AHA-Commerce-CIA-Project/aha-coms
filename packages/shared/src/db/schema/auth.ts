@@ -2,23 +2,10 @@ import { sql } from 'drizzle-orm'
 import {
   pgTable,
   text,
+  uuid,
   timestamp,
-  boolean,
 } from 'drizzle-orm/pg-core'
-
-export const authUser = pgTable('user', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  email: text('email').notNull().unique(),
-  emailVerified: boolean('email_verified').notNull().default(false),
-  image: text('image'),
-  role: text('role').default('user'),
-  banned: boolean('banned').default(false),
-  banReason: text('ban_reason'),
-  banExpires: timestamp('ban_expires'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+import { heroesProfiles } from './heroes-profiles'
 
 export const authSession = pgTable('session', {
   id: text('id').primaryKey(),
@@ -28,9 +15,9 @@ export const authSession = pgTable('session', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
-  userId: text('user_id')
+  userId: uuid('user_id')
     .notNull()
-    .references(() => authUser.id, { onDelete: 'cascade' }),
+    .references(() => heroesProfiles.id, { onDelete: 'cascade' }),
   portalRole: text('portal_role').notNull().default('employee'),
   apps: text('apps').array().notNull().default(sql`ARRAY[]::text[]`),
 })
@@ -39,9 +26,9 @@ export const authAccount = pgTable('account', {
   id: text('id').primaryKey(),
   accountId: text('account_id').notNull(),
   providerId: text('provider_id').notNull(),
-  userId: text('user_id')
+  userId: uuid('user_id')
     .notNull()
-    .references(() => authUser.id, { onDelete: 'cascade' }),
+    .references(() => heroesProfiles.id, { onDelete: 'cascade' }),
   accessToken: text('access_token'),
   refreshToken: text('refresh_token'),
   idToken: text('id_token'),

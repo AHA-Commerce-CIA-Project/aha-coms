@@ -1,0 +1,43 @@
+import {
+  pgTable,
+  uuid,
+  varchar,
+  boolean,
+  timestamp,
+  text,
+  index,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
+
+export const heroesProfiles = pgTable(
+  'heroes_profiles',
+  {
+    id: uuid('id').primaryKey(),
+    name: varchar('name', { length: 255 }).notNull(),
+    attendanceName: varchar('attendance_name', { length: 50 }),
+    branchKey: varchar('branch_key', { length: 128 }),
+    branchValueSnapshot: varchar('branch_value_snapshot', { length: 255 }),
+    teamKey: varchar('team_key', { length: 128 }),
+    teamValueSnapshot: varchar('team_value_snapshot', { length: 255 }),
+    departmentKey: varchar('department_key', { length: 128 }),
+    departmentValueSnapshot: varchar('department_value_snapshot', { length: 255 }),
+    position: varchar('position', { length: 100 }),
+    phone: varchar('phone', { length: 20 }),
+    employmentStatus: varchar('employment_status', { length: 20 }),
+    talentaId: varchar('talenta_id', { length: 50 }),
+    avatarUrl: text('avatar_url'),
+    localePref: varchar('locale_pref', { length: 10 }),
+    mustChangePassword: boolean('must_change_password').notNull().default(true),
+    isActive: boolean('is_active').notNull().default(true),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_heroes_profiles_attendance_name').on(t.attendanceName),
+    uniqueIndex('idx_heroes_profiles_talenta_id').on(t.talentaId),
+    index('idx_heroes_profiles_branch_key').on(t.branchKey),
+    index('idx_heroes_profiles_team_key').on(t.teamKey),
+    index('idx_heroes_profiles_department_key').on(t.departmentKey),
+  ],
+)

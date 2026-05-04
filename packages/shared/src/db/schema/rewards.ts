@@ -10,13 +10,12 @@ import {
   check,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
-import { branches } from './branches'
 
 export const rewards = pgTable(
   'rewards',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id').references(() => branches.id),
+    branchId: uuid('branch_id'),
     name: varchar('name', { length: 200 }).notNull(),
     description: text('description'),
     pointCost: integer('point_cost').notNull(),

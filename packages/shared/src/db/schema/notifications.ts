@@ -8,19 +8,16 @@ import {
   index,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
-import { branches } from './branches'
-import { users } from './users'
+import { heroesProfiles } from './heroes-profiles'
 
 export const notifications = pgTable(
   'notifications',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id')
-      .notNull()
-      .references(() => branches.id),
+    branchId: uuid('branch_id'),
     userId: uuid('user_id')
       .notNull()
-      .references(() => users.id),
+      .references(() => heroesProfiles.id),
     type: varchar('type', { length: 50 }).notNull(),
     title: text('title').notNull(),
     body: text('body'),

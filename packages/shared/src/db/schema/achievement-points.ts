@@ -11,20 +11,17 @@ import {
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { pointStatusEnum } from './enums'
-import { branches } from './branches'
-import { users } from './users'
+import { heroesProfiles } from './heroes-profiles'
 import { pointCategories } from './point-categories'
 
 export const achievementPoints = pgTable(
   'achievement_points',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id')
-      .notNull()
-      .references(() => branches.id),
+    branchId: uuid('branch_id'),
     userId: uuid('user_id')
       .notNull()
-      .references(() => users.id),
+      .references(() => heroesProfiles.id),
     categoryId: uuid('category_id')
       .notNull()
       .references(() => pointCategories.id),
@@ -36,10 +33,10 @@ export const achievementPoints = pgTable(
     status: pointStatusEnum('status').notNull().default('pending'),
     submittedBy: uuid('submitted_by')
       .notNull()
-      .references(() => users.id),
-    approvedBy: uuid('approved_by').references(() => users.id),
+      .references(() => heroesProfiles.id),
+    approvedBy: uuid('approved_by').references(() => heroesProfiles.id),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
-    revokedBy: uuid('revoked_by').references(() => users.id),
+    revokedBy: uuid('revoked_by').references(() => heroesProfiles.id),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     revokeReason: text('revoke_reason'),
     metadata: jsonb('metadata').default({}),

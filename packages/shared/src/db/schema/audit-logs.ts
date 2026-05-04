@@ -1,17 +1,14 @@
 import { pgTable, uuid, varchar, jsonb, inet, timestamp, index } from 'drizzle-orm/pg-core'
-import { branches } from './branches'
-import { users } from './users'
+import { heroesProfiles } from './heroes-profiles'
 
 export const auditLogs = pgTable(
   'audit_logs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id')
-      .notNull()
-      .references(() => branches.id),
+    branchId: uuid('branch_id'),
     actorId: uuid('actor_id')
       .notNull()
-      .references(() => users.id),
+      .references(() => heroesProfiles.id),
     action: varchar('action', { length: 50 }).notNull(),
     entityType: varchar('entity_type', { length: 50 }).notNull(),
     entityId: uuid('entity_id').notNull(),

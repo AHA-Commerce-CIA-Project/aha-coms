@@ -1,20 +1,17 @@
 import { pgTable, uuid, varchar, text, timestamp, index, check } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
-import { branches } from './branches'
-import { users } from './users'
+import { heroesProfiles } from './heroes-profiles'
 
 export const comments = pgTable(
   'comments',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id')
-      .notNull()
-      .references(() => branches.id),
+    branchId: uuid('branch_id'),
     entityType: varchar('entity_type', { length: 30 }).notNull(),
     entityId: uuid('entity_id').notNull(),
     authorId: uuid('author_id')
       .notNull()
-      .references(() => users.id),
+      .references(() => heroesProfiles.id),
     body: text('body').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

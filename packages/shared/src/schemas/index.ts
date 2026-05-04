@@ -104,16 +104,12 @@ import { createInsertSchema, createSelectSchema } from 'drizzle-typebox'
 import type { Static } from '@sinclair/typebox'
 import { Type, type TObject } from '@sinclair/typebox'
 import {
-  user,
   session,
   account,
   verification,
 } from '../db/schema'
 import {
-  branches,
-  teams,
-  users,
-  userEmails,
+  heroesProfiles,
   systemSettings,
   pointCategories,
   pointCategoryTranslations,
@@ -127,13 +123,13 @@ import {
   pointSummaries,
   auditLogs,
   sheetSyncJobs,
+  pendingAliasResolution,
+  aliasCache,
+  taxonomyCache,
+  userConfigCache,
+  emailCache,
+  deactivatedUserIngestAudit,
 } from '../db/schema'
-
-// --- user ---
-export const userSelectSchema: TObject = createSelectSchema(user) as TObject
-export type UserSelect = Static<typeof userSelectSchema>
-export const userInsertSchema: TObject = createInsertSchema(user) as TObject
-export type UserInsert = Static<typeof userInsertSchema>
 
 // --- session ---
 export const sessionSelectSchema: TObject = createSelectSchema(session) as TObject
@@ -153,29 +149,11 @@ export type VerificationSelect = Static<typeof verificationSelectSchema>
 export const verificationInsertSchema: TObject = createInsertSchema(verification) as TObject
 export type VerificationInsert = Static<typeof verificationInsertSchema>
 
-// --- branches ---
-export const branchesSelectSchema: TObject = createSelectSchema(branches) as TObject
-export type BranchesSelect = Static<typeof branchesSelectSchema>
-export const branchesInsertSchema: TObject = createInsertSchema(branches) as TObject
-export type BranchesInsert = Static<typeof branchesInsertSchema>
-
-// --- teams ---
-export const teamsSelectSchema: TObject = createSelectSchema(teams) as TObject
-export type TeamsSelect = Static<typeof teamsSelectSchema>
-export const teamsInsertSchema: TObject = createInsertSchema(teams) as TObject
-export type TeamsInsert = Static<typeof teamsInsertSchema>
-
-// --- users ---
-export const usersSelectSchema: TObject = createSelectSchema(users) as TObject
-export type UsersSelect = Static<typeof usersSelectSchema>
-export const usersInsertSchema: TObject = createInsertSchema(users) as TObject
-export type UsersInsert = Static<typeof usersInsertSchema>
-
-// --- userEmails ---
-export const userEmailsSelectSchema: TObject = createSelectSchema(userEmails) as TObject
-export type UserEmailsSelect = Static<typeof userEmailsSelectSchema>
-export const userEmailsInsertSchema: TObject = createInsertSchema(userEmails) as TObject
-export type UserEmailsInsert = Static<typeof userEmailsInsertSchema>
+// --- heroesProfiles ---
+export const heroesProfilesSelectSchema: TObject = createSelectSchema(heroesProfiles) as TObject
+export type HeroesProfilesSelect = Static<typeof heroesProfilesSelectSchema>
+export const heroesProfilesInsertSchema: TObject = createInsertSchema(heroesProfiles) as TObject
+export type HeroesProfilesInsert = Static<typeof heroesProfilesInsertSchema>
 
 // --- systemSettings ---
 export const systemSettingsSelectSchema: TObject = createSelectSchema(systemSettings) as TObject
@@ -255,8 +233,44 @@ export type SheetSyncJobsSelect = Static<typeof sheetSyncJobsSelectSchema>
 export const sheetSyncJobsInsertSchema: TObject = createInsertSchema(sheetSyncJobs) as TObject
 export type SheetSyncJobsInsert = Static<typeof sheetSyncJobsInsertSchema>
 
-// --- safeUser (users select schema without sensitive fields) ---
-export const safeUserSchema: TObject = Type.Omit(usersSelectSchema, ['mustChangePassword']) as unknown as TObject
-export type SafeUser = Static<typeof safeUserSchema>
+// --- pendingAliasResolution ---
+export const pendingAliasResolutionSelectSchema: TObject = createSelectSchema(pendingAliasResolution) as TObject
+export type PendingAliasResolutionSelect = Static<typeof pendingAliasResolutionSelectSchema>
+export const pendingAliasResolutionInsertSchema: TObject = createInsertSchema(pendingAliasResolution) as TObject
+export type PendingAliasResolutionInsert = Static<typeof pendingAliasResolutionInsertSchema>
+
+// --- aliasCache ---
+export const aliasCacheSelectSchema: TObject = createSelectSchema(aliasCache) as TObject
+export type AliasCacheSelect = Static<typeof aliasCacheSelectSchema>
+export const aliasCacheInsertSchema: TObject = createInsertSchema(aliasCache) as TObject
+export type AliasCacheInsert = Static<typeof aliasCacheInsertSchema>
+
+// --- taxonomyCache ---
+export const taxonomyCacheSelectSchema: TObject = createSelectSchema(taxonomyCache) as TObject
+export type TaxonomyCacheSelect = Static<typeof taxonomyCacheSelectSchema>
+export const taxonomyCacheInsertSchema: TObject = createInsertSchema(taxonomyCache) as TObject
+export type TaxonomyCacheInsert = Static<typeof taxonomyCacheInsertSchema>
+
+// --- userConfigCache ---
+export const userConfigCacheSelectSchema: TObject = createSelectSchema(userConfigCache) as TObject
+export type UserConfigCacheSelect = Static<typeof userConfigCacheSelectSchema>
+export const userConfigCacheInsertSchema: TObject = createInsertSchema(userConfigCache) as TObject
+export type UserConfigCacheInsert = Static<typeof userConfigCacheInsertSchema>
+
+// --- emailCache ---
+export const emailCacheSelectSchema: TObject = createSelectSchema(emailCache) as TObject
+export type EmailCacheSelect = Static<typeof emailCacheSelectSchema>
+export const emailCacheInsertSchema: TObject = createInsertSchema(emailCache) as TObject
+export type EmailCacheInsert = Static<typeof emailCacheInsertSchema>
+
+// --- deactivatedUserIngestAudit ---
+export const deactivatedUserIngestAuditSelectSchema: TObject = createSelectSchema(deactivatedUserIngestAudit) as TObject
+export type DeactivatedUserIngestAuditSelect = Static<typeof deactivatedUserIngestAuditSelectSchema>
+export const deactivatedUserIngestAuditInsertSchema: TObject = createInsertSchema(deactivatedUserIngestAudit) as TObject
+export type DeactivatedUserIngestAuditInsert = Static<typeof deactivatedUserIngestAuditInsertSchema>
+
+// --- safeHeroesProfile (heroes_profiles select schema without password-management fields) ---
+export const safeHeroesProfileSchema: TObject = Type.Omit(heroesProfilesSelectSchema, ['mustChangePassword']) as unknown as TObject
+export type SafeHeroesProfile = Static<typeof safeHeroesProfileSchema>
 
 export { Type }

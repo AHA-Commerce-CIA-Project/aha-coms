@@ -1,25 +1,22 @@
 import { pgTable, uuid, text, varchar, timestamp, index, check } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
-import { branches } from './branches'
 import { achievementPoints } from './achievement-points'
-import { users } from './users'
+import { heroesProfiles } from './heroes-profiles'
 
 export const challenges = pgTable(
   'challenges',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id')
-      .notNull()
-      .references(() => branches.id),
+    branchId: uuid('branch_id'),
     achievementId: uuid('achievement_id')
       .notNull()
       .references(() => achievementPoints.id),
     challengerId: uuid('challenger_id')
       .notNull()
-      .references(() => users.id),
+      .references(() => heroesProfiles.id),
     reason: text('reason').notNull(),
     status: varchar('status', { length: 20 }).notNull().default('open'),
-    resolvedBy: uuid('resolved_by').references(() => users.id),
+    resolvedBy: uuid('resolved_by').references(() => heroesProfiles.id),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     resolutionNote: text('resolution_note'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

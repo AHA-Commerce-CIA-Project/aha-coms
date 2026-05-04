@@ -19,30 +19,32 @@ const __dirname = dirname(__filename)
 // ---------------------------------------------------------------------------
 
 const AUTH_TABLES = [
-  { varName: 'user',         schemaPrefix: 'user' },
   { varName: 'session',      schemaPrefix: 'session' },
   { varName: 'account',      schemaPrefix: 'account' },
   { varName: 'verification', schemaPrefix: 'verification' },
 ] as const
 
 const APP_TABLES = [
-  { varName: 'branches',                  schemaPrefix: 'branches' },
-  { varName: 'teams',                     schemaPrefix: 'teams' },
-  { varName: 'users',                     schemaPrefix: 'users' },
-  { varName: 'userEmails',                schemaPrefix: 'userEmails' },
-  { varName: 'systemSettings',            schemaPrefix: 'systemSettings' },
-  { varName: 'pointCategories',           schemaPrefix: 'pointCategories' },
-  { varName: 'pointCategoryTranslations', schemaPrefix: 'pointCategoryTranslations' },
-  { varName: 'achievementPoints',         schemaPrefix: 'achievementPoints' },
-  { varName: 'challenges',                schemaPrefix: 'challenges' },
-  { varName: 'appeals',                   schemaPrefix: 'appeals' },
-  { varName: 'comments',                  schemaPrefix: 'comments' },
-  { varName: 'rewards',                   schemaPrefix: 'rewards' },
-  { varName: 'redemptions',               schemaPrefix: 'redemptions' },
-  { varName: 'notifications',             schemaPrefix: 'notifications' },
-  { varName: 'pointSummaries',            schemaPrefix: 'pointSummaries' },
-  { varName: 'auditLogs',                 schemaPrefix: 'auditLogs' },
-  { varName: 'sheetSyncJobs',             schemaPrefix: 'sheetSyncJobs' },
+  { varName: 'heroesProfiles',                schemaPrefix: 'heroesProfiles' },
+  { varName: 'systemSettings',                schemaPrefix: 'systemSettings' },
+  { varName: 'pointCategories',               schemaPrefix: 'pointCategories' },
+  { varName: 'pointCategoryTranslations',     schemaPrefix: 'pointCategoryTranslations' },
+  { varName: 'achievementPoints',             schemaPrefix: 'achievementPoints' },
+  { varName: 'challenges',                    schemaPrefix: 'challenges' },
+  { varName: 'appeals',                       schemaPrefix: 'appeals' },
+  { varName: 'comments',                      schemaPrefix: 'comments' },
+  { varName: 'rewards',                       schemaPrefix: 'rewards' },
+  { varName: 'redemptions',                   schemaPrefix: 'redemptions' },
+  { varName: 'notifications',                 schemaPrefix: 'notifications' },
+  { varName: 'pointSummaries',                schemaPrefix: 'pointSummaries' },
+  { varName: 'auditLogs',                     schemaPrefix: 'auditLogs' },
+  { varName: 'sheetSyncJobs',                 schemaPrefix: 'sheetSyncJobs' },
+  { varName: 'pendingAliasResolution',        schemaPrefix: 'pendingAliasResolution' },
+  { varName: 'aliasCache',                    schemaPrefix: 'aliasCache' },
+  { varName: 'taxonomyCache',                 schemaPrefix: 'taxonomyCache' },
+  { varName: 'userConfigCache',               schemaPrefix: 'userConfigCache' },
+  { varName: 'emailCache',                    schemaPrefix: 'emailCache' },
+  { varName: 'deactivatedUserIngestAudit',    schemaPrefix: 'deactivatedUserIngestAudit' },
 ] as const
 
 const ALL_TABLES = [...AUTH_TABLES, ...APP_TABLES]
@@ -62,6 +64,104 @@ const lines: string[] = [
   '// packages/shared/src/schemas/index.ts',
   '// !! AUTO-GENERATED — do not edit by hand !!',
   '// Run `bun run generate:schemas` in packages/shared to regenerate.',
+  '',
+  '// --- Hand-written domain schemas (ported from src/shared/schemas) ---',
+  "export { uuidSchema, paginationSchema, type PaginationInput } from './common'",
+  'export {',
+  '  createUserSchema,',
+  '  updateUserSchema,',
+  '  listUsersSchema,',
+  '  type CreateUserInput,',
+  '  type UpdateUserInput,',
+  '  type ListUsersInput,',
+  "} from './users'",
+  'export {',
+  '  createTeamSchema,',
+  '  updateTeamSchema,',
+  '  listTeamsSchema,',
+  '  type CreateTeamInput,',
+  '  type UpdateTeamInput,',
+  '  type ListTeamsInput,',
+  "} from './teams'",
+  'export {',
+  '  submitPointSchema,',
+  '  listPointsSchema,',
+  '  approveRejectSchema,',
+  '  type SubmitPointInput,',
+  '  type ListPointsInput,',
+  '  type ApproveRejectInput,',
+  "} from './points'",
+  'export {',
+  '  fileChallengeSchema,',
+  '  resolveChallengeSchema,',
+  '  listChallengesSchema,',
+  '  type FileChallengeInput,',
+  '  type ResolveChallengeInput,',
+  '  type ListChallengesInput,',
+  "} from './challenges'",
+  'export {',
+  '  fileAppealSchema,',
+  '  resolveAppealSchema,',
+  '  listAppealsSchema,',
+  '  type FileAppealInput,',
+  '  type ResolveAppealInput,',
+  '  type ListAppealsInput,',
+  "} from './appeals'",
+  'export {',
+  '  createCommentSchema,',
+  '  updateCommentSchema,',
+  '  listCommentsSchema,',
+  '  type CreateCommentInput,',
+  '  type UpdateCommentInput,',
+  '  type ListCommentsInput,',
+  "} from './comments'",
+  'export {',
+  '  bulkUserActionSchema,',
+  '  bulkPointActionSchema,',
+  '  bulkRedemptionActionSchema,',
+  '  type BulkUserActionInput,',
+  '  type BulkPointActionInput,',
+  '  type BulkRedemptionActionInput,',
+  '  type BulkResult,',
+  '  type BulkResultItem,',
+  "} from './bulk'",
+  'export {',
+  '  listAuditLogsSchema,',
+  '  type ListAuditLogsInput,',
+  "} from './audit'",
+  'export {',
+  '  requestRedemptionSchema,',
+  '  listRedemptionsSchema,',
+  '  resolveRedemptionSchema,',
+  '  type RequestRedemptionInput,',
+  '  type ListRedemptionsInput,',
+  '  type ResolveRedemptionInput,',
+  "} from './redemptions'",
+  'export {',
+  '  reportsQuerySchema,',
+  '  type ReportsQueryInput,',
+  "} from './reports'",
+  'export {',
+  '  listRewardsSchema,',
+  '  createRewardSchema,',
+  '  updateRewardSchema,',
+  '  type ListRewardsInput,',
+  '  type CreateRewardInput,',
+  '  type UpdateRewardInput,',
+  "} from './rewards'",
+  'export {',
+  '  listSettingsSchema,',
+  '  updateSettingSchema,',
+  '  type ListSettingsInput,',
+  '  type UpdateSettingInput,',
+  "} from './settings'",
+  'export {',
+  '  syncJobSchema,',
+  '  syncStatusSchema,',
+  '  type SyncJob,',
+  '  type SyncStatus,',
+  "} from './sheet-sync'",
+  '// --- End hand-written schemas ---',
   '',
   "import { createInsertSchema, createSelectSchema } from 'drizzle-typebox'",
   "import type { Static } from '@sinclair/typebox'",
@@ -88,10 +188,12 @@ for (const { varName, schemaPrefix } of ALL_TABLES) {
   lines.push('')
 }
 
-// safeUserSchema — users select schema minus the mustChangePassword field
-lines.push('// --- safeUser (users select schema without sensitive fields) ---')
-lines.push("export const safeUserSchema: TObject = Type.Omit(usersSelectSchema, ['mustChangePassword']) as unknown as TObject")
-lines.push('export type SafeUser = Static<typeof safeUserSchema>')
+// safeHeroesProfile — heroes_profiles select schema minus password-management fields.
+// Replaces the pre-Spec-08 safeUserSchema; consumers that wanted "user without secrets"
+// now key off heroes_profiles.
+lines.push('// --- safeHeroesProfile (heroes_profiles select schema without password-management fields) ---')
+lines.push("export const safeHeroesProfileSchema: TObject = Type.Omit(heroesProfilesSelectSchema, ['mustChangePassword']) as unknown as TObject")
+lines.push('export type SafeHeroesProfile = Static<typeof safeHeroesProfileSchema>')
 lines.push('')
 lines.push('export { Type }')
 lines.push('')
@@ -101,7 +203,7 @@ const output = lines.join('\n')
 const outPath = resolve(__dirname, '../src/schemas/index.ts')
 writeFileSync(outPath, output, 'utf-8')
 
-const total = ALL_TABLES.length * 2 + 1 // select + insert per table, plus safeUserSchema
+const total = ALL_TABLES.length * 2 + 1 // select + insert per table, plus safeHeroesProfileSchema
 console.log(`✓ Generated ${total} schemas → ${outPath}`)
 console.log(`  Tables: ${ALL_TABLES.map((t) => t.varName).join(', ')}`)
-console.log(`  Extra:  safeUserSchema`)
+console.log(`  Extra:  safeHeroesProfileSchema`)

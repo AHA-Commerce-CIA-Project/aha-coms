@@ -1,15 +1,12 @@
 import { pgTable, uuid, varchar, integer, jsonb, timestamp, check } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
-import { branches } from './branches'
-import { users } from './users'
+import { heroesProfiles } from './heroes-profiles'
 
 export const sheetSyncJobs = pgTable(
   'sheet_sync_jobs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id')
-      .notNull()
-      .references(() => branches.id),
+    branchId: uuid('branch_id'),
     direction: varchar('direction', { length: 10 }).notNull(),
     sheetId: varchar('sheet_id', { length: 255 }).notNull(),
     sheetName: varchar('sheet_name', { length: 100 }),
@@ -17,7 +14,7 @@ export const sheetSyncJobs = pgTable(
     rowsProcessed: integer('rows_processed').default(0),
     rowsFailed: integer('rows_failed').default(0),
     errorLog: jsonb('error_log'),
-    startedBy: uuid('started_by').references(() => users.id),
+    startedBy: uuid('started_by').references(() => heroesProfiles.id),
     startedAt: timestamp('started_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

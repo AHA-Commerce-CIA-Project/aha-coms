@@ -1,17 +1,14 @@
 import { pgTable, uuid, integer, timestamp, index } from 'drizzle-orm/pg-core'
-import { branches } from './branches'
-import { users } from './users'
+import { heroesProfiles } from './heroes-profiles'
 
 export const pointSummaries = pgTable(
   'point_summaries',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id')
-      .notNull()
-      .references(() => branches.id),
+    branchId: uuid('branch_id'),
     userId: uuid('user_id')
       .notNull()
-      .references(() => users.id)
+      .references(() => heroesProfiles.id)
       .unique(),
     bintangCount: integer('bintang_count').notNull().default(0),
     penaltiPointsSum: integer('penalti_points_sum').notNull().default(0),
