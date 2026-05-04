@@ -1,6 +1,6 @@
 # Rev 3 — Spec 07: Org Taxonomies & Employment Block
 
-> Status: **Active — PR 07-1 + PR 07-2 SHIPPED 2026-05-04. PRs 07-3 → 07-5 remaining (~3 days portal-side).**
+> Status: **Active — PR 07-1 + PR 07-2 + PR 07-3 SHIPPED 2026-05-04. PRs 07-4 (publish v1.6.0) + 07-5 (drop legacy emit, gated on Heroes Deploy A) remaining.**
 > Priority: **Critical-path. Precondition for Spec 08 (Heroes Spec 03 cutover) and for onboarding any second/third H-app.**
 > Scope: Portal (`org_taxonomies` schema + admin UI + webhook fan-out + manifest extension + `@coms-portal/shared` v1.6.0 contract bump). Every H-app consumes via the projection pattern documented here.
 > Prerequisites: Spec 03 shipped portal-side (already on `main`). Spec 06 shipped (already on `main`).
@@ -296,10 +296,10 @@ This bounds the race to "DLQ retry consumes the taxonomy event in between" — t
 1. ✅ `org_taxonomies` exists, seeded with current branches + departments (PR 07-1). Teams seeded empty per cutover pre-flight.
 2. ✅ `app_manifests` carries `taxonomies` array; Heroes manifest registers `["branches", "teams", "departments"]` (PR 07-1).
 3. ✅ `GET /api/taxonomies/sync` returns the full set for the calling app's subscribed taxonomies (PR 07-2).
-4. ⚙️ `taxonomy.upserted` / `taxonomy.deleted` emit machinery exists, gated by `ENABLE_TAXONOMY_EVENTS` env flag (PR 07-2). Admin-route callers wire in PR 07-3; flag flips to `true` once payloads validated against staging.
-5. ⚙️ `employment.updated` emit machinery exists, gated by the same flag (PR 07-2). `createEmployee` / `updateEmployee` callers wire in PR 07-3.
-6. ⏳ `user.provisioned` payload carries `employment`, `contactEmail`, `appConfig` blocks (PR 07-3).
-7. ⏳ Portal dual-emits legacy + new payload shape during gap window (PR 07-3).
+4. ✅ `taxonomy.upserted` / `taxonomy.deleted` emit machinery exists, gated by `ENABLE_TAXONOMY_EVENTS` env flag (PR 07-2). Admin-route callers wired in PR 07-2 (single + bulk paths); race-window invariant covered by regression tests (PR 07-3). Flag flips to `true` once payloads validated against staging.
+5. ✅ `employment.updated` emit wired into `PATCH /v1/employees/:id` (PR 07-3). Pre-update block captured, post-update diffed; suppressed for no-op writes. Same gate as taxonomy events.
+6. ✅ `user.provisioned` payload carries `user`, `employment`, `contactEmail`, `appConfig` blocks per envelope (PR 07-3). `getEmploymentBlock(userId)` resolves taxonomy refs against `org_taxonomies`.
+7. ✅ Portal dual-emits legacy (`email`, `appRole`, `branch`) + new envelope during gap window (PR 07-3). Legacy fields removed in PR 07-5 after Heroes Deploy A confirms.
 8. ⏳ `@coms-portal/shared` v1.6.0 published with new types (PR 07-4).
 9. ⏳ Heroes can consume the new contract end-to-end (proven by Spec 08 Phase 3 cutover).
 
@@ -311,7 +311,7 @@ Legend: ✅ shipped • ⚙️ machinery shipped, gated off pending caller wirin
 
 - **PR 07-1:** ✅ SHIPPED 2026-05-04 (commit `26057ec`). Schema migration via `drizzle-kit generate` — `org_taxonomies` + manifest `taxonomies` column + seed from `identity_users` distincts (branches + departments). Heroes manifest bumped to `schemaVersion: 2`. Cutover rollback companion `0002_restore_heroes_writes.sql` staged. Teams seeded empty — admin populates from Heroes' production team table during cutover pre-flight (TODO §Cutover window).
 - **PR 07-2:** ✅ SHIPPED 2026-05-04 (commit `66b0a52`). `GET /api/taxonomies/sync` (broker-token auth) + admin UI `/admin/taxonomies` + admin CRUD (`/v1/admin/taxonomies`) + per-taxonomy advisory lock (new `taxonomy_edit_locks` table, migration 0032) + gated webhook emit helpers (`ENABLE_TAXONOMY_EVENTS`, default off). 4 new test files (41 tests) added — full suite 495 pass / 0 fail. Webhook callers wired in PR 07-3.
-- **PR 07-3:** Wire `createEmployee` / `updateEmployee` to fire `employment.updated`. Extend `user.provisioned` payload. Begin dual-emit (legacy + new fields).
+- **PR 07-3:** ✅ SHIPPED 2026-05-04. PATCH `/v1/employees/:id` fires `emitEmploymentUpdated` on real HR-field deltas (suppressed for no-op writes). New `apps/api/src/services/employment-resolution.ts` resolves the block via taxonomy join. `emitUserProvisioned` carries the full Spec 07 envelope (`user`, `employment`, `contactEmail`, `appConfig`) alongside legacy `email`/`appRole`/`branch` (dual-emit). Race-window regression tests assert one `taxonomy.upserted` envelope per `(taxonomyId, batchId)`. 22 new tests added across 3 files; isolated API suite 519 pass / 0 fail. Webhook callers remain gated on `ENABLE_TAXONOMY_EVENTS`; ops flips the flag post-staging burn-in.
 - **PR 07-4:** Publish `@coms-portal/shared` v1.6.0 with new types.
 - (Spec 08 Heroes-side work happens in parallel after PR 07-4 lands.)
 - **PR 07-5:** After Spec 08 Phase 3 verifies, drop legacy emit fields. Manifest schema version bumps to 2 forced.
