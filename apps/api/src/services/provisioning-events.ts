@@ -13,6 +13,7 @@ import { db } from '~/db'
 import { identityUsers, teamMembers, teamAppAccess, appRegistry, memberAppRole, appUserConfig } from '~/db/schema'
 import { dispatchPortalWebhook } from './portal-webhook-fanout'
 import { getDisplayEmail, getEmailEntries } from './email-resolution'
+import { getEmploymentBlock } from './employment-resolution'
 import type {
   UserProvisionedPayload,
   UserUpdatedPayload,
@@ -220,12 +221,18 @@ export async function emitUserProvisioned(userId: string): Promise<void> {
   const perApp = await resolvePerAppContext(userId, state.teamIds)
   if (perApp.length === 0) return
 
+  // Resolve once per emit; every per-app dispatch carries the same employment block.
+  const employment = await getEmploymentBlock(userId)
+
   for (const app of perApp) {
     const appRole = resolveAppRoleForUser(app.memberRole, app.appRoles)
 
-    // appConfig is additive — present once shared@v1.4.0 lands (Task 1).
-    // Cast extends the base type rather than broadening it to unknown.
+    // PR 07-3 dual-emit envelope: legacy fields (email, appRole, branch) AND
+    // the new Spec 07 envelope (user, employment, contactEmail, appConfig).
+    // primaryAliasId is null at provisioning time — aliases are resolved by
+    // Heroes-side ingest after first sign-in, not by portal.
     const payload = {
+      // Legacy fields (Heroes' pre-Deploy-A handler reads these) — removed in PR 07-5
       userId: state.id,
       gipUid: state.gipUid,
       email: state.email,
@@ -237,7 +244,20 @@ export async function emitUserProvisioned(userId: string): Promise<void> {
       appRole,
       branch: state.branch,
       appConfig: app.appConfig,
-    } as UserProvisionedPayload & { appConfig: typeof app.appConfig }
+      // Spec 07 envelope (PR 07-3 — additive, frozen contract until v1.6.0)
+      user: {
+        portalSub: state.id,
+        name: state.name,
+        primaryAliasId: null,
+      },
+      contactEmail: state.email,
+      employment,
+    } as UserProvisionedPayload & {
+      appConfig: typeof app.appConfig
+      user: { portalSub: string; name: string; primaryAliasId: string | null }
+      contactEmail: string
+      employment: typeof employment
+    }
 
     await dispatchPortalWebhook('user.provisioned', payload, {
       appSlugs: [app.slug],

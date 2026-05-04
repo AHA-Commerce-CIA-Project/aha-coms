@@ -16,7 +16,11 @@ import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-
 // Sentinel table objects (reference-equality matching in select stub)
 // ---------------------------------------------------------------------------
 
-const identityUsers = { id: 'identityUsers.id' }
+const identityUsers = {
+  id: 'identityUsers.id',
+  branch: 'identityUsers.branch',
+  department: 'identityUsers.department',
+}
 const teamMembers = { teamId: 'teamMembers.teamId', userId: 'teamMembers.userId' }
 const teamAppAccess = { teamId: 'teamAppAccess.teamId', appId: 'teamAppAccess.appId' }
 const appRegistry = {
@@ -35,6 +39,11 @@ const appUserConfig = {
   config: 'appUserConfig.config',
   schemaVersion: 'appUserConfig.schemaVersion',
 }
+const orgTaxonomies = {
+  taxonomyId: 'orgTaxonomies.taxonomyId',
+  key: 'orgTaxonomies.key',
+  value: 'orgTaxonomies.value',
+}
 
 // ---------------------------------------------------------------------------
 // In-memory user and app state
@@ -46,8 +55,15 @@ type UserRecord = {
   name: string
   portalRole: string
   branch: string | null
+  department: string | null
+  position: string | null
+  phone: string | null
+  leaderName: string | null
+  birthDate: string | null
   status: string
 }
+
+type TaxonomyRow = { taxonomyId: string; key: string; value: string }
 
 type EmailEntry = {
   address: string
@@ -67,6 +83,7 @@ type AppEntry = {
 let currentUser: UserRecord | null = null
 let emailEntries: EmailEntry[] = []
 let appsForUser: AppEntry[] = []
+let taxonomyRows: TaxonomyRow[] = []
 
 // ---------------------------------------------------------------------------
 // DB mock — select chain with inArray support for multi-table resolution
@@ -102,6 +119,9 @@ const db = {
         if (table === appUserConfig) {
           return []
         }
+        if (table === orgTaxonomies) {
+          return taxonomyRows
+        }
         return []
       },
     }),
@@ -117,6 +137,7 @@ mock.module('~/db/schema', () => ({
   appRegistry,
   memberAppRole,
   appUserConfig,
+  orgTaxonomies,
 }))
 mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
@@ -133,6 +154,11 @@ mock.module('../services/email-resolution', () => ({
   getEmailEntries: async (_userId: string): Promise<EmailEntry[]> => emailEntries,
 }))
 
+// employment-resolution is NOT mocked — it uses the real module so the
+// envelope-shape tests exercise the full taxonomy lookup. The DB stub above
+// returns taxonomyRows for select(...).from(orgTaxonomies) queries; tests seed
+// taxonomyRows to drive the (key, value) resolution.
+
 const { emitUserProvisioned, emitUserUpdated } = await import('../services/provisioning-events')
 
 // ---------------------------------------------------------------------------
@@ -145,10 +171,22 @@ function setUser(overrides: Partial<UserRecord> = {}): void {
     gipUid: 'gip-uid-1',
     name: 'Alice',
     portalRole: 'employee',
-    branch: 'Thailand',
+    branch: 'ID-JKT',
+    department: 'ENG',
+    position: 'Senior Engineer',
+    phone: '+62-21-555-1234',
+    leaderName: 'Lead Person',
+    birthDate: '1990-04-15',
     status: 'active',
     ...overrides,
   }
+}
+
+function seedDefaultTaxonomies(): void {
+  taxonomyRows = [
+    { taxonomyId: 'branches', key: 'ID-JKT', value: 'Indonesia – Jakarta' },
+    { taxonomyId: 'departments', key: 'ENG', value: 'Engineering' },
+  ]
 }
 
 function seedTwoEmails(): void {
@@ -185,6 +223,7 @@ function resetState(): void {
   currentUser = null
   emailEntries = []
   appsForUser = []
+  taxonomyRows = []
   dispatchPortalWebhook.mockClear()
 }
 
@@ -299,5 +338,143 @@ describe('user.updated payload — emails array (Q8c)', () => {
 
     const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [string, Record<string, unknown>]
     expect(payload.changedFields).toEqual(['email', 'portalRole'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tests: user.provisioned payload — Spec 07 envelope (PR 07-3 dual-emit)
+//
+// Per Spec 07 §API contract, user.provisioned now carries:
+//   - user: { portalSub, name, primaryAliasId }
+//   - contactEmail (workspace > personal precedence)
+//   - employment: full EmploymentBlock
+//   - appConfig: full per-app config slice
+// Legacy fields (email, appRole, branch) ALSO emitted during the dual-emit
+// window (removed in PR 07-5 after Heroes Deploy A confirms).
+// ---------------------------------------------------------------------------
+
+describe('user.provisioned payload — Spec 07 envelope (PR 07-3)', () => {
+  test('payload carries user{portalSub,name,primaryAliasId} block', async () => {
+    setUser()
+    seedTwoEmails()
+    seedOneApp()
+    seedDefaultTaxonomies()
+
+    await emitUserProvisioned('user-1')
+
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ]
+    const userBlock = payload.user as Record<string, unknown>
+    expect(userBlock).toBeDefined()
+    expect(userBlock.portalSub).toBe('user-1')
+    expect(userBlock.name).toBe('Alice')
+    // primaryAliasId is null at provisioning time — portal doesn't know it yet
+    expect(userBlock.primaryAliasId).toBeNull()
+  })
+
+  test('payload carries contactEmail (workspace precedence)', async () => {
+    setUser()
+    seedTwoEmails()
+    seedOneApp()
+    seedDefaultTaxonomies()
+
+    await emitUserProvisioned('user-1')
+
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ]
+    expect(payload.contactEmail).toBe('alice@ahacommerce.net')
+  })
+
+  test('contactEmail falls back to personal when workspace absent', async () => {
+    setUser()
+    emailEntries = [
+      {
+        address: 'alice.personal@gmail.com',
+        kind: 'personal',
+        isPrimary: true,
+        verified: true,
+        addedBy: 'self',
+      },
+    ]
+    seedOneApp()
+    seedDefaultTaxonomies()
+
+    await emitUserProvisioned('user-1')
+
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ]
+    expect(payload.contactEmail).toBe('alice.personal@gmail.com')
+  })
+
+  test('payload carries full employment block (branch+department resolved, free-form pass-through)', async () => {
+    setUser()
+    seedTwoEmails()
+    seedOneApp()
+    seedDefaultTaxonomies()
+
+    await emitUserProvisioned('user-1')
+
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ]
+    const employment = payload.employment as Record<string, unknown>
+    expect(employment.branch).toEqual({
+      taxonomyId: 'branches',
+      key: 'ID-JKT',
+      value: 'Indonesia – Jakarta',
+    })
+    expect(employment.department).toEqual({
+      taxonomyId: 'departments',
+      key: 'ENG',
+      value: 'Engineering',
+    })
+    expect(employment.team).toBeNull()
+    expect(employment.position).toBe('Senior Engineer')
+    expect(employment.phone).toBe('+62-21-555-1234')
+    // Schema-not-yet fields emitted as null
+    expect(employment.employmentStatus).toBeNull()
+    expect(employment.talentaId).toBeNull()
+    expect(employment.attendanceName).toBeNull()
+  })
+
+  test('legacy top-level fields (email, appRole, branch) ALSO present (dual-emit)', async () => {
+    setUser({ branch: 'Thailand' })
+    seedTwoEmails()
+    seedOneApp()
+    // No taxonomy rows seeded — branch falls back to {key: raw, value: raw}
+
+    await emitUserProvisioned('user-1')
+
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ]
+    // Legacy reader fields — present until PR 07-5 drops them
+    expect(payload.email).toBe('alice@ahacommerce.net')
+    expect(payload.appRole).toBe('employee')
+    expect(payload.branch).toBe('Thailand')
+  })
+
+  test('appConfig is the per-app config slice (full object, not nested under user)', async () => {
+    setUser()
+    seedTwoEmails()
+    seedOneApp()
+    seedDefaultTaxonomies()
+
+    await emitUserProvisioned('user-1')
+
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ]
+    // appConfig is null when no app_user_config row exists (default seed)
+    expect(payload).toHaveProperty('appConfig')
   })
 })

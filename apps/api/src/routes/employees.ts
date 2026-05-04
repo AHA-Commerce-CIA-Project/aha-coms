@@ -18,6 +18,12 @@ import {
 import { ONE_TIME_LOGIN_LINK_REASONS } from '~/db/schema/one-time-login-links'
 import { checkSuperAdmin } from '../middleware/rbac'
 import { emitUserUpdated } from '../services/provisioning-events'
+import { emitEmploymentUpdated } from '../services/taxonomy-events'
+import {
+  getEmploymentBlock,
+  diffEmployment,
+  hasHrFieldChanges,
+} from '../services/employment-resolution'
 import { getDisplayEmail } from '../services/email-resolution'
 import {
   adminAddEmailToUser,
@@ -346,6 +352,19 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         ? await db.query.identityUsers.findFirst({ where: eq(identityUsers.id, params.id) })
         : undefined
 
+      // Compute changedFields once — drives both emitUserUpdated and the
+      // employment.updated decision below.
+      const changedFields = Object.keys(identityFieldsOnly).filter(
+        (k) => identityFieldsOnly[k as keyof typeof identityFieldsOnly] !== undefined,
+      )
+
+      // Spec 07 PR 07-3: capture the pre-update employment block when an HR
+      // field is in the changeset. Computed BEFORE the update so the diff
+      // captures the actual transition. Skipped for non-HR edits to avoid the
+      // extra query.
+      const hrTouched = hasHrFieldChanges(changedFields)
+      const previousBlock = hrTouched ? await getEmploymentBlock(params.id) : null
+
       if (Object.keys(identityFieldsOnly).length > 0) {
         await db
           .update(identityUsers)
@@ -365,14 +384,39 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         actorIp,
       })
 
-      // Compute changedFields from non-email body keys
-      const changedFields = Object.keys(identityFieldsOnly).filter(
-        (k) => identityFieldsOnly[k as keyof typeof identityFieldsOnly] !== undefined,
-      )
       if (changedFields.length > 0) {
         emitUserUpdated(params.id, changedFields).catch((err) => {
           logger.error({ err, userId: params.id }, '[provisioning-events] emitUserUpdated failed')
         })
+      }
+
+      // Fire employment.updated only when HR fields actually changed value.
+      // diffEmployment returns an empty delta when caller wrote a no-op
+      // (e.g. position set to its current value) — we suppress the emit then.
+      if (hrTouched && previousBlock) {
+        try {
+          const nextBlock = await getEmploymentBlock(params.id)
+          if (nextBlock) {
+            const { delta, previous } = diffEmployment(previousBlock, nextBlock)
+            if (Object.keys(delta).length > 0) {
+              emitEmploymentUpdated({
+                user: { portalSub: params.id },
+                employment: delta,
+                previousEmployment: previous,
+              }).catch((err) => {
+                logger.error(
+                  { err, userId: params.id },
+                  '[taxonomy-events] emitEmploymentUpdated failed',
+                )
+              })
+            }
+          }
+        } catch (err) {
+          logger.error(
+            { err, userId: params.id },
+            '[taxonomy-events] employment block diff failed',
+          )
+        }
       }
 
       return { ok: true }

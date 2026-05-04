@@ -269,6 +269,43 @@ describe('POST /admin/taxonomies/:taxonomyId/bulk', () => {
     expect(mockLogAudit).toHaveBeenCalledTimes(2) // one per entry
   })
 
+  // Spec 07 §Race window — bulk path emits exactly ONE taxonomy.upserted event
+  // per (taxonomyId, batchId), regardless of entry count. Critical because
+  // Heroes-side ordering depends on this: a single batched envelope is what
+  // arrives BEFORE the affected employment.updated events.
+  test('bulk upsert emits single taxonomy.upserted event for the whole batch (Race window)', async () => {
+    const app = makeApp()
+    await request(app, 'POST', `/taxonomies/${TAXONOMY_ID}/bulk`, {
+      entries: [
+        { key: 'ID-JKT', value: 'Jakarta' },
+        { key: 'TH-BKK', value: 'Bangkok' },
+        { key: 'VN-HAN', value: 'Hanoi' },
+      ],
+    })
+    expect(mockEmitUpserted).toHaveBeenCalledTimes(1)
+    const calls = mockEmitUpserted.mock.calls as unknown as Array<
+      [{ taxonomyId: string; entries: Array<{ key: string; value: string }> }]
+    >
+    const params = calls[0][0]
+    expect(params.taxonomyId).toBe(TAXONOMY_ID)
+    expect(params.entries).toHaveLength(2) // bulkUpsertTaxonomyEntries mock returns ENTRY_1 and ENTRY_2
+  })
+
+  test('single upsert emits exactly one taxonomy.upserted event', async () => {
+    const app = makeApp()
+    await request(app, 'POST', `/taxonomies/${TAXONOMY_ID}/single`, {
+      key: 'ID-JKT',
+      value: 'Jakarta',
+    })
+    expect(mockEmitUpserted).toHaveBeenCalledTimes(1)
+    const calls = mockEmitUpserted.mock.calls as unknown as Array<
+      [{ taxonomyId: string; entries: unknown[] }]
+    >
+    const params = calls[0][0]
+    expect(params.taxonomyId).toBe(TAXONOMY_ID)
+    expect(params.entries).toHaveLength(1)
+  })
+
   test('lock contention → 409', async () => {
     lockMode = 'held'
     const app = makeApp()
