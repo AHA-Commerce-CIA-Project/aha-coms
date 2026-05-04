@@ -135,24 +135,42 @@ A2 is being delivered in 8 slices. 6 SHIPPED across 4 commits (`b289dbd`, `44f85
 - [x] `POST /api/admin/pending-aliases/sweep` (`packages/server/src/routes/admin-pending-aliases.ts`) — drains pending queue via `resolveAliasesBatch` (1000-name batches), routes outcomes to `deactivated_user_ingest_audit` / status='resolved' / retry++. Auth: OIDC SA bearer (operationally callable today; Slice 8 may convert to user-role gate once middleware is restored).
 - [x] `bun run ci:check-no-illegal-inserts` (`scripts/check-no-illegal-inserts.ts`) — 10 unit tests; flags `INSERT INTO users` anywhere and `INSERT INTO heroes_profiles` outside the two-entry whitelist (handle-user-provisioned + session.ts). First run found 3 real violations in `repositories/users.ts` + `services/sheet-sync.ts` — Slice 6/8 will excise them.
 
-**Sheet-sync rewrite (Slice 6 NOT YET STARTED):**
-- [ ] Rewrite `packages/server/src/services/sheet-sync.ts` (945 lines) ingestion path:
-  - [ ] Per sheet upload: collect normalized names, batch-call `POST /api/aliases/resolve-batch` (1000 names per call, parallelize for >1000) — client already exists (`resolveAliasesBatch` in `lib/portal-api-client.ts`).
-  - [ ] Resolved + not tombstoned → write points to `heroes_profiles`-keyed domain rows.
-  - [ ] Resolved + tombstoned → `deactivated_user_ingest_audit`. Do NOT ingest.
-  - [ ] Unresolved → `pending_alias_resolution`. Do NOT auto-create user.
-- [ ] Delete every legacy `INSERT INTO users` code path (CI guard surfaces 2 in `services/sheet-sync.ts:128, 268`).
-- [ ] `services/sheet-sync.ts` test suite covers all four outcomes per row.
-- [ ] Once shipped, replace the stub `drainPendingAliasQueue` in `packages/server/src/services/sheet-sync-pending.ts` with the actual replay (re-run ingestion using the resolved portal_sub against the cached `rawPayload`).
+**Sheet-sync rewrite (Slice 6 — NEXT-SESSION FOCUS B):**
 
-**Repos/services typecheck cleanup (Slice 8 NOT YET STARTED):**
-- [ ] 27 typecheck errors across ~20 files block `bun run --filter=server typecheck`. All trace to A1's dropped imports of `users`, `branches`, `teams`, `userEmails` from `@coms/shared/db/schema`. Each file needs case-by-case attention because the data-model collapsed (e.g. `users JOIN branches` → `heroes_profiles.branchKey/branchValueSnapshot` denormalized; `users.role` → `user_config_cache.config.role`):
-  - `middleware/auth.ts` (the lynchpin — every authenticated route depends on its `AuthUser` shape; reshape from `users + userEmails` JOIN → `heroes_profiles + email_cache + user_config_cache`)
-  - `services/auth-sync.ts` — DEAD (zero callers); delete entirely
-  - `repositories/{appeals,audit-logs,challenges,comments,points,redemptions,teams,users}.ts` — 8 files
-  - `services/{appeals,approval,challenges,dashboard,leaderboard,points,reports,sheet-sync-scheduler}.ts` — 9 files
-  - `routes/sheet-sync.ts` — overlap with Slice 6
-- [ ] Cascading downstream consumers in `packages/web/src/routes/(authed)/**` will break when `AuthUser` shape changes; expect significant frontend churn around `authUser.role`, `authUser.email`, `authUser.branchId`, `authUser.teamId`.
+Repo: `coms_aha_heroes`. Independent of Slice 8; can run in parallel.
+
+- [ ] Rewrite `packages/server/src/services/sheet-sync.ts` (945 lines) ingestion path:
+  - [ ] Per sheet upload: collect normalized names, batch-call `resolveAliasesBatch({ rawNames })` (1000 names per call, parallelize for >1000). Client is already wired in `packages/server/src/lib/portal-api-client.ts` — its response shape is `{ resolved: [{rawNameNormalized, aliasId, portalSub, isPrimary, tombstoned, deactivatedAt}], unresolved: string[] }`.
+  - [ ] Resolved + not tombstoned → write points to `heroes_profiles`-keyed domain rows.
+  - [ ] Resolved + tombstoned → `deactivated_user_ingest_audit` (table exists; schema: `id, sheet_id, sheet_row_number, portal_sub, raw_payload, received_at`). Do NOT ingest.
+  - [ ] Unresolved → `pending_alias_resolution` (table exists; schema: `id, sheet_id, sheet_row_number, raw_name, raw_name_normalized, raw_payload, first_seen_at, last_retry_at, retry_count, status`). Do NOT auto-create user.
+- [ ] Delete every legacy `INSERT INTO users` code path. CI guard `bun run ci:check-no-illegal-inserts` will fail until both are gone (currently surfaces `services/sheet-sync.ts:128` and `services/sheet-sync.ts:268`, plus `repositories/users.ts:70` from Slice 8 surface).
+- [ ] Replace the stub `drainPendingAliasQueue` in `packages/server/src/services/sheet-sync-pending.ts` with the actual replay (re-run ingestion using the resolved portal_sub against the cached `rawPayload`). Slice 3's `handle-alias-resolved.ts` and `handle-alias-updated.ts` already call this function — they expect rows with `status='resolved'` to be marked AND domain rows to be written.
+- [ ] The `POST /api/admin/pending-aliases/sweep` endpoint (`routes/admin-pending-aliases.ts`, shipped in Slice 7) currently marks rows resolved without writing domain rows; once Slice 6 lands, refactor it to call the same replay path.
+- [ ] `services/sheet-sync.ts` test suite covers all four outcomes per row (resolved-active / resolved-tombstoned / unresolved / batch-failure).
+- [ ] DROP or rewrite the `fn_sync_point_summary` trigger function from migration `0002_triggers.sql` — it still references the dropped `users` table. Decide whether point-summary materialisation moves to application code (preferred) or is rebuilt as a trigger against `heroes_profiles`.
+
+**Repos/services typecheck cleanup (Slice 8 — NEXT-SESSION FOCUS A):**
+
+Repo: `coms_aha_heroes`. **Deployment blocker** — `bun run --filter=server typecheck` reports 27 errors across ~20 files. Run `cd packages/server && bunx tsc --noEmit 2>&1 | grep "error TS"` for the live list.
+
+All errors trace to A1's dropped imports of `users`, `branches`, `teams`, `userEmails` from `@coms/shared/db/schema`. The data model collapsed: `users JOIN branches` → `heroes_profiles.branchKey/branchValueSnapshot` denormalized; `users.role` / `users.canSubmitPoints` → `user_config_cache.config.{role,canSubmitPoints}`; `users.email` → `email_cache.contactEmail`; `teams` table → `heroes_profiles.teamKey/teamValueSnapshot` denormalized (no enumerable team table on heroes side anymore).
+
+Suggested execution order (lowest blast-radius first):
+
+1. **Dead code (zero blast)**: `services/auth-sync.ts` has zero callers (verified via grep) — delete the file outright. Also remove its imports from any barrel files.
+2. **Repository slice** (8 files, ~700 lines total): `repositories/{appeals, audit-logs, challenges, comments, points, redemptions, teams, users}.ts`. Each is small and self-contained; pattern is:
+   - Swap `users` import → `heroesProfiles`
+   - Drop `users.email` / `users.role` / `users.canSubmitPoints` selections — those move to JOINs against `email_cache` / `user_config_cache` if the caller needs them
+   - `users.branchId` / `users.teamId` → `heroesProfiles.branchKey` / `heroesProfiles.teamKey` (string keys, not uuid FKs)
+   - `repositories/teams.ts`: the `teams` concept is gone — file becomes a thin reader over `taxonomyCache WHERE taxonomy_id='teams'` OR is removed entirely (consumer is `routes/teams.ts` + frontend `/teams/+page.server.ts`; need to decide if a teams page still makes sense post-cutover)
+   - `repositories/users.ts`: rename to `repositories/heroes-profiles.ts` and reshape — `createUser` becomes the broker/webhook job (NOT a repository call; CI guard enforces this)
+3. **Service slice** (9 files, ~1500 lines total): `services/{appeals, approval, challenges, dashboard, leaderboard, points, reports, sheet-sync-scheduler}.ts`. Same swap pattern as repositories.
+4. **Lynchpin — `middleware/auth.ts`**: reshape `AuthUser` from `users + userEmails` JOIN → `heroes_profiles + email_cache + user_config_cache`. Today's shape: `{id, email, name, role, branchId, teamId, canSubmitPoints, mustChangePassword}`. Post-cutover suggestion: `{id, email, name, role, branchKey, branchValueSnapshot, teamKey, teamValueSnapshot, canSubmitPoints, mustChangePassword}` — preserves `branchId`-as-string semantics by reusing `branchKey`. Both consumers (`packages/server/src/middleware/auth.ts` server-side and `packages/web/src/hooks.server.ts` SvelteKit-side) do the same JOIN pattern; refactor both together.
+5. **Frontend cascade** in `packages/web/src/routes/(authed)/**`: every `+page.server.ts` that reads `locals.user.role`, `locals.user.email`, `locals.user.branchId`, `locals.user.teamId` will need updating. If you preserve `branchId`-as-string in step 4 by aliasing to `branchKey`, the cascade is smaller.
+6. **Re-run** `bun run --filter=server typecheck` and `bun test` after each file. The CI guard should also stay green throughout.
+
+Cross-cutting: `routes/sheet-sync.ts` overlaps with Slice 6 — coordinate so they don't collide.
 
 ---
 
@@ -200,6 +218,34 @@ Repo: `coms_aha_heroes`
 - [ ] Spec 07 PR 07-5 (drop legacy emit fields).
 - [ ] Update `docs/architecture/rev3/spec-00-implementation-timeline.md` to mark Spec 07 + 08 SHIPPED with commit refs.
 - [ ] Delete this TODO doc from portal repo (cutover archived).
+
+---
+
+## Resuming PR A2 (next session — read this first)
+
+Heroes branch `coms_aha_heroes/main` is **3 commits ahead of `origin/main`** (not pushed):
+- `b289dbd` — Slice 1+2+3 (webhook split + 11 handlers + projection helpers)
+- `44f856c` — Slice 4+5 (pull-on-boot + portal API client + session module restored)
+- `5392d98` — Slice 7 (cutover-verify + sweep + CI guard)
+
+**Two slices remain. Both are required for cutover.** Pick one to start; they're independent:
+
+- **Focus A — Slice 8 (typecheck cleanup, deployment blocker)**: 27 errors, ~20 files, mechanical-but-numerous. Detailed execution order is in the §"Repos/services typecheck cleanup" block above. Starting move: `cd /Users/mac/HT/Project/coms_aha_heroes && bunx --cwd packages/server tsc --noEmit 2>&1 | grep "error TS"` to see the live list, then `rm packages/server/src/services/auth-sync.ts` (verified zero callers) for an instant -1 file count.
+
+- **Focus B — Slice 6 (sheet-sync rewrite)**: 945-line file → batch alias resolve + 4-outcome routing. Detailed scope in the §"Sheet-sync rewrite" block above. Starting move: `Read packages/server/src/services/sheet-sync.ts` end-to-end to map the current ingestion shape, then design the new fan-out around `resolveAliasesBatch` (already wired in `lib/portal-api-client.ts`).
+
+**Verification anchors after each slice:**
+- `bun test packages/server scripts` (49 tests baseline, must stay green)
+- `bun run --filter=server typecheck` (27 errors baseline; Slice 8 drives this to 0; Slice 6 may add a few transient ones if it touches `routes/sheet-sync.ts`)
+- `bun run ci:check-no-illegal-inserts` (currently fails with 3 violations — should reach 0 after Slice 6 + Slice 8)
+
+**Commit discipline**: each cohesive slice via `/mr-door-commit`. Don't bundle Slice 6 and Slice 8 into one commit even if they ship in the same session — they're conceptually separate.
+
+**When BOTH slices land**, the PR A2 deliverable is complete:
+1. Mark this TODO doc's "PR A2" header as SHIPPED with the final commit refs.
+2. Update the project memory at `~/.claude/projects/-Users-mac-HT-Project-coms-portal/memory/project_spec_07_08_cutover.md`.
+3. Heroes Deploy A is ready — coordinate with portal team for the cutover window.
+4. After Heroes Deploy A confirms, portal does PR 07-5 (drop legacy emit fields).
 
 ---
 
