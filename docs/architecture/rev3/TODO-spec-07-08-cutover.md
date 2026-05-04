@@ -18,17 +18,20 @@ Sequenced implementation checklist. Work top-to-bottom. Each block ends in a dep
 
 ## Portal — Spec 07 (ships first)
 
-### PR 07-1 — Schema + seed
+### PR 07-1 — Schema + seed ✅ SHIPPED 2026-05-04 (commit `26057ec`)
 Repo: `coms_portal`
 
-- [ ] `drizzle-kit generate` adding:
-  - [ ] `org_taxonomies` table per Spec 07 §Schema (`id`, `taxonomy_id`, `key`, `value`, `metadata`, `created_at`, `updated_at`, `updated_by` FK to `identity_users`)
-  - [ ] `org_taxonomies_taxonomy_key_uniq` unique index on `(taxonomy_id, key)`
-  - [ ] `org_taxonomies_taxonomy_id_idx` index on `taxonomy_id`
-  - [ ] `app_manifests.taxonomies jsonb NOT NULL DEFAULT '[]'` column
-- [ ] Seed migration: copy current branch + team values from Heroes' production state into `org_taxonomies` as `(taxonomy_id='branches', ...)` and `(taxonomy_id='teams', ...)`. Departments seeded if portal has them; otherwise empty.
-- [ ] Update `apps/api/src/services/manifests/heroes.json` to `schemaVersion: 2` with `"taxonomies": ["branches", "teams", "departments"]`.
-- [ ] Stage rollback migration `apps/api/src/db/migrations/cutover/0002_restore_heroes_writes.sql` (companion to 0001 — Spec 08 §Rollback).
+- [x] `drizzle-kit generate` adding:
+  - [x] `org_taxonomies` table per Spec 07 §Schema (`id`, `taxonomy_id`, `key`, `value`, `metadata`, `created_at`, `updated_at`, `updated_by` FK to `identity_users`) — `apps/api/src/db/schema/org-taxonomies.ts`
+  - [x] `org_taxonomies_taxonomy_key_uniq` unique index on `(taxonomy_id, key)`
+  - [x] `org_taxonomies_taxonomy_id_idx` index on `taxonomy_id`
+  - [x] `app_manifests.taxonomies jsonb NOT NULL DEFAULT '[]'` column
+  - [x] Migration: `apps/api/src/db/migrations/0031_opposite_beast.sql`
+- [x] Seed migration: branches + departments copied from `identity_users` distincts (key == value initially — admin refines display via PR 07-2). **Teams seeded empty** — portal has no enumerable team taxonomy today (the `teams` table is membership groups, a different concept). Admin must populate `(taxonomy_id='teams', ...)` from Heroes' production team table BEFORE Heroes Deploy A; see Cutover window pre-flight.
+- [x] Update `apps/api/src/services/manifests/heroes.json` to `schemaVersion: 2` with `"taxonomies": ["branches", "teams", "departments"]`.
+- [x] `ManifestDefinition.taxonomies?: string[]` + `registerManifest` writes the array (defaults to `[]`).
+- [x] Stage rollback migration `apps/api/src/db/migrations/cutover/0002_restore_heroes_writes.sql` (companion to 0001 — Spec 08 §Rollback). Cutover README extended with rollback section.
+- [x] Tests: `manifests.test.ts` 12/12 green (incl. new shape + defaults-to-`[]` cases). `db:generate` clean. `tsc --noEmit` clean.
 
 ### PR 07-2 — Read endpoint + admin UI + emit (gated off)
 Repo: `coms_portal`
