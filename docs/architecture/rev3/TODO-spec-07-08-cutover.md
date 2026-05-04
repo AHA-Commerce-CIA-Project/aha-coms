@@ -98,50 +98,61 @@ Repo: `coms_aha_heroes`
 - `fn_sync_point_summary` trigger function (defined in migration `0002_triggers.sql`) still references the dropped `users` table. The `BEFORE UPDATE` trigger fires on `achievement_points` / `challenges` / `appeals` / `comments` / `rewards` / `redemptions` / `system_settings` updates — but A1's migration TRUNCATEs `achievement_points`, so no rows will trigger it until A2 re-introduces ingestion. A2 must either DROP and recreate this function against `heroes_profiles`, or drop it entirely if the point-summary materialisation moves to application code.
 - `idx_*_branch` indexes on the 10 dependent tables now reference an unconstrained `branch_id` column. Indexes still work; A2 decides whether to drop them or rebuild on a different column (e.g., a denormalised `branch_key`).
 
-### PR A2 — Behaviour (~1 week)
+### PR A2 — Behaviour (~1 week, IN PROGRESS — 6/8 slices SHIPPED 2026-05-04)
 Repo: `coms_aha_heroes`
 
-**Webhook handler split:**
-- [ ] Refactor `packages/server/src/routes/portal-webhooks.ts` to ~80 lines: HTTP layer + OIDC verify + idempotency dedupe + body parse + dispatch only.
-- [ ] Create `packages/server/src/services/portal-events/` with one handler per file:
-  - [ ] `handle-user-provisioned.ts` — materialize `heroes_profiles` from `user` + `employment` + `appConfig`; upsert `email_cache`, `user_config_cache`. ~60 lines.
-  - [ ] `handle-user-updated.ts` — identity-field updates (email/name only). ~30 lines.
-  - [ ] `handle-employment-updated.ts` — denormalize `(key, value_snapshot)` onto `heroes_profiles`. Re-throw on missing taxonomy key (DLQ retry). ~50 lines.
-  - [ ] `handle-user-offboarded.ts` — flip `is_active`; soft-delete only. ~25 lines.
-  - [ ] `handle-app-config-updated.ts` — update `user_config_cache`; toggle leaderboard suppression based on `leaderboard_eligible`. ~40 lines.
-  - [ ] `handle-alias-resolved.ts` — drain `pending_alias_resolution` by `raw_name_normalized`. ~70 lines.
-  - [ ] `handle-alias-updated.ts` — invalidate `alias_cache` AND walk pending queue (identity-merge case). ~30 lines.
-  - [ ] `handle-alias-deleted.ts` — invalidate `alias_cache` only. ~25 lines.
-  - [ ] `handle-taxonomy-upserted.ts` — upsert `taxonomy_cache`. ~40 lines.
-  - [ ] `handle-taxonomy-deleted.ts` — remove from `taxonomy_cache`. ~25 lines.
-- [ ] Each handler has a focused unit test file beside it.
+A2 is being delivered in 8 slices. 6 SHIPPED across 4 commits (`b289dbd`, `44f856c`, `5392d98`); 2 remain (Slice 6 sheet-sync rewrite, Slice 8 typecheck cleanup). All shipped slices follow TDD with bun:test and commit via /mr-door-commit.
 
-**Pull-on-boot:**
-- [ ] Heroes server startup hook calls `GET /api/taxonomies/sync` and populates `taxonomy_cache`. Same shape any future H-app uses to onboard.
-- [ ] Idempotent on restart; safe to re-call.
+**Webhook handler split (Slice 1+2+3 SHIPPED commit `b289dbd`):**
+- [x] `packages/server/src/routes/portal-webhooks.ts` refactored 187 → 61 lines: HTTP + OIDC + idempotency dedupe + body parse + `dispatchPortalEvent`.
+- [x] `packages/server/src/services/portal-events/dispatch.ts` — pure router with injectable handler map (3 unit tests).
+- [x] `packages/server/src/services/portal-events/payload-projection.ts` — pure projection helpers exhaustively tested (8 unit tests covering null employment, sparse employment-updated, taxonomy ref expansion).
+- [x] All 11 handlers implemented:
+  - [x] `handle-user-provisioned.ts` — materializes `heroes_profiles` + `email_cache` + `user_config_cache` from the Spec 07 envelope.
+  - [x] `handle-user-updated.ts` — identity-only (name) + email_cache refresh.
+  - [x] `handle-employment-updated.ts` — denormalizes `(key, value_snapshot)` onto `heroes_profiles` from sparse payload.
+  - [x] `handle-user-offboarded.ts` — flips `is_active` + revokes sessions.
+  - [x] `handle-app-config-updated.ts` — upserts `user_config_cache`.
+  - [x] `handle-alias-resolved.ts` — upserts `alias_cache` + calls `drainPendingAliasQueue` (replay backend deferred to Slice 6; current behaviour marks rows resolved).
+  - [x] `handle-alias-updated.ts` — invalidates `alias_cache` + drains pending.
+  - [x] `handle-alias-deleted.ts` — invalidates `alias_cache` only.
+  - [x] `handle-taxonomy-upserted.ts` — bulk-upserts `taxonomy_cache` (single statement per event per Spec 07 §Race window).
+  - [x] `handle-taxonomy-deleted.ts` — bulk-deletes from `taxonomy_cache`.
+  - [x] `handle-session-revoked.ts` — calls `destroySessionsForPortalSub` (restored in Slice 5).
+- [x] `packages/server/package.json` gains `@coms-portal/shared` v1.6.0 as direct dep so envelope types resolve at the workspace boundary.
 
-**Broker exchange upsert:**
-- [ ] Rewrite `packages/web/src/routes/auth/portal/exchange/+server.ts` to upsert `heroes_profiles` with `(portal_sub, contactEmail, name)` from handoff payload.
-- [ ] No FK to `authUser` anymore — `authSession.userId` points directly at `heroes_profiles.id`.
-- [ ] better-auth config retargeted to use `heroes_profiles` as the `user` table reference.
-- [ ] Last-write-wins on overlapping fields with webhook handler.
+**Pull-on-boot + portal API client (Slice 4 SHIPPED commit `44f856c`):**
+- [x] `packages/server/src/lib/portal-api-client.ts` — `fetchTaxonomySync` and `resolveAliasesBatch` wrappers using `GoogleAuth.getIdTokenClient(audience)` with per-audience client cache.
+- [x] `packages/server/src/services/portal-bootstrap.ts` — `pullTaxonomiesOnBoot()` fires inside `app.listen` callback, reuses `handleTaxonomyUpserted` per taxonomy, outage-tolerant (warns + continues if portal unreachable). 3 unit tests via injectable fetcher/handler stubs.
 
-**Ingestion rewrite:**
+**Broker exchange + session module restoration (Slice 5 SHIPPED commit `44f856c`):**
+- [x] `packages/shared/src/auth/session.ts` — all 4 functions reimplemented against post-A1 schema (`createLocalSessionForPortalUser`, `getLocalSessionByToken`, `destroyLocalSessionByToken`, `destroySessionsForPortalSub`). `LocalSessionRecord` keeps `email` field via `email_cache` left-join at lookup time.
+- [x] Broker exchange handler at `packages/web/src/routes/auth/portal/exchange/+server.ts` is unchanged at the file level — `createLocalSessionForPortalUser` now does the `heroes_profiles` + `email_cache` upsert per Spec 08 §Decision #10. Last-write-wins with webhook handler.
+- [x] better-auth retargeting deferred — handled by direct schema FK in A1 (`authSession.userId` → `heroes_profiles.id`); better-auth library reconfiguration is not strictly required for the bespoke session functions to operate. Revisit when better-auth is exercised on a code path that requires its internal user reference.
+
+**Cutover tools + CI guard (Slice 7 SHIPPED commit `5392d98`):**
+- [x] `bun run cutover:verify` (`scripts/cutover-verify.ts`) — implements 5 checks per Spec 08 §Cutover sequence. Checks 2 + 3 fully automated (taxonomy_cache vs portal sync; pending-alias `--since-iso=` filter); checks 1 + 4 + 5 surfaced as PASS / FAIL / MANUAL with detail.
+- [x] `POST /api/admin/pending-aliases/sweep` (`packages/server/src/routes/admin-pending-aliases.ts`) — drains pending queue via `resolveAliasesBatch` (1000-name batches), routes outcomes to `deactivated_user_ingest_audit` / status='resolved' / retry++. Auth: OIDC SA bearer (operationally callable today; Slice 8 may convert to user-role gate once middleware is restored).
+- [x] `bun run ci:check-no-illegal-inserts` (`scripts/check-no-illegal-inserts.ts`) — 10 unit tests; flags `INSERT INTO users` anywhere and `INSERT INTO heroes_profiles` outside the two-entry whitelist (handle-user-provisioned + session.ts). First run found 3 real violations in `repositories/users.ts` + `services/sheet-sync.ts` — Slice 6/8 will excise them.
+
+**Sheet-sync rewrite (Slice 6 NOT YET STARTED):**
 - [ ] Rewrite `packages/server/src/services/sheet-sync.ts` (945 lines) ingestion path:
-  - [ ] Per sheet upload: collect normalized names, batch-call `POST /api/aliases/resolve-batch` (max 1000 names per call, parallelize for >1000).
+  - [ ] Per sheet upload: collect normalized names, batch-call `POST /api/aliases/resolve-batch` (1000 names per call, parallelize for >1000) — client already exists (`resolveAliasesBatch` in `lib/portal-api-client.ts`).
   - [ ] Resolved + not tombstoned → write points to `heroes_profiles`-keyed domain rows.
   - [ ] Resolved + tombstoned → `deactivated_user_ingest_audit`. Do NOT ingest.
   - [ ] Unresolved → `pending_alias_resolution`. Do NOT auto-create user.
-- [ ] Delete every legacy `INSERT INTO users` code path identified by Phase 0 audit (`grep -rn "INSERT INTO users\|.insert(users)" packages/server/src`).
+- [ ] Delete every legacy `INSERT INTO users` code path (CI guard surfaces 2 in `services/sheet-sync.ts:128, 268`).
 - [ ] `services/sheet-sync.ts` test suite covers all four outcomes per row.
+- [ ] Once shipped, replace the stub `drainPendingAliasQueue` in `packages/server/src/services/sheet-sync-pending.ts` with the actual replay (re-run ingestion using the resolved portal_sub against the cached `rawPayload`).
 
-**Cutover tools:**
-- [ ] `bun run cutover:verify` script implementing all 5 checks per Spec 08 §Cutover sequence.
-- [ ] `POST /admin/pending-aliases/sweep` endpoint — re-resolve all `pending` rows on demand. Auth: super_admin only.
-
-**CI guard:**
-- [ ] Static check fails build if `INSERT INTO users` (case-insensitive) appears anywhere.
-- [ ] Static check fails build if `INSERT INTO heroes_profiles` appears outside `services/portal-events/handle-user-provisioned.ts` and the broker exchange handler.
+**Repos/services typecheck cleanup (Slice 8 NOT YET STARTED):**
+- [ ] 27 typecheck errors across ~20 files block `bun run --filter=server typecheck`. All trace to A1's dropped imports of `users`, `branches`, `teams`, `userEmails` from `@coms/shared/db/schema`. Each file needs case-by-case attention because the data-model collapsed (e.g. `users JOIN branches` → `heroes_profiles.branchKey/branchValueSnapshot` denormalized; `users.role` → `user_config_cache.config.role`):
+  - `middleware/auth.ts` (the lynchpin — every authenticated route depends on its `AuthUser` shape; reshape from `users + userEmails` JOIN → `heroes_profiles + email_cache + user_config_cache`)
+  - `services/auth-sync.ts` — DEAD (zero callers); delete entirely
+  - `repositories/{appeals,audit-logs,challenges,comments,points,redemptions,teams,users}.ts` — 8 files
+  - `services/{appeals,approval,challenges,dashboard,leaderboard,points,reports,sheet-sync-scheduler}.ts` — 9 files
+  - `routes/sheet-sync.ts` — overlap with Slice 6
+- [ ] Cascading downstream consumers in `packages/web/src/routes/(authed)/**` will break when `AuthUser` shape changes; expect significant frontend churn around `authUser.role`, `authUser.email`, `authUser.branchId`, `authUser.teamId`.
 
 ---
 
