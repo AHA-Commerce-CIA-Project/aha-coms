@@ -9,6 +9,25 @@ This is by design: they are applied manually at specific cutover deploy steps.
 ---
 
 ## 0001_revoke_heroes_writes.sql — Deploy C
+## 0002_restore_heroes_writes.sql — Rollback companion (Spec 07/08)
+
+If Deploy C lands and Heroes regresses (e.g. an unexpected legacy code path tries to INSERT into
+`identity_users`/`user_aliases`/`app_user_config`/`app_manifests`), apply
+`0002_restore_heroes_writes.sql` to restore write privileges on the four tables. Identical SQL to
+the rollback section below, just lifted into a checked-in file so the cutover team can run it
+without copy/paste:
+
+```bash
+psql "host=127.0.0.1 port=5432 dbname=coms_portal user=postgres" \
+  -f apps/api/src/db/migrations/cutover/0002_restore_heroes_writes.sql
+```
+
+Has no `meta/_journal.json` entry — `db:migrate` will never apply it. Re-running is idempotent
+(GRANT is a no-op when privileges are already present).
+
+---
+
+## 0001_revoke_heroes_writes.sql — Deploy C (original entry)
 
 ### What it does
 

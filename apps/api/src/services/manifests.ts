@@ -37,6 +37,12 @@ export interface ManifestDefinition {
   displayName: string
   schemaVersion: number
   configSchema: Record<string, ConfigField>
+  /**
+   * Spec 07: list of `taxonomy_id`s the app subscribes to. Portal uses this at
+   * registration time (initial sync) and webhook fan-out (only fires events
+   * for taxonomies the app subscribes to). Defaults to `[]` when absent.
+   */
+  taxonomies?: string[]
 }
 
 export type ValidationResult =
@@ -116,6 +122,8 @@ export async function registerManifest(manifest: ManifestDefinition): Promise<vo
     throw new Error(`registerManifest: app_registry row not found for slug "${manifest.appId}"`)
   }
 
+  const taxonomies = manifest.taxonomies ?? []
+
   await db
     .insert(appManifests)
     .values({
@@ -123,6 +131,7 @@ export async function registerManifest(manifest: ManifestDefinition): Promise<vo
       displayName: manifest.displayName,
       configSchema: manifest.configSchema,
       schemaVersion: manifest.schemaVersion,
+      taxonomies,
     })
     .onConflictDoUpdate({
       target: appManifests.appId,
@@ -131,6 +140,7 @@ export async function registerManifest(manifest: ManifestDefinition): Promise<vo
         configSchema: manifest.configSchema,
         // Only advance schemaVersion, never regress it.
         schemaVersion: sql`GREATEST(app_manifests.schema_version, ${manifest.schemaVersion})`,
+        taxonomies,
         updatedAt: sql`now()`,
       },
     })

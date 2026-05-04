@@ -162,6 +162,8 @@ describe('seedDefaults', () => {
 describe('heroes.json manifest shape', () => {
   test('matches spec exactly', () => {
     expect(heroesManifest.appId).toBe('heroes')
+    expect(heroesManifest.schemaVersion).toBe(2)
+    expect(heroesManifest.taxonomies).toEqual(['branches', 'teams', 'departments'])
     expect(heroesManifest.configSchema.role).toMatchObject({
       type: 'enum',
       values: ['member', 'captain', 'admin'],
@@ -191,8 +193,20 @@ describe('registerManifest', () => {
     expect(mockInsertChain.values).toHaveBeenCalledWith(
       expect.objectContaining({
         displayName: 'Heroes',
-        schemaVersion: 1,
+        schemaVersion: 2,
+        taxonomies: ['branches', 'teams', 'departments'],
       }),
+    )
+  })
+
+  test('writes taxonomies array even when manifest omits it (defaults to [])', async () => {
+    const manifestWithoutTaxonomies = { ...heroesManifest } as Parameters<
+      typeof registerManifest
+    >[0]
+    delete (manifestWithoutTaxonomies as { taxonomies?: string[] }).taxonomies
+    await registerManifest(manifestWithoutTaxonomies)
+    expect(mockInsertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({ taxonomies: [] }),
     )
   })
 

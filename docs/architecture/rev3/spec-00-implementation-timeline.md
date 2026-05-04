@@ -63,8 +63,10 @@ After Rev 3, identity is *centrally owned* (Rev 2), *centrally surfaced* (Spec 0
 | 04 | Unified User Preferences (theme + locale) | Portal + every H-app | Small per phase | Yes — Phase 3 (preference consumption) | No — deferred until trigger |
 | 05 | Suite Search / Command Palette | Portal + every H-app | Medium per phase | Optional — Phase 3 (search provider) | No — deferred until trigger |
 | 06 | Dual-Email Auth (workspace OIDC + personal OTP) | Portal | PRs A → F shipped 2026-04-30 → 2026-05-03 (commits `049008d`, `6938553`, `ac2f905`, `df1c90c`+`6f96634`, `a684fa9`, `212e103`, `8f13c64`). | Minimal — Heroes compiles unchanged against `@coms-portal/shared` v1.5.0; no required Heroes work for v1 | **Yes — gated Heroes-side rev3 adoption; gate cleared 2026-05-03** |
+| 07 | Org Taxonomies & Employment Block (`@coms-portal/shared` v1.6.0 contract bump) | Portal | Drafted 2026-05-04 — ~5-7 days | No (sets up the contract Heroes consumes in Spec 08) | **Yes — precondition for Spec 08 + every future H-app onboarding** |
+| 08 | Heroes Spec 03 Cutover Protocol (one-time migration plan) | Heroes | Drafted 2026-05-04 — ~2 PRs (~2 weeks Heroes engineering) | **Yes — the entire spec is Heroes work** | **Yes — must land before Heroes takes real users** |
 
-Specs 01 + 03 + 06 are the load-bearing trio for Rev 3 closure: 01 surfaces identity, 03 hardens who can write it, 06 widens who can authenticate. Specs 02, 04, 05 are full architecture decided + deferred until their trigger conditions fire (documented in each spec's §Why this is deferred).
+Specs 01 + 03 + 06 are the load-bearing trio for Rev 3 closure: 01 surfaces identity, 03 hardens who can write it, 06 widens who can authenticate. Specs 02, 04, 05 are full architecture decided + deferred until their trigger conditions fire (documented in each spec's §Why this is deferred). **Specs 07 + 08 (drafted 2026-05-04) operationalise Spec 03's Heroes-side cutover** — 07 supplies the missing portal-side contract (employment block + taxonomies + email handling), 08 is the Heroes-specific migration plan.
 
 ---
 

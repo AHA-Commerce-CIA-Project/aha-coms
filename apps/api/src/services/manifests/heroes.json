@@ -1,7 +1,8 @@
 {
   "appId": "heroes",
   "displayName": "Heroes",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "taxonomies": ["branches", "teams", "departments"],
   "configSchema": {
     "role": { "type": "enum", "values": ["member", "captain", "admin"], "default": "member" },
     "leaderboard_eligible": { "type": "boolean", "default": true },
