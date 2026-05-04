@@ -122,7 +122,6 @@
                 {m.point_detail_submitted_by()}
               </p>
               <p class="text-sm font-semibold truncate">{point.submitter.name}</p>
-              <p class="text-xs text-muted-foreground uppercase">{point.submitter.role ?? ''}</p>
             </div>
           </div>
         {/if}

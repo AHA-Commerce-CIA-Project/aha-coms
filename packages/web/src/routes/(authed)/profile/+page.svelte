@@ -110,10 +110,10 @@
               <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                 {m.profile_branch()}
               </p>
-              <p class="truncate text-xs font-bold text-foreground">{user.branchId}</p>
+              <p class="truncate text-xs font-bold text-foreground">{user.branchValueSnapshot ?? user.branchKey}</p>
             </div>
           </div>
-          {#if user.teamId}
+          {#if user.teamKey}
             <div class="flex items-center gap-2 rounded-xl bg-muted px-3 py-2">
               <Users class="h-3.5 w-3.5 shrink-0 text-primary/60" />
               <div class="min-w-0">
@@ -122,7 +122,7 @@
                 >
                   {m.profile_team()}
                 </p>
-                <p class="truncate text-xs font-bold text-foreground">{user.teamId}</p>
+                <p class="truncate text-xs font-bold text-foreground">{user.teamValueSnapshot ?? user.teamKey}</p>
               </div>
             </div>
           {/if}
