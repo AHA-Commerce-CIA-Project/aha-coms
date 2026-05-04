@@ -1,5 +1,5 @@
 import { eq, and, count, desc, sql, ilike, gte, lte } from 'drizzle-orm'
-import { redemptions, rewards, users } from '@coms/shared/db/schema'
+import { redemptions, rewards, heroesProfiles, emailCache } from '@coms/shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 
@@ -62,12 +62,13 @@ export async function listRedemptions(
         updatedAt: redemptions.updatedAt,
         rewardName: rewards.name,
         rewardPointCost: rewards.pointCost,
-        userName: users.name,
-        userEmail: users.email,
+        userName: heroesProfiles.name,
+        userEmail: emailCache.contactEmail,
       })
       .from(redemptions)
       .innerJoin(rewards, eq(redemptions.rewardId, rewards.id))
-      .innerJoin(users, eq(redemptions.userId, users.id))
+      .innerJoin(heroesProfiles, eq(redemptions.userId, heroesProfiles.id))
+      .leftJoin(emailCache, eq(redemptions.userId, emailCache.portalSub))
       .where(where)
       .orderBy(desc(redemptions.createdAt))
       .limit(opts.limit)
@@ -101,12 +102,13 @@ export async function getRedemptionById(id: string, tx?: DbClient) {
       rewardName: rewards.name,
       rewardPointCost: rewards.pointCost,
       rewardDescription: rewards.description,
-      userName: users.name,
-      userEmail: users.email,
+      userName: heroesProfiles.name,
+      userEmail: emailCache.contactEmail,
     })
     .from(redemptions)
     .innerJoin(rewards, eq(redemptions.rewardId, rewards.id))
-    .innerJoin(users, eq(redemptions.userId, users.id))
+    .innerJoin(heroesProfiles, eq(redemptions.userId, heroesProfiles.id))
+    .leftJoin(emailCache, eq(redemptions.userId, emailCache.portalSub))
     .where(eq(redemptions.id, id))
     .limit(1)
   return result ?? null

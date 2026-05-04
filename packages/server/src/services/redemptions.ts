@@ -133,7 +133,7 @@ export async function approveRedemption(id: string, ctx: ServiceContext) {
 
     await createNotification(
       {
-        branchId: redemption.branchId,
+        branchId: redemption.branchId ?? ctx.actor.branchId,
         userId: redemption.userId,
         type: 'redemption_approved',
         title: `Your redemption request for "${redemption.rewardName}" has been approved`,
@@ -187,7 +187,7 @@ export async function rejectRedemption(
 
     await createNotification(
       {
-        branchId: redemption.branchId,
+        branchId: redemption.branchId ?? ctx.actor.branchId,
         userId: redemption.userId,
         type: 'redemption_rejected',
         title: `Your redemption request for "${redemption.rewardName}" has been rejected`,

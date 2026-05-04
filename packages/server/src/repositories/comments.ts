@@ -1,5 +1,5 @@
 import { eq, and, count, asc } from 'drizzle-orm'
-import { comments, users } from '@coms/shared/db/schema'
+import { comments, heroesProfiles, emailCache } from '@coms/shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 
@@ -30,11 +30,12 @@ export async function listByEntity(opts: ListOpts, tx?: DbClient) {
         body: comments.body,
         createdAt: comments.createdAt,
         updatedAt: comments.updatedAt,
-        authorName: users.name,
-        authorEmail: users.email,
+        authorName: heroesProfiles.name,
+        authorEmail: emailCache.contactEmail,
       })
       .from(comments)
-      .innerJoin(users, eq(comments.authorId, users.id))
+      .innerJoin(heroesProfiles, eq(comments.authorId, heroesProfiles.id))
+      .leftJoin(emailCache, eq(comments.authorId, emailCache.portalSub))
       .where(where)
       .orderBy(asc(comments.createdAt))
       .limit(opts.limit)

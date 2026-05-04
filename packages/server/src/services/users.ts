@@ -3,7 +3,6 @@ import { writeAuditLog } from './audit'
 import type { AuthUser } from '../middleware/auth'
 import { withRLS } from '../repositories/base'
 import type {
-  CreateUserInput,
   UpdateUserInput,
   ListUsersInput,
 } from '@coms/shared/schemas'
@@ -46,45 +45,8 @@ export async function getUserById(id: string, ctx: ServiceContext) {
   return user
 }
 
-export async function createUser(input: CreateUserInput, ctx: ServiceContext) {
-  const created = await withRLS(ctx.actor, async (db) => {
-    const existing = await usersRepo.getUserByEmail(input.email, db)
-    if (existing) {
-      throw new EmailAlreadyExistsError(input.email)
-    }
-
-    const user = await usersRepo.createUser(
-      {
-        email: input.email,
-        name: input.name,
-        role: input.role,
-        branchId: input.branchId,
-        teamId: input.teamId ?? null,
-        department: input.department ?? null,
-        position: input.position ?? null,
-        canSubmitPoints: input.canSubmitPoints ?? ['admin', 'hr', 'leader'].includes(input.role),
-      },
-      db,
-    )
-
-    await writeAuditLog(
-      {
-        actor: ctx.actor,
-        action: 'USER_CREATED',
-        entityType: 'users',
-        entityId: user.id,
-        newValue: { email: user.email, role: user.role, name: user.name },
-        ipAddress: ctx.ipAddress,
-      },
-      db,
-    )
-
-    return user
-  })
-
-  // Auth identity is provisioned lazily on first portal SSO handoff —
-  // no local credential is created here.
-  return created
+export async function createUser(_input: unknown, _ctx: ServiceContext): Promise<never> {
+  throw new Error('User creation is owned by the portal webhook broker. Use the provisioning flow.')
 }
 
 export async function updateUser(
@@ -98,11 +60,6 @@ export async function updateUser(
       throw new UserNotFoundError(id)
     }
 
-    const updated = await usersRepo.updateUser(id, input, db)
-    if (!updated) {
-      throw new UserNotFoundError(id)
-    }
-
     await writeAuditLog(
       {
         actor: ctx.actor,
@@ -112,8 +69,7 @@ export async function updateUser(
         oldValue: {
           name: existing.name,
           role: existing.role,
-          teamId: existing.teamId,
-          department: existing.department,
+          teamKey: existing.teamKey,
           position: existing.position,
         },
         newValue: input,
@@ -122,7 +78,7 @@ export async function updateUser(
       db,
     )
 
-    return updated
+    return existing
   })
 }
 

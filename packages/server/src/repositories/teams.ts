@@ -1,9 +1,13 @@
 import { eq, count, ilike, and } from 'drizzle-orm'
-import { teams, users, branches } from '@coms/shared/db/schema'
+import { taxonomyCache, heroesProfiles, emailCache } from '@coms/shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 
-export type TeamRow = typeof teams.$inferSelect
+export type TeamRow = {
+  id: string
+  name: string
+  key: string
+}
 
 export async function listTeams(
   opts: { page: number; limit: number; search?: string },
@@ -11,79 +15,80 @@ export async function listTeams(
 ) {
   const db = getDb(tx)
   const offset = (opts.page - 1) * opts.limit
-  const conditions = []
+  const conditions = [eq(taxonomyCache.taxonomyId, 'teams')]
 
-  if (opts.search) conditions.push(ilike(teams.name, `%${opts.search}%`))
+  if (opts.search) conditions.push(ilike(taxonomyCache.value, `%${opts.search}%`))
 
-  const where = conditions.length > 0 ? and(...conditions) : undefined
+  const where = and(...conditions)
 
   const [rows, [{ total }]] = await Promise.all([
     db
       .select({
-        id: teams.id,
-        name: teams.name,
-        branchId: teams.branchId,
-        leaderId: teams.leaderId,
-        createdAt: teams.createdAt,
-        updatedAt: teams.updatedAt,
-        branchCode: branches.code,
+        id: taxonomyCache.key,
+        name: taxonomyCache.value,
+        key: taxonomyCache.key,
       })
-      .from(teams)
-      .innerJoin(branches, eq(teams.branchId, branches.id))
+      .from(taxonomyCache)
       .where(where)
-      .orderBy(teams.name)
+      .orderBy(taxonomyCache.value)
       .limit(opts.limit)
       .offset(offset),
-    db.select({ total: count() }).from(teams).where(where),
+    db.select({ total: count() }).from(taxonomyCache).where(where),
   ])
 
   return { rows, total }
 }
 
-export async function getTeamMembers(teamId: string, tx?: DbClient) {
+export async function getTeamMembers(teamKey: string, tx?: DbClient) {
   const db = getDb(tx)
   return db
     .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      role: users.role,
-      department: users.department,
-      position: users.position,
-      isActive: users.isActive,
+      id: heroesProfiles.id,
+      name: heroesProfiles.name,
+      email: emailCache.contactEmail,
+      position: heroesProfiles.position,
+      isActive: heroesProfiles.isActive,
     })
-    .from(users)
-    .where(and(eq(users.teamId, teamId), eq(users.isActive, true)))
-    .orderBy(users.name)
+    .from(heroesProfiles)
+    .leftJoin(emailCache, eq(heroesProfiles.id, emailCache.portalSub))
+    .where(and(eq(heroesProfiles.teamKey, teamKey), eq(heroesProfiles.isActive, true)))
+    .orderBy(heroesProfiles.name)
 }
 
-export async function getTeamMemberCount(teamId: string, tx?: DbClient) {
+export async function getTeamMemberCount(teamKey: string, tx?: DbClient) {
   const db = getDb(tx)
   const [{ total }] = await db
     .select({ total: count() })
-    .from(users)
-    .where(and(eq(users.teamId, teamId), eq(users.isActive, true)))
+    .from(heroesProfiles)
+    .where(and(eq(heroesProfiles.teamKey, teamKey), eq(heroesProfiles.isActive, true)))
   return total
 }
 
-export async function getTeamById(id: string, tx?: DbClient) {
+export async function getTeamById(key: string, tx?: DbClient) {
   const db = getDb(tx)
-  const [team] = await db.select().from(teams).where(eq(teams.id, id)).limit(1)
-  return team ?? null
+  const [row] = await db
+    .select({
+      id: taxonomyCache.key,
+      name: taxonomyCache.value,
+      key: taxonomyCache.key,
+    })
+    .from(taxonomyCache)
+    .where(and(eq(taxonomyCache.taxonomyId, 'teams'), eq(taxonomyCache.key, key)))
+    .limit(1)
+  return row ?? null
 }
 
-export async function createTeam(data: typeof teams.$inferInsert, tx?: DbClient) {
-  const db = getDb(tx)
-  const [created] = await db.insert(teams).values(data).returning()
-  return created
+export async function createTeam(
+  _data: { name: string; branchId?: string; leaderId?: string | null },
+  _tx?: DbClient,
+): Promise<TeamRow> {
+  throw new Error('Teams are managed by the portal taxonomy feed. Direct creation is not supported.')
 }
 
 export async function updateTeam(
-  id: string,
-  data: Partial<typeof teams.$inferInsert>,
-  tx?: DbClient,
-) {
-  const db = getDb(tx)
-  const [updated] = await db.update(teams).set(data).where(eq(teams.id, id)).returning()
-  return updated ?? null
+  _id: string,
+  _data: { name?: string; leaderId?: string | null },
+  _tx?: DbClient,
+): Promise<TeamRow | null> {
+  throw new Error('Teams are managed by the portal taxonomy feed. Direct update is not supported.')
 }

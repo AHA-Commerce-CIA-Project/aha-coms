@@ -1,12 +1,12 @@
 import { eq, and, gte, lte, count, desc } from 'drizzle-orm'
-import { auditLogs, users } from '@coms/shared/db/schema'
+import { auditLogs, heroesProfiles, emailCache } from '@coms/shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 import type { ListAuditLogsInput } from '@coms/shared/schemas'
 
 export type AuditLogRow = typeof auditLogs.$inferSelect & {
   actorName: string
-  actorEmail: string
+  actorEmail: string | null
 }
 
 export async function listAuditLogs(
@@ -52,11 +52,12 @@ export async function listAuditLogs(
         newValue: auditLogs.newValue,
         ipAddress: auditLogs.ipAddress,
         createdAt: auditLogs.createdAt,
-        actorName: users.name,
-        actorEmail: users.email,
+        actorName: heroesProfiles.name,
+        actorEmail: emailCache.contactEmail,
       })
       .from(auditLogs)
-      .innerJoin(users, eq(auditLogs.actorId, users.id))
+      .innerJoin(heroesProfiles, eq(auditLogs.actorId, heroesProfiles.id))
+      .leftJoin(emailCache, eq(auditLogs.actorId, emailCache.portalSub))
       .where(where)
       .orderBy(desc(auditLogs.createdAt))
       .limit(input.limit)

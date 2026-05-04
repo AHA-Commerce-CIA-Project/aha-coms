@@ -1,5 +1,5 @@
 import { eq, and, count, desc } from 'drizzle-orm'
-import { appeals, users } from '@coms/shared/db/schema'
+import { appeals, heroesProfiles, emailCache } from '@coms/shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 
@@ -31,11 +31,12 @@ export async function listByAchievement(
         resolvedAt: appeals.resolvedAt,
         resolutionNote: appeals.resolutionNote,
         createdAt: appeals.createdAt,
-        appellantName: users.name,
-        appellantEmail: users.email,
+        appellantName: heroesProfiles.name,
+        appellantEmail: emailCache.contactEmail,
       })
       .from(appeals)
-      .innerJoin(users, eq(appeals.appellantId, users.id))
+      .innerJoin(heroesProfiles, eq(appeals.appellantId, heroesProfiles.id))
+      .leftJoin(emailCache, eq(appeals.appellantId, emailCache.portalSub))
       .where(where)
       .orderBy(desc(appeals.createdAt))
       .limit(opts.limit)
@@ -62,13 +63,14 @@ export async function getByIdWithDetails(id: string, tx?: DbClient) {
     .select({
       appeal: appeals,
       appellant: {
-        id: users.id,
-        name: users.name,
-        email: users.email,
+        id: heroesProfiles.id,
+        name: heroesProfiles.name,
+        email: emailCache.contactEmail,
       },
     })
     .from(appeals)
-    .innerJoin(users, eq(appeals.appellantId, users.id))
+    .innerJoin(heroesProfiles, eq(appeals.appellantId, heroesProfiles.id))
+    .leftJoin(emailCache, eq(appeals.appellantId, emailCache.portalSub))
     .where(eq(appeals.id, id))
     .limit(1)
   return result ?? null

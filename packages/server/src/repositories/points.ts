@@ -1,5 +1,5 @@
 import { eq, and, count, desc, ilike, gte, lte } from 'drizzle-orm'
-import { achievementPoints, pointCategories, users } from '@coms/shared/db/schema'
+import { achievementPoints, pointCategories, heroesProfiles, emailCache } from '@coms/shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 import type { PointStatus, PointCategoryCode } from '@coms/shared/constants'
@@ -59,12 +59,13 @@ export async function listPoints(opts: ListPointsOpts, tx?: DbClient) {
         createdAt: achievementPoints.createdAt,
         categoryCode: pointCategories.code,
         categoryName: pointCategories.defaultName,
-        userName: users.name,
-        userEmail: users.email,
+        userName: heroesProfiles.name,
+        userEmail: emailCache.contactEmail,
       })
       .from(achievementPoints)
       .innerJoin(pointCategories, eq(achievementPoints.categoryId, pointCategories.id))
-      .innerJoin(users, eq(achievementPoints.userId, users.id))
+      .innerJoin(heroesProfiles, eq(achievementPoints.userId, heroesProfiles.id))
+      .leftJoin(emailCache, eq(achievementPoints.userId, emailCache.portalSub))
       .where(where)
       .orderBy(desc(achievementPoints.createdAt))
       .limit(opts.limit)
@@ -94,11 +95,12 @@ export async function getPointWithDetails(id: string, tx?: DbClient) {
     .select({
       point: achievementPoints,
       category: pointCategories,
-      user: { id: users.id, name: users.name, email: users.email, teamId: users.teamId },
+      user: { id: heroesProfiles.id, name: heroesProfiles.name, email: emailCache.contactEmail, teamKey: heroesProfiles.teamKey },
     })
     .from(achievementPoints)
     .innerJoin(pointCategories, eq(achievementPoints.categoryId, pointCategories.id))
-    .innerJoin(users, eq(achievementPoints.userId, users.id))
+    .innerJoin(heroesProfiles, eq(achievementPoints.userId, heroesProfiles.id))
+    .leftJoin(emailCache, eq(achievementPoints.userId, emailCache.portalSub))
     .where(eq(achievementPoints.id, id))
     .limit(1)
   return result ?? null
