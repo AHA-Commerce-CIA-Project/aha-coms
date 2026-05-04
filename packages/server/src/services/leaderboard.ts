@@ -1,5 +1,5 @@
 import { eq, and, count, sql, desc } from 'drizzle-orm'
-import { pointSummaries, users, achievementPoints, pointCategories } from '@coms/shared/db/schema'
+import { pointSummaries, heroesProfiles, achievementPoints, pointCategories } from '@coms/shared/db/schema'
 import { withRLS } from '../repositories/base'
 import { getPointImpactSettings } from './settings-cache'
 import type { AuthUser } from '../middleware/auth'
@@ -44,10 +44,10 @@ export async function getLeaderboard(
     const whereConditions = input.teamId
       ? and(
           eq(pointSummaries.branchId, ctx.actor.branchId),
-          eq(users.isActive, true),
-          eq(users.teamId, input.teamId),
+          eq(heroesProfiles.isActive, true),
+          eq(heroesProfiles.teamKey, input.teamId),
         )
-      : and(eq(pointSummaries.branchId, ctx.actor.branchId), eq(users.isActive, true))
+      : and(eq(pointSummaries.branchId, ctx.actor.branchId), eq(heroesProfiles.isActive, true))
 
     // Compute poinAhaBalance in SQL so we can ORDER BY and LIMIT/OFFSET in the DB
     const poinAhaBalanceExpr = sql<number>`(
@@ -71,21 +71,21 @@ export async function getLeaderboard(
       db
         .select({ total: count() })
         .from(pointSummaries)
-        .innerJoin(users, eq(pointSummaries.userId, users.id))
+        .innerJoin(heroesProfiles, eq(pointSummaries.userId, heroesProfiles.id))
         .where(whereConditions),
 
       db
         .select({
           userId: pointSummaries.userId,
-          name: users.name,
-          avatarUrl: users.avatarUrl,
-          teamId: users.teamId,
+          name: heroesProfiles.name,
+          avatarUrl: heroesProfiles.avatarUrl,
+          teamId: heroesProfiles.teamKey,
           bintangCount: pointSummaries.bintangCount,
           penaltiPointsSum: pointSummaries.penaltiPointsSum,
           poinAhaBalance: poinAhaBalanceExpr,
         })
         .from(pointSummaries)
-        .innerJoin(users, eq(pointSummaries.userId, users.id))
+        .innerJoin(heroesProfiles, eq(pointSummaries.userId, heroesProfiles.id))
         .where(whereConditions)
         .orderBy(orderExpr)
         .limit(input.limit)
@@ -163,11 +163,11 @@ async function getLeaderboardFiltered(
           ? sql`penalti_sum DESC`
           : sql`poin_aha_balance DESC`
 
-    const teamCondition = input.teamId ? sql`AND ${users.teamId} = ${input.teamId}` : sql``
+    const teamCondition = input.teamId ? sql`AND ${heroesProfiles.teamKey} = ${input.teamId}` : sql``
 
     const baseWhere = sql`
-      ${users.isActive} = true
-      AND ${users.branchId} = ${ctx.actor.branchId}
+      ${heroesProfiles.isActive} = true
+      AND ${heroesProfiles.branchKey} = ${ctx.actor.branchId}
       ${teamCondition}
       AND ${achievementPoints.createdAt} >= ${sinceDate}
     `
@@ -178,9 +178,9 @@ async function getLeaderboardFiltered(
     let countRows: Array<{ total: string }>
     try {
       countRows = (await db.execute<{ total: string }>(sql`
-        SELECT COUNT(DISTINCT ${users.id}) AS total
-        FROM ${users}
-        INNER JOIN ${achievementPoints} ON ${achievementPoints.userId} = ${users.id}
+        SELECT COUNT(DISTINCT ${heroesProfiles.id}) AS total
+        FROM ${heroesProfiles}
+        INNER JOIN ${achievementPoints} ON ${achievementPoints.userId} = ${heroesProfiles.id}
         INNER JOIN ${pointCategories} ON ${pointCategories.id} = ${achievementPoints.categoryId}
         WHERE ${baseWhere}
       `)) as unknown as Array<{ total: string }>
@@ -205,18 +205,18 @@ async function getLeaderboardFiltered(
     try {
       dataRows = (await db.execute<FilteredRow>(sql`
         SELECT
-          ${users.id} AS user_id,
-          ${users.name} AS name,
-          ${users.avatarUrl} AS avatar_url,
-          ${users.teamId} AS team_id,
+          ${heroesProfiles.id} AS user_id,
+          ${heroesProfiles.name} AS name,
+          ${heroesProfiles.avatarUrl} AS avatar_url,
+          ${heroesProfiles.teamKey} AS team_id,
           ${bintangCountExpr} AS bintang_count,
           ${penaltiSumExpr} AS penalti_sum,
           ${poinAhaBalanceExpr} AS poin_aha_balance
-        FROM ${users}
-        INNER JOIN ${achievementPoints} ON ${achievementPoints.userId} = ${users.id}
+        FROM ${heroesProfiles}
+        INNER JOIN ${achievementPoints} ON ${achievementPoints.userId} = ${heroesProfiles.id}
         INNER JOIN ${pointCategories} ON ${pointCategories.id} = ${achievementPoints.categoryId}
         WHERE ${baseWhere}
-        GROUP BY ${users.id}, ${users.name}, ${users.avatarUrl}, ${users.teamId}
+        GROUP BY ${heroesProfiles.id}, ${heroesProfiles.name}, ${heroesProfiles.avatarUrl}, ${heroesProfiles.teamKey}
         ORDER BY ${orderExpr}
         LIMIT ${input.limit}
         OFFSET ${offset}

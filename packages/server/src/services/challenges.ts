@@ -1,5 +1,5 @@
-import { eq, and } from 'drizzle-orm'
-import { users } from '@coms/shared/db/schema'
+import { eq, and, sql } from 'drizzle-orm'
+import { heroesProfiles, userConfigCache } from '@coms/shared/db/schema'
 import * as challengesRepo from '../repositories/challenges'
 import * as pointsRepo from '../repositories/points'
 import { writeAuditLog } from './audit'
@@ -86,13 +86,14 @@ export async function fileChallenge(
 
     // Notify HR users in branch for resolution
     const hrUsers = await db
-      .select({ id: users.id })
-      .from(users)
+      .select({ id: heroesProfiles.id })
+      .from(heroesProfiles)
+      .innerJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
       .where(
         and(
-          eq(users.branchId, ctx.actor.branchId),
-          eq(users.role, 'hr'),
-          eq(users.isActive, true),
+          eq(heroesProfiles.branchKey, ctx.actor.branchId),
+          sql`${userConfigCache.config}->>'role' = 'hr'`,
+          eq(heroesProfiles.isActive, true),
         ),
       )
 

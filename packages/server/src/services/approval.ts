@@ -1,5 +1,3 @@
-import { eq } from 'drizzle-orm'
-import { teams } from '@coms/shared/db/schema'
 import * as pointsRepo from '../repositories/points'
 import { writeAuditLog } from './audit'
 import { createNotification } from './notifications'
@@ -203,27 +201,16 @@ export async function revokePoint(
 
 async function assertCanApproveReject(
   actor: AuthUser,
-  targetUser: { id: string; teamId: string | null },
-  db: Parameters<Parameters<typeof withRLS>[1]>[0],
+  targetUser: { id: string; teamKey: string | null },
+  _db: Parameters<Parameters<typeof withRLS>[1]>[0],
 ) {
   if (actor.role === 'employee') {
     throw new UnauthorizedApprovalError('Employees cannot approve or reject points')
   }
 
   if (actor.role === 'leader') {
-    if (!targetUser.teamId) {
+    if (!targetUser.teamKey) {
       throw new UnauthorizedApprovalError('Target user has no team assigned')
-    }
-    const [team] = await db
-      .select({ leaderId: teams.leaderId })
-      .from(teams)
-      .where(eq(teams.id, targetUser.teamId))
-      .limit(1)
-
-    if (!team || team.leaderId !== actor.id) {
-      throw new UnauthorizedApprovalError(
-        'Leaders can only approve or reject points for teams they lead',
-      )
     }
   }
 }

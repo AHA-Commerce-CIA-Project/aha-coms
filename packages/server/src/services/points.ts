@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { pointCategories, users, teams } from '@coms/shared/db/schema'
+import { pointCategories, heroesProfiles, taxonomyCache } from '@coms/shared/db/schema'
 import * as pointsRepo from '../repositories/points'
 import { writeAuditLog } from './audit'
 import { createNotification } from './notifications'
@@ -33,8 +33,8 @@ export async function submitPoint(input: SubmitPointInput, ctx: ServiceContext) 
     // Validate target user exists and is active
     const [targetUser] = await db
       .select()
-      .from(users)
-      .where(eq(users.id, input.userId))
+      .from(heroesProfiles)
+      .where(eq(heroesProfiles.id, input.userId))
       .limit(1)
 
     if (!targetUser || !targetUser.isActive) {
@@ -119,28 +119,6 @@ export async function submitPoint(input: SubmitPointInput, ctx: ServiceContext) 
         db,
       )
 
-      // Notify the designated team leader for approval
-      if (targetUser.teamId) {
-        const [team] = await db
-          .select({ leaderId: teams.leaderId })
-          .from(teams)
-          .where(eq(teams.id, targetUser.teamId))
-          .limit(1)
-
-        if (team?.leaderId) {
-          await createNotification(
-            {
-              branchId: ctx.actor.branchId,
-              userId: team.leaderId,
-              type: 'point_needs_approval',
-              title: `${ctx.actor.name} submitted ${getCategoryLabel(input.categoryCode)} — needs your approval`,
-              entityType: 'achievement_points',
-              entityId: created.id,
-            },
-            db,
-          )
-        }
-      }
     } else if (!isSelfSubmission) {
       // Notify the target user about the point they received
       await createNotification(
@@ -195,14 +173,12 @@ export async function getPointById(id: string, ctx: ServiceContext) {
     // Also fetch submitter info
     const [submitter] = await db
       .select({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-        role: users.role,
-        avatarUrl: users.avatarUrl,
+        id: heroesProfiles.id,
+        name: heroesProfiles.name,
+        avatarUrl: heroesProfiles.avatarUrl,
       })
-      .from(users)
-      .where(eq(users.id, result.point.submittedBy))
+      .from(heroesProfiles)
+      .where(eq(heroesProfiles.id, result.point.submittedBy))
       .limit(1)
 
     return {

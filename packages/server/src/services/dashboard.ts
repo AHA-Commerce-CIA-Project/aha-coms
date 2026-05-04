@@ -1,6 +1,6 @@
-import { eq, and, desc, count, inArray } from 'drizzle-orm'
+import { eq, and, desc, count } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
-import { pointSummaries, achievementPoints, pointCategories, users, teams } from '@coms/shared/db/schema'
+import { pointSummaries, achievementPoints, pointCategories, heroesProfiles } from '@coms/shared/db/schema'
 import { withRLS } from '../repositories/base'
 import { getPointImpactSettings } from './settings-cache'
 import type { AuthUser } from '../middleware/auth'
@@ -75,22 +75,17 @@ async function getPendingCount(
   if (role === 'employee') return 0
 
   if (role === 'leader') {
-    const ledTeams = await db
-      .select({ id: teams.id })
-      .from(teams)
-      .where(eq(teams.leaderId, ctx.actor.id))
+    const actorTeamKey = ctx.actor.teamId
+    if (!actorTeamKey) return 0
 
-    if (ledTeams.length === 0) return 0
-
-    const teamIds = ledTeams.map((t) => t.id)
     const rows = await db
       .select({ cnt: count() })
       .from(achievementPoints)
-      .innerJoin(users, eq(achievementPoints.userId, users.id))
+      .innerJoin(heroesProfiles, eq(achievementPoints.userId, heroesProfiles.id))
       .where(
         and(
           eq(achievementPoints.status, 'pending'),
-          inArray(users.teamId, teamIds),
+          eq(heroesProfiles.teamKey, actorTeamKey),
         ),
       )
     return Number(rows[0]?.cnt ?? 0)
@@ -110,7 +105,7 @@ async function getPendingCount(
 }
 
 export async function getRecentActivity(ctx: ServiceContext): Promise<ActivityItem[]> {
-  const submitter = alias(users, 'submitter')
+  const submitter = alias(heroesProfiles, 'submitter')
 
   return withRLS(ctx.actor, async (db) => {
     const rows = await db
@@ -121,13 +116,13 @@ export async function getRecentActivity(ctx: ServiceContext): Promise<ActivityIt
         points: achievementPoints.points,
         status: achievementPoints.status,
         reason: achievementPoints.reason,
-        userName: users.name,
-        userAvatarUrl: users.avatarUrl,
+        userName: heroesProfiles.name,
+        userAvatarUrl: heroesProfiles.avatarUrl,
         submitterName: submitter.name,
         createdAt: achievementPoints.createdAt,
       })
       .from(achievementPoints)
-      .innerJoin(users, eq(achievementPoints.userId, users.id))
+      .innerJoin(heroesProfiles, eq(achievementPoints.userId, heroesProfiles.id))
       .innerJoin(submitter, eq(achievementPoints.submittedBy, submitter.id))
       .innerJoin(pointCategories, eq(achievementPoints.categoryId, pointCategories.id))
       .where(eq(achievementPoints.branchId, ctx.actor.branchId))
