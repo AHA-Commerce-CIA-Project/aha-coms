@@ -25,6 +25,7 @@ import { auditLogsRoute } from './routes/audit-logs'
 import { reportsRoute } from './routes/reports'
 import { sheetSyncRoute, sheetSyncTriggerRoute } from './routes/sheet-sync'
 import { portalWebhooksRoute } from './routes/portal-webhooks'
+import { adminPendingAliasesRoute } from './routes/admin-pending-aliases'
 import { pullTaxonomiesOnBoot } from './services/portal-bootstrap'
 
 const app = new Elysia()
@@ -43,6 +44,7 @@ const app = new Elysia()
       .use(healthz)
       .use(sheetSyncTriggerRoute)
       .use(portalWebhooksRoute)
+      .use(adminPendingAliasesRoute)
       .group('/v1', (v1) =>
         v1
           .use(authPlugin)
