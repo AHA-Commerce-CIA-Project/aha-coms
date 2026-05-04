@@ -293,7 +293,7 @@ This bounds the race to "DLQ retry consumes the taxonomy event in between" — t
 
 ## Phasing
 
-- **PR 07-1:** Schema migration via `drizzle-kit generate` — `org_taxonomies` + manifest `taxonomies` column + seed from Heroes' current branches/teams.
+- **PR 07-1:** ✅ SHIPPED 2026-05-04 (commit `26057ec`). Schema migration via `drizzle-kit generate` — `org_taxonomies` + manifest `taxonomies` column + seed from `identity_users` distincts (branches + departments). Heroes manifest bumped to `schemaVersion: 2`. Cutover rollback companion `0002_restore_heroes_writes.sql` staged. Teams seeded empty — admin populates from Heroes' production team table during cutover pre-flight (TODO §Cutover window).
 - **PR 07-2:** `GET /api/taxonomies/sync` endpoint + admin UI for taxonomies + webhook events emit (initially gated off).
 - **PR 07-3:** Wire `createEmployee` / `updateEmployee` to fire `employment.updated`. Extend `user.provisioned` payload. Begin dual-emit (legacy + new fields).
 - **PR 07-4:** Publish `@coms-portal/shared` v1.6.0 with new types.
