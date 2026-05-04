@@ -1,5 +1,5 @@
 import { eq, and, gte, lte, count, sum, sql } from 'drizzle-orm'
-import { achievementPoints, pointCategories, users, teams } from '@coms/shared/db/schema'
+import { achievementPoints, pointCategories, heroesProfiles } from '@coms/shared/db/schema'
 import { withRLS } from '../repositories/base'
 import type { AuthUser } from '../middleware/auth'
 import type { ReportsQueryInput } from '@coms/shared/schemas'
@@ -24,13 +24,14 @@ export async function getDashboardStats(
   }
 
   return withRLS(ctx.actor, async (db) => {
-    // Determine branchId filter: admin can pass branchId param, hr is scoped to own branch
-    const branchId =
-      ctx.actor.role === 'admin' || ctx.actor.role === 'hr' ? (input.branchId ?? null) : ctx.actor.branchId
+    const branchKey =
+      ctx.actor.role === 'admin' || ctx.actor.role === 'hr' ? (input.branchId ?? null) : ctx.actor.branchKey
 
     const baseConditions = []
-    if (branchId !== null) {
-      baseConditions.push(eq(achievementPoints.branchId, branchId))
+    if (branchKey !== null) {
+      baseConditions.push(
+        sql`${achievementPoints.userId} IN (SELECT id FROM heroes_profiles WHERE branch_key = ${branchKey})`,
+      )
     }
     if (input.startDate) {
       baseConditions.push(gte(achievementPoints.createdAt, new Date(input.startDate)))
@@ -41,12 +42,9 @@ export async function getDashboardStats(
 
     const baseWhere = baseConditions.length > 0 ? and(...baseConditions) : undefined
 
-    // Run all 4 aggregation queries in parallel within the same transaction
     const [totalResult, categoryRows, teamRows, overTimeRows] = await Promise.all([
-      // 1. Total submissions
       db.select({ total: count() }).from(achievementPoints).where(baseWhere),
 
-      // 2. By category breakdown
       db
         .select({ name: pointCategories.defaultName, count: count() })
         .from(achievementPoints)
@@ -55,17 +53,14 @@ export async function getDashboardStats(
         .groupBy(pointCategories.id, pointCategories.defaultName)
         .orderBy(pointCategories.defaultName),
 
-      // 3. By team breakdown
       db
-        .select({ name: teams.name, total: sum(achievementPoints.points) })
+        .select({ name: heroesProfiles.teamValueSnapshot, total: sum(achievementPoints.points) })
         .from(achievementPoints)
-        .innerJoin(users, eq(achievementPoints.userId, users.id))
-        .innerJoin(teams, eq(users.teamId, teams.id))
+        .innerJoin(heroesProfiles, eq(achievementPoints.userId, heroesProfiles.id))
         .where(baseWhere)
-        .groupBy(teams.id, teams.name)
-        .orderBy(teams.name),
+        .groupBy(heroesProfiles.teamValueSnapshot)
+        .orderBy(heroesProfiles.teamValueSnapshot),
 
-      // 4. Submissions over time (grouped by date)
       db
         .select({
           date: sql<string>`DATE(${achievementPoints.createdAt})`.as('date'),
@@ -82,7 +77,7 @@ export async function getDashboardStats(
     return {
       totalSubmissions: Number(total ?? 0),
       byCategory: categoryRows.map((r) => ({ name: r.name, count: Number(r.count) })),
-      byTeam: teamRows.map((r) => ({ name: r.name, total: Number(r.total ?? 0) })),
+      byTeam: teamRows.map((r) => ({ name: r.name ?? '', total: Number(r.total ?? 0) })),
       overTime: overTimeRows.map((r) => ({
         date: String(r.date),
         count: Number(r.count),

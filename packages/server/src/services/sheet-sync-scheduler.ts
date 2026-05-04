@@ -1,6 +1,6 @@
 import { eq, and, lt, sql } from 'drizzle-orm'
 import { db } from '@coms/shared/db'
-import { branches, sheetSyncJobs } from '@coms/shared/db/schema'
+import { taxonomyCache, sheetSyncJobs } from '@coms/shared/db/schema'
 import { runFullSync, runFullResync } from './sheet-sync'
 
 type SyncConfig = {
@@ -15,7 +15,7 @@ type SyncConfig = {
     poinAha: string
     redeem: string
   }
-  branchId: string
+  branchKey: string
 }
 
 let isSyncing = false
@@ -44,12 +44,16 @@ export async function cleanupStaleJobs(): Promise<void> {
     )
 }
 
-async function getDefaultBranchId(): Promise<string | null> {
-  const [branch] = await db.select({ id: branches.id }).from(branches).limit(1)
-  return branch?.id ?? null
+async function getDefaultBranchKey(): Promise<string | null> {
+  const [entry] = await db
+    .select({ key: taxonomyCache.key })
+    .from(taxonomyCache)
+    .where(eq(taxonomyCache.taxonomyId, 'branches'))
+    .limit(1)
+  return entry?.key ?? null
 }
 
-function buildConfigFromEnv(): Omit<SyncConfig, 'branchId'> {
+function buildConfigFromEnv(): Omit<SyncConfig, 'branchKey'> {
   return {
     sheetIds: {
       points: process.env.GOOGLE_SHEET_ID_POINTS ?? '',
@@ -83,15 +87,14 @@ export async function triggerManualSync(startedBy?: string) {
   if (isSyncing) return null
   isSyncing = true
   try {
-    // Clean up any stale jobs that never completed (e.g. server restart, timeout)
     await cleanupStaleJobs()
     const config = buildConfigFromEnv()
-    const branchId = await getDefaultBranchId()
-    if (!branchId) throw new Error('No branch found')
+    const branchKey = await getDefaultBranchKey()
+    if (!branchKey) throw new Error('No branch found')
     if (!config.sheetIds.points && !config.sheetIds.employees) {
       throw new Error('GOOGLE_SHEET_ID_POINTS/EMPLOYEES env vars not set')
     }
-    return await runFullSync(config.sheetIds, config.tabNames, branchId, startedBy)
+    return await runFullSync(config.sheetIds, config.tabNames, branchKey, startedBy)
   } catch (err) {
     console.error('[sheet-sync] sync error:', err)
     throw err
@@ -115,12 +118,12 @@ export function triggerResyncInBackground(startedBy?: string) {
     try {
       await cleanupStaleJobs()
       const config = buildConfigFromEnv()
-      const branchId = await getDefaultBranchId()
-      if (!branchId) throw new Error('No branch found')
+      const branchKey = await getDefaultBranchKey()
+      if (!branchKey) throw new Error('No branch found')
       if (!config.sheetIds.points && !config.sheetIds.employees) {
         throw new Error('GOOGLE_SHEET_ID_POINTS/EMPLOYEES env vars not set')
       }
-      await runFullResync(config.sheetIds, config.tabNames, branchId, startedBy)
+      await runFullResync(config.sheetIds, config.tabNames, branchKey, startedBy)
     } catch (err) {
       console.error('[sheet-sync] resync error:', err)
     } finally {
