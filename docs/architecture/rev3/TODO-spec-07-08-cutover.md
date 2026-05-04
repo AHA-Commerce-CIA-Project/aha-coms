@@ -223,31 +223,25 @@ Repo: `coms_aha_heroes`
 
 ---
 
-## Resuming PR A2 (next session — read this first)
+## PR A2 SHIPPED (2026-05-04) — what to do next
 
-Heroes branch `coms_aha_heroes/main` is **3 commits ahead of `origin/main`** (not pushed):
-- `b289dbd` — Slice 1+2+3 (webhook split + 11 handlers + projection helpers)
-- `44f856c` — Slice 4+5 (pull-on-boot + portal API client + session module restored)
-- `5392d98` — Slice 7 (cutover-verify + sweep + CI guard)
+Heroes branch `coms_aha_heroes/main` carries the full PR A2 deliverable across 11 commits ending at `8b4e2ad` (not yet pushed to `origin/main` — push when coordinating Heroes Deploy A).
 
-**Two slices remain. Both are required for cutover.** Pick one to start; they're independent:
+**Final A2 verification gate:**
+- `bun run --filter=@coms/server typecheck` → 0 errors (down from 27 baseline)
+- `bun test packages/server scripts` → 67 pass / 0 fail (up from 49; Slice 6 added 18 four-outcome tests)
+- `bun run ci:check-no-illegal-inserts` → 0 violations across 174 source files (down from 3)
 
-- **Focus A — Slice 8 (typecheck cleanup, deployment blocker)**: 27 errors, ~20 files, mechanical-but-numerous. Detailed execution order is in the §"Repos/services typecheck cleanup" block above. Starting move: `cd /Users/mac/HT/Project/coms_aha_heroes && bunx --cwd packages/server tsc --noEmit 2>&1 | grep "error TS"` to see the live list, then `rm packages/server/src/services/auth-sync.ts` (verified zero callers) for an instant -1 file count.
+**Remaining work (not blocked on code):**
 
-- **Focus B — Slice 6 (sheet-sync rewrite)**: 945-line file → batch alias resolve + 4-outcome routing. Detailed scope in the §"Sheet-sync rewrite" block above. Starting move: `Read packages/server/src/services/sheet-sync.ts` end-to-end to map the current ingestion shape, then design the new fan-out around `resolveAliasesBatch` (already wired in `lib/portal-api-client.ts`).
-
-**Verification anchors after each slice:**
-- `bun test packages/server scripts` (49 tests baseline, must stay green)
-- `bun run --filter=server typecheck` (27 errors baseline; Slice 8 drives this to 0; Slice 6 may add a few transient ones if it touches `routes/sheet-sync.ts`)
-- `bun run ci:check-no-illegal-inserts` (currently fails with 3 violations — should reach 0 after Slice 6 + Slice 8)
-
-**Commit discipline**: each cohesive slice via `/mr-door-commit`. Don't bundle Slice 6 and Slice 8 into one commit even if they ship in the same session — they're conceptually separate.
-
-**When BOTH slices land**, the PR A2 deliverable is complete:
-1. Mark this TODO doc's "PR A2" header as SHIPPED with the final commit refs.
-2. Update the project memory at `~/.claude/projects/-Users-mac-HT-Project-coms-portal/memory/project_spec_07_08_cutover.md`.
-3. Heroes Deploy A is ready — coordinate with portal team for the cutover window.
-4. After Heroes Deploy A confirms, portal does PR 07-5 (drop legacy emit fields).
+1. **Push `coms_aha_heroes/main` to `origin/main`** when ready to start the cutover sequence. Coordinate timing with portal team via shared comms channel.
+2. **Pre-cutover (T-1h)** — see §"Cutover window" block above. Critical pre-flight: portal admin populates `(taxonomy_id='teams', ...)` from Heroes' production team table BEFORE Heroes Deploy A. Without this, taxonomy_cache will be sparse for teams.
+3. **Ops flips `ENABLE_TAXONOMY_EVENTS=true`** in portal production after staging burn-in (PR 07-3 §OPS step).
+4. **Cutover window execution** (<30min, both teams) per §"Cutover window" runbook above.
+5. **Run `bun run cutover:verify` on Heroes** at T+~25min — all 5 checks must pass.
+6. **Apply cutover migration `0001_revoke_heroes_writes.sql`** on portal at T+30min (Deploy C).
+7. **After Heroes Deploy A confirms stable** — execute portal PR 07-5 (drop legacy emit fields, bump `@coms-portal/shared` git+url pin to v1.6.0, force manifest schemaVersion:2). Detailed scope in §"PR 07-5" block above.
+8. **Cleanup phases** (Heroes + portal) per §"Cleanup" blocks above, ~7 days after cutover stable.
 
 ---
 
