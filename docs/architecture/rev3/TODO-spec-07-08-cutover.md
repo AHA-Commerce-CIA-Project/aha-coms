@@ -61,18 +61,18 @@ Repo: `coms-shared` (separate GitHub repo per `project_shared_packages.md`)
 - [x] Bump version to v1.6.0; tagged `v1.6.0` and pushed to `origin/main`.
 - [x] Verified no breaking changes — locked by `src/__tests__/v1_5_0-backcompat.test.ts` (12 tests exercising every v1.5.0 name and shape verbatim). Full suite: 28/28 pass; `tsc --noEmit` clean.
 
-### PR 07-3.5 — Bulk rebroadcast-provisioning admin endpoint (BLOCKER for cutover window)
+### PR 07-3.5 — Bulk rebroadcast-provisioning admin endpoint ✅ SHIPPED 2026-05-05
 Repo: `coms_portal`
 
 **Why:** Surfaced 2026-05-05 while attempting a staging cutover dress rehearsal. `emitUserProvisioned` is only invoked from `createEmployee` (POST `/api/v1/employees`), `employee-info-sync` (sheet sync), and `employee-import` (CSV import). `retry-provisioning` runs the internal state machine but does NOT emit. Portal currently has 72 backfilled active `identity_users` whose initial `user.provisioned` events fired long ago — when Step 1 truncate wipes Heroes, those events have no path to refire, so `heroes_profiles` stays empty after restart. This endpoint is what makes Cutover sequence Step 3 path (a) (Spec 08) actually work for any portal that has pre-existing users.
 
-- [ ] `POST /api/v1/admin/employees/rebroadcast-provisioning` — `apps/api/src/routes/admin.ts` (or new `apps/api/src/routes/admin/employees.ts`).
-  - [ ] Auth: `requireRole('admin')` (matches `/admin/taxonomies` and existing `/employees` routes).
-  - [ ] Body: optional `{ userIds?: string[] }` for selective rebroadcast; default = all `status='active'` rows.
-  - [ ] Implementation: `SELECT id FROM identity_users WHERE status='active'` → loop with concurrency cap (~5 parallel) calling `emitUserProvisioned(userId)`. Log per-user success/failure; return `{ count, fired, failed }` summary.
-  - [ ] Audit: single `bulk_rebroadcast_provisioning` log entry with `{count, requestedCount, source: 'admin-cli' | 'admin-ui'}` plus per-user failure entries on errors.
-  - [ ] Idempotency: each `emitUserProvisioned` already constructs an `eventId` per call; Heroes' webhook handler dedupes on `eventId`. Re-running this endpoint multiple times is safe (Heroes will only insert each `heroes_profiles` row once per emit).
-- [ ] Tests: 1 happy-path (3 users → 3 emits captured), 1 selective (`userIds: [a,b]` → 2 emits), 1 partial-failure (mock one emit to throw → response shows `failed: 1`).
+- [x] `POST /api/v1/admin/employees/rebroadcast-provisioning` — `apps/api/src/routes/admin/employees.ts`.
+  - [x] Auth: `requireRole('admin')` (matches `/admin/taxonomies` and existing `/employees` routes).
+  - [x] Body: optional `{ userIds?: string[] }` for selective rebroadcast; default = all `status='active'` rows.
+  - [x] Implementation: `SELECT id FROM identity_users WHERE status='active'` → 5-lane concurrent fan-out (`fanOutWithConcurrency` helper) calling `emitUserProvisioned(userId)`. Per-user failures captured; response carries `{ ok, batchId, count, fired, failed, failures: [{userId, error}] }`.
+  - [x] Audit: single `bulk_rebroadcast_provisioning` log entry with `{batchId, count, requestedCount, fired, failed, source: 'admin-cli'}` plus per-user `bulk_rebroadcast_provisioning_failure` entries on errors. Two new audit-action constants added to `apps/api/src/services/audit.ts`.
+  - [x] Idempotency: each `emitUserProvisioned` already constructs an `eventId` per call; Heroes' webhook handler dedupes on `eventId`. Re-running this endpoint multiple times is safe (Heroes will only insert each `heroes_profiles` row once per emit).
+- [x] Tests: 5 in `apps/api/src/routes/admin/__tests__/employees.test.ts` — happy-path (3 users → 3 emits + summary audit), selective (`userIds: [a,b]` → 2 emits, requestedCount pinned), partial-failure (1 throws → `failed:1` + failure-audit row), non-admin → 403, empty selection → 200/0/0/0. Full isolated API suite: 531 pass / 0 fail. `tsc --noEmit` clean (api + web).
 - [ ] Deploy via existing portal `deploy.yml`. Smoke-test against prod by setting one portal user's `branch` field after deploy and confirming a `user.updated` (or rebroadcast) event lands at Heroes.
 
 This is genuinely useful infrastructure beyond cutover: any future Heroes recovery (DB restore, schema regression that loses `heroes_profiles`) can use this endpoint to rebuild from portal source-of-truth without touching identity_users.
