@@ -1,6 +1,6 @@
 # Rev 3 — Spec 07: Org Taxonomies & Employment Block
 
-> Status: **Active — PRs 07-1 / 07-2 / 07-3 / 07-4 SHIPPED 2026-05-04 (`@coms-portal/shared` v1.6.0 published). Heroes Deploy A is READY (Spec 08 PR A1 + PR A2 ALL SHIPPED 2026-05-04). PR 07-5 (drop legacy emit fields, force manifest schemaVersion:2) is the only remaining portal-side work — gated on Heroes Deploy A confirmation.**
+> Status: **Active — PRs 07-1 / 07-2 / 07-3 / 07-4 SHIPPED 2026-05-04 (`@coms-portal/shared` v1.6.0 published). Heroes Deploy A is LIVE IN STAGING (Spec 08 PR A1 + PR A2 ALL SHIPPED + DEPLOYED 2026-05-04 through sha `f62f2be`). PR 07-5 (drop legacy emit fields, force manifest schemaVersion:2) is the only remaining portal-side work — gated on Heroes production cutover confirming stable.**
 > Priority: **Critical-path. Precondition for Spec 08 (Heroes Spec 03 cutover) and for onboarding any second/third H-app.**
 > Scope: Portal (`org_taxonomies` schema + admin UI + webhook fan-out + manifest extension + `@coms-portal/shared` v1.6.0 contract bump). Every H-app consumes via the projection pattern documented here.
 > Prerequisites: Spec 03 shipped portal-side (already on `main`). Spec 06 shipped (already on `main`).

@@ -98,16 +98,17 @@ Repo: `coms_aha_heroes`
 - `fn_sync_point_summary` trigger function (defined in migration `0002_triggers.sql`) still references the dropped `users` table. The `BEFORE UPDATE` trigger fires on `achievement_points` / `challenges` / `appeals` / `comments` / `rewards` / `redemptions` / `system_settings` updates — but A1's migration TRUNCATEs `achievement_points`, so no rows will trigger it until A2 re-introduces ingestion. A2 must either DROP and recreate this function against `heroes_profiles`, or drop it entirely if the point-summary materialisation moves to application code.
 - `idx_*_branch` indexes on the 10 dependent tables now reference an unconstrained `branch_id` column. Indexes still work; A2 decides whether to drop them or rebuild on a different column (e.g., a denormalised `branch_key`).
 
-### PR A2 — Behaviour ✅ SHIPPED 2026-05-04 (8/8 slices across 11 commits)
+### PR A2 — Behaviour ✅ SHIPPED + DEPLOYED to staging 2026-05-04 (8 slices + 2 deploy fixes across 13 commits)
 Repo: `coms_aha_heroes`
 
-A2 is delivered in 8 slices. ALL SHIPPED across 11 commits (`b289dbd`, `44f856c`, `5392d98`, `257d021`, `c0d026d`, `feccc27`, `7c2cf7f`, `75621df`, `0e20355`, `da0cc09`, `d9e0c31`, `6989f1d`, `8b4e2ad`). All slices followed TDD with bun:test and committed via /mr-door-commit.
+A2 delivered in 8 slices across 11 commits (`b289dbd`, `44f856c`, `5392d98`, `257d021`, `c0d026d`, `feccc27`, `7c2cf7f`, `75621df`, `0e20355`, `da0cc09`, `d9e0c31`, `6989f1d`, `8b4e2ad`). Two deploy-time follow-up fixes landed on push: `a7f9ed9` (svelte-check fallout — 4 .svelte template field renames missed by the Slice 8 sweep that grepped only `+page.server.ts` files) and `f62f2be` (migration 0011 needed `USING "user_id"::uuid` on the text→uuid type changes — PostgreSQL refuses to implicitly cast even on TRUNCATEd tables; surfaced via local Docker postgres reproduction after CI's drizzle-kit spinner ate the postgres ERROR). All slices followed TDD with bun:test and committed via /mr-door-commit.
 
-**Final verification gate (commit `8b4e2ad`):**
+**Final verification gate (commit `f62f2be`, deployed to heroes staging via run `25314176044`):**
 - `bun run --filter=@coms/server typecheck` → 0 errors (down from 27 baseline)
+- `bun run --filter=@coms/web typecheck` → 0 errors / 5915 files (was 4 errors after first push)
 - `bun test packages/server scripts` → 67 pass / 0 fail (up from 49 — Slice 6 added 18 tests)
 - `bun run ci:check-no-illegal-inserts` → 0 violations across 174 files (down from 3)
-- Heroes Deploy A is **READY**. Coordinate with portal team for cutover window.
+- Heroes CI ✅ run `25314122508`; Heroes Deploy ✅ run `25314176044`. **Heroes Deploy A is LIVE IN STAGING.** Cutover window + portal PR 07-5 are the remaining work.
 
 **Webhook handler split (Slice 1+2+3 SHIPPED commit `b289dbd`):**
 - [x] `packages/server/src/routes/portal-webhooks.ts` refactored 187 → 61 lines: HTTP + OIDC + idempotency dedupe + body parse + `dispatchPortalEvent`.
@@ -223,24 +224,26 @@ Repo: `coms_aha_heroes`
 
 ---
 
-## PR A2 SHIPPED (2026-05-04) — what to do next
+## PR A2 SHIPPED + DEPLOYED to staging (2026-05-04) — what to do next
 
-Heroes branch `coms_aha_heroes/main` carries the full PR A2 deliverable across 11 commits ending at `8b4e2ad` (not yet pushed to `origin/main` — push when coordinating Heroes Deploy A).
+Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be` (pushed 2026-05-04). Heroes Deploy A is LIVE in staging via Deploy run `25314176044`.
 
 **Final A2 verification gate:**
 - `bun run --filter=@coms/server typecheck` → 0 errors (down from 27 baseline)
+- `bun run --filter=@coms/web typecheck` → 0 errors / 5915 files
 - `bun test packages/server scripts` → 67 pass / 0 fail (up from 49; Slice 6 added 18 four-outcome tests)
 - `bun run ci:check-no-illegal-inserts` → 0 violations across 174 source files (down from 3)
+- Heroes CI ✅ + Deploy ✅ on sha `f62f2be`
 
-**Remaining work (not blocked on code):**
+**Remaining work (operational, not blocked on code):**
 
-1. **Push `coms_aha_heroes/main` to `origin/main`** when ready to start the cutover sequence. Coordinate timing with portal team via shared comms channel.
-2. **Pre-cutover (T-1h)** — see §"Cutover window" block above. Critical pre-flight: portal admin populates `(taxonomy_id='teams', ...)` from Heroes' production team table BEFORE Heroes Deploy A. Without this, taxonomy_cache will be sparse for teams.
+1. **Smoke-test heroes staging** — log in, run a sheet ingestion, exercise admin flows, hit `/profile`. Confirm webhook fan-out works end-to-end with portal staging.
+2. **Pre-cutover (T-1h)** — see §"Cutover window" block above. Critical pre-flight: portal admin populates `(taxonomy_id='teams', ...)` from Heroes' production team table BEFORE the cutover window. Without this, taxonomy_cache will be sparse for teams in production.
 3. **Ops flips `ENABLE_TAXONOMY_EVENTS=true`** in portal production after staging burn-in (PR 07-3 §OPS step).
-4. **Cutover window execution** (<30min, both teams) per §"Cutover window" runbook above.
-5. **Run `bun run cutover:verify` on Heroes** at T+~25min — all 5 checks must pass.
+4. **Run `bun run cutover:verify`** against staging end-to-end before scheduling the production cutover. All 5 checks must pass.
+5. **Cutover window execution** (<30min, both teams) per §"Cutover window" runbook above.
 6. **Apply cutover migration `0001_revoke_heroes_writes.sql`** on portal at T+30min (Deploy C).
-7. **After Heroes Deploy A confirms stable** — execute portal PR 07-5 (drop legacy emit fields, bump `@coms-portal/shared` git+url pin to v1.6.0, force manifest schemaVersion:2). Detailed scope in §"PR 07-5" block above.
+7. **After Heroes Deploy A confirms stable in production** — execute portal PR 07-5 (drop legacy emit fields, bump `@coms-portal/shared` git+url pin to v1.6.0, force manifest schemaVersion:2). Detailed scope in §"PR 07-5" block above.
 8. **Cleanup phases** (Heroes + portal) per §"Cleanup" blocks above, ~7 days after cutover stable.
 
 ---
