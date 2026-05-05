@@ -42,6 +42,11 @@ variable "sheet_sync_sa_key_secret_id" {
   default     = ""
 }
 
+variable "portal_service_account_email" {
+  description = "Email of the SA the portal Cloud Run runs as. Used to verify Authorization: Bearer Google ID tokens on inbound portal webhooks (Rev 2 §03)."
+  type        = string
+}
+
 variable "sheet_sync_config" {
   description = "Google Sheets sync configuration (Sheet IDs and tab names)"
   type = object({

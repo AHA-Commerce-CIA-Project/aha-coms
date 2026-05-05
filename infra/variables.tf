@@ -57,5 +57,15 @@ variable "app_image" {
   # Placeholder to bootstrap Cloud Run before the first real image is pushed.
   # After the first successful deploy.yml run, this value is irrelevant —
   # the workflow always overrides it with the SHA-tagged image.
-  default     = "us-docker.pkg.dev/cloudrun/container/hello"
+  default = "us-docker.pkg.dev/cloudrun/container/hello"
+}
+
+variable "portal_service_account_email" {
+  description = "SA email the portal Cloud Run runs as — used to verify inbound webhook Bearer tokens (Rev 2 §03)."
+  type        = string
+  # Defaults to the SA in this project. deploy.yml sources the same value from
+  # the GitHub repo variable PORTAL_SERVICE_ACCOUNT_EMAIL so a Cloud Run env
+  # update doesn't get reset on each deploy. Override here if portal moves
+  # projects.
+  default = "coms-portal-run-sa@fbi-dev-484410.iam.gserviceaccount.com"
 }

@@ -33,16 +33,17 @@ module "sheet_sync" {
 }
 
 module "cloud_run" {
-  source              = "./modules/cloud-run"
-  project_id          = var.project_id
-  region              = var.region
-  image               = var.app_image
-  db_connection_name  = module.cloud_sql.connection_name
-  db_url_secret_id         = module.cloud_sql.db_url_production_secret_id
-  db_url_staging_secret_id = module.cloud_sql.db_url_staging_secret_id
-  uploads_bucket_name = module.storage.uploads_bucket_name
-  exports_bucket_name = module.storage.exports_bucket_name
-  sheet_sync_sa_key_secret_id = module.sheet_sync.sa_key_secret_id
+  source                       = "./modules/cloud-run"
+  project_id                   = var.project_id
+  region                       = var.region
+  image                        = var.app_image
+  db_connection_name           = module.cloud_sql.connection_name
+  db_url_secret_id             = module.cloud_sql.db_url_production_secret_id
+  db_url_staging_secret_id     = module.cloud_sql.db_url_staging_secret_id
+  uploads_bucket_name          = module.storage.uploads_bucket_name
+  exports_bucket_name          = module.storage.exports_bucket_name
+  sheet_sync_sa_key_secret_id  = module.sheet_sync.sa_key_secret_id
+  portal_service_account_email = var.portal_service_account_email
   sheet_sync_config = {
     sheet_id_points    = var.sheet_id_points
     sheet_id_employees = var.sheet_id_employees

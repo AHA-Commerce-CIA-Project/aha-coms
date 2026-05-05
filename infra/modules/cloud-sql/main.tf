@@ -82,8 +82,8 @@ locals {
 resource "google_secret_manager_secret" "db_url_production" {
   project   = var.project_id
   secret_id = "coms-aha-heroes-db-url-production"
-  replication { 
-    auto {} 
+  replication {
+    auto {}
   }
   depends_on = [google_project_service.secretmanager]
 }
@@ -96,7 +96,7 @@ resource "google_secret_manager_secret_version" "db_url_production" {
 resource "google_secret_manager_secret" "db_url_staging" {
   project   = var.project_id
   secret_id = "coms-aha-heroes-db-url-staging"
-  replication { 
+  replication {
     auto {}
   }
   depends_on = [google_project_service.secretmanager]

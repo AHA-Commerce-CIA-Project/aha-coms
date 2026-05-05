@@ -32,9 +32,9 @@ resource "google_secret_manager_secret_iam_member" "cloud_run_db_url_staging_acc
 
 locals {
   auth_secrets = {
-    "coms-aha-heroes-auth-secret"        = "BETTER_AUTH_SECRET"
-    "coms-aha-heroes-auth-url"           = "BETTER_AUTH_URL"
-    "coms-aha-heroes-google-client-id"   = "GOOGLE_CLIENT_ID"
+    "coms-aha-heroes-auth-secret"          = "BETTER_AUTH_SECRET"
+    "coms-aha-heroes-auth-url"             = "BETTER_AUTH_URL"
+    "coms-aha-heroes-google-client-id"     = "GOOGLE_CLIENT_ID"
     "coms-aha-heroes-google-client-secret" = "GOOGLE_CLIENT_SECRET"
   }
 }
@@ -166,10 +166,11 @@ resource "google_cloud_run_v2_service" "app" {
       # Rev 2 §03: portal webhook OIDC verification. PORTAL_SERVICE_ACCOUNT_EMAIL
       # is the SA the portal Cloud Run runs as; confirm with portal team if it
       # changes. SELF_PUBLIC_URL must match exactly what portal mints as 'aud'
-      # (computed from app_registry.url).
+      # (computed from app_registry.url). Sourced from var.portal_service_account_email
+      # so the literal can't drift from deploy.yml's GitHub Actions variable.
       env {
         name  = "PORTAL_SERVICE_ACCOUNT_EMAIL"
-        value = "coms-portal-run-sa@coms-portal-prod.iam.gserviceaccount.com"
+        value = var.portal_service_account_email
       }
 
       env {
