@@ -47,8 +47,11 @@ async function getSubscribedAppSlugs(taxonomyId: string): Promise<string[]> {
     .where(
       // jsonb @> operator: manifests whose taxonomies array contains the given id.
       // jsonb_build_array keeps taxonomyId as a bound parameter (no injection risk).
+      // The ::text cast is required — without it Postgres reports
+      // "could not determine data type of parameter $1" because
+      // jsonb_build_array accepts anyelement.
       // Drizzle's arrayContains targets native PG arrays, not jsonb, so we use sql here.
-      sql`${appManifests.taxonomies} @> jsonb_build_array(${taxonomyId})`,
+      sql`${appManifests.taxonomies} @> jsonb_build_array(${taxonomyId}::text)`,
     )
 
   return rows.map((r) => r.slug)
