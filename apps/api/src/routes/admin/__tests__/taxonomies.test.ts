@@ -44,7 +44,10 @@ let listEntriesResult: OrgTaxonomyRow[] = [ENTRY_1, ENTRY_2]
 let listAllIdsResult: string[] = [TAXONOMY_ID, 'teams']
 let upsertResult: OrgTaxonomyRow = ENTRY_1
 let bulkUpsertResult = { upserted: 2, entries: [ENTRY_1, ENTRY_2] }
-let deleteResult = { deleted: 1 }
+let deleteResult: { deleted: number; entries: Array<{ id: string; key: string; value: string }> } = {
+  deleted: 1,
+  entries: [{ id: 'row-1', key: 'ID-JKT', value: 'Jakarta' }],
+}
 let upsertShouldThrow = false
 
 const mockListAllTaxonomyIds = mock(async () => listAllIdsResult)
@@ -337,6 +340,35 @@ describe('DELETE /admin/taxonomies/:taxonomyId/:key', () => {
     const body = await res.json() as { ok: boolean }
     expect(body.ok).toBe(true)
     expect(mockLogAudit).toHaveBeenCalledTimes(1)
+  })
+
+  // Regression for staging 500 (2026-05-05): the delete route was logging audit
+  // with `targetId: '${taxonomyId}/${key}'` (e.g. "branches/SMOKE"), but
+  // access_audit_log.target_id is `uuid NOT NULL`, causing a Postgres
+  // "invalid input syntax for type uuid" error and bubbling up as 500.
+  // Audit must use the deleted row's actual uuid (returned by the service).
+  test('audit targetId is the deleted row uuid (not "<taxonomyId>/<key>")', async () => {
+    deleteResult = {
+      deleted: 1,
+      entries: [{ id: '1d8c1a96-1234-4abc-9def-000000000001', key: 'SMOKE', value: 'Smoke Test Branch' }],
+    }
+    const app = makeApp()
+    const res = await request(app, 'DELETE', `/taxonomies/${TAXONOMY_ID}/SMOKE`)
+    expect(res.status).toBe(200)
+    expect(mockLogAudit).toHaveBeenCalledTimes(1)
+    const call = mockLogAudit.mock.calls[0] as unknown as Array<{ targetId: string; details: Record<string, unknown> }>
+    const args = call[0]
+    expect(args.targetId).toBe('1d8c1a96-1234-4abc-9def-000000000001')
+    // Sanity: human-readable info goes to details JSON, not targetId
+    expect(args.details).toMatchObject({ taxonomyId: TAXONOMY_ID, key: 'SMOKE' })
+  })
+
+  test('delete with no matching row → 404 (not 500)', async () => {
+    deleteResult = { deleted: 0, entries: [] }
+    const app = makeApp()
+    const res = await request(app, 'DELETE', `/taxonomies/${TAXONOMY_ID}/MISSING`)
+    expect(res.status).toBe(404)
+    expect(mockLogAudit).not.toHaveBeenCalled()
   })
 
   test('non-admin → 403', async () => {
