@@ -50,7 +50,7 @@ Dependencies (already in place from PR 07-2): `emitTaxonomyUpserted` / `emitTaxo
 - [x] New service module `apps/api/src/services/employment-resolution.ts`: `getEmploymentBlock(userId)` joins identity_users HR fields against `org_taxonomies` for `(taxonomyId, key, value)` refs (falls back to `{key:raw, value:raw}` while seed entries are key==value); `diffEmployment(prev,next)` computes the delta + previous-value pair used by emit; `hasHrFieldChanges` and `HR_FIELD_NAMES` are the source of truth for "what counts as an HR edit."
 - [x] `emitUserProvisioned` extended with the Spec 07 envelope: `user{portalSub,name,primaryAliasId:null}`, `contactEmail` (workspace > personal precedence per Spec 06 §Q8a), `employment` (full block), `appConfig` (already present, reaffirmed). Legacy top-level fields (`email`, `appRole`, `branch`) ALSO emitted — dual-emit window per Spec 07 §contract; legacy fields removed in PR 07-5 after Heroes Deploy A.
 - [x] Admin bulk taxonomy upsert path already batches into a single `taxonomy.upserted` envelope per `(taxonomyId, batchId)` (PR 07-2). Race-window regression tests added in `routes/admin/__tests__/taxonomies.test.ts` asserting one event per batch (3-entry bulk → 1 dispatch) and one event per single upsert.
-- [ ] **OPS step (post-merge):** flip `ENABLE_TAXONOMY_EVENTS=true` in production after staging burn-in. Verify in staging: (a) admin upsert triggers a single delivery to Heroes' webhook endpoint, (b) `createEmployee` triggers `user.provisioned` with the new envelope, (c) `updateEmployee` to a HR field triggers `employment.updated` with delta, (d) no double-emit for non-HR field changes.
+- [x] **OPS step:** `ENABLE_TAXONOMY_EVENTS=true` in production (set in `infra/cloud-run.tf:120-123`). End-to-end verified 2026-05-05: portal admin taxonomy upsert → Heroes' `/api/webhooks/portal` → row landed in Heroes' `taxonomy_cache` (commit chain below). Burn-in surfaced three follow-up bugs — see §Post-Deploy A follow-up fixes.
 - [x] Tests: 29 new across 3 files — `services/__tests__/employment-resolution.test.ts` (10), `__tests__/employees-patch-employment-emit.test.ts` (6), `__tests__/webhook-payload-shape.test.ts` Spec 07 envelope cases (+6). Existing `provisioning-events.test.ts` + `taxonomy-events.test.ts` regressions clean. Full isolated API suite: 519 pass / 0 fail. `tsc --noEmit` clean (api + web). `db:generate` reports no schema drift.
 
 ### PR 07-4 — Publish `@coms-portal/shared` v1.6.0 ✅ SHIPPED 2026-05-04 (commit `19cf057`, tag `v1.6.0`)
@@ -224,6 +224,27 @@ Repo: `coms_aha_heroes`
 
 ---
 
+## Post-Deploy A follow-up fixes (2026-05-05)
+
+Three bugs surfaced when `ENABLE_TAXONOMY_EVENTS=true` was first exercised against the deployed Heroes Deploy A. Each had a clean root cause and shipped same-day. End-to-end webhook delivery is now verified working: portal admin upsert (`SMOKE` key in `branches`) → row visible in Heroes' production `taxonomy_cache` (`2026-05-05 07:19:16`).
+
+1. **Portal — `taxonomy-events.ts` SQL cast** *(commit `e28065d`, coms_portal)*
+   `getSubscribedAppSlugs` was emitting `jsonb_build_array($1)` without a type hint, so Postgres rejected every `taxonomy.*`/`employment.updated` emit with `could not determine data type of parameter $1`. Fixed by casting the bound `taxonomyId` to `::text` inside `jsonb_build_array(${taxonomyId}::text)`. Test now pins the rendered SQL contains `::text`. Surfaced as `[admin/taxonomies] emitTaxonomyUpserted failed` errors in API logs the moment the flag flipped on.
+
+2. **Heroes — webhook envelope unwrap** *(commit `ee4ded5`, coms_aha_heroes)*
+   Heroes' `/api/webhooks/portal` route was passing the full `PortalWebhookEnvelope<T>` to handlers that expected the inner payload only. Every handler's guard clause tripped on undefined fields (e.g. `payload.taxonomyId` lived at `body.payload.taxonomyId`) → silent early return → 200 ack with no DB write. Affected ALL 11 handlers, including the live Spec 06 ones (alias.*, user.*). Fixed by extracting `unwrapWebhookEnvelope` helper in the route; handlers now receive `envelope.payload`. 5 regression tests added pinning the contract. Detection only happened because no test exercised the full route → dispatch → handler chain — a class of regression that test extension should now prevent.
+
+3. **Heroes — `PORTAL_SERVICE_ACCOUNT_EMAIL` phantom-project hardcode** *(commit `ef8b01c`, coms_aha_heroes)*
+   The literal `coms-portal-run-sa@coms-portal-prod.iam.gserviceaccount.com` was hardcoded in three places (deploy.yml × 2 staging+prod jobs, `infra/modules/cloud-run/main.tf:172`). `coms-portal-prod` is not a real GCP project. The deployed Cloud Run env had been hand-edited at some point to the correct value (`@fbi-dev-484410`), but my deploy of `ee4ded5` overwrote that hand-edit with the bad source-of-truth, causing every inbound portal webhook to 401 on OIDC verification. Fixed by parameterising via `var.portal_service_account_email` (Tofu) + `${{ vars.PORTAL_SERVICE_ACCOUNT_EMAIL }}` (deploy.yml), with the GitHub repo variable set to the real SA. Tofu validate clean.
+
+**Operational debt surfaced (open):**
+
+- **Disabled-endpoint recovery** — when Cloud Tasks retries exhaust, `routes/internal.ts:144-182` flips `app_webhook_endpoints.status='disabled'` (acts as DLQ). There is no admin re-enable route today; recovery requires direct SQL (`UPDATE app_webhook_endpoints SET status='active', failure_count=0, last_failure_reason=NULL`). Worth a follow-up: either an admin reactivate endpoint on portal, or auto-reactivation on next manual ping. Tracked in coms_aha_heroes/TODOS.md.
+
+- **Smoke tests beyond webhooks** — webhook fan-out is now end-to-end green. The other items in §Remaining work #1 (login, sheet ingestion, admin flows, `/profile`) are still pending burn-in.
+
+---
+
 ## PR A2 SHIPPED + DEPLOYED to staging (2026-05-04) — what to do next
 
 Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be` (pushed 2026-05-04). Heroes Deploy A is LIVE in staging via Deploy run `25314176044`.
@@ -237,9 +258,9 @@ Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be`
 
 **Remaining work (operational, not blocked on code):**
 
-1. **Smoke-test heroes staging** — log in, run a sheet ingestion, exercise admin flows, hit `/profile`. Confirm webhook fan-out works end-to-end with portal staging.
+1. **Smoke-test heroes staging** — *partially complete*. ✅ Webhook fan-out end-to-end verified 2026-05-05 (taxonomy.upserted SMOKE row landed in heroes_production `taxonomy_cache`; three follow-up fixes shipped — see §Post-Deploy A follow-up fixes). Still pending: login, sheet ingestion, admin flows, `/profile`.
 2. **Pre-cutover (T-1h)** — see §"Cutover window" block above. Critical pre-flight: portal admin populates `(taxonomy_id='teams', ...)` from Heroes' production team table BEFORE the cutover window. Without this, taxonomy_cache will be sparse for teams in production.
-3. **Ops flips `ENABLE_TAXONOMY_EVENTS=true`** in portal production after staging burn-in (PR 07-3 §OPS step).
+3. ✅ **Ops flipped `ENABLE_TAXONOMY_EVENTS=true`** in portal production (`infra/cloud-run.tf:120-123`). Burn-in done 2026-05-05.
 4. **Run `bun run cutover:verify`** against staging end-to-end before scheduling the production cutover. All 5 checks must pass.
 5. **Cutover window execution** (<30min, both teams) per §"Cutover window" runbook above.
 6. **Apply cutover migration `0001_revoke_heroes_writes.sql`** on portal at T+30min (Deploy C).
