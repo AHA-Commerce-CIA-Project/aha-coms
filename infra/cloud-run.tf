@@ -112,6 +112,16 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         value = var.brevo_from
       }
 
+      # ── Spec 07/08 cutover ──────────────────────────────────────
+      # Gates taxonomy.upserted / taxonomy.deleted / employment.updated
+      # webhook fan-out. PR 07-3 ships the emit machinery dormant; this
+      # flag turns it on. Flip back to "false" only if the consumer
+      # (heroes) is unable to receive events during a temporary outage.
+      env {
+        name  = "ENABLE_TAXONOMY_EVENTS"
+        value = "true"
+      }
+
       # ── Secrets ─────────────────────────────────────────────────
       env {
         name = "DATABASE_URL"
