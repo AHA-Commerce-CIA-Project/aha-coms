@@ -1,5 +1,7 @@
 # TODO — Spec 07 + Spec 08 Heroes Cutover
 
+> **STATUS — 2026-05-05: CUTOVER EXECUTED, Heroes Deploy A LIVE IN PROD.** Pre-flight + T-0 + cutover-verify all collapsed onto cutover-day smoke-tests; T+30 Deploy C verified non-applicable on this deployment (Heroes never had direct portal-DB grants). The remaining items in this doc are: (a) **PR 07-5** — drop legacy emit fields, bump `@coms-portal/shared` git+url pin to v1.6.0, force manifest schemaVersion:2 (gated on ~7d Heroes Deploy A burn-in); (b) Heroes-side cleanup (Phase 6); (c) optional Heroes ops re-run of sheet-ingestion for points data; (d) operational debt from the Post-Deploy A burn-in (disabled-endpoint admin reactivate). Detail in §"Cutover window" + §"Cleanup" blocks below; both Spec 07 and Spec 08 status banners point at this doc as the canonical execution log.
+
 Sequenced implementation checklist. Work top-to-bottom. Each block ends in a deployable PR.
 
 **Source-of-truth specs (read these before starting any block):**
@@ -194,11 +196,11 @@ Cross-cutting: `routes/sheet-sync.ts` overlaps with Slice 6 — coordinate so th
 
 ---
 
-## Cutover window (<30min, both teams)
+## Cutover window (<30min, both teams) — ✅ EXECUTED 2026-05-05
 
-**Decision 2026-05-05: cutover executes against PROD directly, no staging dress rehearsal.**
+**Decision 2026-05-05: cutover executed against PROD directly, no staging dress rehearsal.**
 
-A staging dress rehearsal was scoped + attempted on 2026-05-05 but blocked by the missing rebroadcast endpoint (see PR 07-3.5). Rather than build a staging-only mock harness, we'll use the rebroadcast endpoint (which is genuinely useful infra) and cut over against prod directly. Justification: prod is observably empty of real user activity — Heroes prod has 0 `heroes_profiles`, 0 across all domain tables (only 10 reward seed rows + 1 stale `taxonomy_cache:branches:SMOKE`), and portal prod has 72 backfilled `identity_users` (1 admin + 71 employees, all `addedBy=backfill`, all `provisioningStatus=ready`) with no active end-user sessions. The destructive Heroes truncate has near-zero cost; portal users are preserved by the cutover sequence (only Heroes truncates).
+A staging dress rehearsal was scoped + attempted on 2026-05-05 but blocked by the missing rebroadcast endpoint (see PR 07-3.5). Rather than build a staging-only mock harness, the rebroadcast endpoint (which is genuinely useful infra) was shipped and the cutover was executed against prod directly. Justification: prod was observably empty of real user activity — Heroes prod had 0 `heroes_profiles`, 0 across all domain tables (only 10 reward seed rows + 1 stale `taxonomy_cache:branches:SMOKE`), and portal prod had 72 backfilled `identity_users` (1 admin + 71 employees, all `addedBy=backfill`, all `provisioningStatus=ready`) with no active end-user sessions. The destructive Heroes TRUNCATE step ended up being skipped entirely because the cutover-day smoke-tests had populated Heroes prod cleanly via the live webhook handlers — destroying that state would have meant repopulating from the same source. See execution log in §"Cutover EXECUTED 2026-05-05 — what's left" below for the full sequence.
 
 Pre-cutover (T-1h):
 
@@ -269,28 +271,32 @@ Three bugs surfaced when `ENABLE_TAXONOMY_EVENTS=true` was first exercised again
 
 ---
 
-## PR A2 SHIPPED + DEPLOYED to staging (2026-05-04) — what to do next
+## Cutover EXECUTED 2026-05-05 — what's left
 
-Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be` (pushed 2026-05-04). Heroes Deploy A is LIVE in staging via Deploy run `25314176044`.
+Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be` (pushed 2026-05-04). Heroes Deploy A is LIVE IN PROD; cutover window EXECUTED 2026-05-05 against prod directly per the prod-as-rehearsal decision. Portal `coms-portal-app-00178-vc6` (sha `66a46d3`) is the live revision.
 
-**Final A2 verification gate:**
+**Final A2 verification gate (Heroes-side, 2026-05-04):**
 - `bun run --filter=@coms/server typecheck` → 0 errors (down from 27 baseline)
 - `bun run --filter=@coms/web typecheck` → 0 errors / 5915 files
 - `bun test packages/server scripts` → 67 pass / 0 fail (up from 49; Slice 6 added 18 four-outcome tests)
 - `bun run ci:check-no-illegal-inserts` → 0 violations across 174 source files (down from 3)
 - Heroes CI ✅ + Deploy ✅ on sha `f62f2be`
 
-**Remaining work (operational, not blocked on code unless flagged):**
+**Cutover-day execution log (2026-05-05):**
+1. ✅ **Smoke-test webhook fan-out** — verified end-to-end (taxonomy.upserted, employment.updated, user.provisioned all arrived at Heroes prod with HTTP 200).
+2. ✅ **Pre-cutover (T-1h)** — taxonomies seeded via portal admin API (branches Indonesia/Thailand, 13 teams, departments empty); SMOKE row deleted; 71 employees PATCHed with random branches; `all-staff` team created + Heroes app granted + 71 non-admin users batch-added. Heroes Deploy A confirmed already serving 100% prod traffic (revisions `00311-s4c` and `00453-vuf` carry the same image SHA `518140b1...`; the staging tag is a URL alias, not a traffic gate).
+3. ✅ **`ENABLE_TAXONOMY_EVENTS=true`** in portal production (`infra/cloud-run.tf:120-123`).
+4. ✅ **PR 07-3.5 rebroadcast endpoint shipped + deployed + smoke-tested** — 2 commits (`ba1983a` initial endpoint, `66a46d3` metric tightening after the smoke-test surfaced misleading `fired:1` for users with no team→app access). Final rebroadcast: `dispatched:72, skipped:0, failed:0`; 72 `user.provisioned` log lines confirmed at Heroes.
+5. ✅ **`bun run cutover:verify`** ran against prod via cloud-sql-proxy + impersonated heroes-run-sa identity token (with `--include-email` per the script runbook). Auto checks: Check 2 PASS (branches:2/2, teams:13/13, departments:0/0), Check 3 PASS (0 pre-step5 pending_alias rows). Manual checks: Check 1 PASS (heroes_profiles=72 == portal active=72), Check 4 PASS (5 spot-checked employment blocks all match portal).
+6. ✅ **Cutover window executed** — TRUNCATE step skipped (Heroes prod was already in cutover-target state from the smoke-tests via live webhook handlers; destroying it would have meant repopulating from the same source).
+7. ⚠ **Deploy C verified NON-APPLICABLE** — `apps/api/src/db/migrations/cutover/0001_revoke_heroes_writes.sql` REVOKEs from `heroes_app_role`, but probing the portal Cloud SQL cluster showed that role does not exist; the Heroes DB user (`app`) holds zero grants on portal-owned tables. The architecture's strictness is enforced by separate Cloud SQL users on the same instance, not by REVOKE. Cutover migration README updated with the probe transcript.
 
-1. **Smoke-test heroes staging** — *partially complete*. ✅ Webhook fan-out end-to-end verified 2026-05-05 (taxonomy.upserted SMOKE row landed in heroes_production `taxonomy_cache`; three follow-up fixes shipped — see §Post-Deploy A follow-up fixes). Still pending: login, sheet ingestion, admin flows, `/profile`.
-2. **Pre-cutover (T-1h)** — see §"Cutover window" block above. Critical pre-flight: portal admin populates `(taxonomy_id='teams', ...)` from the HEROES Fulltime Staff sheet (13 distinct `Tim` values, listed in §"Cutover window" pre-cutover block).
-3. ✅ **Ops flipped `ENABLE_TAXONOMY_EVENTS=true`** in portal production (`infra/cloud-run.tf:120-123`). Burn-in done 2026-05-05.
-4. **BLOCKER — Build + ship PR 07-3.5 rebroadcast endpoint** (see §"PR 07-3.5" block above). Without this, Cutover Step 3 has no path to fan out events for the 72 pre-existing `identity_users` rows on portal prod. Dress rehearsal against staging is moot (same blocker); decision on 2026-05-05 was to skip staging mock and cut over against prod directly once the endpoint ships, since prod is observably empty of real user activity.
-5. **Cutover-verify proven against staging** — *deferred*. Originally intended to gate cutover scheduling, but blocked by the same pre-existing-users issue (Heroes staging cannot be repopulated without the rebroadcast endpoint, and verify-PASS state is dependent on populated `heroes_profiles`). Side-fix `f4ed6e5` (Heroes 2026-05-05) makes the script runnable from a fresh checkout and documents the OIDC SA-impersonation requirement. Operational sanity proof from staging: Cloud SQL Auth Proxy + DATABASE_URL wiring works; portal `/api/taxonomies/sync` returns HTTP 200 against impersonated Heroes SA token; Check 2 SQL renders correctly (FAILed cleanly in unprovisioned staging; will PASS once populated). The script's first PASS run will be in the prod cutover window itself.
-6. **Cutover window execution** (<30min, both teams) per §"Cutover window" runbook above. Pre-flight gates: PR 07-3.5 deployed + smoke-tested, Heroes Deploy A promoted to 100% prod traffic.
-7. **Apply cutover migration `0001_revoke_heroes_writes.sql`** on portal at T+30min (Deploy C).
-8. **After Heroes Deploy A confirms stable in production** — execute portal PR 07-5 (drop legacy emit fields, bump `@coms-portal/shared` git+url pin to v1.6.0, force manifest schemaVersion:2). Detailed scope in §"PR 07-5" block above.
-9. **Cleanup phases** (Heroes + portal) per §"Cleanup" blocks above, ~7 days after cutover stable.
+**Remaining work (post-cutover, ~7d burn-in window):**
+
+8. **PR 07-5** — drop legacy emit fields (`email`, `appRole`, `branch`) from `user.provisioned` / `user.updated`, bump `@coms-portal/shared` git+url pin v1.5.0 → v1.6.0 in `apps/api/package.json`, replace local payload type declarations in `taxonomy-events.ts` / `employment-resolution.ts` / `provisioning-events.ts` with imports from shared, force manifest `schemaVersion: 2`. Gated on Heroes Deploy A burn-in confirming stable. Detailed scope in §"PR 07-5" block above.
+9. **Heroes ops re-run sheet ingestion for points data** via `POST /api/aliases/resolve-batch` — separate operational step on Heroes side; not blocking. `pending_alias_resolution` is currently 0 and `--since-iso` is recorded for the eventual run.
+10. **Cleanup phases** (Heroes + portal) per §"Cleanup" blocks above — delete legacy webhook field-reader fallback, refresh CLAUDE.md, archive this TODO doc, update spec-00 timeline (already done as part of doc sync 2026-05-05).
+11. **Operational debt — disabled-endpoint admin reactivate** (from §"Post-Deploy A follow-up fixes"): when Cloud Tasks retries exhaust on a portal app webhook endpoint, `routes/internal.ts` flips it to `status='disabled'` (acts as DLQ) with no admin re-enable route. Worth ~30 lines + 2 tests; not blocking.
 
 **Prod baseline observed 2026-05-05 (informs the prod-as-rehearsal decision):**
 
