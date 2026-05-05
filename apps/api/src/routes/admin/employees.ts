@@ -10,20 +10,30 @@ import { logger } from '~/logger'
 
 const REBROADCAST_CONCURRENCY = 5
 
+interface FanOutResult {
+  /** Users where ≥1 webhook actually dispatched. */
+  dispatched: number
+  /** Users where the call returned cleanly but emitted zero webhooks (no app access). */
+  skipped: number
+  failures: Array<{ userId: string; error: string }>
+}
+
 async function fanOutWithConcurrency(
   ids: string[],
-  worker: (id: string) => Promise<void>,
-): Promise<{ fired: number; failures: Array<{ userId: string; error: string }> }> {
-  let fired = 0
-  const failures: Array<{ userId: string; error: string }> = []
+  worker: (id: string) => Promise<{ dispatched: number }>,
+): Promise<FanOutResult> {
+  let dispatched = 0
+  let skipped = 0
+  const failures: FanOutResult['failures'] = []
   let cursor = 0
 
   async function next(): Promise<void> {
     while (cursor < ids.length) {
       const id = ids[cursor++]
       try {
-        await worker(id)
-        fired++
+        const result = await worker(id)
+        if (result.dispatched > 0) dispatched++
+        else skipped++
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         failures.push({ userId: id, error: message })
@@ -34,7 +44,7 @@ async function fanOutWithConcurrency(
   const lanes = Math.min(REBROADCAST_CONCURRENCY, Math.max(1, ids.length))
   await Promise.all(Array.from({ length: lanes }, () => next()))
 
-  return { fired, failures }
+  return { dispatched, skipped, failures }
 }
 
 export const adminEmployeesRoutes = new Elysia({ prefix: '/employees' })
@@ -70,9 +80,13 @@ export const adminEmployeesRoutes = new Elysia({ prefix: '/employees' })
         targetIds = rows.map((r) => r.id)
       }
 
-      const { fired, failures } = await fanOutWithConcurrency(targetIds, async (userId) => {
-        await emitUserProvisioned(userId)
-      })
+      const { dispatched, skipped, failures } = await fanOutWithConcurrency(
+        targetIds,
+        (userId) => emitUserProvisioned(userId),
+      )
+      // `fired` retained as backward-compat alias for "successful invocations"
+      // (dispatched + skipped). New callers should prefer the explicit pair.
+      const fired = dispatched + skipped
 
       const batchId = randomUUID()
 
@@ -85,6 +99,8 @@ export const adminEmployeesRoutes = new Elysia({ prefix: '/employees' })
           batchId,
           count: targetIds.length,
           requestedCount,
+          dispatched,
+          skipped,
           fired,
           failed: failures.length,
           source: 'admin-cli',
@@ -113,6 +129,8 @@ export const adminEmployeesRoutes = new Elysia({ prefix: '/employees' })
         ok: true,
         batchId,
         count: targetIds.length,
+        dispatched,
+        skipped,
         fired,
         failed: failures.length,
         failures,

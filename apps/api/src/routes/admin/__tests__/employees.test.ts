@@ -73,7 +73,9 @@ mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 // Mock provisioning emit
 // ---------------------------------------------------------------------------
 
-const mockEmitUserProvisioned = mock(async (_userId: string) => {})
+// Default: each user dispatches to 1 app (Heroes).  Tests override per-user
+// counts via mockImplementation to simulate skip (0 apps) or multi-dispatch.
+const mockEmitUserProvisioned = mock(async (_userId: string) => ({ dispatched: 1 }))
 mock.module('~/services/provisioning-events', () => ({
   emitUserProvisioned: mockEmitUserProvisioned,
   emitUserUpdated: mock(async () => {}),
@@ -123,7 +125,7 @@ function reset() {
     '33333333-3333-4333-8333-333333333333',
   ]
   mockEmitUserProvisioned.mockReset()
-  mockEmitUserProvisioned.mockImplementation(async () => {})
+  mockEmitUserProvisioned.mockImplementation(async () => ({ dispatched: 1 }))
   mockLogAudit.mockReset()
   mockLogAudit.mockImplementation(async () => {})
 }
@@ -140,10 +142,17 @@ describe('POST /admin/employees/rebroadcast-provisioning', () => {
     const res = await request(app, 'POST', '/employees/rebroadcast-provisioning', {})
 
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { count: number; fired: number; failed: number; failures: unknown[] }
+    const body = (await res.json()) as {
+      count: number; fired: number; dispatched: number; skipped: number; failed: number; failures: unknown[]
+    }
     expect(body.count).toBe(3)
-    expect(body.fired).toBe(3)
+    expect(body.dispatched).toBe(3)
+    expect(body.skipped).toBe(0)
     expect(body.failed).toBe(0)
+    // `fired` is preserved as a backward-compat alias for `dispatched + skipped`
+    // (i.e. successful invocations) so older callers that read `fired` keep
+    // working until they're migrated.
+    expect(body.fired).toBe(3)
     expect(body.failures).toEqual([])
 
     expect(mockEmitUserProvisioned).toHaveBeenCalledTimes(3)
@@ -158,11 +167,13 @@ describe('POST /admin/employees/rebroadcast-provisioning', () => {
     expect(mockLogAudit).toHaveBeenCalledTimes(1)
     const summaryArgs = (mockLogAudit.mock.calls[0] as unknown as Array<{
       action: string
-      details: { count: number; requestedCount: number | null; source: string }
+      details: { count: number; requestedCount: number | null; dispatched: number; skipped: number; source: string }
     }>)[0]
     expect(summaryArgs.action).toBe('bulk_rebroadcast_provisioning')
     expect(summaryArgs.details.count).toBe(3)
     expect(summaryArgs.details.requestedCount).toBeNull()
+    expect(summaryArgs.details.dispatched).toBe(3)
+    expect(summaryArgs.details.skipped).toBe(0)
   })
 
   test('selective userIds — only the requested ids are fanned out', async () => {
@@ -175,10 +186,12 @@ describe('POST /admin/employees/rebroadcast-provisioning', () => {
     })
 
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { count: number; fired: number; failed: number }
+    const body = (await res.json()) as { count: number; fired: number; dispatched: number; skipped: number; failed: number }
     expect(body.count).toBe(2)
-    expect(body.fired).toBe(2)
+    expect(body.dispatched).toBe(2)
+    expect(body.skipped).toBe(0)
     expect(body.failed).toBe(0)
+    expect(body.fired).toBe(2)
 
     expect(mockEmitUserProvisioned).toHaveBeenCalledTimes(2)
     const calledIds = (mockEmitUserProvisioned.mock.calls as unknown as Array<[string]>).map((c) => c[0]).sort()
@@ -199,6 +212,7 @@ describe('POST /admin/employees/rebroadcast-provisioning', () => {
     const failingId = '22222222-2222-4222-8222-222222222222'
     mockEmitUserProvisioned.mockImplementation(async (userId: string) => {
       if (userId === failingId) throw new Error('downstream-boom')
+      return { dispatched: 1 }
     })
 
     const app = makeApp()
@@ -208,12 +222,16 @@ describe('POST /admin/employees/rebroadcast-provisioning', () => {
     const body = (await res.json()) as {
       count: number
       fired: number
+      dispatched: number
+      skipped: number
       failed: number
       failures: Array<{ userId: string; error: string }>
     }
     expect(body.count).toBe(3)
-    expect(body.fired).toBe(2)
+    expect(body.dispatched).toBe(2)
+    expect(body.skipped).toBe(0)
     expect(body.failed).toBe(1)
+    expect(body.fired).toBe(2)
     expect(body.failures).toHaveLength(1)
     expect(body.failures[0]).toEqual({ userId: failingId, error: 'downstream-boom' })
 
@@ -248,10 +266,46 @@ describe('POST /admin/employees/rebroadcast-provisioning', () => {
     const app = makeApp()
     const res = await request(app, 'POST', '/employees/rebroadcast-provisioning', {})
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { count: number; fired: number; failed: number }
+    const body = (await res.json()) as { count: number; fired: number; dispatched: number; skipped: number; failed: number }
     expect(body.count).toBe(0)
-    expect(body.fired).toBe(0)
+    expect(body.dispatched).toBe(0)
+    expect(body.skipped).toBe(0)
     expect(body.failed).toBe(0)
+    expect(body.fired).toBe(0)
     expect(mockEmitUserProvisioned).not.toHaveBeenCalled()
+  })
+
+  // Regression for the smoke-test surprise (2026-05-05): users who have no
+  // team→app access cause `emitUserProvisioned` to short-circuit silently
+  // (perApp.length === 0).  Pre-fix the route counted these as "fired" and
+  // hid the fact that nothing reached Heroes.  After the fix, dispatched=0
+  // for those users — we surface them as `skipped` so the cutover-day audit
+  // line is honest about what actually went out.
+  test('users with no apps return dispatched:0 → counted as skipped, not fired', async () => {
+    const noAppsId = '22222222-2222-4222-8222-222222222222'
+    mockEmitUserProvisioned.mockImplementation(async (userId: string) => {
+      if (userId === noAppsId) return { dispatched: 0 }
+      return { dispatched: 1 }
+    })
+
+    const app = makeApp()
+    const res = await request(app, 'POST', '/employees/rebroadcast-provisioning', {})
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      count: number; fired: number; dispatched: number; skipped: number; failed: number
+    }
+    expect(body.count).toBe(3)
+    expect(body.dispatched).toBe(2)
+    expect(body.skipped).toBe(1)
+    expect(body.failed).toBe(0)
+    // `fired` retains backward-compat semantics: invocations that did not throw.
+    expect(body.fired).toBe(3)
+
+    const summary = (mockLogAudit.mock.calls[0] as unknown as Array<{
+      details: { dispatched: number; skipped: number }
+    }>)[0]
+    expect(summary.details.dispatched).toBe(2)
+    expect(summary.details.skipped).toBe(1)
   })
 })

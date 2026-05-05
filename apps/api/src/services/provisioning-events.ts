@@ -204,6 +204,16 @@ export function resolveAppRoleForUser(
 // Public emitters
 // ---------------------------------------------------------------------------
 
+export interface EmitResult {
+  /**
+   * Number of webhook dispatches that were actually fired. Zero when the user
+   * has no team→app access (the silent no-op path); the bulk-rebroadcast
+   * admin endpoint relies on this to distinguish "skipped" from "dispatched"
+   * users in its summary, since both return without throwing.
+   */
+  dispatched: number
+}
+
 /**
  * Emit user.provisioned after a new identity_users row has been committed
  * and initial provisioning has run.
@@ -212,14 +222,15 @@ export function resolveAppRoleForUser(
  * correct resolved appRole for that specific app.
  *
  * Edge case: a freshly-created user with no team memberships has no apps,
- * so no webhooks are dispatched. This is intentional.
+ * so no webhooks are dispatched. The returned `dispatched` count surfaces
+ * this so callers can report it accurately.
  */
-export async function emitUserProvisioned(userId: string): Promise<void> {
+export async function emitUserProvisioned(userId: string): Promise<EmitResult> {
   const state = await resolveUserState(userId)
-  if (!state) return
+  if (!state) return { dispatched: 0 }
 
   const perApp = await resolvePerAppContext(userId, state.teamIds)
-  if (perApp.length === 0) return
+  if (perApp.length === 0) return { dispatched: 0 }
 
   // Resolve once per emit; every per-app dispatch carries the same employment block.
   const employment = await getEmploymentBlock(userId)
@@ -263,6 +274,8 @@ export async function emitUserProvisioned(userId: string): Promise<void> {
       appSlugs: [app.slug],
     })
   }
+
+  return { dispatched: perApp.length }
 }
 
 /**
