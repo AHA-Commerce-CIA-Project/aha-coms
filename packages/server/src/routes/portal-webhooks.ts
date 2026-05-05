@@ -1,8 +1,34 @@
 import { Elysia } from 'elysia'
+import type { PortalWebhookEnvelope } from '@coms-portal/shared'
 import { db } from '@coms/shared/db'
 import { portalWebhookEvents } from '@coms/shared/db/schema'
 import { verifyGoogleIdToken } from '../lib/oidc'
 import { dispatchPortalEvent } from '../services/portal-events/dispatch'
+
+/**
+ * Unwrap the PortalWebhookEnvelope<T> Portal sends over the wire and return
+ * the inner payload that handlers expect. Returns a discriminated result so
+ * the route can map failures to a 400 with a useful message.
+ *
+ * Pure / no I/O — exported so unit tests can pin the unwrap contract without
+ * mocking OIDC, DB, or dispatch.
+ */
+export type UnwrapResult =
+  | { ok: true; payload: unknown; appSlug: string | undefined }
+  | { ok: false; reason: 'malformed_json' | 'missing_payload'; detail?: string }
+
+export function unwrapWebhookEnvelope(rawBody: string): UnwrapResult {
+  let envelope: PortalWebhookEnvelope
+  try {
+    envelope = JSON.parse(rawBody) as PortalWebhookEnvelope
+  } catch (err) {
+    return { ok: false, reason: 'malformed_json', detail: (err as Error).message }
+  }
+  if (!envelope || typeof envelope !== 'object' || !('payload' in envelope)) {
+    return { ok: false, reason: 'missing_payload' }
+  }
+  return { ok: true, payload: envelope.payload, appSlug: envelope.appSlug }
+}
 
 export const portalWebhooksRoute = new Elysia().post(
   '/webhooks/portal',
@@ -54,8 +80,23 @@ export const portalWebhooksRoute = new Elysia().post(
       return { ok: true }
     }
 
-    const body = JSON.parse(rawBody) as unknown
-    await dispatchPortalEvent(event, body)
+    const unwrapped = unwrapWebhookEnvelope(rawBody)
+    if (!unwrapped.ok) {
+      console.warn(
+        `[portal-webhook] envelope rejected reason=${unwrapped.reason} event=${event} eventId=${eventId}` +
+          (unwrapped.detail ? ` detail=${unwrapped.detail}` : ''),
+      )
+      set.status = 400
+      return {
+        message:
+          unwrapped.reason === 'malformed_json'
+            ? 'malformed json body'
+            : 'envelope missing payload',
+      }
+    }
+
+    console.log(`[portal-webhook] dispatching event=${event} eventId=${eventId} appSlug=${unwrapped.appSlug ?? '<none>'}`)
+    await dispatchPortalEvent(event, unwrapped.payload)
     return { ok: true }
   },
 )

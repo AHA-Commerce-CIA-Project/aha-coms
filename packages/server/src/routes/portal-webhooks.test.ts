@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { Elysia } from 'elysia'
-import { portalWebhooksRoute } from './portal-webhooks'
+import { portalWebhooksRoute, unwrapWebhookEnvelope } from './portal-webhooks'
 
 const app = new Elysia({ prefix: '/api' }).use(portalWebhooksRoute)
 
@@ -92,5 +92,74 @@ describe('POST /api/webhooks/portal — bearer token validation', () => {
     expect(res.status).toBe(401)
     const json = await res.json()
     expect(json.message).toBe('invalid bearer token')
+  })
+})
+
+// Regression for 2026-05-05: Heroes' route was passing the full
+// PortalWebhookEnvelope to handlers, which expect the inner payload only.
+// Every webhook event silently no-op'd because handlers' guard clauses tripped
+// on undefined fields (e.g. `payload.taxonomyId` lived at `body.payload.taxonomyId`).
+// These tests pin the unwrap contract at the helper level.
+describe('unwrapWebhookEnvelope', () => {
+  it('returns the inner payload from a well-formed envelope', () => {
+    const result = unwrapWebhookEnvelope(
+      JSON.stringify({
+        contractVersion: 1,
+        event: 'taxonomy.upserted',
+        eventId: 'evt-1',
+        occurredAt: '2026-05-05T00:00:00.000Z',
+        appSlug: 'heroes',
+        payload: { taxonomyId: 'branches', entries: [{ key: 'ID-JKT', value: 'Jakarta', metadata: null }] },
+      }),
+    )
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.appSlug).toBe('heroes')
+      expect(result.payload).toEqual({
+        taxonomyId: 'branches',
+        entries: [{ key: 'ID-JKT', value: 'Jakarta', metadata: null }],
+      })
+    }
+  })
+
+  it('does NOT pass the transport envelope through as the payload', () => {
+    const result = unwrapWebhookEnvelope(
+      JSON.stringify({
+        contractVersion: 1,
+        event: 'taxonomy.upserted',
+        eventId: 'evt-2',
+        occurredAt: '2026-05-05T00:00:00.000Z',
+        appSlug: 'heroes',
+        payload: { taxonomyId: 'branches', entries: [] },
+      }),
+    )
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      // The payload must NOT carry transport-layer fields. If a future change
+      // accidentally hands the whole envelope through, this assertion catches it.
+      expect(result.payload).not.toHaveProperty('contractVersion')
+      expect(result.payload).not.toHaveProperty('event')
+      expect(result.payload).not.toHaveProperty('eventId')
+    }
+  })
+
+  it('rejects malformed JSON', () => {
+    const result = unwrapWebhookEnvelope('{ not json')
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('malformed_json')
+  })
+
+  it('rejects an envelope missing the payload field', () => {
+    const result = unwrapWebhookEnvelope(
+      JSON.stringify({ contractVersion: 1, event: 'taxonomy.upserted', eventId: 'evt-3' }),
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('missing_payload')
+  })
+
+  it('rejects a JSON primitive', () => {
+    const result = unwrapWebhookEnvelope(JSON.stringify('just a string'))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('missing_payload')
   })
 })
