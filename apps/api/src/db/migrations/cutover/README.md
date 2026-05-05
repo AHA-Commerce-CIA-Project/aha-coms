@@ -8,6 +8,28 @@ This is by design: they are applied manually at specific cutover deploy steps.
 
 ---
 
+## ⚠ Deploy C — verified non-applicable on `fbi-dev-484410` (2026-05-05)
+
+When the cutover window opened, this directory's `0001_revoke_heroes_writes.sql` was probed
+against portal prod (`coms_portal` DB on Cloud SQL instance `coms-aha-heroes-db`) and discovered
+to assume a role (`heroes_app_role`) that does not exist on the instance and never has. The
+Heroes service-account user (`app`) was queried via `information_schema.role_table_grants` and
+returned zero grants on portal tables — Heroes has no direct DB access to portal data; it talks
+to portal exclusively over HTTP webhooks. The REVOKE was therefore a no-op: there is nothing to
+revoke. Probe transcript:
+
+```
+ERROR:  role "heroes_app_role" does not exist
+```
+
+The defense Deploy C was meant to provide is already in place by virtue of separate Cloud SQL
+users on the same instance — portal owns `coms_portal_app`, Heroes owns `app`, and the latter
+has no GRANTs on portal-owned tables. The migration files are kept for design-intent record and
+in case a future deployment needs a written-down REVOKE of an actual grant. **Do not attempt to
+apply 0001 in its current form: it will fail with the role-not-found error above.** If a future
+deployment introduces a real grant to a Heroes-side role, edit the role name in 0001 (and 0002)
+to match before applying.
+
 ## 0001_revoke_heroes_writes.sql — Deploy C
 ## 0002_restore_heroes_writes.sql — Rollback companion (Spec 07/08)
 
