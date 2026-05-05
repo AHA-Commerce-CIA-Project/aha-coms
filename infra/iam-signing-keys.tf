@@ -34,14 +34,10 @@
 # A tighter custom role can replace this in a follow-up if/when audit
 # requires it; out of scope for T1.
 
-locals {
-  portal_broker_signing_key_member = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
-}
-
 resource "google_project_iam_member" "portal_broker_signing_keys_admin" {
   project = var.project_id
   role    = "roles/secretmanager.admin"
-  member  = local.portal_broker_signing_key_member
+  member  = "serviceAccount:${google_service_account.portal_runtime.email}"
 
   condition {
     title       = "Only portal-broker-signing-key-* secrets"

@@ -3,6 +3,10 @@ resource "google_cloud_run_v2_service" "coms_portal" {
   location = var.region
 
   template {
+    # Dedicated portal runtime identity. See infra/iam-portal-runtime.tf.
+    # Outbound webhook OIDC tokens carry this SA's email as the `email` claim.
+    service_account = google_service_account.portal_runtime.email
+
     scaling {
       min_instance_count = 0
       max_instance_count = 2
@@ -192,23 +196,7 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
   member   = "allUsers"
 }
 
-# Grant default compute SA access to secrets
+# data.google_project.current is retained for any future cross-file consumer.
+# Secret access has moved to the dedicated portal_runtime SA — see
+# infra/iam-portal-runtime.tf.
 data "google_project" "current" {}
-
-resource "google_secret_manager_secret_iam_member" "compute_sa_database_url" {
-  secret_id = google_secret_manager_secret.database_url.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
-}
-
-resource "google_secret_manager_secret_iam_member" "compute_sa_gip_api_key" {
-  secret_id = google_secret_manager_secret.gip_api_key.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
-}
-
-resource "google_secret_manager_secret_iam_member" "compute_sa_portal_broker_signing_secret" {
-  secret_id = google_secret_manager_secret.portal_broker_signing_secret.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
-}
