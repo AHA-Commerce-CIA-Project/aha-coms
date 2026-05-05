@@ -39,6 +39,8 @@ export type AuditAction =
   | 'one_time_link_consumed'
   | 'update_taxonomy_entry'
   | 'delete_taxonomy_entry'
+  | 'bulk_rebroadcast_provisioning'
+  | 'bulk_rebroadcast_provisioning_failure'
 
 export type AuditTargetType = 'user' | 'team' | 'app' | 'personal_email_sync' | 'employee_info_sync' | 'alias_collision_queue' | 'app_user_config' | 'taxonomy_entry'
 
