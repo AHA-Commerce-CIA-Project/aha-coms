@@ -61,6 +61,22 @@ Repo: `coms-shared` (separate GitHub repo per `project_shared_packages.md`)
 - [x] Bump version to v1.6.0; tagged `v1.6.0` and pushed to `origin/main`.
 - [x] Verified no breaking changes — locked by `src/__tests__/v1_5_0-backcompat.test.ts` (12 tests exercising every v1.5.0 name and shape verbatim). Full suite: 28/28 pass; `tsc --noEmit` clean.
 
+### PR 07-3.5 — Bulk rebroadcast-provisioning admin endpoint (BLOCKER for cutover window)
+Repo: `coms_portal`
+
+**Why:** Surfaced 2026-05-05 while attempting a staging cutover dress rehearsal. `emitUserProvisioned` is only invoked from `createEmployee` (POST `/api/v1/employees`), `employee-info-sync` (sheet sync), and `employee-import` (CSV import). `retry-provisioning` runs the internal state machine but does NOT emit. Portal currently has 72 backfilled active `identity_users` whose initial `user.provisioned` events fired long ago — when Step 1 truncate wipes Heroes, those events have no path to refire, so `heroes_profiles` stays empty after restart. This endpoint is what makes Cutover sequence Step 3 path (a) (Spec 08) actually work for any portal that has pre-existing users.
+
+- [ ] `POST /api/v1/admin/employees/rebroadcast-provisioning` — `apps/api/src/routes/admin.ts` (or new `apps/api/src/routes/admin/employees.ts`).
+  - [ ] Auth: `requireRole('admin')` (matches `/admin/taxonomies` and existing `/employees` routes).
+  - [ ] Body: optional `{ userIds?: string[] }` for selective rebroadcast; default = all `status='active'` rows.
+  - [ ] Implementation: `SELECT id FROM identity_users WHERE status='active'` → loop with concurrency cap (~5 parallel) calling `emitUserProvisioned(userId)`. Log per-user success/failure; return `{ count, fired, failed }` summary.
+  - [ ] Audit: single `bulk_rebroadcast_provisioning` log entry with `{count, requestedCount, source: 'admin-cli' | 'admin-ui'}` plus per-user failure entries on errors.
+  - [ ] Idempotency: each `emitUserProvisioned` already constructs an `eventId` per call; Heroes' webhook handler dedupes on `eventId`. Re-running this endpoint multiple times is safe (Heroes will only insert each `heroes_profiles` row once per emit).
+- [ ] Tests: 1 happy-path (3 users → 3 emits captured), 1 selective (`userIds: [a,b]` → 2 emits), 1 partial-failure (mock one emit to throw → response shows `failed: 1`).
+- [ ] Deploy via existing portal `deploy.yml`. Smoke-test against prod by setting one portal user's `branch` field after deploy and confirming a `user.updated` (or rebroadcast) event lands at Heroes.
+
+This is genuinely useful infrastructure beyond cutover: any future Heroes recovery (DB restore, schema regression that loses `heroes_profiles`) can use this endpoint to rebuild from portal source-of-truth without touching identity_users.
+
 ### PR 07-5 — Drop legacy emit (after Heroes Deploy A confirmed)
 Repo: `coms_portal`
 
@@ -137,8 +153,9 @@ A2 delivered in 8 slices across 11 commits (`b289dbd`, `44f856c`, `5392d98`, `25
 - [x] Broker exchange handler at `packages/web/src/routes/auth/portal/exchange/+server.ts` is unchanged at the file level — `createLocalSessionForPortalUser` now does the `heroes_profiles` + `email_cache` upsert per Spec 08 §Decision #10. Last-write-wins with webhook handler.
 - [x] better-auth retargeting deferred — handled by direct schema FK in A1 (`authSession.userId` → `heroes_profiles.id`); better-auth library reconfiguration is not strictly required for the bespoke session functions to operate. Revisit when better-auth is exercised on a code path that requires its internal user reference.
 
-**Cutover tools + CI guard (Slice 7 SHIPPED commit `5392d98`):**
+**Cutover tools + CI guard (Slice 7 SHIPPED commit `5392d98`, follow-up `f4ed6e5` 2026-05-05):**
 - [x] `bun run cutover:verify` (`scripts/cutover-verify.ts`) — implements 5 checks per Spec 08 §Cutover sequence. Checks 2 + 3 fully automated (taxonomy_cache vs portal sync; pending-alias `--since-iso=` filter); checks 1 + 4 + 5 surfaced as PASS / FAIL / MANUAL with detail.
+- [x] **Follow-up `f4ed6e5` (2026-05-05):** Heroes root `package.json` was missing `drizzle-orm` + `@coms/shared` workspace dep — `bun run cutover:verify` failed with `Cannot find package 'drizzle-orm'` from a fresh checkout because Bun resolves modules from the script's location upward and the script lives at workspace root. Added both as root devDependencies; lockfile clean; lint clean. Also added a header runbook to the script with the local invocation sequence (cloud-sql-proxy + DATABASE_URL env + PORTAL_BASE_URL env) and the SA-impersonation quirk: user-level ADC silently returns `401 missing_token` on Check 2 because gcloud's `print-identity-token` omits the email claim by default; either run with `gcloud auth application-default login --impersonate-service-account=coms-aha-heroes-run-sa@...` or run inside the staging Heroes Cloud Run container.
 - [x] `POST /api/admin/pending-aliases/sweep` (`packages/server/src/routes/admin-pending-aliases.ts`) — drains pending queue via `resolveAliasesBatch` (1000-name batches), routes outcomes to `deactivated_user_ingest_audit` / status='resolved' / retry++. Auth: OIDC SA bearer (operationally callable today; Slice 8 may convert to user-role gate once middleware is restored).
 - [x] `bun run ci:check-no-illegal-inserts` (`scripts/check-no-illegal-inserts.ts`) — 10 unit tests; flags `INSERT INTO users` anywhere and `INSERT INTO heroes_profiles` outside the two-entry whitelist (handle-user-provisioned + session.ts). First run found 3 real violations in `repositories/users.ts` + `services/sheet-sync.ts` — Slice 6/8 will excise them.
 
@@ -179,12 +196,18 @@ Cross-cutting: `routes/sheet-sync.ts` overlaps with Slice 6 — coordinate so th
 
 ## Cutover window (<30min, both teams)
 
-Runbook execution. Pre-cutover (T-1h):
+**Decision 2026-05-05: cutover executes against PROD directly, no staging dress rehearsal.**
 
-- [ ] Portal: `org_taxonomies` populated, verified manually (admin UI count check).
+A staging dress rehearsal was scoped + attempted on 2026-05-05 but blocked by the missing rebroadcast endpoint (see PR 07-3.5). Rather than build a staging-only mock harness, we'll use the rebroadcast endpoint (which is genuinely useful infra) and cut over against prod directly. Justification: prod is observably empty of real user activity — Heroes prod has 0 `heroes_profiles`, 0 across all domain tables (only 10 reward seed rows + 1 stale `taxonomy_cache:branches:SMOKE`), and portal prod has 72 backfilled `identity_users` (1 admin + 71 employees, all `addedBy=backfill`, all `provisioningStatus=ready`) with no active end-user sessions. The destructive Heroes truncate has near-zero cost; portal users are preserved by the cutover sequence (only Heroes truncates).
+
+Pre-cutover (T-1h):
+
+- [ ] Portal: `org_taxonomies` populated, verified manually (admin UI count check). Branches: `Indonesia`, `Thailand` (matches API schema literal). Teams: 13 entries from HEROES Fulltime Staff sheet (Outsource, Logistics, Branding, Marketplace, Warehouse, FBI, CS, Partnership, Finance, BD, HRD, Executives, Leadership). Departments: empty (org has no departments concept yet — confirmed 2026-05-05).
 - [ ] Portal: Heroes manifest at v2 with `taxonomies: ["branches", "teams", "departments"]`.
-- [ ] Portal: Heroes service-account WIF binding for `GET /api/taxonomies/sync` verified.
-- [ ] Heroes: PR A1 + PR A2 deployed to staging; cutover-verify script proven against staging.
+- [ ] Portal: Heroes service-account WIF binding for `GET /api/taxonomies/sync` verified. ✅ Confirmed working 2026-05-05 against staging Heroes service.
+- [ ] Portal: **PR 07-3.5 rebroadcast endpoint deployed to prod portal Cloud Run** (`coms-portal-app` revision >= deploy of that PR). Smoke-test before cutover: setting one portal user's branch then calling rebroadcast endpoint should fan out one event to Heroes.
+- [ ] Portal: 72 existing `identity_users` updated with `branch` set (random Indonesia/Thailand assignment is acceptable for current org spread per 2026-05-05 decision; departments stay null per the no-departments stance). Optional: also create the 69 sheet rows missing from portal (HEROES sheet has 134 active rows minus 65 already-in-portal = 69 net-new) — these would represent the Indonesia outsource/freelance/mitra/magang roster. The 7 portal-only users are 3 AHA Thailand staff + 4 already-resigned Indonesia staff; leave them.
+- [ ] Heroes: Deploy A image promoted to 100% prod traffic (revision currently sitting at `coms-aha-heroes-app-00453-vuf` with `staging` tag at 0%). Migration `0011_*` already applied to prod DB at deploy time, so the new schema is in place; only the code revision needs promoting.
 - [ ] Both teams in a shared comms channel; declare cutover window start.
 
 T-0:
@@ -192,8 +215,8 @@ T-0:
 - [ ] Heroes: TRUNCATE all domain tables AND all caches per Spec 08 §Cutover sequence step 1.
 - [ ] Heroes: restart service. Boot triggers `GET /api/taxonomies/sync`; `taxonomy_cache` populates.
 - [ ] Heroes: confirm `taxonomy_cache` count == portal `org_taxonomies` count per `taxonomy_id`.
-- [ ] Portal admin: run CSV/Sheet/manual provisioning for full user roster. Each `user.provisioned` event flows.
-- [ ] Heroes: confirm `heroes_profiles` count grows to match.
+- [ ] Portal admin: trigger fan-out for the existing roster — `POST /api/v1/admin/employees/rebroadcast-provisioning` (path 3a per Spec 08 §T-0). Each `user.provisioned` event flows. Capture the response timestamp as `--since-iso` for cutover-verify Check 3.
+- [ ] Heroes: confirm `heroes_profiles` count grows to match `identity_users WHERE status='active'` count.
 - [ ] Portal admin: set per-app config where defaults are wrong (single + bulk via `/admin/app-config`).
 - [ ] Heroes ops: re-run sheet ingestion for points data. Watch `pending_alias_resolution` for drops.
 
@@ -256,16 +279,38 @@ Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be`
 - `bun run ci:check-no-illegal-inserts` → 0 violations across 174 source files (down from 3)
 - Heroes CI ✅ + Deploy ✅ on sha `f62f2be`
 
-**Remaining work (operational, not blocked on code):**
+**Remaining work (operational, not blocked on code unless flagged):**
 
 1. **Smoke-test heroes staging** — *partially complete*. ✅ Webhook fan-out end-to-end verified 2026-05-05 (taxonomy.upserted SMOKE row landed in heroes_production `taxonomy_cache`; three follow-up fixes shipped — see §Post-Deploy A follow-up fixes). Still pending: login, sheet ingestion, admin flows, `/profile`.
-2. **Pre-cutover (T-1h)** — see §"Cutover window" block above. Critical pre-flight: portal admin populates `(taxonomy_id='teams', ...)` from Heroes' production team table BEFORE the cutover window. Without this, taxonomy_cache will be sparse for teams in production.
+2. **Pre-cutover (T-1h)** — see §"Cutover window" block above. Critical pre-flight: portal admin populates `(taxonomy_id='teams', ...)` from the HEROES Fulltime Staff sheet (13 distinct `Tim` values, listed in §"Cutover window" pre-cutover block).
 3. ✅ **Ops flipped `ENABLE_TAXONOMY_EVENTS=true`** in portal production (`infra/cloud-run.tf:120-123`). Burn-in done 2026-05-05.
-4. **Run `bun run cutover:verify`** against staging end-to-end before scheduling the production cutover. All 5 checks must pass.
-5. **Cutover window execution** (<30min, both teams) per §"Cutover window" runbook above.
-6. **Apply cutover migration `0001_revoke_heroes_writes.sql`** on portal at T+30min (Deploy C).
-7. **After Heroes Deploy A confirms stable in production** — execute portal PR 07-5 (drop legacy emit fields, bump `@coms-portal/shared` git+url pin to v1.6.0, force manifest schemaVersion:2). Detailed scope in §"PR 07-5" block above.
-8. **Cleanup phases** (Heroes + portal) per §"Cleanup" blocks above, ~7 days after cutover stable.
+4. **BLOCKER — Build + ship PR 07-3.5 rebroadcast endpoint** (see §"PR 07-3.5" block above). Without this, Cutover Step 3 has no path to fan out events for the 72 pre-existing `identity_users` rows on portal prod. Dress rehearsal against staging is moot (same blocker); decision on 2026-05-05 was to skip staging mock and cut over against prod directly once the endpoint ships, since prod is observably empty of real user activity.
+5. **Cutover-verify proven against staging** — *deferred*. Originally intended to gate cutover scheduling, but blocked by the same pre-existing-users issue (Heroes staging cannot be repopulated without the rebroadcast endpoint, and verify-PASS state is dependent on populated `heroes_profiles`). Side-fix `f4ed6e5` (Heroes 2026-05-05) makes the script runnable from a fresh checkout and documents the OIDC SA-impersonation requirement. Operational sanity proof from staging: Cloud SQL Auth Proxy + DATABASE_URL wiring works; portal `/api/taxonomies/sync` returns HTTP 200 against impersonated Heroes SA token; Check 2 SQL renders correctly (FAILed cleanly in unprovisioned staging; will PASS once populated). The script's first PASS run will be in the prod cutover window itself.
+6. **Cutover window execution** (<30min, both teams) per §"Cutover window" runbook above. Pre-flight gates: PR 07-3.5 deployed + smoke-tested, Heroes Deploy A promoted to 100% prod traffic.
+7. **Apply cutover migration `0001_revoke_heroes_writes.sql`** on portal at T+30min (Deploy C).
+8. **After Heroes Deploy A confirms stable in production** — execute portal PR 07-5 (drop legacy emit fields, bump `@coms-portal/shared` git+url pin to v1.6.0, force manifest schemaVersion:2). Detailed scope in §"PR 07-5" block above.
+9. **Cleanup phases** (Heroes + portal) per §"Cleanup" blocks above, ~7 days after cutover stable.
+
+**Prod baseline observed 2026-05-05 (informs the prod-as-rehearsal decision):**
+
+Portal (`coms_portal` DB):
+- 72 `identity_users` — all status=active, all provisioningStatus=ready, all hasGoogleWorkspace=true. 1 portalRole=admin (Handers The), 71 employees. All emails carry `addedBy=backfill`. No active end-user sessions besides the admin's current admin session.
+- 1 `app_registry` row: `heroes` (HEALTHY, last health-checked minutes before observation).
+- 1 stale `org_taxonomies` row: `branches:SMOKE` (delete or overwrite during pre-cutover).
+
+Heroes (`coms_aha_heroes_production` DB):
+- 0 `heroes_profiles`, 0 `pending_alias_resolution`, 0 `alias_cache`, 0 `email_cache`, 0 `user_config_cache`, 0 `deactivated_user_ingest_audit`.
+- 1 stale `taxonomy_cache` row: `branches:SMOKE`.
+- All 12 domain tables empty: points (table absent), audit_logs, redemptions, comments, appeals, achievement_points, point_summaries, system_settings, notifications, session, account.
+- `rewards`: 10 (catalog seed from migrations — re-seedable).
+- 24 tables total in schema; PR A1 migrations have already run against prod DB even though the prod Cloud Run code revision is still pre-Deploy-A.
+
+HEROES sheet (`AHA COMS - HEROES - Fulltime Staff.csv`) dimensions for cutover provisioning:
+- 141 rows total; 134 active after filtering `Status=Resign` (7 resigned).
+- 13 distinct `Tim` values (the team taxonomy seed).
+- 65 sheet emails match an existing portal `identity_users` row by ANY email (workspace OR personal). 69 sheet rows missing from portal. 7 portal users not in sheet (3 AHA Thailand staff with `@ahacommerce.net`-only addresses + 4 sheet-resigned employees that still have portal rows).
+- Departments: not present in the sheet. Org has no departments concept — `departments` taxonomy stays empty for the cutover.
+- Branches: not present in the sheet. Per 2026-05-05 decision, assign random Indonesia/Thailand at provisioning time. The portal API schema enforces these as the only two accepted branch literals (`apps/api/src/routes/employees.ts` line ~46: `t.Union([t.Literal('Indonesia'), t.Literal('Thailand')])`).
 
 ---
 
