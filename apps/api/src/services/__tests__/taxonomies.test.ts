@@ -79,9 +79,17 @@ const mockDb = {
   }),
 
   delete: (_table: unknown) => ({
-    where: async () => ({ rowCount: 1 }),
+    where: (pred: unknown) => {
+      _capturedDeleteWhere = pred
+      return {
+        returning: async () => _deleteReturningRows,
+      }
+    },
   }),
 }
+
+let _capturedDeleteWhere: unknown = null
+let _deleteReturningRows: Row[] = []
 
 mock.module('~/db', () => ({ db: mockDb }))
 
@@ -107,6 +115,8 @@ const MOCK_APP_ID = 'app-uuid-heroes'
 function reset() {
   _selectRows = []
   _insertRows = []
+  _capturedDeleteWhere = null
+  _deleteReturningRows = []
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +267,43 @@ describe('deleteTaxonomyEntries', () => {
   beforeEach(reset)
 
   test('returns deleted count', async () => {
+    _deleteReturningRows = [
+      { id: 'r1', taxonomyId: 'branches', key: 'OLD-1', value: 'X' },
+      { id: 'r2', taxonomyId: 'branches', key: 'OLD-2', value: 'Y' },
+    ]
     const result = await deleteTaxonomyEntries('branches', ['OLD-1', 'OLD-2'])
     expect(typeof result.deleted).toBe('number')
+    expect(result.deleted).toBe(2)
+  })
+
+  test('returns zero count + empty entries for empty keys', async () => {
+    const result = await deleteTaxonomyEntries('branches', [])
+    expect(result.deleted).toBe(0)
+    expect(result.entries).toHaveLength(0)
+  })
+
+  test('WHERE filters by taxonomyId AND key (not key alone)', async () => {
+    _deleteReturningRows = [{ id: 'r1', taxonomyId: 'branches', key: 'SMOKE', value: 'Smoke' }]
+    await deleteTaxonomyEntries('branches', ['SMOKE'])
+    // The mocked drizzle-orm returns shaped objects. The captured WHERE must be an
+    // `and(...)` with both an `eq` over taxonomyId AND an `inArray` over key.
+    const where = _capturedDeleteWhere as { type: string; args?: unknown[] }
+    expect(where).toBeDefined()
+    expect(where.type).toBe('and')
+    const args = (where.args ?? []) as Array<{ type: string; l: unknown }>
+    expect(args).toHaveLength(2)
+    expect(args.some((a) => a.type === 'eq' && a.l === 'orgTaxonomies.taxonomyId')).toBe(true)
+    expect(args.some((a) => a.type === 'inArray' && a.l === 'orgTaxonomies.key')).toBe(true)
+  })
+
+  test('returns the deleted rows so callers can audit by uuid', async () => {
+    _deleteReturningRows = [
+      { id: '1d8c1a96-1234-4abc-9def-000000000001', taxonomyId: 'branches', key: 'SMOKE', value: 'Smoke' },
+    ]
+    const result = await deleteTaxonomyEntries('branches', ['SMOKE'])
+    expect(result.entries).toHaveLength(1)
+    expect(result.entries[0].id).toBe('1d8c1a96-1234-4abc-9def-000000000001')
+    expect(result.entries[0].key).toBe('SMOKE')
+    expect(result.entries[0].value).toBe('Smoke')
   })
 })

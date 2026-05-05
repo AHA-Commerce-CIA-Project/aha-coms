@@ -206,20 +206,32 @@ export const adminTaxonomiesRoutes = new Elysia({ prefix: '/taxonomies' })
   // Delete one entry
   .delete(
     '/:taxonomyId/:key',
-    async ({ params, authUser, requestId, actorIp }) => {
+    async ({ params, authUser, requestId, actorIp, status }) => {
       const result = await deleteTaxonomyEntries(params.taxonomyId, [params.key])
+
+      if (result.deleted === 0) {
+        throw status(404, { message: 'Taxonomy entry not found' })
+      }
 
       emitTaxonomyDeleted({
         taxonomyId: params.taxonomyId,
         keys: [params.key],
       }).catch((err) => logger.error({ err }, '[admin/taxonomies] emitTaxonomyDeleted failed'))
 
+      // access_audit_log.target_id is uuid NOT NULL — use the deleted row's
+      // actual id, not a synthetic "<taxonomyId>/<key>" string. Human-readable
+      // taxonomyId/key go into the details JSON for forensic queries.
+      const deleted = result.entries[0]
       await logAudit({
         actorId: authUser.id,
         action: 'delete_taxonomy_entry',
         targetType: 'taxonomy_entry',
-        targetId: `${params.taxonomyId}/${params.key}`,
-        details: { taxonomyId: params.taxonomyId, key: params.key },
+        targetId: deleted.id,
+        details: {
+          taxonomyId: params.taxonomyId,
+          key: deleted.key,
+          value: deleted.value,
+        },
         requestId,
         actorIp,
       })

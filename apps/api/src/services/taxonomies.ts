@@ -6,7 +6,7 @@
 import { db } from '~/db'
 import { orgTaxonomies } from '~/db/schema/org-taxonomies'
 import { appManifests } from '~/db/schema/app-manifests'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import type { OrgTaxonomy } from '~/db/schema/org-taxonomies'
 
 export type { OrgTaxonomy }
@@ -192,17 +192,31 @@ export async function bulkUpsertTaxonomyEntries(
 // deleteTaxonomyEntries
 // ---------------------------------------------------------------------------
 
+export interface DeletedTaxonomyEntry {
+  id: string
+  key: string
+  value: string
+}
+
 export async function deleteTaxonomyEntries(
   taxonomyId: string,
   keys: string[],
-): Promise<{ deleted: number }> {
-  if (keys.length === 0) return { deleted: 0 }
+): Promise<{ deleted: number; entries: DeletedTaxonomyEntry[] }> {
+  if (keys.length === 0) return { deleted: 0, entries: [] }
 
-  await db
+  const rows = await db
     .delete(orgTaxonomies)
     .where(
-      inArray(orgTaxonomies.key, keys),
+      and(
+        eq(orgTaxonomies.taxonomyId, taxonomyId),
+        inArray(orgTaxonomies.key, keys),
+      ),
     )
+    .returning({
+      id: orgTaxonomies.id,
+      key: orgTaxonomies.key,
+      value: orgTaxonomies.value,
+    })
 
-  return { deleted: keys.length }
+  return { deleted: rows.length, entries: rows }
 }
