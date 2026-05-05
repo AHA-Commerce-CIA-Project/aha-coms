@@ -117,9 +117,10 @@ Two PRs, both shipped before cutover. Single Drizzle migration via `drizzle-kit 
 
 ### Pre-cutover (T-1h, portal-side, no emit)
 
-- `org_taxonomies` populated with current branches + teams + departments (verified manually).
+- `org_taxonomies` populated with current branches + teams + departments (verified manually). Departments taxonomy stays empty per current org (no departments concept yet — confirmed 2026-05-05). Branches: `Indonesia`, `Thailand` (matches existing API schema literal at `apps/api/src/routes/employees.ts` line ~46).
 - Heroes manifest registered with portal at v2 (with `taxonomies` array).
 - Heroes' service-account WIF binding for `GET /api/taxonomies/sync` verified.
+- **Portal `POST /api/v1/admin/employees/rebroadcast-provisioning` deployed and smoke-tested.** Required because `emitUserProvisioned` is only invoked from `createEmployee` / sheet-sync / CSV-import paths today; pre-existing `identity_users` rows (any portal that has ever created users) cannot otherwise re-fanout to Heroes after Step 1 truncate. Endpoint loops `identity_users WHERE status='active'` and calls `emitUserProvisioned(userId)` per row. See TODO doc §"PR 07-3.5 — Rebroadcast endpoint."
 
 ### T-0
 
@@ -128,7 +129,10 @@ Two PRs, both shipped before cutover. Single Drizzle migration via `drizzle-kit 
    - Caches: `alias_cache`, `taxonomy_cache`, `user_config_cache`, `email_cache`, `pending_alias_resolution`, `deactivated_user_ingest_audit`.
    - Drop `branches` + `teams` (already dropped in PR A1, but verify empty).
 2. **Heroes restarts.** On boot, calls `GET /api/taxonomies/sync`; populates `taxonomy_cache`. (Same shape any future H-app uses to onboard.)
-3. **Portal admin runs CSV/Sheet/manual provisioning.** Each `user.provisioned` event carries `employment` (referencing cached taxonomy keys), `appConfig` (manifest defaults), `contactEmail`. Heroes materialises empty `heroes_profiles` rows.
+3. **Portal admin triggers fan-out for the existing user roster.** Two valid paths:
+   - **(a) Rebroadcast existing users (recommended when portal already has identity_users rows):** `POST /api/v1/admin/employees/rebroadcast-provisioning` fires `emitUserProvisioned` for every active identity_user. Heroes materialises `heroes_profiles` rows from each event.
+   - **(b) Create new users:** Portal admin runs CSV/Sheet/manual provisioning to create fresh identity_users; each `createEmployee` fires `user.provisioned` naturally. Use this only when portal is empty or new users are being onboarded as part of cutover.
+   - Both paths emit the same Spec 07 envelope: `user{portalSub,name,primaryAliasId}`, `contactEmail`, `employment` (full block referencing cached taxonomy keys), `appConfig` (manifest defaults).
 4. **Portal admin sets per-app config** where manifest defaults are wrong; `app_config.updated` events fan out.
 5. **Heroes ops re-runs sheet ingestion for points data** via `POST /api/aliases/resolve-batch`.
 
