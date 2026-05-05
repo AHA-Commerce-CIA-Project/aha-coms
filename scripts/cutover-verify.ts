@@ -1,3 +1,25 @@
+// Spec 08 cutover-verify — runs at T+~25min in the cutover window. Five checks;
+// any [FAIL] blocks Deploy C.
+//
+// Local invocation against staging:
+//   1. Start Cloud SQL Auth Proxy in another shell:
+//        cloud-sql-proxy fbi-dev-484410:asia-southeast2:coms-aha-heroes-db --port 5433
+//   2. Pull the staging DB password and run:
+//        DB_PASS=$(gcloud secrets versions access latest \
+//          --secret=coms-aha-heroes-db-password --project=fbi-dev-484410)
+//        DATABASE_URL="postgres://app:${DB_PASS}@127.0.0.1:5433/coms_aha_heroes_staging" \
+//        PORTAL_BASE_URL="https://coms-portal-app-45tyczfska-et.a.run.app" \
+//          bun run cutover:verify --since-iso=YYYY-MM-DDThh:mm:ssZ
+//
+// Auth note: Check 2 calls portal /api/taxonomies/sync, which requires an OIDC
+// token whose `email` claim matches the Heroes Cloud Run SA registered in
+// app_registry. Plain user-level ADC (`gcloud auth application-default login`)
+// will NOT mint a token with the email claim — verification will fail with
+// "missing_token". Either run with ADC impersonated as the Heroes SA
+// (`gcloud auth application-default login --impersonate-service-account=
+// coms-aha-heroes-run-sa@fbi-dev-484410.iam.gserviceaccount.com`) or run
+// the script inside the staging Heroes Cloud Run container, where the
+// metadata server provides email-bearing tokens automatically.
 import { sql, count, gte } from 'drizzle-orm'
 import { db } from '@coms/shared/db'
 import {
