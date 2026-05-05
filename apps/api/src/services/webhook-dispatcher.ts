@@ -15,7 +15,7 @@
  */
 
 import { verifyWebhookSignature, signWebhookPayload } from '@coms-portal/sdk'
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and, inArray, sql } from 'drizzle-orm'
 import { GoogleAuth } from 'google-auth-library'
 import { db } from '~/db'
 import { appWebhookEndpoints } from '~/db/schema/app-webhook-endpoints'
@@ -185,9 +185,13 @@ export async function dispatchPortalWebhook<T>(
     .where(
       and(
         eq(appWebhookEndpoints.status, 'active'),
-        // Filter to requested app slugs when provided
+        // Filter to requested app slugs when provided.
+        // inArray emits `IN (?, ?, ...)` which postgres-js serialises correctly;
+        // `slug = ANY($n)` with a JS array fails because postgres-js sends the
+        // array as a comma-joined string and PG rejects it as a malformed array
+        // literal.
         opts?.appSlugs?.length
-          ? sql`${appRegistry.slug} = ANY(${opts.appSlugs})`
+          ? inArray(appRegistry.slug, opts.appSlugs)
           : undefined,
       ),
     )

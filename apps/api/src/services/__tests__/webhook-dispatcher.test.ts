@@ -80,6 +80,7 @@ type EndpointRecord = {
 
 let endpointStore: EndpointRecord[] = []
 const dbUpdates: Array<Record<string, unknown>> = []
+let lastSelectWhere: unknown = null
 
 // Tracks the WHERE condition values passed to update().where() so we can
 // identify which endpoint was updated.
@@ -90,7 +91,8 @@ const db = {
   select: (_fields: unknown) => ({
     from: (_table: unknown) => ({
       innerJoin: (_joined: unknown, _on: unknown) => ({
-        where: (_condition: unknown) => {
+        where: (condition: unknown) => {
+          lastSelectWhere = condition
           // Return all active endpoints (filtering is done by the dispatcher in JS)
           return Promise.resolve(
             endpointStore.filter((ep) => ep.status === 'active'),
@@ -254,7 +256,36 @@ describe('dispatchPortalWebhook', () => {
     dbUpdates.length = 0
     lastUpdatePayload = {}
     lastUpdateWhereId = null
+    lastSelectWhere = null
     enqueueWebhookDeliveryMock.mockClear()
+  })
+
+  // Regression for staging 500 (2026-05-05): when the dispatcher filtered by
+  // appSlugs it built `slug = ANY($n)` with a JS array. postgres-js sends a
+  // JS array as a comma-joined string, so PG saw `ANY('heroes')` and rejected
+  // it as `malformed array literal: "heroes"`. Use drizzle's inArray instead,
+  // which serialises as `slug IN (?, ?, ...)`.
+  test('appSlugs filter uses inArray (not sql`= ANY(...)`)', async () => {
+    const ep = makeEndpoint({
+      id: 'ep-heroes',
+      appSlug: 'heroes',
+      subscribedEvents: ['taxonomy.upserted'],
+    })
+    endpointStore.push(ep)
+
+    await dispatchPortalWebhook(
+      'taxonomy.upserted' as never,
+      { taxonomyId: 'branches', entries: [] },
+      { appSlugs: ['heroes'], fetchImpl: mock(async () => new Response(null, { status: 200 })) as unknown as typeof fetch },
+    )
+
+    expect(lastSelectWhere).not.toBeNull()
+    const rendered = JSON.stringify(lastSelectWhere)
+    // Must NOT contain the broken ANY( serialisation
+    expect(rendered).not.toContain('= ANY(')
+    // The drizzle-orm mock represents inArray as { left, right }.
+    // appSlugs should appear as the right-hand value of an inArray expression.
+    expect(rendered).toContain('"right":["heroes"]')
   })
 
   // Helper: build a fetch stub that always returns 2xx
