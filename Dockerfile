@@ -33,9 +33,5 @@ COPY --from=builder /app/packages/web/build ./packages/web/build
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/web/node_modules ./packages/web/node_modules
 COPY --from=builder /app/package.json ./
-# Migration assets — let the deploy pipeline run `bun run db:migrate` against
-# this image instead of re-installing Bun deps on the runner.
-COPY --from=builder /app/drizzle.config.ts ./
-COPY --from=builder /app/packages/shared/src/db ./packages/shared/src/db
 EXPOSE 8080
 CMD ["bun", "run", "dist/index.js"]
