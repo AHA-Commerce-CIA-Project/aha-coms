@@ -5,7 +5,7 @@
 > **BURN-IN STATUS — 2026-05-06: three Heroes-side fixes shipped end-to-end (CI auto-deploy)** + four additional portal-side fixes shipped same day. Heroes-side discovered while testing handers.the@ahacommerce.net (a non-admin dual-email user provisioned post-cutover) against live Heroes:
 >
 > 1. Portal `d9ebf4c` — Webhook **Test** button mints OIDC bearer (was HMAC-only; Cloud Run rejected with 401).
-> 2. Heroes `34124cd` — Removed dead `mustChangePassword` gate + orphan `/change-password` route. Post-cutover the column defaults to `true` for every newly-projected profile and the page only bounced to portal, producing a redirect loop. Column lingers (still written by `auth-sync.ts` and sheet-sync paths) — flagged for cleanup alongside PR 07-5.
+> 2. Heroes `34124cd` — Removed dead `mustChangePassword` gate + orphan `/change-password` route. Post-cutover the column defaults to `true` for every newly-projected profile and the page only bounced to portal, producing a redirect loop. Column lingers (still written by `auth-sync.ts` and sheet-sync paths) — deferred to Heroes Phase 6 cleanup (PR 07-5 shipped without touching the Heroes-side column).
 > 3. Heroes `c145fda` + portal `8086269` — **App-local role moved off `app_user_config.config.role` onto `heroes_profiles.role`.** The portal's team page writes `member_app_role.appRole` (broadcast as `envelope.appRole`); Heroes was reading from `userConfigCache.config.role` (different surface, never written by the team-page path). Migration `0013_colossal_wolfsbane` adds the column + backfills from `user_config_cache.config.role` so existing admins keep their nav. `handleUserUpdated` now mirrors `appRole` into the column (was a no-op for role before). `role` removed from `heroes.json` configSchema in portal — every future H-app inherits the same one-source contract: read role from `envelope.appRole`, persist whatever extra config it needs locally; configSchema is for app-specific knobs only.
 >
 > **Portal-side burn-in fixes shipped 2026-05-06:**
@@ -140,7 +140,7 @@ A2 delivered in 8 slices across 11 commits (`b289dbd`, `44f856c`, `5392d98`, `25
 - `bun run --filter=@coms/web typecheck` → 0 errors / 5915 files (was 4 errors after first push)
 - `bun test packages/server scripts` → 67 pass / 0 fail (up from 49 — Slice 6 added 18 tests)
 - `bun run ci:check-no-illegal-inserts` → 0 violations across 174 files (down from 3)
-- Heroes CI ✅ run `25314122508`; Heroes Deploy ✅ run `25314176044`. **Heroes Deploy A is LIVE IN STAGING.** Cutover window + portal PR 07-5 are the remaining work.
+- Heroes CI ✅ run `25314122508`; Heroes Deploy ✅ run `25314176044`. **Heroes Deploy A is LIVE IN PROD** (cutover EXECUTED 2026-05-05). Portal PR 07-5 SHIPPED 2026-05-06 (commit `27aed23`). Pending: Heroes-side Phase 6 cleanup only.
 
 **Webhook handler split (Slice 1+2+3 SHIPPED commit `b289dbd`):**
 - [x] `packages/server/src/routes/portal-webhooks.ts` refactored 187 → 61 lines: HTTP + OIDC + idempotency dedupe + body parse + `dispatchPortalEvent`.
@@ -225,7 +225,7 @@ Pre-cutover (T-1h):
 - [x] Portal: **Cutover prerequisite — every active user must hold Heroes app access via team membership.** Initial discovery 2026-05-05: 71 of 72 active users were in zero teams, so `emitUserProvisioned` short-circuited silently (perApp.length===0 path). Resolved by creating `all-staff` team (`88eac54f-705c-4617-87ed-955ecf3c5e61`), granting Heroes app, batch-adding the 71 non-admin users. Handers (admin) remains in FBI per pre-existing setup.
 - [x] Portal: 72 existing `identity_users` updated with `branch` set 2026-05-05 (deterministic random split: 41 Indonesia / 31 Thailand; PATCH loop, 71/71 ok in 71 sequential calls). Each PATCH fired `employment.updated` to Heroes (71 events confirmed in Heroes Cloud Run logs). Departments stay null per the no-departments stance. Optional follow-up not done: create the 69 sheet rows missing from portal (HEROES sheet has 134 active rows minus 65 already-in-portal = 69 net-new) — these would represent the Indonesia outsource/freelance/mitra/magang roster. The 7 portal-only users are 3 AHA Thailand staff + 4 already-resigned Indonesia staff; leave them.
 - [x] Heroes: Deploy A image is already serving 100% prod traffic. Confirmed 2026-05-05 — both `coms-aha-heroes-app-00311-s4c` (current 100%) and `coms-aha-heroes-app-00453-vuf` (tagged `staging` at 0%) carry the same image SHA `518140b1...`; the staging tag is just a URL alias, not a traffic gate. Heroes Deploy A code IS what's serving every webhook today.
-- [ ] Both teams in a shared comms channel; declare cutover window start.
+- [x] Both teams in a shared comms channel; cutover window declared and EXECUTED 2026-05-05.
 
 T-0:
 
@@ -234,7 +234,7 @@ T-0:
 - [x] Heroes: `taxonomy_cache` count matches portal `org_taxonomies` per `taxonomy_id` — branches:2/2, teams:13/13.
 - [x] Portal admin: triggered fan-out for the existing roster via `POST /api/v1/admin/employees/rebroadcast-provisioning`. Result: `count:72, dispatched:72, skipped:0, failed:0` (batchId `b4663f65-...`). 72/72 `user.provisioned` events confirmed in Heroes Cloud Run logs.
 - [x] Heroes: `heroes_profiles` count = 72, matches portal `identity_users WHERE status='active'` count.
-- [ ] Portal admin: set per-app config where defaults are wrong (single + bulk via `/admin/app-config`). Skipped — no defaults are wrong; Heroes manifest defaults are accepted as-is for the initial roster. May revisit after first user logins surface mismatched roles.
+- [~] Portal admin: set per-app config where defaults are wrong (single + bulk via `/admin/app-config`). **Skipped intentionally** — Heroes manifest defaults were accepted as-is for the initial roster; subsequently obsoleted by `29966d7` (2026-05-06) which emptied Heroes' `config_schema` after the two knobs (`leaderboard_eligible`, `starting_points`) were verified to have zero consumers in Heroes.
 - [ ] Heroes ops: re-run sheet ingestion for points data. **Pending** — separate operational step on the Heroes side; not blocking cutover gate. `pending_alias_resolution` is currently 0 and `--since-iso` is recorded for the eventual run.
 
 T+~25min — verify gate:
@@ -258,9 +258,9 @@ Repo: `coms_aha_heroes`
 
 ## Cleanup portal-side
 
-- [ ] Spec 07 PR 07-5 (drop legacy emit fields).
-- [ ] Update `docs/architecture/rev3/spec-00-implementation-timeline.md` to mark Spec 07 + 08 SHIPPED with commit refs.
-- [ ] Delete this TODO doc from portal repo (cutover archived).
+- [x] Spec 07 PR 07-5 — SHIPPED 2026-05-06 (commit `27aed23`). Dropped `email` + `branch`; **kept `appRole`** as canonical per-app role broadcast (re-classified — the v1.6.0 envelope has no role field). Manifest `schemaVersion: 2` floor enforced; shared pin bumped; payload types consolidated onto `@coms-portal/shared` v1.6.0.
+- [x] Updated `docs/architecture/rev3/spec-00-implementation-timeline.md` (commit `618a804`) — Spec 07 portal-side row marked PORTAL-SIDE COMPLETE; Spec 08 row Pending narrowed to "Heroes-side cleanup (Phase 6)."
+- [ ] Delete this TODO doc from portal repo (cutover archived). Optional — kept for reference until Heroes Phase 6 also closes.
 
 ---
 
@@ -291,7 +291,7 @@ Three bugs surfaced when `ENABLE_TAXONOMY_EVENTS=true` was first exercised again
 
 ## Cutover EXECUTED 2026-05-05 — what's left
 
-Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be` (pushed 2026-05-04). Heroes Deploy A is LIVE IN PROD; cutover window EXECUTED 2026-05-05 against prod directly per the prod-as-rehearsal decision. Portal `coms-portal-app-00178-vc6` (sha `66a46d3`) is the live revision.
+Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be` (pushed 2026-05-04). Heroes Deploy A is LIVE IN PROD; cutover window EXECUTED 2026-05-05 against prod directly per the prod-as-rehearsal decision. Portal live revision (as of 2026-05-06 afternoon): `coms-portal-app-00206-8f9` (sha `29966d7` — Heroes manifest dead-config drop, stacked on top of `27aed23` PR 07-5 shipped earlier the same day).
 
 **Final A2 verification gate (Heroes-side, 2026-05-04):**
 - `bun run --filter=@coms/server typecheck` → 0 errors (down from 27 baseline)
