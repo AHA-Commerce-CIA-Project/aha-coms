@@ -189,9 +189,15 @@
   async function handleToggleStatus(endpoint: WebhookEndpoint) {
     webhookActionError = null
     pendingToggleWebhook = endpoint.id
-    const newStatus = endpoint.status === 'active' ? 'disabled' : 'active'
     try {
-      await adminApi.updateWebhook(id, endpoint.id, { status: newStatus })
+      if (endpoint.status === 'active') {
+        await adminApi.updateWebhook(id, endpoint.id, { status: 'disabled' })
+      } else {
+        // Re-enable via the dedicated reactivate route — clears stale
+        // failureCount / lastFailureAt / lastFailureReason and audits
+        // separately from generic status PATCHes.
+        await adminApi.reactivateWebhook(id, endpoint.id)
+      }
       queryClient.invalidateQueries({ queryKey: ['webhooks', id] })
     } catch (err) {
       webhookActionError = err instanceof Error ? err.message : 'Failed to update endpoint'

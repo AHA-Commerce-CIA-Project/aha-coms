@@ -612,6 +612,12 @@ export const adminApi = {
       body: JSON.stringify({}),
     })
   },
+  reactivateWebhook(appId: string, id: string) {
+    return requestJson<WebhookEndpoint>(`/api/v1/apps/${appId}/webhooks/${id}/reactivate`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+  },
   deleteWebhook(appId: string, id: string) {
     return requestJson<{ ok: true }>(`/api/v1/apps/${appId}/webhooks/${id}`, {
       method: 'DELETE',

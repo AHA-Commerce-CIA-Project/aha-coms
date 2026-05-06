@@ -234,6 +234,64 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
     },
   )
 
+  // POST /api/v1/apps/:id/webhooks/:endpointId/reactivate
+  // Re-enable a webhook endpoint that was disabled by the DLQ handler in
+  // routes/internal.ts after Cloud Tasks retries exhausted. Status flips back
+  // to 'active', stale failure counters and timestamps are cleared so the
+  // endpoint resumes from a clean slate, and the action is audited so we can
+  // trace who brought a dead endpoint back to life.
+  .post('/:endpointId/reactivate', async ({ params, authUser, requestId, actorIp, set }) => {
+    const existing = await db.query.appWebhookEndpoints.findFirst({
+      where: and(
+        eq(appWebhookEndpoints.id, params.endpointId),
+        eq(appWebhookEndpoints.appId, params.id),
+      ),
+    })
+    if (!existing) {
+      set.status = 404
+      return { message: 'Webhook endpoint not found' }
+    }
+
+    const [updated] = await db
+      .update(appWebhookEndpoints)
+      .set({
+        status: 'active',
+        failureCount: 0,
+        lastFailureAt: null,
+        lastFailureReason: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(appWebhookEndpoints.id, params.endpointId),
+          eq(appWebhookEndpoints.appId, params.id),
+        ),
+      )
+      .returning()
+
+    await logAudit({
+      actorId: authUser.id,
+      action: 'reactivate_webhook_endpoint',
+      targetType: 'app',
+      targetId: params.id,
+      details: {
+        endpointId: params.endpointId,
+        previousStatus: existing.status,
+        previousFailureCount: existing.failureCount,
+      },
+      requestId,
+      actorIp,
+      targetAppId: params.id,
+    })
+
+    return toPublicEndpoint(updated)
+  }, {
+    response: {
+      200: t.Any(),
+      404: t.Object({ message: t.String() }),
+    },
+  })
+
   // POST /api/v1/apps/:id/webhooks/:endpointId/rotate-secret
   .post('/:endpointId/rotate-secret', async ({ params, authUser, requestId, actorIp, set }) => {
     const existing = await db.query.appWebhookEndpoints.findFirst({

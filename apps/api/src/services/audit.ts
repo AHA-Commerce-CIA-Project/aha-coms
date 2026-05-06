@@ -27,6 +27,7 @@ export type AuditAction =
   | 'create_webhook_endpoint'
   | 'rotate_webhook_secret'
   | 'delete_webhook_endpoint'
+  | 'reactivate_webhook_endpoint'
   | 'alias_queue_resolve'
   | 'alias_queue_reject'
   | 'update_app_user_config'
