@@ -1,10 +1,19 @@
 name: Deploy
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+
+# Cancel superseded runs on the same ref so a force-push or rapid follow-up
+# commit doesn't keep an obsolete run burning a runner.
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false  # don't cancel mid-deploy
 
 # Default to read-only; jobs that need WIF or more must opt in via job-level
 # permissions. Keeps blast radius small if a step is ever compromised.
@@ -22,13 +31,100 @@ env:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
+  # 0. Verify — same checks as ci.yml, but run in parallel with build-and-push
+  #    so the Docker build and verification overlap. deploy-staging gates on
+  #    all of them, so deployment safety is unchanged from the old workflow_run
+  #    setup; we just stop running CI sequentially before Deploy.
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
+        with:
+          bun-version: 1.3.13
+      - name: Cache bun install
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Lint
+        run: bun run lint
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
+        with:
+          bun-version: 1.3.13
+      - name: Cache bun install
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Type check
+        run: bun run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
+        with:
+          bun-version: 1.3.13
+      - name: Cache bun install
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Test
+        run: bun test
+
+  infra:
+    name: OpenTofu Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb  # v2
+      - name: OpenTofu init (no backend)
+        run: tofu init -backend=false -input=false
+      - name: OpenTofu validate
+        run: tofu validate
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # 1. Build and push the Docker image once; reuse the SHA-tagged image
   #    in both staging and production deploys.
   # ─────────────────────────────────────────────────────────────────────────────
   build-and-push:
     name: Build & Push Image
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       id-token: write  # WIF needs to mint an OIDC token
@@ -38,8 +134,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
@@ -57,7 +151,7 @@ jobs:
         id: meta
         run: |
           set -euo pipefail
-          IMAGE="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/app:${{ github.event.workflow_run.head_sha }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/app:${{ github.sha }}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
@@ -79,17 +173,14 @@ jobs:
   deploy-staging:
     name: Migrate Staging & Deploy (0% Traffic)
     runs-on: ubuntu-latest
-    needs: build-and-push
+    # Gate on verify + build. Functionally equivalent to the old workflow_run
+    # gate on CI: deployment never runs unless lint/typecheck/test/infra pass.
+    needs: [lint, typecheck, test, infra, build-and-push]
     permissions:
       contents: read
       id-token: write  # WIF needs to mint an OIDC token
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
       - name: Authenticate to GCP
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
         with:
@@ -99,21 +190,8 @@ jobs:
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
-        with:
-          bun-version: 1.3.13
-
-      - name: Cache bun install
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
 
       - name: Download Cloud SQL Auth Proxy
         run: |
@@ -129,13 +207,16 @@ jobs:
           DB_PASSWORD=$(gcloud secrets versions access latest --secret=coms-aha-heroes-db-password --project=${{ env.PROJECT_ID }})
           echo "::add-mask::${DB_USER}"
           echo "::add-mask::${DB_PASSWORD}"
-          # URL-encode the password (may contain special chars like !#$%&)
-          DB_PASSWORD_ENCODED=$(bun -e "console.log(encodeURIComponent('${DB_PASSWORD//\'/\\\'}'))")
+          # URL-encode the password (may contain special chars like !#$%&). Use
+          # python instead of bun so we don't need a Bun toolchain on the runner.
+          DB_PASSWORD_ENCODED=$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["P"], safe=""))' P="${DB_PASSWORD}")
           echo "::add-mask::${DB_PASSWORD_ENCODED}"
           echo "DB_USER=${DB_USER}" >> "$GITHUB_ENV"
           echo "DB_PASSWORD_ENCODED=${DB_PASSWORD_ENCODED}" >> "$GITHUB_ENV"
 
       - name: Run Drizzle migrations → staging
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
         run: |
           set -euo pipefail
           # Start Auth Proxy; connects via TCP on localhost:5432.
@@ -145,7 +226,12 @@ jobs:
           trap 'kill "$PROXY_PID" 2>/dev/null || true' EXIT
           sleep 3
 
-          DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/coms_aha_heroes_staging" \
+          # Run drizzle-kit migrate inside the freshly built image. The image
+          # already has node_modules + drizzle-kit + the migration SQL files,
+          # so we skip the Bun setup + bun install on the runner.
+          docker run --rm --network=host \
+            -e DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/coms_aha_heroes_staging" \
+            "${IMAGE}" \
             bun run db:migrate
 
       - name: Deploy new image — 0% traffic, tag=staging
@@ -223,11 +309,6 @@ jobs:
       id-token: write  # WIF needs to mint an OIDC token
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
       - name: Authenticate to GCP
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
         with:
@@ -237,21 +318,8 @@ jobs:
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
-        with:
-          bun-version: 1.3.13
-
-      - name: Cache bun install
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
 
       - name: Download Cloud SQL Auth Proxy
         run: |
@@ -267,13 +335,16 @@ jobs:
           DB_PASSWORD=$(gcloud secrets versions access latest --secret=coms-aha-heroes-db-password --project=${{ env.PROJECT_ID }})
           echo "::add-mask::${DB_USER}"
           echo "::add-mask::${DB_PASSWORD}"
-          # URL-encode the password (may contain special chars like !#$%&)
-          DB_PASSWORD_ENCODED=$(bun -e "console.log(encodeURIComponent('${DB_PASSWORD//\'/\\\'}'))")
+          # URL-encode the password (may contain special chars like !#$%&). Use
+          # python instead of bun so we don't need a Bun toolchain on the runner.
+          DB_PASSWORD_ENCODED=$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["P"], safe=""))' P="${DB_PASSWORD}")
           echo "::add-mask::${DB_PASSWORD_ENCODED}"
           echo "DB_USER=${DB_USER}" >> "$GITHUB_ENV"
           echo "DB_PASSWORD_ENCODED=${DB_PASSWORD_ENCODED}" >> "$GITHUB_ENV"
 
       - name: Run Drizzle migrations → production
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
         run: |
           set -euo pipefail
           ./cloud-sql-proxy --port 5432 "${{ env.DB_INSTANCE }}" &
@@ -281,7 +352,11 @@ jobs:
           trap 'kill "$PROXY_PID" 2>/dev/null || true' EXIT
           sleep 3
 
-          DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/coms_aha_heroes_production" \
+          # Run migrations inside the freshly built image — see deploy-staging
+          # for rationale.
+          docker run --rm --network=host \
+            -e DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/coms_aha_heroes_production" \
+            "${IMAGE}" \
             bun run db:migrate
 
       - name: Deploy to Cloud Run — 100% traffic

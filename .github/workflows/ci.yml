@@ -4,14 +4,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - '.github/ISSUE_TEMPLATE/**'
+  # PRs only — on push to main, the Deploy workflow runs the same verify
+  # jobs in parallel with the Docker build to shave the CI→Deploy gap.
   pull_request:
     branches:
       - main
@@ -96,10 +90,6 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    # On push to main the Deploy workflow's docker build does the same work
-    # ~30s later — running it here too is pure duplicate. Keep the safety
-    # net on PRs (which never reach the Deploy workflow) and skip on push.
-    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
