@@ -9,10 +9,6 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
     redirect(302, buildPortalSignInUrl(absoluteDeepLink))
   }
 
-  if (locals.user.mustChangePassword && url.pathname !== '/change-password') {
-    redirect(302, '/change-password')
-  }
-
   const actor = locals.user
 
   const { withRLS } = await import('@coms/server/repositories/base')
