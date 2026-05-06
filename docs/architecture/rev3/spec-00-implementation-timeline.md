@@ -7,6 +7,16 @@
 
 ---
 
+## Status — 2026-05-06 (REV 3 CLOSED)
+
+**Rev 3 is closed.** Specs 01, 02 (Phases 1-4), 03 + 03b + 03c, 06, 07, 08 all shipped end-to-end portal- and Heroes-side. Heroes Phase 6 cleanup landed earlier the same day; the cutover TODO doc is left in place one cycle for any optional Heroes-ops sheet-ingestion notes (see `TODO-spec-07-08-cutover.md` line 266).
+
+**Specs 04 (User Preferences) and 05 (Suite Search) carried over to Rev 4** on 2026-05-06 — `git mv` to `../rev4/`, with rev labels updated and a stub `../rev4/spec-00-implementation-timeline.md` framing them as architecture-decided / trigger-deferred. The two specs kept their numbers (04, 05) so existing cross-references from `spec-03c-pre-spec-4-hardening.md`, `spec-03d-deferred-hardening-backlog.md`, and the Rev 3 §Order and Dependencies block continue to resolve. Rev 4 starts as a holding container; no scheduled work until either spec's trigger fires.
+
+The rest of this document is the historical record of Rev 3 as it shipped. Status banners below are preserved for archaeology.
+
+---
+
 ## Status — 2026-05-06 (evening: Heroes Phase 6 cleanup SHIPPED + LIVE IN PROD)
 
 **Heroes Phase 6 cleanup SHIPPED 2026-05-06 (commit `bdae9e8` on `coms_aha_heroes/main`, Deploy run `25417165795`).** Closed out the dead-storage column + cutover doc-mirror in a single thematic act now that Heroes Deploy A has been stable in prod for ~36 hours.
@@ -115,13 +125,13 @@ After Rev 3, identity is *centrally owned* (Rev 2), *centrally surfaced* (Spec 0
 | 03b | Spec 03 Test-Gate Cleanup | Portal | Shipped 2026-04-29 — single PR; root cause was Bun mock-pollution, not real fixture bugs | No | Resolved |
 | 03c | Pre-Spec-4 Hardening (launcher migration, observability, SDK extraction) | Portal | Queued — ~3 days | No (Heroes consumes new SDK in a follow-up) | **Yes — blocks Spec 4/5 debugging** |
 | 03d | Deferred Hardening Backlog (Redis, staging, per-tenant keys, KMS encryption, audit Cloud Logging sink, OTel, canary, feature flags, etc.) | Portal | 11 items, ~13–18 days total if every item ships | No | No — each item ships on its own trigger |
-| 04 | Unified User Preferences (theme + locale) | Portal + every H-app | Small per phase | Yes — Phase 3 (preference consumption) | No — deferred until trigger |
-| 05 | Suite Search / Command Palette | Portal + every H-app | Medium per phase | Optional — Phase 3 (search provider) | No — deferred until trigger |
+| 04 | Unified User Preferences (theme + locale) | — | — | — | **Moved to Rev 4** on 2026-05-06 — see `../rev4/spec-04-user-preferences.md`. Architecture unchanged; trigger-deferred. |
+| 05 | Suite Search / Command Palette | — | — | — | **Moved to Rev 4** on 2026-05-06 — see `../rev4/spec-05-suite-search.md`. Architecture unchanged; trigger-deferred. |
 | 06 | Dual-Email Auth (workspace OIDC + personal OTP) | Portal | PRs A → F shipped 2026-04-30 → 2026-05-03 (commits `049008d`, `6938553`, `ac2f905`, `df1c90c`+`6f96634`, `a684fa9`, `212e103`, `8f13c64`). | Minimal — Heroes compiles unchanged against `@coms-portal/shared` v1.5.0; no required Heroes work for v1 | **Yes — gated Heroes-side rev3 adoption; gate cleared 2026-05-03** |
 | 07 | Org Taxonomies & Employment Block (`@coms-portal/shared` v1.6.0 contract bump) | Portal | Drafted 2026-05-04. PR 07-1 SHIPPED 2026-05-04 (commit `26057ec`) — schema + seed + manifest v2 + cutover rollback companion. PR 07-2 SHIPPED 2026-05-04 (commit `66b0a52`) — sync endpoint + admin UI + gated emitters (`ENABLE_TAXONOMY_EVENTS` off by default) + `taxonomy_edit_locks` migration. PR 07-3 SHIPPED 2026-05-04 (commit `8ca124c`) — `employment-resolution` service, PATCH employees emits `employment.updated` on HR delta, `user.provisioned` carries the full Spec 07 envelope alongside legacy fields (dual-emit). PR 07-4 SHIPPED 2026-05-04 (commit `19cf057` on `mrdoorba/coms-shared`, tag `v1.6.0`) — `EmploymentBlock`, `TaxonomyRef`, `TaxonomyEvent`, `WebhookUserEnvelope`, `ContactEmail`, `taxonomies?: string[]` manifest extension; v1.5.0 backcompat locked by 12 verbatim tests. **PR 07-3.5 SHIPPED 2026-05-05** in two commits: `ba1983a` (initial `POST /api/v1/admin/employees/rebroadcast-provisioning` — 5-lane concurrent fan-out + audit row, 5 tests) + `66a46d3` (metric tightening — `dispatched`/`skipped`/`failed` distinction; surfaced when prod smoke-test reported misleading `fired:1` for users with no team→app access). **PR 07-5 SHIPPED 2026-05-06 (commit `27aed23`)** — burn-in gate waived; dropped legacy duplicates `email`/`branch` (kept `appRole` as canonical per-app role broadcast — re-classified from "legacy" because the v1.6.0 envelope has no role field), bumped shared pin to v1.6.0, replaced local payload type declarations with shared imports, forced manifest `schemaVersion: 2` floor (migration `0033_nifty_raza.sql` forward-fills v1 rows). Followed same-day by `29966d7` — emptied Heroes' manifest `config_schema` (`leaderboard_eligible` + `starting_points` had zero consumers in Heroes; migration `0034_drop_heroes_deadconfig.sql`). | No (sets up the contract Heroes consumes in Spec 08) | **Yes — precondition for Spec 08 + every future H-app onboarding** |
 | 08 | Heroes Spec 03 Cutover Protocol (one-time migration plan) | Heroes | Drafted 2026-05-04 — 2 PRs. **PR A1 + PR A2 SHIPPED + DEPLOYED + CUTOVER EXECUTED.** PR A1 (commit `57fd523`): schema migration — rename `users → heroes_profiles`, drop `branches`/`teams`/`authUser`/`user_emails`, add 6 portal-projection caches, retarget 10 dependent FKs, pin `@coms-portal/shared` v1.6.0. PR A2 across 11 slice commits (Slices 1-8 — webhook handler split + 11 event handlers + pull-on-boot + portal API client + session restored + cutover-verify + admin sweep + CI guard + typecheck cleanup 27→0 + sheet-sync rewrite with 4-outcome routing + `fn_sync_point_summary` trigger DROPPED) + 2 deploy-time fixes (`a7f9ed9` svelte-check fallout, `f62f2be` migration `USING "user_id"::uuid` clause). Heroes CI ✅ + Deploy ✅ on `f62f2be` (Deploy run `25314176044`); final gate server typecheck=0, web typecheck=0/5915 files, tests=67 pass / 0 fail, ci:check-no-illegal-inserts=0 across 174 files. **Cutover EXECUTED 2026-05-05 against prod directly.** TRUNCATE step skipped (Heroes prod was already in cutover-target state from cutover-day smoke-tests via live webhook handlers); Final rebroadcast `dispatched:72, skipped:0, failed:0`; cutover-verify 4/4 automated checks PASS; Deploy C verified non-applicable (`heroes_app_role` does not exist on the cluster — Heroes has zero direct portal-DB grants by virtue of separate Cloud SQL users; the §Success Criteria #7 guarantee holds via absence-of-grants rather than presence-of-revokes). Closeout commits today: `ba1983a`, `66a46d3`, `d7112db`, `049252b`. Portal PR 07-5 SHIPPED 2026-05-06 (commit `27aed23`); Heroes manifest dead-config dropped same day (commit `29966d7`); **Heroes Phase 6 cleanup SHIPPED + LIVE IN PROD 2026-05-06 (commit `bdae9e8` on `coms_aha_heroes/main`, Deploy run `25417165795`)** — column drop + ref sweep + TODO mirror erasure; CLAUDE.md refresh deliberately skipped per owner direction. Pending: optional Heroes ops re-run of sheet ingestion for points data (operational, not blocking). | **Yes — the entire spec is Heroes work** | **Yes — must land before Heroes takes real users** |
 
-Specs 01 + 03 + 06 are the load-bearing trio for Rev 3 closure: 01 surfaces identity, 03 hardens who can write it, 06 widens who can authenticate. Specs 02, 04, 05 are full architecture decided + deferred until their trigger conditions fire (documented in each spec's §Why this is deferred). **Specs 07 + 08 (drafted 2026-05-04) operationalise Spec 03's Heroes-side cutover** — 07 supplies the missing portal-side contract (employment block + taxonomies + email handling), 08 is the Heroes-specific migration plan.
+Specs 01 + 03 + 06 are the load-bearing trio for Rev 3 closure: 01 surfaces identity, 03 hardens who can write it, 06 widens who can authenticate. Spec 02 is full architecture decided + deferred until its trigger fires (documented in §Why this is deferred). **Specs 04 + 05 moved to Rev 4 on 2026-05-06** when Rev 3 closed — same trigger-deferred posture, new home. **Specs 07 + 08 (drafted 2026-05-04) operationalise Spec 03's Heroes-side cutover** — 07 supplies the missing portal-side contract (employment block + taxonomies + email handling), 08 is the Heroes-specific migration plan.
 
 ---
 
@@ -134,8 +144,8 @@ Every Rev 3 spec touches Heroes eventually, but only Specs 01 + 03 are scheduled
 | 01 | Adopt `@coms-portal/account-widget`; refactor `ServiceBar` / `MobileTopBar` to mount the widget in the right slot; remove existing avatar dropdown + sign-out button | ~1 week | **✅ SHIPPED 2026-05-03** (PR #2, deploy `25267737871`) | Done |
 | 02 | Phase 1: nothing (done portal-side). Phase 2+3: ✅ shipped 2026-05-03 — Heroes' app.css imports `@coms-portal/design-tokens/css` v1.1.0; semantic `:root`/`.dark` blocks stripped, tokens own them; chrome migrated to `@coms-portal/ui/chrome`. Phase 4: ✅ shipped 2026-04-30 — `commit b7b7431` deleted Heroes' local `packages/web/src/lib/components/ui/*` (103 files, 2,276 lines) and rewired all 24 importers to `@coms-portal/ui/primitives` | **All phases SHIPPED** | Spec 02 round-trip complete |
 | 03 | Rename `users` → `heroes_profiles`; drop all user-creation paths; ingestion rewrite (resolve-batch + pending queue + audit log + alias_cache); webhook consumer; DB-role REVOKE | ~2 weeks engineering + portal cutover coordination | **Now — critical-path** | Must land before real users |
-| 04 | Read `coms_prefs` claim from ID token; apply theme + locale on render; remove Heroes' standalone theme toggle (widget popover from Spec 01 owns it) | ~½ day | **Deferred** | 3rd H-app onboards, drift report, or Spec 02 Phase 2+ ships |
-| 05 | Register Heroes searchables (heroes, courses, cohorts) with portal search registry; expose `POST /search/provider` endpoint | ~1 day | **Deferred (optional)** | N > 6 apps, first cross-app search request, or Heroes ops asks |
+| 04 | (See `../rev4/spec-04-user-preferences.md` — moved 2026-05-06) | — | **Moved to Rev 4** | — |
+| 05 | (See `../rev4/spec-05-suite-search.md` — moved 2026-05-06) | — | **Moved to Rev 4** | — |
 | 06 | Heroes consumes `userinfo.email` (scalar) — no widget-side change. Per Q8e Heroes mirrors primary email only on `heroes_profiles`; `emails` array fetched directly from `/api/userinfo` only if Heroes ever ships a "show all my login methods" UI (no v1 use case) | ~0 (no required Heroes work for v1) | **N/A** | Heroes-side rev3 (Specs 01 + 02 + 03) unblocked 2026-05-03 — Spec 06 PR F shipped |
 
 **Wall-clock — what shipped and what remains:**
@@ -157,13 +167,13 @@ Every Rev 3 spec touches Heroes eventually, but only Specs 01 + 03 are scheduled
 - **Next — Spec 03 Heroes-side cutover (Deploy A/B/C):** Schema rename `users` → `heroes_profiles`, drop role/eligibility columns, ingestion rewrite via `POST /api/aliases/resolve-batch`, alias + user-config caches, webhook consumers, audit log, wipe-and-reprovision cutover (pre-real-users on Heroes makes the wipe a no-op). Two-database-one-instance Cloud SQL setup retained for cutover dry-run on staging before prod.
 - **Rev 3 closes** when spec-00 §Success Criteria are green: widget renders identically in portal + Heroes from one package version; Heroes' DB role cannot write `identity_users`; sheet ingestion mints zero new user rows; non-Workspace users can authenticate via personal-email OTP; Workspace users can self-bind a personal email and log in via either path.
 
-No fixed dates — gated by team capacity, not calendar. Specs 02 / 04 / 05 sit on the shelf with full architecture pre-baked; spinning one up is a "trigger fires → start phase plan" decision, not a re-design.
+No fixed dates — gated by team capacity, not calendar. Spec 02 sits on the shelf with full architecture pre-baked; specs 04 and 05 moved to Rev 4 with the same posture. Spinning any of them up is a "trigger fires → start phase plan" decision, not a re-design.
 
 ---
 
 ## Team split + handoffs
 
-Concrete team breakdown for the scheduled work (Specs 01 + 03). Spec 02 Phase 1 already shipped portal-side; Specs 04 and 05 deferred.
+Concrete team breakdown for the scheduled work (Specs 01 + 03). Spec 02 Phase 1 already shipped portal-side; Specs 04 and 05 moved to Rev 4 (deferred).
 
 ### Portal team builds
 
@@ -225,7 +235,8 @@ Specs 01 + 03 (shipped portal-side) ──→ Spec 03c (pre-Spec-4 hardening:
                                                 identity_user_emails multi-row,
                                                 OTP, Brevo)
                                           ──→ Heroes-side rev3 adoption
-                                          ──→ Specs 4, 5 (when their triggers fire)
+                                          ──→ Rev 4 Specs 04, 05 (moved 2026-05-06;
+                                              ship when their triggers fire)
 ```
 
 Spec 01 and Spec 03 are independent — they touch different surfaces (UX vs identity-writer enforcement) and shipped in parallel. Spec 03c is sequenced *after* both have shipped portal-side and *before* Spec 4/5 critical-path debugging begins; it is independent of Heroes' Rev 3 adoption. **Spec 06 sits between portal-side hardening (Specs 01/03/03c shipped) and Heroes-side adoption — owner decision 2026-04-30 is to land Spec 06 portal-side fully before unblocking Heroes' rev3 adoption.** This trades parallelism for sequencing clarity: Heroes adopts against a stable, complete identity model rather than tracking a moving target.
@@ -242,8 +253,8 @@ Spec 01 and Spec 03 are independent — they touch different surfaces (UX vs ide
 
 - **Spec 02** — Design System Phase 2+. Trigger: third H-app onboards, token value change, or drift detected.
 - **Spec 03d** — Deferred Hardening Backlog. 11 items (Redis-backed rate limiter, staging environment, per-tenant signing keys, KMS encryption for webhook secrets, `compliance_status` enforcement, session-expiry UX, broker refresh flow, rate-limit extension, audit Cloud Logging sink, OpenTelemetry → Cloud Trace, canary + feature flags). Each ships on its own trigger; documented as a backlog so deferred work stays visible. Max combined infra spend if everything ships: ~$85/mo.
-- **Spec 04** — User Preferences. Trigger: third H-app onboards, portal localizes, drift incident, or Spec 02 Phase 2+ ships. *(Spec 03c is now a documented prerequisite — the preference-write debug path needs structured logging + request IDs.)*
-- **Spec 05** — Suite Search. Trigger: N > 6 apps, first cross-app search request, an app builds its own palette, or recent-items demand. *(Spec 03c is now a documented prerequisite — federated `/api/search` calls need request-ID propagation to debug timeouts and silently-skipped providers.)*
+- **Spec 04** — User Preferences. **Moved to Rev 4 on 2026-05-06** (`../rev4/spec-04-user-preferences.md`). Trigger unchanged: third H-app onboards, portal localizes, drift incident, or Spec 02 Phase 2+ ships. Spec 03c remains a documented prerequisite.
+- **Spec 05** — Suite Search. **Moved to Rev 4 on 2026-05-06** (`../rev4/spec-05-suite-search.md`). Trigger unchanged: N > 6 apps, first cross-app search request, an app builds its own palette, or recent-items demand. Spec 03c remains a documented prerequisite.
 
 ---
 

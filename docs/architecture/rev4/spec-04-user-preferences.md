@@ -1,4 +1,6 @@
-# Rev 3 — Spec 04: Unified User Preferences (Theme + Language)
+# Rev 4 — Spec 04: Unified User Preferences (Theme + Language)
+
+> **Carried over from Rev 3** on 2026-05-06 when Rev 3 closed. The architecture is unchanged; only the rev label moved. Cross-references back into `../rev3/` (Spec 01, Spec 03c) remain valid because those specs shipped in Rev 3 and are stable.
 
 > Priority: **Deferred. Not critical-path; ships when the third H-app onboards or users report drift.**
 > Scope: Portal (preferences endpoint, ID-token claim, broadcast mechanism) + every H-app (consume preference, render in shared chrome).

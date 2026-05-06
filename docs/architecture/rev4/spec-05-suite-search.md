@@ -1,4 +1,6 @@
-# Rev 3 — Spec 05: Suite Search / Command Palette
+# Rev 4 — Spec 05: Suite Search / Command Palette
+
+> **Carried over from Rev 3** on 2026-05-06 when Rev 3 closed. The architecture is unchanged; only the rev label moved. Cross-references back into `../rev3/` (Spec 01, Spec 03c) remain valid because those specs shipped in Rev 3 and are stable.
 
 > Priority: **Deferred. Not critical-path; ships when N > 6 apps or first cross-app search request lands.**
 > Scope: Portal (search registry, ranker, federation endpoint) + every H-app (search provider plugin, optional).
