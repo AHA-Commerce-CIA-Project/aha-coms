@@ -209,7 +209,7 @@ jobs:
           echo "::add-mask::${DB_PASSWORD}"
           # URL-encode the password (may contain special chars like !#$%&). Use
           # python instead of bun so we don't need a Bun toolchain on the runner.
-          DB_PASSWORD_ENCODED=$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["P"], safe=""))' P="${DB_PASSWORD}")
+          DB_PASSWORD_ENCODED=$(P="${DB_PASSWORD}" python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["P"], safe=""))')
           echo "::add-mask::${DB_PASSWORD_ENCODED}"
           echo "DB_USER=${DB_USER}" >> "$GITHUB_ENV"
           echo "DB_PASSWORD_ENCODED=${DB_PASSWORD_ENCODED}" >> "$GITHUB_ENV"
@@ -337,7 +337,7 @@ jobs:
           echo "::add-mask::${DB_PASSWORD}"
           # URL-encode the password (may contain special chars like !#$%&). Use
           # python instead of bun so we don't need a Bun toolchain on the runner.
-          DB_PASSWORD_ENCODED=$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["P"], safe=""))' P="${DB_PASSWORD}")
+          DB_PASSWORD_ENCODED=$(P="${DB_PASSWORD}" python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["P"], safe=""))')
           echo "::add-mask::${DB_PASSWORD_ENCODED}"
           echo "DB_USER=${DB_USER}" >> "$GITHUB_ENV"
           echo "DB_PASSWORD_ENCODED=${DB_PASSWORD_ENCODED}" >> "$GITHUB_ENV"
