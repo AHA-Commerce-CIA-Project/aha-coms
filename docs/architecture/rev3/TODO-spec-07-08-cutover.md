@@ -1,6 +1,8 @@
 # TODO — Spec 07 + Spec 08 Heroes Cutover
 
-> **STATUS — 2026-05-06: PR 07-5 SHIPPED EARLY (burn-in gate waived).** Cutover executed 2026-05-05; Heroes Deploy A LIVE IN PROD. PR 07-5 dropped legacy emit duplicates (`email` + `branch`), retained `appRole` (re-classified — it's the canonical per-app role broadcast, not a legacy duplicate), forced manifest `schemaVersion: 2` floor, and consolidated all payload types onto `@coms-portal/shared` v1.6.0. Pre-flight + T-0 + cutover-verify collapsed onto cutover-day smoke-tests; T+30 Deploy C verified non-applicable on this deployment (Heroes never had direct portal-DB grants). The remaining items are: (a) Heroes-side cleanup (Phase 6); (b) optional Heroes ops re-run of sheet-ingestion for points data; (c) burn-in fixes — see banner below. Operational debt from the burn-in (disabled-endpoint admin reactivate, stale-failure-display) shipped 2026-05-06.
+> **STATUS — 2026-05-06 (evening): HEROES PHASE 6 CLEANUP SHIPPED + LIVE IN PROD.** Spec 07/08 is closed for code purposes. Heroes commit `bdae9e8` (Deploy run `25417165795`) drops `heroes_profiles.must_change_password` (migration `0014_happy_newton_destine.sql`), strips 9 source files of dead refs, deletes `safeHeroesProfileSchema` (zero consumers), removes heroes-side TODO mirror. CLAUDE.md refresh deliberately skipped per owner direction. Only optional remaining item is the Heroes ops re-run of sheet ingestion for points data (operational, not blocking). This portal-side TODO doc is now ripe for archival.
+
+> **STATUS — 2026-05-06 (afternoon): PR 07-5 SHIPPED EARLY (burn-in gate waived).** Cutover executed 2026-05-05; Heroes Deploy A LIVE IN PROD. PR 07-5 dropped legacy emit duplicates (`email` + `branch`), retained `appRole` (re-classified — it's the canonical per-app role broadcast, not a legacy duplicate), forced manifest `schemaVersion: 2` floor, and consolidated all payload types onto `@coms-portal/shared` v1.6.0. Pre-flight + T-0 + cutover-verify collapsed onto cutover-day smoke-tests; T+30 Deploy C verified non-applicable on this deployment (Heroes never had direct portal-DB grants). Operational debt from the burn-in (disabled-endpoint admin reactivate, stale-failure-display) shipped same day.
 
 > **BURN-IN STATUS — 2026-05-06: three Heroes-side fixes shipped end-to-end (CI auto-deploy)** + four additional portal-side fixes shipped same day. Heroes-side discovered while testing handers.the@ahacommerce.net (a non-admin dual-email user provisioned post-cutover) against live Heroes:
 >
@@ -248,19 +250,20 @@ T+30min — Deploy C:
 
 ---
 
-## Cleanup (Heroes Phase 6, after cutover stable for ~7d)
+## Cleanup (Heroes Phase 6, after cutover stable for ~7d) ✅ SHIPPED 2026-05-06 (commit `bdae9e8`, Deploy run `25417165795`)
 
-Repo: `coms_aha_heroes`
+Repo: `coms_aha_heroes`. Shipped at T+~36h after cutover (well inside the 7d soak window — burn-in fixes had already stabilised the day before, and the column was pure storage round-tripping with two leftover write sites). All four jobs of the deploy clean: build & push → staging migrate + 0% deploy + smoke-test → manual approval → prod migrate + 100% deploy.
 
-- [ ] Delete the legacy webhook field-reader fallback if any survived A2 (none should — `body.email`/`body.appRole`/`body.branch` direct reads in the old handler).
-- [ ] Update `CLAUDE.md` to reflect: identity comes from portal, per-app config comes from portal, sheet ingestion never creates users, taxonomies projected from portal.
-- [ ] Remove this TODO doc and `TODO-spec-07-08-cutover.md` mirror from heroes repo (cutover archived to spec-00 timeline).
+- [x] **Legacy webhook field-readers verified absent.** Grep for `body.email` / `body.appRole` / `body.branch` / `payload.email|appRole|branch` against `coms_aha_heroes` returned zero hits in handler context (the 3 hits in `packages/server/src/lib/oidc.ts` are legitimate OIDC ID-token `email_verified` checks, not webhook field-readers). PR A2 had already cleaned them; no follow-up edit needed.
+- [~] **CLAUDE.md refresh deliberately skipped per owner direction (2026-05-06).** Identity-from-portal model is documented across the rev3 spec set + Heroes ADR 0001 + DESIGN_SYSTEM.md. Re-evaluate when next H-app onboarding queues or when a Heroes contributor reports CLAUDE.md as the source of confusion.
+- [x] **Heroes-side `TODO-spec-07-08-cutover.md` mirror deleted** as part of `bdae9e8` (cutover archived to portal `spec-00-implementation-timeline.md`).
+- [x] **Bonus — `must_change_password` column dropped** via migration `0014_happy_newton_destine.sql`. Closes the prophecy left in burn-in fix `34124cd`'s Directive. Strips dead reads from `middleware/auth.ts`, `hooks.server.ts`, `repositories/users.ts`; strips dead writes from `services/sheet-sync.ts` + `services/sheet-sync-pending.ts`; removes the field from shared `AuthUser` type; deletes `safeHeroesProfileSchema` (which existed only to omit this single field — zero consumers, so dropping the export rather than keeping a passthrough alias). `auth-sync.ts` named in the original Directive was already extinct from Slice 8A `257d021`. Verification gates pre-push: server typecheck 0, web typecheck 0/5911, `bun test packages/server scripts` 72/0, ci illegal-inserts 0/173, db:generate no drift.
 
 ## Cleanup portal-side
 
 - [x] Spec 07 PR 07-5 — SHIPPED 2026-05-06 (commit `27aed23`). Dropped `email` + `branch`; **kept `appRole`** as canonical per-app role broadcast (re-classified — the v1.6.0 envelope has no role field). Manifest `schemaVersion: 2` floor enforced; shared pin bumped; payload types consolidated onto `@coms-portal/shared` v1.6.0.
-- [x] Updated `docs/architecture/rev3/spec-00-implementation-timeline.md` (commit `618a804`) — Spec 07 portal-side row marked PORTAL-SIDE COMPLETE; Spec 08 row Pending narrowed to "Heroes-side cleanup (Phase 6)."
-- [ ] Delete this TODO doc from portal repo (cutover archived). Optional — kept for reference until Heroes Phase 6 also closes.
+- [x] Updated `docs/architecture/rev3/spec-00-implementation-timeline.md` (commit `618a804` for PR 07-5 + Heroes manifest dead-config; this commit's twin sweep adds the Phase 6 evening status banner).
+- [ ] Delete this TODO doc from portal repo (cutover archived). **Now ripe** — Heroes Phase 6 has closed (modulo the deliberately-skipped CLAUDE.md). Owner can drop this file in a follow-up commit; left in place for one more cycle in case the optional Heroes ops sheet-ingestion re-run produces follow-up notes.
 
 ---
 
@@ -313,7 +316,7 @@ Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be`
 
 8. ✅ **PR 07-5 SHIPPED 2026-05-06** — see §"PR 07-5" block above. Burn-in gate waived (decided same-day to ship after observing the day-1 fixes were stable). Dropped legacy duplicates `email` + `branch`; **kept `appRole`** (re-classified as the canonical per-app role broadcast — the v1.6.0 envelope has no role field, and Heroes' `handle-user-updated` mirrors `payload.appRole` into `heroes_profiles.role`); forced manifest `schemaVersion: 2` floor; consolidated all payload types onto `@coms-portal/shared` v1.6.0.
 9. **Heroes ops re-run sheet ingestion for points data** via `POST /api/aliases/resolve-batch` — separate operational step on Heroes side; not blocking. `pending_alias_resolution` is currently 0 and `--since-iso` is recorded for the eventual run.
-10. **Cleanup phases** (Heroes + portal) per §"Cleanup" blocks above — delete legacy webhook field-reader fallback, refresh CLAUDE.md, archive this TODO doc, update spec-00 timeline (already done as part of doc sync 2026-05-05).
+10. ✅ **Heroes Phase 6 cleanup SHIPPED 2026-05-06** as `bdae9e8` on `coms_aha_heroes/main` (Deploy run `25417165795`). Migration `0014_happy_newton_destine.sql` drops `must_change_password`; 9 source files stripped of dead refs; `safeHeroesProfileSchema` deleted (zero consumers); heroes-side TODO mirror removed; legacy webhook field-readers verified already absent (PR A2 had cleaned them). CLAUDE.md refresh deliberately skipped per owner direction.
 
 ✅ **Item 11 (disabled-endpoint admin reactivate) shipped 2026-05-06** as portal `1f0da55` — see Operational debt section above.
 
