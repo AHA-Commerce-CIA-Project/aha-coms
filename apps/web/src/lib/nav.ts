@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Building2, AppWindow, FileText, GitMerge, Settings2, Tags } from 'lucide-svelte'
+import { LayoutDashboard, Users, Building2, AppWindow, FileText, GitMerge, Tags } from 'lucide-svelte'
 
 // lucide-svelte ships Svelte-4-flavored classes; the @coms-portal/ui consumer
 // types `icon` as Svelte 5 `Component`. The two are runtime-compatible via
@@ -18,12 +18,15 @@ export const BASE_NAV: NavItem[] = [
 ]
 
 /** Admin-only items, shown when `hasPortalRole(user.portalRole, ['admin'])`. */
+// `/admin/app-config` is intentionally omitted: every registered manifest
+// currently has an empty configSchema, so the page has no editable fields and
+// confuses operators. The route + API stay intact and will be re-listed once
+// a manifest ships a non-empty configSchema.
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/employees', label: 'Employees', icon: Users },
   { href: '/admin/teams', label: 'Teams', icon: Building2 },
   { href: '/admin/apps', label: 'Apps', icon: AppWindow },
   { href: '/admin/aliases', label: 'Alias Queue', icon: GitMerge },
-  { href: '/admin/app-config', label: 'App Config', icon: Settings2 },
   { href: '/admin/taxonomies', label: 'Taxonomies', icon: Tags },
   { href: '/admin/audit', label: 'Audit Log', icon: FileText },
 ]
