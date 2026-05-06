@@ -20,7 +20,7 @@ import {
   PORTAL_WEBHOOK_EVENTS,
 } from '@coms-portal/shared'
 import type { PortalWebhookEvent, PortalWebhookEnvelope, SessionRevokedPayload } from '@coms-portal/shared'
-import { signWebhookBody } from '../services/webhook-dispatcher'
+import { signWebhookBody, mintWebhookAudienceToken } from '../services/webhook-dispatcher'
 
 // ---------------------------------------------------------------------------
 // Validation helpers
@@ -347,16 +347,27 @@ export const appWebhookRoutes = new Elysia({ prefix: '/apps/:id/webhooks' })
     const jsonBody = JSON.stringify(envelope)
     const signature = signWebhookBody(existing.secret, now, jsonBody)
 
+    // Mint the same OIDC bearer the real dispatcher uses, so test sends
+    // exercise the receiver's authenticated path. Receivers gated on Cloud Run
+    // IAM (e.g. Heroes) reject HMAC-only requests with 401.
+    const audience = new URL(existing.url).origin
+    const oidcToken = await mintWebhookAudienceToken(audience)
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      [PORTAL_WEBHOOK_SIGNATURE_HEADER]: signature,
+      [PORTAL_WEBHOOK_EVENT_HEADER]: 'session.revoked',
+      [PORTAL_WEBHOOK_EVENT_ID_HEADER]: eventId,
+      [PORTAL_WEBHOOK_TIMESTAMP_HEADER]: now,
+    }
+    if (oidcToken) {
+      headers['Authorization'] = `Bearer ${oidcToken}`
+    }
+
     try {
       const response = await fetch(existing.url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          [PORTAL_WEBHOOK_SIGNATURE_HEADER]: signature,
-          [PORTAL_WEBHOOK_EVENT_HEADER]: 'session.revoked',
-          [PORTAL_WEBHOOK_EVENT_ID_HEADER]: eventId,
-          [PORTAL_WEBHOOK_TIMESTAMP_HEADER]: now,
-        },
+        headers,
         body: jsonBody,
         // 10 second timeout via AbortSignal
         signal: AbortSignal.timeout(10_000),
