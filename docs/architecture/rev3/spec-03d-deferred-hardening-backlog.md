@@ -1,10 +1,11 @@
 # Rev 3 — Spec 03d: Deferred Hardening Backlog
 
-> **Status (2026-04-29):** Decided + deferred. Each item has a documented trigger; none are scheduled. This spec exists so deferred work is visible and not rediscovered as bugs later.
+> **Status (2026-05-06):** Decided + deferred. Each item has a documented trigger; none are scheduled. This spec exists so deferred work is visible and not rediscovered as bugs later.
 > **Spec 03c prerequisite — satisfied (2026-04-29).** All 03c work is on `main`; the observability foundation (Pino structured logging, request-ID middleware with UUID validation, real `/api/health` probe, four audit-log columns: `actor_ip` + `request_id` + `actor_app_id` + `target_app_id`) is in place. Items below that referenced "after Spec 03c ships" can now proceed when their own triggers fire.
 > **Original priority:** **Variable per item.** Two are cost-bearing infra decisions (Redis, staging); the rest are pure engineering deferred behind product or compliance triggers.
 > Scope: Portal `apps/api`, `apps/web`, `infra/`, `.github/workflows/`. No Heroes-side work.
 > Prerequisites: Spec 03c shipped (provides the observability foundation several items below depend on) — **satisfied**.
+> **2026-05-06 addition:** D12 — drop static-file manifest pattern in favour of admin-UI-driven app registration. Trigger: second H-app onboarding queued.
 
 ---
 
@@ -225,6 +226,39 @@ These are deferred for product or compliance reasons, not for cost.
 
 ---
 
+### D12. App registration — drop static manifest files; admin-driven onboarding
+
+**Today:** `apps/api/src/services/manifests/heroes.json` is a static JSON file imported and seeded at boot in `apps/api/src/index.ts:37,48` via `registerManifest(heroesManifest as ManifestDefinition)`. Adding a second or third H-app under the current pattern requires (a) checking in a new `<slug>.json` in `services/manifests/`, (b) a matching `import` + `registerManifest(...)` line in `index.ts`, and (c) an `app_registry` row that already exists at the slug the manifest references (otherwise `registerManifest` throws `app_registry row not found for slug "<x>"`). Three coordinated edits in the portal codebase per app — incompatible with the envisioned "register via admin UI, follow the docs, no portal-side code change" onboarding workflow.
+
+The role-refactor that just shipped (Heroes commit `c145fda` + portal commit `8086269`, 2026-05-06) moved app-local role out of `app_user_config.config.role` into a per-app column owned by each H-app, populated from `envelope.appRole` on `user.provisioned` / `user.updated`. With role gone, the only fields a manifest still asserts are app-specific knob bags (`leaderboard_eligible`, `starting_points` for Heroes) and the taxonomy subscription list. Many future H-apps will not need a manifest at all; the ones that do should declare their schema through the admin App Registry surface, not through a portal-repo file.
+
+**Trigger.** Any of:
+- Onboarding a second H-app is queued (e.g. the admin needs to register a new slug and the team reaches for `services/manifests/`).
+- The first attempt to onboard an app outside the portal-monorepo team — partner code can't easily push a JSON file into `apps/api/src/services/manifests/`.
+- A manifest schema needs to be edited at runtime (e.g. compliance review asks to change `taxonomies` for an existing app) and the only path today is "ship a new portal release".
+
+**Scope.**
+- **Make `app_manifests` optional.** The portal currently assumes every active app has a manifest; audit consumers (`services/manifests.ts::loadAllManifests`, `routes/admin/app-config.ts`, `services/provisioning-events.ts::resolvePerAppContext` consumes `appRoles` from `app_registry`, not from manifest) and confirm an app with no `app_manifests` row degrades gracefully — admin App Config page shows "no managed config" for that slug, dispatchers still emit `user.provisioned` with `appConfig: null`.
+- **Drop the static-import boot path.** Delete the `import heroesManifest` + `registerManifest(...)` block from `apps/api/src/index.ts`. Heroes' `app_manifests` row already exists in prod (it has been re-upserted on every boot since Spec 03 shipped); leaving it alone is sufficient. Remove `apps/api/src/services/manifests/heroes.json`.
+- **Extend the App Registry admin form.** Add three optional fields next to slug/URL/SA email: `taxonomies` (multi-select against the org-taxonomies catalog), `configSchema` (JSON textarea with a parse + `validateConfig` shape preview), `schemaVersion` (number). On submit, the existing `POST /api/v1/admin/apps` (or its register-app handler) upserts both `app_registry` and `app_manifests` in one transaction. Empty `configSchema` → no `app_manifests` row written → app boots without managed config.
+- **Tighten `registerManifest`.** Today it throws when `app_registry` is missing for the slug; once the static-file path is removed, the only callers are the admin endpoint (which already has the slug pinned) and any internal tooling, so the error becomes unreachable in steady state. Either inline the upsert into the admin handler, or keep the helper but remove its `apps/api/scripts/*.ts` callers if unused.
+- **Update `docs/architecture/integrator-quickstart.md`.** New section: "Registering a new app." Walk the admin through the App Registry form; make clear that `configSchema` is for portal-managed per-user knobs only — auth/users/RBAC are wired by following the integrator-quickstart's existing broker + webhook sections.
+- **Tests.** New: `routes/admin/__tests__/apps.test.ts` covers register-app-with-manifest, register-app-without-manifest, and register-app-with-invalid-configSchema-JSON (rejected with 400). Existing: `services/__tests__/manifests.test.ts` keeps its `validateConfig` / `seedDefaults` coverage; add a case for "loadAllManifests returns empty array when no manifests are registered."
+
+**Cost.**
+- **Infra:** $0.
+- **Engineering:** ~1 day. Three portal files (one route extension, one admin UI form section, one boot-path cleanup), one deletion (`heroes.json`), one docs section, ~3 new tests.
+
+**Acceptance.** An admin can register a brand-new H-app from the portal admin UI alone — fills slug/URL/SA email, optionally pastes a `configSchema` JSON, saves — and that app's broker handoff, `user.provisioned` webhook, and admin App Config surface all work without any commit to the portal repo. Heroes continues to function unchanged on this path (its `app_manifests` row was registered at past boots and persists).
+
+**Out of scope.**
+- App-side self-registration (each H-app POSTing its own manifest at startup). Bigger surface; needs auth model for who can register an app + idempotency rules + version negotiation. Revisit when the portal hosts a third-party integrator that doesn't share the admin login.
+- Migration of Heroes' existing `app_manifests.configSchema` (which still lists `leaderboard_eligible` + `starting_points`) into the admin UI for hand-editing. The row works as-is post role-refactor; touching it is a separate PR if the admin wants to retire those knobs.
+
+**Why deferred.** Today's pattern is functional for the single-app reality. The trigger fires the moment a second H-app is queued; until then, the cost of changing the model is higher than the cost of one more `import heroesManifest`-like edit. Scoped here so the next person reaching for `services/manifests/` finds the explicit decision rather than assuming the static-file pattern is intentional.
+
+---
+
 ## Recommended ordering when triggers cluster
 
 If multiple triggers fire near-simultaneously (e.g., onboarding an external tenant fires D2, D3, D4, D5, D9 all at once), recommended order:
@@ -255,10 +289,11 @@ D6, D7, D10, D11 stay independent and ship on their own triggers regardless of c
 | D9 Audit Cloud Logging + BigQuery | ~1–2 days | <$1 | Compliance review |
 | D10 OpenTelemetry → Cloud Trace | ~½–1 day | $0 (free tier) | Multi-service or Spec 5 |
 | D11 Canary + feature flags | ~2–3 days | $0 | D2 lands / risky rollout |
+| D12 Admin-driven app registration | ~1 day | $0 | Second H-app onboarding queued |
 
-**Maximum monthly infra spend if every item ships:** ~$85/mo (D1 + D2 + D4 + D9 combined; D3, D5, D6, D7, D8, D10, D11 add nothing). All comfortably inside an internal-tool budget.
+**Maximum monthly infra spend if every item ships:** ~$85/mo (D1 + D2 + D4 + D9 combined; D3, D5, D6, D7, D8, D10, D11, D12 add nothing). All comfortably inside an internal-tool budget.
 
-**Total engineering ceiling:** ~13–18 days if every item is implemented sequentially. Most items are independent and can land as separate PRs by separate engineers.
+**Total engineering ceiling:** ~14–19 days if every item is implemented sequentially. Most items are independent and can land as separate PRs by separate engineers.
 
 ---
 
@@ -279,4 +314,4 @@ Spec 03d is "done" only in the sense that the backlog is documented. Each item i
 2. Its acceptance test passes.
 3. The relevant section is moved out of this spec and into the implementing PR's description; this spec gets updated to mark the item shipped (with a link to the PR).
 
-When all 11 items have shipped, this spec is retired. Until then it lives as a living backlog.
+When all 12 items have shipped, this spec is retired. Until then it lives as a living backlog.
