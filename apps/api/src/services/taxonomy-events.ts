@@ -3,8 +3,6 @@
  *
  * All three emit functions are gated by ENABLE_TAXONOMY_EVENTS env var.
  * When NOT 'true' (the default) they no-op silently.
- *
- * PR 07-2: implementation-only. No callers wired yet — that's PR 07-3.
  */
 
 import { db } from '~/db'
@@ -12,28 +10,15 @@ import { appManifests } from '~/db/schema/app-manifests'
 import { appRegistry } from '~/db/schema/apps'
 import { eq, sql } from 'drizzle-orm'
 import { dispatchPortalWebhook } from '~/services/portal-webhook-fanout'
-import type { PortalWebhookEvent } from '@coms-portal/shared'
+import type {
+  EmploymentUpdatedPayload,
+  PortalWebhookEvent,
+  TaxonomyDeletedPayload,
+  TaxonomyUpsertedPayload,
+} from '@coms-portal/shared'
 import { randomUUID } from 'crypto'
 
-// ---------------------------------------------------------------------------
-// Local payload types (frozen until @coms-portal/shared v1.6.0 in PR 07-4)
-// ---------------------------------------------------------------------------
-
-export interface TaxonomyUpsertedPayload {
-  taxonomyId: string
-  entries: Array<{ key: string; value: string; metadata: Record<string, unknown> | null }>
-}
-
-export interface TaxonomyDeletedPayload {
-  taxonomyId: string
-  keys: string[]
-}
-
-export interface EmploymentUpdatedPayload {
-  user: { portalSub: string }
-  employment: Record<string, unknown>
-  previousEmployment: Record<string, unknown>
-}
+export type { EmploymentUpdatedPayload, TaxonomyDeletedPayload, TaxonomyUpsertedPayload }
 
 // ---------------------------------------------------------------------------
 // Helper: find app slugs subscribed to a given taxonomyId

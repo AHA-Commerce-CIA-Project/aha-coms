@@ -173,7 +173,9 @@ describe('emitUserProvisioned', () => {
     ]
     expect(event).toBe('user.provisioned')
     expect(payload.userId).toBe('user-1')
-    expect(payload.email).toBe('user@example.com')
+    // PR 07-5: legacy top-level `email` dropped; contactEmail carries the address.
+    expect(payload).not.toHaveProperty('email')
+    expect(payload.contactEmail).toBe('user@example.com')
     // appRole resolved to the default role since no explicit team grant
     expect(payload.appRole).toBe('employee')
     expect(opts?.appSlugs).toEqual(['heroes'])

@@ -265,17 +265,17 @@ describe('user.provisioned payload — emails array (Q8c)', () => {
     expect(personal!.addedBy).toBe('self')
   })
 
-  test('scalar email field is still present (additive — non-breaking)', async () => {
+  test('scalar email field is dropped post-PR-07-5; contactEmail carries the address', async () => {
     setUser()
     seedTwoEmails()
     seedOneApp()
+    seedDefaultTaxonomies()
 
     await emitUserProvisioned('user-1')
 
     const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [string, Record<string, unknown>]
-    // Scalar email resolves to the workspace address per Q8a precedence
-    expect(typeof payload.email).toBe('string')
-    expect(payload.email).toBe('alice@ahacommerce.net')
+    expect(payload).not.toHaveProperty('email')
+    expect(payload.contactEmail).toBe('alice@ahacommerce.net')
   })
 
   test('emails array is empty when user has no email entries', async () => {
@@ -318,15 +318,17 @@ describe('user.updated payload — emails array (Q8c)', () => {
     expect(emails.some((e) => e.kind === 'personal')).toBe(true)
   })
 
-  test('scalar email field is still present (additive — non-breaking)', async () => {
+  test('scalar email field is dropped post-PR-07-5; contactEmail carries the address', async () => {
     setUser()
     seedTwoEmails()
     seedOneApp()
+    seedDefaultTaxonomies()
 
     await emitUserUpdated('user-1', ['name'])
 
     const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [string, Record<string, unknown>]
-    expect(typeof payload.email).toBe('string')
+    expect(payload).not.toHaveProperty('email')
+    expect(payload.contactEmail).toBe('alice@ahacommerce.net')
   })
 
   test('changedFields is correctly forwarded in payload', async () => {
@@ -444,11 +446,10 @@ describe('user.provisioned payload — Spec 07 envelope (PR 07-3)', () => {
     expect(employment.attendanceName).toBeNull()
   })
 
-  test('legacy top-level fields (email, appRole, branch) ALSO present (dual-emit)', async () => {
+  test('legacy duplicates email + branch are ABSENT post-PR-07-5; appRole stays (canonical role signal)', async () => {
     setUser({ branch: 'Thailand' })
     seedTwoEmails()
     seedOneApp()
-    // No taxonomy rows seeded — branch falls back to {key: raw, value: raw}
 
     await emitUserProvisioned('user-1')
 
@@ -456,10 +457,11 @@ describe('user.provisioned payload — Spec 07 envelope (PR 07-3)', () => {
       string,
       Record<string, unknown>,
     ]
-    // Legacy reader fields — present until PR 07-5 drops them
-    expect(payload.email).toBe('alice@ahacommerce.net')
+    expect(payload).not.toHaveProperty('email')
+    expect(payload).not.toHaveProperty('branch')
+    // appRole is the per-app role broadcast — Heroes' handle-user-updated mirrors
+    // this into heroes_profiles.role. Not a legacy field.
     expect(payload.appRole).toBe('employee')
-    expect(payload.branch).toBe('Thailand')
   })
 
   test('appConfig is the per-app config slice (full object, not nested under user)', async () => {
@@ -521,5 +523,23 @@ describe('user.updated payload — Spec 07 envelope (regression)', () => {
     ]
     expect(payload.contactEmail).toBe('alice@ahacommerce.net')
     expect(payload.employment).toBeDefined()
+  })
+
+  test('legacy duplicates email + branch are ABSENT post-PR-07-5; appRole stays (canonical role signal)', async () => {
+    setUser({ branch: 'Thailand' })
+    seedTwoEmails()
+    seedOneApp()
+
+    await emitUserUpdated('user-1', ['appRole'])
+
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ]
+    expect(payload).not.toHaveProperty('email')
+    expect(payload).not.toHaveProperty('branch')
+    // appRole is the per-app role broadcast — Heroes' handle-user-updated mirrors
+    // this into heroes_profiles.role. Not a legacy field.
+    expect(payload.appRole).toBe('employee')
   })
 })

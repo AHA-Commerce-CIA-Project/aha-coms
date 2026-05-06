@@ -57,7 +57,7 @@ const appBody = t.Object({
   manifest: t.Optional(
     t.Object({
       configSchema: t.Record(t.String(), t.Unknown()),
-      schemaVersion: t.Optional(t.Integer({ minimum: 1 })),
+      schemaVersion: t.Optional(t.Integer({ minimum: 2 })),
       taxonomies: t.Optional(t.Array(t.String())),
     }),
   ),

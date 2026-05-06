@@ -236,7 +236,7 @@ describe('registerApp — Spec 03d D12 admin manifest payload', () => {
     })
   })
 
-  test('defaults schemaVersion to 1 and taxonomies to [] when omitted', async () => {
+  test('defaults schemaVersion to 2 and taxonomies to [] when omitted (PR 07-5)', async () => {
     await registerApp({
       ...baseAppPayload,
       manifest: {
@@ -244,9 +244,23 @@ describe('registerApp — Spec 03d D12 admin manifest payload', () => {
       },
     })
     expect(manifestInsertedValues[0]).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       taxonomies: [],
     })
+  })
+
+  test('rejects manifest with schemaVersion below 2 (PR 07-5)', async () => {
+    await expect(
+      registerApp({
+        ...baseAppPayload,
+        manifest: {
+          configSchema: { tier: { type: 'string', default: 'basic' } },
+          schemaVersion: 1,
+        },
+      }),
+    ).rejects.toBeInstanceOf(AppManifestValidationError)
+    expect(insertedValues).toHaveLength(0)
+    expect(manifestInsertedValues).toHaveLength(0)
   })
 
   test('rejects invalid configSchema with AppManifestValidationError (no rows written)', async () => {

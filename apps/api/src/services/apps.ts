@@ -20,6 +20,13 @@ export interface AppManifestRegistration {
   taxonomies?: string[]
 }
 
+/**
+ * Spec 07 PR 07-5 — minimum manifest schemaVersion. v1 was the pre-Spec-07
+ * shape (no taxonomies array, no envelope-aware H-app); every newly registered
+ * manifest must declare v2 or higher. Existing rows are migrated forward.
+ */
+export const MIN_MANIFEST_SCHEMA_VERSION = 2 as const
+
 interface AppIntegrationMetadata {
   adapterType: NonNullable<AppRegistryWrite['adapterType']>
   transportMode: NonNullable<AppRegistryWrite['transportMode']>
@@ -123,6 +130,15 @@ export async function registerApp(
     if (shapeErrors.length > 0) {
       throw new AppManifestValidationError(shapeErrors)
     }
+    const declaredVersion = manifest.schemaVersion ?? MIN_MANIFEST_SCHEMA_VERSION
+    if (declaredVersion < MIN_MANIFEST_SCHEMA_VERSION) {
+      throw new AppManifestValidationError([
+        {
+          key: 'schemaVersion',
+          reason: `must be at least ${MIN_MANIFEST_SCHEMA_VERSION}`,
+        },
+      ])
+    }
   }
 
   return db.transaction(async (tx) => {
@@ -136,7 +152,7 @@ export async function registerApp(
         appId: app.id,
         displayName: appData.name,
         configSchema: manifest.configSchema,
-        schemaVersion: manifest.schemaVersion ?? 1,
+        schemaVersion: manifest.schemaVersion ?? MIN_MANIFEST_SCHEMA_VERSION,
         taxonomies: manifest.taxonomies ?? [],
       })
     }
