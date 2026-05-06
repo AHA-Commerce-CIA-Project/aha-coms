@@ -85,6 +85,8 @@ For one release after Spec 07 ships portal-side, portal emits BOTH the legacy to
 
 This preserves Spec 03's "no fallback path" rule on the *consumer* side. The dual-emit lives portal-side only.
 
+**Applies to all user-event emitters, not just `user.provisioned`:** `emitUserProvisioned`, `emitUserUpdated`, and any future per-app user event must carry both shapes. Heroes' handlers (`handleUserUpdated` etc.) read `body.user?.portalSub` first and early-return when absent; an emitter that sends only the legacy flat payload will deliver HTTP 200 but produce no DB write on the consumer side. This was the root cause of the 2026-05-06 burn-in fix #7 — `emitUserUpdated` had kept the legacy-only path through the cutover and silently dropped role changes until it was rewritten to mirror `emitUserProvisioned`'s dual-emit.
+
 ---
 
 ## Schema
@@ -298,8 +300,8 @@ This bounds the race to "DLQ retry consumes the taxonomy event in between" — t
 3. ✅ `GET /api/taxonomies/sync` returns the full set for the calling app's subscribed taxonomies (PR 07-2).
 4. ✅ `taxonomy.upserted` / `taxonomy.deleted` emit machinery exists, gated by `ENABLE_TAXONOMY_EVENTS` env flag (PR 07-2). Admin-route callers wired in PR 07-2 (single + bulk paths); race-window invariant covered by regression tests (PR 07-3). Flag flips to `true` once payloads validated against staging.
 5. ✅ `employment.updated` emit wired into `PATCH /v1/employees/:id` (PR 07-3). Pre-update block captured, post-update diffed; suppressed for no-op writes. Same gate as taxonomy events.
-6. ✅ `user.provisioned` payload carries `user`, `employment`, `contactEmail`, `appConfig` blocks per envelope (PR 07-3). `getEmploymentBlock(userId)` resolves taxonomy refs against `org_taxonomies`.
-7. ✅ Portal dual-emits legacy (`email`, `appRole`, `branch`) + new envelope during gap window (PR 07-3). Legacy fields removed in PR 07-5 after Heroes Deploy A confirms.
+6. ✅ `user.provisioned` payload carries `user`, `employment`, `contactEmail`, `appConfig` blocks per envelope (PR 07-3). `getEmploymentBlock(userId)` resolves taxonomy refs against `org_taxonomies`. `user.updated` carries the same envelope shape (parity with `user.provisioned`) — completed via 2026-05-06 burn-in fix #7 (commit `1e628db`); the original PR 07-3 had updated the provisioned emitter only.
+7. ✅ Portal dual-emits legacy (`email`, `appRole`, `branch`) + new envelope during gap window (PR 07-3 for `user.provisioned`; 2026-05-06 burn-in for `user.updated`). Legacy fields removed in PR 07-5 after Heroes Deploy A confirms.
 8. ⏳ `@coms-portal/shared` v1.6.0 published with new types (PR 07-4).
 9. ⏳ Heroes can consume the new contract end-to-end (proven by Spec 08 Phase 3 cutover).
 
