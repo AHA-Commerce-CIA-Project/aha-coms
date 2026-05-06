@@ -317,6 +317,8 @@ Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be`
 
 ✅ **Item 11 (disabled-endpoint admin reactivate) shipped 2026-05-06** as portal `1f0da55` — see Operational debt section above.
 
+✅ **Item 12 (Heroes manifest dead-config drop) shipped 2026-05-06** as portal `29966d7` (CI run `25415797323`, Cloud Run revision `coms-portal-app-00206-8f9`). Migration `0034_drop_heroes_deadconfig.sql` empties Heroes' `app_manifests.config_schema` to `{}`. `leaderboard_eligible` + `starting_points` were declared in Heroes' configSchema but had zero references in the Heroes repo — `packages/server/src/services/leaderboard.ts:31` filters only on `heroesProfiles.{branchKey, isActive, teamKey}`. The manifest row is preserved (taxonomies subscription + schemaVersion floor stay intact) — only the `config_schema` jsonb is wiped. `app_user_config` was already at zero rows in production, so no per-user data was disturbed.
+
 **Prod baseline observed 2026-05-05 (informs the prod-as-rehearsal decision):**
 
 Portal (`coms_portal` DB):
