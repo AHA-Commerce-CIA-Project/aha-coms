@@ -28,7 +28,6 @@ export const heroesProfiles = pgTable(
     talentaId: varchar('talenta_id', { length: 50 }),
     avatarUrl: text('avatar_url'),
     localePref: varchar('locale_pref', { length: 10 }),
-    mustChangePassword: boolean('must_change_password').notNull().default(true),
     isActive: boolean('is_active').notNull().default(true),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

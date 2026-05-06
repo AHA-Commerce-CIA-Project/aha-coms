@@ -344,7 +344,6 @@ export async function syncEmployees(
           ...(meta.position ? { position: meta.position } : {}),
           ...(meta.talentaId ? { talentaId: meta.talentaId } : {}),
           teamValueSnapshot: meta.teamName ?? null,
-          mustChangePassword: false,
         })
         .onConflictDoUpdate({
           target: heroesProfiles.id,

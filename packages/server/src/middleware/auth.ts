@@ -18,7 +18,6 @@ export type AuthUser = {
   readonly teamKey: string | null
   readonly teamValueSnapshot: string | null
   readonly canSubmitPoints: boolean
-  readonly mustChangePassword: boolean
 }
 
 export const authPlugin = new Elysia({ name: 'auth' }).derive(
@@ -43,7 +42,6 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
         teamKey: heroesProfiles.teamKey,
         teamValueSnapshot: heroesProfiles.teamValueSnapshot,
         role: heroesProfiles.role,
-        mustChangePassword: heroesProfiles.mustChangePassword,
         email: emailCache.contactEmail,
         configJson: userConfigCache.config,
       })
@@ -73,7 +71,6 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
       teamKey: raw.teamKey ?? null,
       teamValueSnapshot: raw.teamValueSnapshot ?? null,
       canSubmitPoints: (cfg?.canSubmitPoints as boolean | undefined) ?? false,
-      mustChangePassword: raw.mustChangePassword,
     }
 
     return { authUser: appUser }

@@ -269,8 +269,4 @@ export type DeactivatedUserIngestAuditSelect = Static<typeof deactivatedUserInge
 export const deactivatedUserIngestAuditInsertSchema: TObject = createInsertSchema(deactivatedUserIngestAudit) as TObject
 export type DeactivatedUserIngestAuditInsert = Static<typeof deactivatedUserIngestAuditInsertSchema>
 
-// --- safeHeroesProfile (heroes_profiles select schema without password-management fields) ---
-export const safeHeroesProfileSchema: TObject = Type.Omit(heroesProfilesSelectSchema, ['mustChangePassword']) as unknown as TObject
-export type SafeHeroesProfile = Static<typeof safeHeroesProfileSchema>
-
 export { Type }

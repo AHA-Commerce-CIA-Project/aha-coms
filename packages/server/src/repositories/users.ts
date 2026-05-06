@@ -15,7 +15,6 @@ export type UserRow = {
   avatarUrl: string | null
   talentaId: string | null
   isActive: boolean
-  mustChangePassword: boolean
   archivedAt: Date | null
   canSubmitPoints: boolean | null
 }
@@ -59,7 +58,6 @@ export async function listUsers(opts: ListUsersOpts, tx?: DbClient) {
         avatarUrl: heroesProfiles.avatarUrl,
         talentaId: heroesProfiles.talentaId,
         isActive: heroesProfiles.isActive,
-        mustChangePassword: heroesProfiles.mustChangePassword,
         archivedAt: heroesProfiles.archivedAt,
       })
       .from(heroesProfiles)
@@ -85,7 +83,6 @@ export async function listUsers(opts: ListUsersOpts, tx?: DbClient) {
       avatarUrl: r.avatarUrl ?? null,
       talentaId: r.talentaId ?? null,
       isActive: r.isActive,
-      mustChangePassword: r.mustChangePassword,
       archivedAt: r.archivedAt ?? null,
       canSubmitPoints: (cfg?.canSubmitPoints ?? null) as boolean | null,
     }
@@ -109,7 +106,6 @@ export async function getUserById(id: string, tx?: DbClient): Promise<UserRow | 
       avatarUrl: heroesProfiles.avatarUrl,
       talentaId: heroesProfiles.talentaId,
       isActive: heroesProfiles.isActive,
-      mustChangePassword: heroesProfiles.mustChangePassword,
       archivedAt: heroesProfiles.archivedAt,
     })
     .from(heroesProfiles)
@@ -131,7 +127,6 @@ export async function getUserById(id: string, tx?: DbClient): Promise<UserRow | 
     avatarUrl: row.avatarUrl ?? null,
     talentaId: row.talentaId ?? null,
     isActive: row.isActive,
-    mustChangePassword: row.mustChangePassword,
     archivedAt: row.archivedAt ?? null,
     canSubmitPoints: (cfg?.canSubmitPoints ?? null) as boolean | null,
   }
@@ -152,7 +147,6 @@ export async function getUserByEmail(email: string, tx?: DbClient): Promise<User
       avatarUrl: heroesProfiles.avatarUrl,
       talentaId: heroesProfiles.talentaId,
       isActive: heroesProfiles.isActive,
-      mustChangePassword: heroesProfiles.mustChangePassword,
       archivedAt: heroesProfiles.archivedAt,
     })
     .from(emailCache)
@@ -174,7 +168,6 @@ export async function getUserByEmail(email: string, tx?: DbClient): Promise<User
     avatarUrl: row.avatarUrl ?? null,
     talentaId: row.talentaId ?? null,
     isActive: row.isActive,
-    mustChangePassword: row.mustChangePassword,
     archivedAt: row.archivedAt ?? null,
     canSubmitPoints: (cfg?.canSubmitPoints ?? null) as boolean | null,
   }

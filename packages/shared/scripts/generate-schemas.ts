@@ -188,13 +188,6 @@ for (const { varName, schemaPrefix } of ALL_TABLES) {
   lines.push('')
 }
 
-// safeHeroesProfile — heroes_profiles select schema minus password-management fields.
-// Replaces the pre-Spec-08 safeUserSchema; consumers that wanted "user without secrets"
-// now key off heroes_profiles.
-lines.push('// --- safeHeroesProfile (heroes_profiles select schema without password-management fields) ---')
-lines.push("export const safeHeroesProfileSchema: TObject = Type.Omit(heroesProfilesSelectSchema, ['mustChangePassword']) as unknown as TObject")
-lines.push('export type SafeHeroesProfile = Static<typeof safeHeroesProfileSchema>')
-lines.push('')
 lines.push('export { Type }')
 lines.push('')
 
@@ -203,7 +196,6 @@ const output = lines.join('\n')
 const outPath = resolve(__dirname, '../src/schemas/index.ts')
 writeFileSync(outPath, output, 'utf-8')
 
-const total = ALL_TABLES.length * 2 + 1 // select + insert per table, plus safeHeroesProfileSchema
+const total = ALL_TABLES.length * 2 // select + insert per table
 console.log(`✓ Generated ${total} schemas → ${outPath}`)
 console.log(`  Tables: ${ALL_TABLES.map((t) => t.varName).join(', ')}`)
-console.log(`  Extra:  safeHeroesProfileSchema`)

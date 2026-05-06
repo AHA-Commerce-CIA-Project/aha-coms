@@ -198,7 +198,6 @@ async function defaultUpsertProfile(row: PendingAliasRow, portalSub: string): Pr
       ...(p.phone ? { phone: p.phone as string } : {}),
       ...(p.position ? { position: p.position as string } : {}),
       ...(p.talentaId ? { talentaId: p.talentaId as string } : {}),
-      mustChangePassword: false,
     })
     .onConflictDoUpdate({
       target: heroesProfiles.id,

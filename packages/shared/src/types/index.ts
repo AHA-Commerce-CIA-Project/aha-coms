@@ -12,7 +12,6 @@ export type AuthUser = {
   readonly teamKey: string | null
   readonly teamValueSnapshot: string | null
   readonly canSubmitPoints: boolean
-  readonly mustChangePassword: boolean
   readonly portalRole: string
   readonly apps: readonly string[]
 }

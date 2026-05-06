@@ -48,7 +48,6 @@ const auth: Handle = async ({ event, resolve }) => {
       teamKey: heroesProfiles.teamKey,
       teamValueSnapshot: heroesProfiles.teamValueSnapshot,
       role: heroesProfiles.role,
-      mustChangePassword: heroesProfiles.mustChangePassword,
       email: emailCache.contactEmail,
       configJson: userConfigCache.config,
     })
@@ -70,7 +69,6 @@ const auth: Handle = async ({ event, resolve }) => {
       teamKey: raw.teamKey ?? null,
       teamValueSnapshot: raw.teamValueSnapshot ?? null,
       canSubmitPoints: (cfg?.canSubmitPoints as boolean | undefined) ?? false,
-      mustChangePassword: raw.mustChangePassword,
       portalRole: session.portalRole,
       apps: session.apps,
     }
