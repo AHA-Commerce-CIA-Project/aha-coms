@@ -1,0 +1,64 @@
+name: CI — PR validation
+
+# Runs on every PR to main: typecheck, unit tests, hardcoded-URL lint.
+# Branch protection should require these to pass before merge so the
+# deploy workflow on main can trust them.
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Typecheck & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache bun install
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            apps/api/node_modules
+            apps/web/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test
+
+  lint-urls:
+    name: Lint hardcoded URLs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check for hardcoded portal URLs
+        run: |
+          # Match actual URL string literals only (quoted https://... ending in
+          # .run.app or ahacommerce.net). Resource names, JWT issuer strings,
+          # email placeholders, and JSDoc backtick examples are intentionally
+          # not URLs and won't trip this — we want to catch hardcoded fetches
+          # that would break on the run.app → coms.ahacommerce.net cutover.
+          ! git grep -nE '["'\'']https?://[^"'\''[:space:]]*(\.run\.app|ahacommerce\.net)' -- \
+            ':!apps/api/src/config.ts' \
+            ':!apps/web/src/lib/config.ts' \
+            ':!.env.example' \
+            ':!**/__tests__/**' \
+            ':!**/*.test.ts' \
+            ':!**/*.test.svelte' \
+            ':!.github/workflows/*' \
+            ':!docs/**' \
+            ':!.nelson/**'
