@@ -294,10 +294,17 @@ export async function emitUserUpdated(userId: string, changedFields: string[]): 
   const perApp = await resolvePerAppContext(userId, state.teamIds)
   if (perApp.length === 0) return
 
+  // Resolve once per emit; every per-app dispatch carries the same employment block.
+  const employment = await getEmploymentBlock(userId)
+
   for (const app of perApp) {
     const appRole = resolveAppRoleForUser(app.memberRole, app.appRoles)
 
-    const payload: UserUpdatedPayload = {
+    // Dual-emit envelope (parity with emitUserProvisioned): legacy fields AND
+    // the Spec 07 envelope (user, employment, contactEmail, appConfig).
+    // Heroes' user.updated handler bails when `user.portalSub` is missing,
+    // so the envelope half is required for role changes to take effect.
+    const payload = {
       userId: state.id,
       gipUid: state.gipUid,
       email: state.email,
@@ -309,6 +316,19 @@ export async function emitUserUpdated(userId: string, changedFields: string[]): 
       changedFields,
       appRole,
       branch: state.branch,
+      appConfig: app.appConfig,
+      user: {
+        portalSub: state.id,
+        name: state.name,
+        primaryAliasId: null,
+      },
+      contactEmail: state.email,
+      employment,
+    } as UserUpdatedPayload & {
+      appConfig: typeof app.appConfig
+      user: { portalSub: string; name: string; primaryAliasId: string | null }
+      contactEmail: string
+      employment: typeof employment
     }
 
     await dispatchPortalWebhook('user.updated', payload, {
