@@ -921,8 +921,8 @@ Validated 2026-04-30:
 - [x] `BOOTSTRAP_ADMIN_PERSONAL_EMAIL` set as a GH Actions repo var to a distinct personal inbox — must NOT match the workspace email (UNIQUE index on `email_normalized` enforces one row per address across all kinds).
 - [x] End-to-end OTP smoke test against deployed Cloud Run: `POST /api/auth/otp/request` → email delivered → `POST /api/auth/otp/verify` returns 200 with `__session` cookie set to the new `auth_sessions.id`.
 
-**For PR E (deferred validation):**
-- [ ] `super_admin` value added to `portalRole` enum (extend `identity-users.ts`, `routes/employees.ts` t.Union, RBAC middleware, shared types in coms-shared if any).
+**For PR E (resolved):**
+- [~] `super_admin` value added to `portalRole` enum — **NOT shipped; design changed during PR F (2026-05-03).** `super_admin` stays portal-internal: `@coms-portal/shared` `PORTAL_ROLES` remains `['employee', 'admin']` (no v1.6.0 bump from this thread). The super-admin one-time login link feature was implemented behind an internal predicate without extending the public role enum, keeping the integrator-facing contract narrow. See spec-00 line 57 + `project_spec_06_dual_email_auth.md`.
 
 ---
 
