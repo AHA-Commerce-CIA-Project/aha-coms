@@ -24,6 +24,7 @@ export const heroesProfiles = pgTable(
     position: varchar('position', { length: 100 }),
     phone: varchar('phone', { length: 20 }),
     employmentStatus: varchar('employment_status', { length: 20 }),
+    role: varchar('role', { length: 32 }).notNull().default('employee'),
     talentaId: varchar('talenta_id', { length: 50 }),
     avatarUrl: text('avatar_url'),
     localePref: varchar('locale_pref', { length: 10 }),

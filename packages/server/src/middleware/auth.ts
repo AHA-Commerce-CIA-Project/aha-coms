@@ -42,6 +42,7 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
         branchValueSnapshot: heroesProfiles.branchValueSnapshot,
         teamKey: heroesProfiles.teamKey,
         teamValueSnapshot: heroesProfiles.teamValueSnapshot,
+        role: heroesProfiles.role,
         mustChangePassword: heroesProfiles.mustChangePassword,
         email: emailCache.contactEmail,
         configJson: userConfigCache.config,
@@ -61,17 +62,12 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
     }
 
     const cfg = raw.configJson as Record<string, unknown> | null
-    const role = cfg?.role as UserRole | undefined
-
-    if (!role) {
-      throw new AuthError(403, 'NO_ROLE', 'User has no assigned role')
-    }
 
     const appUser: AuthUser = {
       id: raw.id,
       email: raw.email ?? '',
       name: raw.name,
-      role,
+      role: raw.role as UserRole,
       branchKey: raw.branchKey ?? null,
       branchValueSnapshot: raw.branchValueSnapshot ?? null,
       teamKey: raw.teamKey ?? null,

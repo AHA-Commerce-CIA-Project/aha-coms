@@ -5,6 +5,21 @@ import type {
   WebhookUserEnvelope,
 } from '@coms-portal/shared'
 
+/**
+ * The portal dual-emits the legacy `appRole` field at the top level of the
+ * `user.provisioned` / `user.updated` payload alongside the Spec 07 envelope
+ * keys (until PR 07-5). Heroes-side projection reads it through this shape.
+ *
+ * Once PR 07-5 lands and the legacy field disappears, role will travel inside
+ * `appConfig.config.role` *only when an app declares role in its configSchema*
+ * — Heroes will need to derive role from a different signal (likely a new
+ * top-level `roles: Record<appSlug, string>` field). Update this type and
+ * `envelopeToHeroesProfileRow` together when that day arrives.
+ */
+export type WebhookUserEnvelopeWithRole = WebhookUserEnvelope & {
+  appRole?: string | null
+}
+
 export interface HeroesProfileRow {
   id: string
   name: string
@@ -17,6 +32,7 @@ export interface HeroesProfileRow {
   position: string | null
   phone: string | null
   employmentStatus: string | null
+  role: string
   talentaId: string | null
   attendanceName: string | null
   isActive: boolean
@@ -41,7 +57,9 @@ function refValue(ref: TaxonomyRef | null | undefined): string | null {
   return ref?.value ?? null
 }
 
-export function envelopeToHeroesProfileRow(envelope: WebhookUserEnvelope): HeroesProfileRow {
+export function envelopeToHeroesProfileRow(
+  envelope: WebhookUserEnvelopeWithRole,
+): HeroesProfileRow {
   const e = envelope.employment
   return {
     id: envelope.user.portalSub,
@@ -55,6 +73,7 @@ export function envelopeToHeroesProfileRow(envelope: WebhookUserEnvelope): Heroe
     position: e?.position ?? null,
     phone: e?.phone ?? null,
     employmentStatus: e?.employmentStatus ?? null,
+    role: envelope.appRole ?? 'employee',
     talentaId: e?.talentaId ?? null,
     attendanceName: e?.attendanceName ?? null,
     isActive: true,

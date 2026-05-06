@@ -1,4 +1,3 @@
-import type { WebhookUserEnvelope } from '@coms-portal/shared'
 import { db } from '@coms/shared/db'
 import { emailCache, heroesProfiles, userConfigCache } from '@coms/shared/db/schema'
 import type { PortalEventHandler } from './dispatch'
@@ -6,10 +5,11 @@ import {
   envelopeToEmailCacheRow,
   envelopeToHeroesProfileRow,
   envelopeToUserConfigCacheRow,
+  type WebhookUserEnvelopeWithRole,
 } from './payload-projection'
 
 export const handleUserProvisioned: PortalEventHandler = async (body) => {
-  const envelope = body as WebhookUserEnvelope
+  const envelope = body as WebhookUserEnvelopeWithRole
   const profileRow = envelopeToHeroesProfileRow(envelope)
 
   await db
@@ -28,6 +28,7 @@ export const handleUserProvisioned: PortalEventHandler = async (body) => {
         position: profileRow.position,
         phone: profileRow.phone,
         employmentStatus: profileRow.employmentStatus,
+        role: profileRow.role,
         talentaId: profileRow.talentaId,
         attendanceName: profileRow.attendanceName,
         isActive: profileRow.isActive,
