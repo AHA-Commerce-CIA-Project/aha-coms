@@ -80,28 +80,14 @@ function resetMocks() {
 describe('validateConfig', () => {
   test('accepts a fully valid config', () => {
     const result = validateConfig(heroesManifest, {
-      role: 'captain',
       leaderboard_eligible: false,
       starting_points: 100,
     })
     expect(result.valid).toBe(true)
   })
 
-  test('rejects enum value not in values list', () => {
-    const result = validateConfig(heroesManifest, {
-      role: 'superadmin',
-      leaderboard_eligible: true,
-      starting_points: 0,
-    })
-    expect(result.valid).toBe(false)
-    if (!result.valid) {
-      expect(result.errors.some((e) => e.key === 'role')).toBe(true)
-    }
-  })
-
   test('rejects integer given a string', () => {
     const result = validateConfig(heroesManifest, {
-      role: 'member',
       leaderboard_eligible: true,
       starting_points: 'zero',
     })
@@ -113,7 +99,6 @@ describe('validateConfig', () => {
 
   test('rejects boolean given a string', () => {
     const result = validateConfig(heroesManifest, {
-      role: 'member',
       leaderboard_eligible: 'yes',
       starting_points: 0,
     })
@@ -125,7 +110,6 @@ describe('validateConfig', () => {
 
   test('rejects missing required key', () => {
     const result = validateConfig(heroesManifest, {
-      role: 'member',
       leaderboard_eligible: true,
       // starting_points omitted
     })
@@ -144,7 +128,6 @@ describe('seedDefaults', () => {
   test('returns default values for all fields', () => {
     const defaults = seedDefaults(heroesManifest)
     expect(defaults).toEqual({
-      role: 'member',
       leaderboard_eligible: true,
       starting_points: 0,
     })
@@ -164,11 +147,6 @@ describe('heroes.json manifest shape', () => {
     expect(heroesManifest.appId).toBe('heroes')
     expect(heroesManifest.schemaVersion).toBe(2)
     expect(heroesManifest.taxonomies).toEqual(['branches', 'teams', 'departments'])
-    expect(heroesManifest.configSchema.role).toMatchObject({
-      type: 'enum',
-      values: ['member', 'captain', 'admin'],
-      default: 'member',
-    })
     expect(heroesManifest.configSchema.leaderboard_eligible).toMatchObject({
       type: 'boolean',
       default: true,
@@ -177,6 +155,10 @@ describe('heroes.json manifest shape', () => {
       type: 'integer',
       default: 0,
     })
+    // role intentionally NOT in configSchema — Heroes derives role from
+    // member_app_role.appRole (broadcast via envelope.appRole) post Heroes
+    // role-refactor.
+    expect((heroesManifest.configSchema as Record<string, unknown>).role).toBeUndefined()
   })
 })
 
