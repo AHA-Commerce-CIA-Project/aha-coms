@@ -96,9 +96,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    # On push to main, the Deploy workflow's docker build does the same work
-    # ~30s later — running it here too is pure duplicate. Keep the safety net
-    # on PRs (which never reach the Deploy workflow) and skip on push.
+    # On push to main the Deploy workflow's docker build does the same work
+    # ~30s later — running it here too is pure duplicate. Keep the safety
+    # net on PRs (which never reach the Deploy workflow) and skip on push.
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
