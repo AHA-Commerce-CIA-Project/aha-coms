@@ -47,7 +47,12 @@ jobs:
       - uses: actions/checkout@v6
       - name: Check for hardcoded portal URLs
         run: |
-          ! git grep -nE 'run\.app|coms-portal-[a-z0-9]|ahacommerce\.net' -- \
+          # Match actual URL string literals only (quoted https://... ending in
+          # .run.app or ahacommerce.net). Resource names, JWT issuer strings,
+          # email placeholders, and JSDoc backtick examples are intentionally
+          # not URLs and won't trip this — we want to catch hardcoded fetches
+          # that would break on the run.app → coms.ahacommerce.net cutover.
+          ! git grep -nE '["'\'']https?://[^"'\''[:space:]]*(\.run\.app|ahacommerce\.net)' -- \
             ':!apps/api/src/config.ts' \
             ':!apps/web/src/lib/config.ts' \
             ':!.env.example' \
