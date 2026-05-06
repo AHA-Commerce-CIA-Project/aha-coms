@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm'
 import { requireRole } from '../middleware/rbac'
 import {
   AppIntegrationValidationError,
+  AppManifestValidationError,
   deregisterApp,
   registerApp,
   updateApp,
@@ -50,6 +51,16 @@ const appBody = t.Object({
     t.Union([t.Literal('active'), t.Literal('maintenance'), t.Literal('deprecated')]),
   ),
   serviceAccountEmail: t.Optional(t.String()),
+  // Spec 03d D12 — admin can land an app_manifests row in the same call.
+  // Empty configSchema (or omitting `manifest` entirely) skips the manifest
+  // write; the app boots without managed config.
+  manifest: t.Optional(
+    t.Object({
+      configSchema: t.Record(t.String(), t.Unknown()),
+      schemaVersion: t.Optional(t.Integer({ minimum: 1 })),
+      taxonomies: t.Optional(t.Array(t.String())),
+    }),
+  ),
 })
 
 export const appRoutes = new Elysia({ prefix: '/apps' })
@@ -84,15 +95,21 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
   .post(
     '/',
     async ({ body, authUser, requestId, actorIp, set }) => {
+      const { manifest, ...appBody } = body
       let result: { id: string }
       try {
         result = await registerApp({
-          ...body,
-          contractVersion: body.contractVersion ?? PLATFORM_AUTH_CONTRACT_VERSION,
-          lastVerifiedAt: body.lastVerifiedAt ? new Date(body.lastVerifiedAt) : undefined,
+          ...appBody,
+          contractVersion: appBody.contractVersion ?? PLATFORM_AUTH_CONTRACT_VERSION,
+          lastVerifiedAt: appBody.lastVerifiedAt ? new Date(appBody.lastVerifiedAt) : undefined,
+          manifest,
         })
       } catch (error) {
         if (error instanceof AppIntegrationValidationError) {
+          set.status = 400
+          return { message: error.message, errors: error.errors }
+        }
+        if (error instanceof AppManifestValidationError) {
           set.status = 400
           return { message: error.message, errors: error.errors }
         }
@@ -104,10 +121,13 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
         targetType: 'app',
         targetId: result.id,
         details: {
-          slug: body.slug,
-          adapterType: body.adapterType,
-          transportMode: body.transportMode,
-          complianceStatus: body.complianceStatus,
+          slug: appBody.slug,
+          adapterType: appBody.adapterType,
+          transportMode: appBody.transportMode,
+          complianceStatus: appBody.complianceStatus,
+          manifestRegistered:
+            manifest !== undefined &&
+            Object.keys(manifest.configSchema ?? {}).length > 0,
         },
         requestId,
         actorIp,
@@ -127,10 +147,15 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
   .patch(
     '/:id',
     async ({ params, body, authUser, requestId, actorIp, set }) => {
+      // PATCH ignores the `manifest` payload today — manifest edits go through
+      // a future dedicated endpoint when D12's admin form gains an "edit
+      // manifest" flow. Strip it so the strongly-typed updateApp path remains
+      // honest about which columns it touches.
+      const { manifest: _ignoredManifest, ...patchBody } = body
       try {
         await updateApp(params.id, {
-          ...body,
-          lastVerifiedAt: body.lastVerifiedAt ? new Date(body.lastVerifiedAt) : undefined,
+          ...patchBody,
+          lastVerifiedAt: patchBody.lastVerifiedAt ? new Date(patchBody.lastVerifiedAt) : undefined,
         })
       } catch (error) {
         if (error instanceof AppIntegrationValidationError) {

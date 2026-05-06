@@ -94,6 +94,83 @@ export function validateConfig(
 }
 
 // ---------------------------------------------------------------------------
+// validateConfigSchemaShape — Spec 03d D12. Used by the admin App Registry
+// register-app endpoint to reject malformed configSchema payloads before they
+// land in app_manifests. Returns one entry per malformed field; empty array
+// means the schema is well-formed.
+// ---------------------------------------------------------------------------
+
+const FIELD_TYPES = new Set<FieldType>(['enum', 'boolean', 'integer', 'string'])
+
+export function validateConfigSchemaShape(
+  schema: unknown,
+): { key: string; reason: string }[] {
+  if (
+    schema === null ||
+    typeof schema !== 'object' ||
+    Array.isArray(schema)
+  ) {
+    return [{ key: '<root>', reason: 'configSchema must be a JSON object' }]
+  }
+
+  const errors: { key: string; reason: string }[] = []
+
+  for (const [key, raw] of Object.entries(schema as Record<string, unknown>)) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      errors.push({ key, reason: 'field definition must be an object' })
+      continue
+    }
+
+    const field = raw as Record<string, unknown>
+    const type = field.type
+
+    if (typeof type !== 'string' || !FIELD_TYPES.has(type as FieldType)) {
+      errors.push({
+        key,
+        reason: `type must be one of: ${[...FIELD_TYPES].join(', ')}`,
+      })
+      continue
+    }
+
+    if (!('default' in field)) {
+      errors.push({ key, reason: 'default is required' })
+      continue
+    }
+
+    switch (type) {
+      case 'enum': {
+        const values = field.values
+        if (!Array.isArray(values) || values.length === 0 || !values.every((v) => typeof v === 'string')) {
+          errors.push({ key, reason: 'enum field requires non-empty values: string[]' })
+          break
+        }
+        if (typeof field.default !== 'string' || !values.includes(field.default as string)) {
+          errors.push({ key, reason: 'enum default must be one of values' })
+        }
+        break
+      }
+      case 'boolean':
+        if (typeof field.default !== 'boolean') {
+          errors.push({ key, reason: 'boolean default must be a boolean' })
+        }
+        break
+      case 'integer':
+        if (typeof field.default !== 'number' || !Number.isInteger(field.default)) {
+          errors.push({ key, reason: 'integer default must be an integer' })
+        }
+        break
+      case 'string':
+        if (typeof field.default !== 'string') {
+          errors.push({ key, reason: 'string default must be a string' })
+        }
+        break
+    }
+  }
+
+  return errors
+}
+
+// ---------------------------------------------------------------------------
 // seedDefaults — pure, no DB access
 // ---------------------------------------------------------------------------
 

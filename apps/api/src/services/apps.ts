@@ -1,11 +1,24 @@
 import { db } from '~/db'
-import { appRegistry } from '~/db/schema'
+import { appRegistry, appManifests } from '~/db/schema'
 import { eq } from 'drizzle-orm'
 import type { NewAppRegistry } from '~/db/schema'
 import { DEFAULT_AUTH_TRANSPORT_MODE, PLATFORM_AUTH_CONTRACT_VERSION } from '@coms-portal/shared/contracts/auth'
+import { validateConfigSchemaShape } from './manifests'
 
 type AppRegistryWrite = Omit<NewAppRegistry, 'id' | 'createdAt' | 'updatedAt'>
 type AppRegistryUpdate = Partial<AppRegistryWrite>
+
+/**
+ * Spec 03d D12 — optional manifest payload accepted alongside the app_registry
+ * row. When `configSchema` is empty (or this whole field is omitted), no
+ * app_manifests row is written and the app boots without managed config —
+ * this is the explicit "manifest is optional" path.
+ */
+export interface AppManifestRegistration {
+  configSchema: Record<string, unknown>
+  schemaVersion?: number
+  taxonomies?: string[]
+}
 
 interface AppIntegrationMetadata {
   adapterType: NonNullable<AppRegistryWrite['adapterType']>
@@ -23,6 +36,13 @@ export class AppIntegrationValidationError extends Error {
   constructor(public readonly errors: string[]) {
     super(errors[0] ?? 'Invalid app integration metadata')
     this.name = 'AppIntegrationValidationError'
+  }
+}
+
+export class AppManifestValidationError extends Error {
+  constructor(public readonly errors: { key: string; reason: string }[]) {
+    super(errors[0] ? `${errors[0].key}: ${errors[0].reason}` : 'Invalid manifest configSchema')
+    this.name = 'AppManifestValidationError'
   }
 }
 
@@ -86,12 +106,43 @@ function assertValidAppIntegrationMetadata(metadata: AppIntegrationMetadata): vo
 }
 
 export async function registerApp(
-  data: AppRegistryWrite,
+  data: AppRegistryWrite & { manifest?: AppManifestRegistration },
 ): Promise<{ id: string }> {
-  const normalizedMetadata = resolveAppIntegrationMetadata(data)
+  const { manifest, ...appData } = data
+  const normalizedMetadata = resolveAppIntegrationMetadata(appData)
   assertValidAppIntegrationMetadata(normalizedMetadata)
-  const [app] = await db.insert(appRegistry).values(data).returning({ id: appRegistry.id })
-  return { id: app.id }
+
+  const writesManifest =
+    manifest !== undefined &&
+    typeof manifest.configSchema === 'object' &&
+    manifest.configSchema !== null &&
+    Object.keys(manifest.configSchema).length > 0
+
+  if (writesManifest) {
+    const shapeErrors = validateConfigSchemaShape(manifest.configSchema)
+    if (shapeErrors.length > 0) {
+      throw new AppManifestValidationError(shapeErrors)
+    }
+  }
+
+  return db.transaction(async (tx) => {
+    const [app] = await tx
+      .insert(appRegistry)
+      .values(appData)
+      .returning({ id: appRegistry.id })
+
+    if (writesManifest) {
+      await tx.insert(appManifests).values({
+        appId: app.id,
+        displayName: appData.name,
+        configSchema: manifest.configSchema,
+        schemaVersion: manifest.schemaVersion ?? 1,
+        taxonomies: manifest.taxonomies ?? [],
+      })
+    }
+
+    return { id: app.id }
+  })
 }
 
 export async function updateApp(
