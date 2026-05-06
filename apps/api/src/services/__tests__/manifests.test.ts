@@ -54,16 +54,31 @@ mock.module('~/db', () => ({
   },
 }))
 
-const { validateConfig, seedDefaults, registerManifest, loadAllManifests } = await import(
-  '../manifests'
-)
-import heroesJson from '../manifests/heroes.json'
+const {
+  validateConfig,
+  seedDefaults,
+  registerManifest,
+  loadAllManifests,
+  validateConfigSchemaShape,
+} = await import('../manifests')
 
 // ---------------------------------------------------------------------------
-// Fixtures
+// Fixtures — Heroes-shaped manifest used as a reference. The static
+// heroes.json file no longer exists in the codebase (Spec 03d D12); this
+// inline fixture preserves the test surface for validateConfig / seedDefaults
+// / registerManifest without resurrecting a runtime artefact.
 // ---------------------------------------------------------------------------
 
-const heroesManifest = heroesJson as Parameters<typeof registerManifest>[0]
+const heroesManifest: Parameters<typeof registerManifest>[0] = {
+  appId: 'heroes',
+  displayName: 'Heroes',
+  schemaVersion: 2,
+  taxonomies: ['branches', 'teams', 'departments'],
+  configSchema: {
+    leaderboard_eligible: { type: 'boolean', default: true },
+    starting_points: { type: 'integer', default: 0 },
+  },
+}
 
 function resetMocks() {
   mockSelect.mockClear()
@@ -142,11 +157,8 @@ describe('seedDefaults', () => {
 // Heroes manifest shape
 // ---------------------------------------------------------------------------
 
-describe('heroes.json manifest shape', () => {
-  test('matches spec exactly', () => {
-    expect(heroesManifest.appId).toBe('heroes')
-    expect(heroesManifest.schemaVersion).toBe(2)
-    expect(heroesManifest.taxonomies).toEqual(['branches', 'teams', 'departments'])
+describe('Heroes-shaped reference manifest', () => {
+  test('configSchema carries only app-specific knobs (role lives on heroes_profiles, not the manifest)', () => {
     expect(heroesManifest.configSchema.leaderboard_eligible).toMatchObject({
       type: 'boolean',
       default: true,
@@ -159,6 +171,95 @@ describe('heroes.json manifest shape', () => {
     // member_app_role.appRole (broadcast via envelope.appRole) post Heroes
     // role-refactor.
     expect((heroesManifest.configSchema as Record<string, unknown>).role).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// validateConfigSchemaShape — Spec 03d D12 admin-driven onboarding gate
+// ---------------------------------------------------------------------------
+
+describe('validateConfigSchemaShape', () => {
+  test('accepts a valid configSchema with mixed field types', () => {
+    const errors = validateConfigSchemaShape({
+      leaderboard_eligible: { type: 'boolean', default: true },
+      starting_points: { type: 'integer', default: 0 },
+      tier: { type: 'string', default: 'basic' },
+      role: { type: 'enum', values: ['member', 'captain'], default: 'member' },
+    })
+    expect(errors).toEqual([])
+  })
+
+  test('rejects non-object root', () => {
+    const errors = validateConfigSchemaShape('not-an-object')
+    expect(errors.length).toBeGreaterThan(0)
+    expect(errors[0]?.reason).toMatch(/object/i)
+  })
+
+  test('rejects array root (arrays are objects in JS but not valid here)', () => {
+    const errors = validateConfigSchemaShape([])
+    expect(errors.length).toBeGreaterThan(0)
+  })
+
+  test('rejects field with unknown type', () => {
+    const errors = validateConfigSchemaShape({
+      mystery: { type: 'json', default: {} },
+    })
+    expect(errors).toContainEqual(
+      expect.objectContaining({ key: 'mystery', reason: expect.stringMatching(/type/i) }),
+    )
+  })
+
+  test('rejects enum field missing values array', () => {
+    const errors = validateConfigSchemaShape({
+      role: { type: 'enum', default: 'member' },
+    })
+    expect(errors).toContainEqual(
+      expect.objectContaining({ key: 'role', reason: expect.stringMatching(/values/i) }),
+    )
+  })
+
+  test("rejects enum field whose default is not in values", () => {
+    const errors = validateConfigSchemaShape({
+      role: { type: 'enum', values: ['a', 'b'], default: 'c' },
+    })
+    expect(errors).toContainEqual(
+      expect.objectContaining({ key: 'role', reason: expect.stringMatching(/default/i) }),
+    )
+  })
+
+  test('rejects boolean field whose default is not a boolean', () => {
+    const errors = validateConfigSchemaShape({
+      flag: { type: 'boolean', default: 'true' },
+    })
+    expect(errors).toContainEqual(
+      expect.objectContaining({ key: 'flag', reason: expect.stringMatching(/boolean/i) }),
+    )
+  })
+
+  test('rejects integer field with non-integer default', () => {
+    const errors = validateConfigSchemaShape({
+      count: { type: 'integer', default: 1.5 },
+    })
+    expect(errors).toContainEqual(
+      expect.objectContaining({ key: 'count', reason: expect.stringMatching(/integer/i) }),
+    )
+  })
+
+  test('rejects string field with non-string default', () => {
+    const errors = validateConfigSchemaShape({
+      label: { type: 'string', default: 42 },
+    })
+    expect(errors).toContainEqual(
+      expect.objectContaining({ key: 'label', reason: expect.stringMatching(/string/i) }),
+    )
+  })
+
+  test('reports every malformed field, not just the first', () => {
+    const errors = validateConfigSchemaShape({
+      bad1: { type: 'unknown' },
+      bad2: { type: 'integer', default: 'nope' },
+    })
+    expect(errors.length).toBeGreaterThanOrEqual(2)
   })
 })
 
@@ -208,4 +309,11 @@ describe('loadAllManifests', () => {
     expect(Array.isArray(rows)).toBe(true)
     expect(rows.length).toBeGreaterThan(0)
   })
+
+  // Spec 03d D12 — "manifest is optional" empty-rowset behaviour is exercised
+  // end-to-end by the seedAppUserConfigForUser test
+  // ("no-ops when no manifests are registered") in app-user-config.test.ts,
+  // which is the meaningful consumer contract. The thin db.select().from(...)
+  // wrapper here is too small for an isolated mock-flip test that survives
+  // bun:test's cross-file mock.module pollution.
 })

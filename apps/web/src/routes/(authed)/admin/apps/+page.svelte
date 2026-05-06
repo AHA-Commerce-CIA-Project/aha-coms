@@ -58,6 +58,12 @@
   let regContractVersion = $state(PLATFORM_AUTH_CONTRACT_VERSION)
   let regComplianceStatus = $state<PortalComplianceStatus>('draft')
   let regManifestPath = $state('portal.integration.json')
+  // Spec 03d D12 — optional admin-managed manifest written alongside the
+  // app_registry row. Empty configSchema (i.e. {}) means no app_manifests
+  // row is created and the app boots without managed config.
+  let regSchemaVersion = $state(1)
+  let regTaxonomiesCsv = $state('')
+  let regConfigSchemaJson = $state('')
   let regError = $state<string | null>(null)
   let regPending = $state(false)
 
@@ -73,6 +79,9 @@
     regContractVersion = PLATFORM_AUTH_CONTRACT_VERSION
     regComplianceStatus = 'draft'
     regManifestPath = 'portal.integration.json'
+    regSchemaVersion = 1
+    regTaxonomiesCsv = ''
+    regConfigSchemaJson = ''
     regError = null
     registering = true
   }
@@ -82,6 +91,36 @@
     regError = null
     regPending = true
     try {
+      let manifest: {
+        configSchema: Record<string, unknown>
+        schemaVersion?: number
+        taxonomies?: string[]
+      } | undefined
+
+      const trimmedSchema = regConfigSchemaJson.trim()
+      if (trimmedSchema.length > 0) {
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(trimmedSchema)
+        } catch (err) {
+          throw new Error(
+            `configSchema is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+          )
+        }
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          throw new Error('configSchema must be a JSON object')
+        }
+        const taxonomies = regTaxonomiesCsv
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+        manifest = {
+          configSchema: parsed as Record<string, unknown>,
+          schemaVersion: regSchemaVersion,
+          ...(taxonomies.length > 0 ? { taxonomies } : {}),
+        }
+      }
+
       const result = await adminApi.registerApp({
         name: regName,
         slug: regSlug,
@@ -94,6 +133,7 @@
         contractVersion: regContractVersion,
         complianceStatus: regComplianceStatus,
         manifestPath: regManifestPath || undefined,
+        ...(manifest ? { manifest } : {}),
       })
       await queryClient.invalidateQueries({ queryKey: ['apps'] })
       registering = false
@@ -255,6 +295,52 @@
             />
           </div>
         </div>
+        <!-- Spec 03d D12 — optional managed-config manifest. Leave configSchema empty to skip. -->
+        <details class="rounded-md border border-border/60 bg-muted/30 p-3">
+          <summary class="cursor-pointer text-xs font-medium text-muted-foreground">
+            Managed config (optional)
+          </summary>
+          <p class="mt-2 text-[11px] leading-snug text-muted-foreground">
+            Define portal-managed per-user knobs for this app. Leave configSchema blank
+            to skip — the app will still authenticate via broker/webhook.
+          </p>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label for="reg-schema-version" class="mb-1 block text-xs text-muted-foreground">Schema Version</Label>
+              <Input
+                id="reg-schema-version"
+                type="number"
+                min="1"
+                bind:value={regSchemaVersion}
+                class="w-full"
+              />
+            </div>
+            <div>
+              <Label for="reg-taxonomies" class="mb-1 block text-xs text-muted-foreground">
+                Taxonomies (comma-separated, e.g. <code>branches, teams</code>)
+              </Label>
+              <Input
+                id="reg-taxonomies"
+                type="text"
+                bind:value={regTaxonomiesCsv}
+                placeholder="branches, teams, departments"
+                class="w-full"
+              />
+            </div>
+          </div>
+          <div class="mt-3">
+            <Label for="reg-config-schema" class="mb-1 block text-xs text-muted-foreground">
+              configSchema (JSON object)
+            </Label>
+            <textarea
+              id="reg-config-schema"
+              bind:value={regConfigSchemaJson}
+              rows="6"
+              placeholder={'{\n  "leaderboard_eligible": { "type": "boolean", "default": true }\n}'}
+              class="w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs"
+            ></textarea>
+          </div>
+        </details>
         {#if regError}
           <p class="text-xs text-destructive">{regError}</p>
         {/if}

@@ -564,6 +564,13 @@ export const adminApi = {
     manifestPath?: string
     lastVerifiedAt?: string
     status?: 'active' | 'maintenance' | 'deprecated'
+    // Spec 03d D12 — optional manifest payload. Empty configSchema means
+    // the app boots without managed config.
+    manifest?: {
+      configSchema: Record<string, unknown>
+      schemaVersion?: number
+      taxonomies?: string[]
+    }
   }) {
     return requestJson<{ id: string }>(`/api/v1/apps`, {
       method: 'POST',

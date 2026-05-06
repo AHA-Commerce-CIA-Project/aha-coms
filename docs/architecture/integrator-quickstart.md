@@ -16,7 +16,7 @@ npm install git+https://github.com/mrdoorba/coms-sdk.git#v0.1.0
 
 ## 1. Register an app
 
-Use the Portal admin UI at `/admin/apps` or the API directly.
+Use the Portal admin UI at `/admin/apps` or the API directly. Registration is admin-only and lands in `app_registry` (and optionally `app_manifests`) in a single transaction.
 
 **Required fields:**
 
@@ -29,6 +29,20 @@ Use the Portal admin UI at `/admin/apps` or the API directly.
 | `transportMode` | How the portal hands the session to your app. Default `server_middleware`. |
 
 Once registered, the portal assigns a UUID (`id`). Your app appears in the chrome launcher for any user whose team has been granted access.
+
+### Managed config (optional)
+
+The "Managed config" block on the registration form is the way to register an `app_manifests` row alongside the `app_registry` row. Use it when the portal admin needs to control per-user knobs for your app (think: `leaderboard_eligible`, `starting_points`) and broadcast them via the `user.provisioned` / `app.config_updated` webhook envelopes.
+
+| Field | Meaning |
+|---|---|
+| `configSchema` | JSON object whose keys are knob names and values declare `{ type, default, … }`. Allowed `type` values: `enum` (with `values: string[]`), `boolean`, `integer`, `string`. Leave the textarea blank to skip the manifest entirely — the app boots without managed config. |
+| `schemaVersion` | Integer ≥ 1. Bump this each time you widen `configSchema` so consumers can detect drift. |
+| `taxonomies` | Comma-separated list of taxonomy IDs (e.g. `branches, teams, departments`). The portal injects current taxonomy entries into your provisioning webhooks for the IDs you subscribe to. |
+
+`configSchema` is for **portal-managed per-user knobs only**. Auth, identity, and RBAC are wired by following the broker (§2) and webhook (§3) sections — never put role, email, or session state in `configSchema`. Apps without managed config can still receive `user.provisioned`, broker tokens, and team-level access grants; only the `appConfig` envelope field will be `null`.
+
+If you need to land a manifest after the fact, use the App Registry detail page (`/admin/apps/:id`) to register/update the manifest row separately. Re-registering with the same slug + a non-empty `configSchema` upserts the manifest row.
 
 ---
 

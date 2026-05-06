@@ -3,7 +3,6 @@ import cors from '@elysiajs/cors'
 import swagger from '@elysiajs/swagger'
 import { requestIdPlugin } from './middleware/request-id'
 import { handleApiError } from './middleware/api-error-handler'
-import { logger } from './logger'
 import { probeHealth } from './services/health'
 import { authRoutes } from './routes/auth'
 import { oneTimeAuthRoutes } from './routes/auth/one-time'
@@ -33,21 +32,18 @@ import { aliasesRoutes } from './routes/aliases'
 import { taxonomiesRoutes } from './routes/taxonomies'
 import { userRoutes } from './routes/users'
 import { auditLogRoutes } from './routes/audit-log'
-import { registerManifest } from './services/manifests'
-import heroesManifest from './services/manifests/heroes.json'
-import type { ManifestDefinition } from './services/manifests'
 
 initGip()
 
 // Background timers — webhook retry has moved to Cloud Tasks (see
 // services/cloud-tasks-client.ts and routes/internal.ts). Health probing still
 // runs in-process for the moment; spec-04 covers moving it to Cloud Scheduler.
+//
+// App manifests are no longer seeded from static files at boot (Spec 03d D12).
+// Admins land app_registry + app_manifests rows together via the App Registry
+// admin UI; existing rows persist across restarts.
 if (process.env.NODE_ENV !== 'test') {
   startHealthProbeInterval()
-  // Idempotent boot-time registration of all static app manifests.
-  registerManifest(heroesManifest as ManifestDefinition).catch((err) => {
-    logger.error({ err }, '[boot] manifest registration failed')
-  })
 }
 
 export const app = new Elysia({ prefix: '/api' })
