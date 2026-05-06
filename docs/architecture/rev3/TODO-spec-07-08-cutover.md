@@ -1,6 +1,6 @@
 # TODO — Spec 07 + Spec 08 Heroes Cutover
 
-> **STATUS — 2026-05-05: CUTOVER EXECUTED, Heroes Deploy A LIVE IN PROD.** Pre-flight + T-0 + cutover-verify all collapsed onto cutover-day smoke-tests; T+30 Deploy C verified non-applicable on this deployment (Heroes never had direct portal-DB grants). The remaining items in this doc are: (a) **PR 07-5** — drop legacy emit fields, bump `@coms-portal/shared` git+url pin to v1.6.0, force manifest schemaVersion:2 (gated on ~7d Heroes Deploy A burn-in); (b) Heroes-side cleanup (Phase 6); (c) optional Heroes ops re-run of sheet-ingestion for points data; (d) burn-in fixes — see banner below. Operational debt from the burn-in (disabled-endpoint admin reactivate, stale-failure-display) shipped 2026-05-06.
+> **STATUS — 2026-05-06: PR 07-5 SHIPPED EARLY (burn-in gate waived).** Cutover executed 2026-05-05; Heroes Deploy A LIVE IN PROD. PR 07-5 dropped legacy emit duplicates (`email` + `branch`), retained `appRole` (re-classified — it's the canonical per-app role broadcast, not a legacy duplicate), forced manifest `schemaVersion: 2` floor, and consolidated all payload types onto `@coms-portal/shared` v1.6.0. Pre-flight + T-0 + cutover-verify collapsed onto cutover-day smoke-tests; T+30 Deploy C verified non-applicable on this deployment (Heroes never had direct portal-DB grants). The remaining items are: (a) Heroes-side cleanup (Phase 6); (b) optional Heroes ops re-run of sheet-ingestion for points data; (c) burn-in fixes — see banner below. Operational debt from the burn-in (disabled-endpoint admin reactivate, stale-failure-display) shipped 2026-05-06.
 
 > **BURN-IN STATUS — 2026-05-06: three Heroes-side fixes shipped end-to-end (CI auto-deploy)** + four additional portal-side fixes shipped same day. Heroes-side discovered while testing handers.the@ahacommerce.net (a non-admin dual-email user provisioned post-cutover) against live Heroes:
 >
@@ -92,12 +92,13 @@ Repo: `coms_portal`
 
 This is genuinely useful infrastructure beyond cutover: any future Heroes recovery (DB restore, schema regression that loses `heroes_profiles`) can use this endpoint to rebuild from portal source-of-truth without touching identity_users.
 
-### PR 07-5 — Drop legacy emit (after Heroes Deploy A confirmed)
+### PR 07-5 — Drop legacy emit ✅ SHIPPED 2026-05-06
 Repo: `coms_portal`
 
-- [ ] Bump `@coms-portal/shared` git+url pin from v1.5.0 → v1.6.0 in `apps/api/package.json` (and any other consumers in the workspace). Replace the local payload type declarations in `apps/api/src/services/taxonomy-events.ts` (`TaxonomyUpsertedPayload`, `TaxonomyDeletedPayload`, `EmploymentUpdatedPayload`) and `apps/api/src/services/employment-resolution.ts` (`TaxonomyRef`, `EmploymentBlock`) with imports from `@coms-portal/shared`. Same for the inline envelope type in `provisioning-events.ts` → `WebhookUserEnvelope`.
-- [ ] Remove legacy top-level fields (`email`, `appRole`, `branch`) from `user.provisioned` / `user.updated` payloads.
-- [ ] Force manifest `schemaVersion: 2` on all registered apps.
+- [x] Bumped `@coms-portal/shared` git+url pin v1.5.0 → v1.6.0 in `apps/api/package.json` and `apps/web/package.json`. Replaced local payload type declarations in `apps/api/src/services/taxonomy-events.ts` (`TaxonomyUpsertedPayload`, `TaxonomyDeletedPayload`, `EmploymentUpdatedPayload`) and `apps/api/src/services/employment-resolution.ts` (`TaxonomyRef`, `EmploymentBlock`) with imports from `@coms-portal/shared`; `provisioning-events.ts` casts now reference `WebhookUserEnvelope`.
+- [x] Removed legacy top-level **duplicates** `email` and `branch` from `user.provisioned` / `user.updated` payloads. **`appRole` retained** — re-classified as the canonical per-app role broadcast (the v1.6.0 envelope has no role field; Heroes' `handle-user-updated` mirrors `payload.appRole` into `heroes_profiles.role`). The TODO's "drop email + appRole + branch" lumping was imprecise — `email` → `contactEmail` and `branch` → `employment.branch.value_snapshot` are real duplicates, but `appRole` has no envelope replacement.
+- [x] Forced manifest `schemaVersion: 2` floor: schema column default bumped to 2 (`apps/api/src/db/schema/app-manifests.ts`); `registerApp` rejects manifests below 2 with `AppManifestValidationError`; route validator `t.Optional(t.Integer({ minimum: 2 }))`; migration `0033_nifty_raza.sql` forward-fills any rows still at v1.
+- [x] Verification: 555/555 API tests pass; api + web `tsc --noEmit` clean; `db:generate` reports no drift.
 
 ---
 
@@ -308,9 +309,9 @@ Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be`
 6. ✅ **Cutover window executed** — TRUNCATE step skipped (Heroes prod was already in cutover-target state from the smoke-tests via live webhook handlers; destroying it would have meant repopulating from the same source).
 7. ⚠ **Deploy C verified NON-APPLICABLE** — `apps/api/src/db/migrations/cutover/0001_revoke_heroes_writes.sql` REVOKEs from `heroes_app_role`, but probing the portal Cloud SQL cluster showed that role does not exist; the Heroes DB user (`app`) holds zero grants on portal-owned tables. The architecture's strictness is enforced by separate Cloud SQL users on the same instance, not by REVOKE. Cutover migration README updated with the probe transcript.
 
-**Remaining work (post-cutover, ~7d burn-in window — gate elapses ~2026-05-12):**
+**Remaining work (post-cutover):**
 
-8. **PR 07-5** — drop legacy emit fields (`email`, `appRole`, `branch`) from `user.provisioned` / `user.updated`, bump `@coms-portal/shared` git+url pin v1.5.0 → v1.6.0 in `apps/api/package.json`, replace local payload type declarations in `taxonomy-events.ts` / `employment-resolution.ts` / `provisioning-events.ts` with imports from shared, force manifest `schemaVersion: 2`. Gated on Heroes Deploy A burn-in confirming stable. Detailed scope in §"PR 07-5" block above.
+8. ✅ **PR 07-5 SHIPPED 2026-05-06** — see §"PR 07-5" block above. Burn-in gate waived (decided same-day to ship after observing the day-1 fixes were stable). Dropped legacy duplicates `email` + `branch`; **kept `appRole`** (re-classified as the canonical per-app role broadcast — the v1.6.0 envelope has no role field, and Heroes' `handle-user-updated` mirrors `payload.appRole` into `heroes_profiles.role`); forced manifest `schemaVersion: 2` floor; consolidated all payload types onto `@coms-portal/shared` v1.6.0.
 9. **Heroes ops re-run sheet ingestion for points data** via `POST /api/aliases/resolve-batch` — separate operational step on Heroes side; not blocking. `pending_alias_resolution` is currently 0 and `--since-iso` is recorded for the eventual run.
 10. **Cleanup phases** (Heroes + portal) per §"Cleanup" blocks above — delete legacy webhook field-reader fallback, refresh CLAUDE.md, archive this TODO doc, update spec-00 timeline (already done as part of doc sync 2026-05-05).
 

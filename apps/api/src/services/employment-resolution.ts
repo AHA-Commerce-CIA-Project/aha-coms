@@ -18,36 +18,14 @@
  * column today (the existing `teams` table is membership groups, a different
  * concept per Spec 07 TODO line 30). When the team taxonomy is wired up,
  * this resolver gains a real lookup.
- *
- * Local types (frozen until @coms-portal/shared v1.6.0 in PR 07-4).
  */
 
 import { db } from '~/db'
 import { identityUsers, orgTaxonomies } from '~/db/schema'
 import { eq, inArray } from 'drizzle-orm'
+import type { EmploymentBlock, TaxonomyRef } from '@coms-portal/shared'
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface TaxonomyRef {
-  taxonomyId: string
-  key: string
-  value: string
-}
-
-export interface EmploymentBlock {
-  branch: TaxonomyRef | null
-  team: TaxonomyRef | null
-  department: TaxonomyRef | null
-  position: string | null
-  phone: string | null
-  employmentStatus: string | null
-  talentaId: string | null
-  attendanceName: string | null
-  leaderName: string | null
-  birthDate: string | null
-}
+export type { EmploymentBlock, TaxonomyRef }
 
 // ---------------------------------------------------------------------------
 // getEmploymentBlock

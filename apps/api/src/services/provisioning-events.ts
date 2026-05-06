@@ -19,6 +19,7 @@ import type {
   UserUpdatedPayload,
   UserOffboardedPayload,
   UserEmailEntry,
+  WebhookUserEnvelope,
 } from '@coms-portal/shared'
 import type { PortalRole, PortalAppRole } from '@coms-portal/shared'
 
@@ -238,24 +239,22 @@ export async function emitUserProvisioned(userId: string): Promise<EmitResult> {
   for (const app of perApp) {
     const appRole = resolveAppRoleForUser(app.memberRole, app.appRoles)
 
-    // PR 07-3 dual-emit envelope: legacy fields (email, appRole, branch) AND
-    // the new Spec 07 envelope (user, employment, contactEmail, appConfig).
+    // Post-PR-07-5 payload: Spec 07 envelope is the canonical shape. Legacy
+    // duplicates `email` (→ contactEmail) and `branch` (→ employment.branch.value)
+    // are dropped. `appRole` is retained — it's the per-app role broadcast Heroes'
+    // handle-user-updated mirrors into heroes_profiles.role; not a duplicate.
     // primaryAliasId is null at provisioning time — aliases are resolved by
     // Heroes-side ingest after first sign-in, not by portal.
     const payload = {
-      // Legacy fields (Heroes' pre-Deploy-A handler reads these) — removed in PR 07-5
       userId: state.id,
       gipUid: state.gipUid,
-      email: state.email,
       emails: state.emails,
       name: state.name,
       portalRole: state.portalRole,
       teamIds: state.teamIds,
       apps: state.appSlugs,
       appRole,
-      branch: state.branch,
-      appConfig: app.appConfig,
-      // Spec 07 envelope (PR 07-3 — additive, frozen contract until v1.6.0)
+      // Spec 07 envelope
       user: {
         portalSub: state.id,
         name: state.name,
@@ -263,12 +262,9 @@ export async function emitUserProvisioned(userId: string): Promise<EmitResult> {
       },
       contactEmail: state.email,
       employment,
-    } as UserProvisionedPayload & {
-      appConfig: typeof app.appConfig
-      user: { portalSub: string; name: string; primaryAliasId: string | null }
-      contactEmail: string
-      employment: typeof employment
-    }
+      appConfig: app.appConfig,
+    } as Omit<UserProvisionedPayload, 'email' | 'branch'> &
+      WebhookUserEnvelope & { appRole: string | null }
 
     await dispatchPortalWebhook('user.provisioned', payload, {
       appSlugs: [app.slug],
@@ -300,14 +296,12 @@ export async function emitUserUpdated(userId: string, changedFields: string[]): 
   for (const app of perApp) {
     const appRole = resolveAppRoleForUser(app.memberRole, app.appRoles)
 
-    // Dual-emit envelope (parity with emitUserProvisioned): legacy fields AND
-    // the Spec 07 envelope (user, employment, contactEmail, appConfig).
-    // Heroes' user.updated handler bails when `user.portalSub` is missing,
-    // so the envelope half is required for role changes to take effect.
+    // Post-PR-07-5 payload: parity with emitUserProvisioned. Legacy duplicates
+    // (email → contactEmail; branch → employment.branch.value) dropped. appRole
+    // retained — Heroes' handle-user-updated mirrors it into heroes_profiles.role.
     const payload = {
       userId: state.id,
       gipUid: state.gipUid,
-      email: state.email,
       emails: state.emails,
       name: state.name,
       portalRole: state.portalRole,
@@ -315,8 +309,6 @@ export async function emitUserUpdated(userId: string, changedFields: string[]): 
       apps: state.appSlugs,
       changedFields,
       appRole,
-      branch: state.branch,
-      appConfig: app.appConfig,
       user: {
         portalSub: state.id,
         name: state.name,
@@ -324,12 +316,9 @@ export async function emitUserUpdated(userId: string, changedFields: string[]): 
       },
       contactEmail: state.email,
       employment,
-    } as UserUpdatedPayload & {
-      appConfig: typeof app.appConfig
-      user: { portalSub: string; name: string; primaryAliasId: string | null }
-      contactEmail: string
-      employment: typeof employment
-    }
+      appConfig: app.appConfig,
+    } as Omit<UserUpdatedPayload, 'email' | 'branch'> &
+      WebhookUserEnvelope & { appRole: string | null }
 
     await dispatchPortalWebhook('user.updated', payload, {
       appSlugs: [app.slug],

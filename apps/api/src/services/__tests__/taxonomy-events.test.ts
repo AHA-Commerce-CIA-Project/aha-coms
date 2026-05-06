@@ -237,7 +237,7 @@ describe('emitEmploymentUpdated — flag off', () => {
   test('no dispatch when flag not set', async () => {
     await emitEmploymentUpdated({
       user: { portalSub: 'user-uuid' },
-      employment: { branch: 'ID-JKT' },
+      employment: { branch: { taxonomyId: 'branches', key: 'ID-JKT', value: 'ID-JKT' } },
       previousEmployment: {},
     })
     expect(mockDispatch).not.toHaveBeenCalled()
@@ -253,8 +253,8 @@ describe('emitEmploymentUpdated — flag on', () => {
   test('dispatches always (no per-app filter)', async () => {
     await emitEmploymentUpdated({
       user: { portalSub: 'user-uuid' },
-      employment: { branch: 'ID-JKT' },
-      previousEmployment: { branch: 'TH-BKK' },
+      employment: { branch: { taxonomyId: 'branches', key: 'ID-JKT', value: 'ID-JKT' } },
+      previousEmployment: { branch: { taxonomyId: 'branches', key: 'TH-BKK', value: 'TH-BKK' } },
     })
     expect(mockDispatch).toHaveBeenCalledTimes(1)
     const [event] = mockDispatch.mock.calls[0] as unknown as [string, unknown, unknown]
@@ -262,10 +262,12 @@ describe('emitEmploymentUpdated — flag on', () => {
   })
 
   test('passes correct payload shape', async () => {
+    const idjkt = { taxonomyId: 'branches', key: 'ID-JKT', value: 'ID-JKT' }
+    const thbkk = { taxonomyId: 'branches', key: 'TH-BKK', value: 'TH-BKK' }
     await emitEmploymentUpdated({
       user: { portalSub: 'user-uuid-123' },
-      employment: { branch: 'ID-JKT', position: 'Engineer' },
-      previousEmployment: { branch: 'TH-BKK' },
+      employment: { branch: idjkt, position: 'Engineer' },
+      previousEmployment: { branch: thbkk },
     })
     const [, payload] = mockDispatch.mock.calls[0] as unknown as [
       string,
@@ -273,8 +275,8 @@ describe('emitEmploymentUpdated — flag on', () => {
       unknown
     ]
     expect(payload.user.portalSub).toBe('user-uuid-123')
-    expect(payload.employment).toMatchObject({ branch: 'ID-JKT' })
-    expect(payload.previousEmployment).toMatchObject({ branch: 'TH-BKK' })
+    expect(payload.employment).toMatchObject({ branch: idjkt })
+    expect(payload.previousEmployment).toMatchObject({ branch: thbkk })
   })
 
   test('dispatches even when subscribedAppSlugs is empty (no taxonomy filter)', async () => {

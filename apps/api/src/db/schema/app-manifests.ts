@@ -8,7 +8,7 @@ export const appManifests = pgTable('app_manifests', {
     .references(() => appRegistry.id, { onDelete: 'cascade' }),
   displayName: varchar('display_name', { length: 128 }).notNull(),
   configSchema: jsonb('config_schema').notNull(),
-  schemaVersion: integer('schema_version').notNull().default(1),
+  schemaVersion: integer('schema_version').notNull().default(2),
   taxonomies: jsonb('taxonomies').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
