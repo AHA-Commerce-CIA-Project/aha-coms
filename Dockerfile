@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 # Stage 1: Install dependencies
 FROM oven/bun:1 AS deps
 WORKDIR /app
@@ -7,10 +5,7 @@ COPY package.json bun.lock ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/server/package.json ./packages/server/
 COPY packages/web/package.json ./packages/web/
-# BuildKit cache mount keeps the bun store warm across builds, so a lockfile
-# change re-evaluates the manifest but doesn't redownload every package.
-RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
-    bun install --frozen-lockfile
+RUN bun install --frozen-lockfile
 
 # Stage 2: Build (shared first; web + server in parallel afterwards)
 FROM oven/bun:1 AS builder
