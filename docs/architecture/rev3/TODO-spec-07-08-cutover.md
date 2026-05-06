@@ -1,14 +1,18 @@
 # TODO — Spec 07 + Spec 08 Heroes Cutover
 
-> **STATUS — 2026-05-05: CUTOVER EXECUTED, Heroes Deploy A LIVE IN PROD.** Pre-flight + T-0 + cutover-verify all collapsed onto cutover-day smoke-tests; T+30 Deploy C verified non-applicable on this deployment (Heroes never had direct portal-DB grants). The remaining items in this doc are: (a) **PR 07-5** — drop legacy emit fields, bump `@coms-portal/shared` git+url pin to v1.6.0, force manifest schemaVersion:2 (gated on ~7d Heroes Deploy A burn-in); (b) Heroes-side cleanup (Phase 6); (c) optional Heroes ops re-run of sheet-ingestion for points data; (d) operational debt from the Post-Deploy A burn-in (disabled-endpoint admin reactivate); (e) burn-in fixes — see banner below.
+> **STATUS — 2026-05-05: CUTOVER EXECUTED, Heroes Deploy A LIVE IN PROD.** Pre-flight + T-0 + cutover-verify all collapsed onto cutover-day smoke-tests; T+30 Deploy C verified non-applicable on this deployment (Heroes never had direct portal-DB grants). The remaining items in this doc are: (a) **PR 07-5** — drop legacy emit fields, bump `@coms-portal/shared` git+url pin to v1.6.0, force manifest schemaVersion:2 (gated on ~7d Heroes Deploy A burn-in); (b) Heroes-side cleanup (Phase 6); (c) optional Heroes ops re-run of sheet-ingestion for points data; (d) burn-in fixes — see banner below. Operational debt from the burn-in (disabled-endpoint admin reactivate, stale-failure-display) shipped 2026-05-06.
 
-> **BURN-IN STATUS — 2026-05-06: three Heroes-side fixes shipped end-to-end (CI auto-deploy).** Discovered while testing handers.the@ahacommerce.net (a non-admin dual-email user provisioned post-cutover) against live Heroes:
+> **BURN-IN STATUS — 2026-05-06: three Heroes-side fixes shipped end-to-end (CI auto-deploy)** + three additional portal-side fixes shipped same day. Heroes-side discovered while testing handers.the@ahacommerce.net (a non-admin dual-email user provisioned post-cutover) against live Heroes:
 >
 > 1. Portal `d9ebf4c` — Webhook **Test** button mints OIDC bearer (was HMAC-only; Cloud Run rejected with 401).
 > 2. Heroes `34124cd` — Removed dead `mustChangePassword` gate + orphan `/change-password` route. Post-cutover the column defaults to `true` for every newly-projected profile and the page only bounced to portal, producing a redirect loop. Column lingers (still written by `auth-sync.ts` and sheet-sync paths) — flagged for cleanup alongside PR 07-5.
 > 3. Heroes `c145fda` + portal `8086269` — **App-local role moved off `app_user_config.config.role` onto `heroes_profiles.role`.** The portal's team page writes `member_app_role.appRole` (broadcast as `envelope.appRole`); Heroes was reading from `userConfigCache.config.role` (different surface, never written by the team-page path). Migration `0013_colossal_wolfsbane` adds the column + backfills from `user_config_cache.config.role` so existing admins keep their nav. `handleUserUpdated` now mirrors `appRole` into the column (was a no-op for role before). `role` removed from `heroes.json` configSchema in portal — every future H-app inherits the same one-source contract: read role from `envelope.appRole`, persist whatever extra config it needs locally; configSchema is for app-specific knobs only.
 >
-> **Filed as deferred work (Spec 03d D12).** While shipping fix #3, surfaced that `apps/api/src/services/manifests/heroes.json` is a static-file manifest seeded at boot — incompatible with the "register a new app via admin UI, follow integrator-quickstart docs, no portal-side code change" onboarding workflow. Trigger: second H-app onboarding queued. See Spec 03d §D12.
+> **Portal-side burn-in fixes shipped 2026-05-06:**
+>
+> 4. Portal `fb3b3ac` — **Spec 03d D12 SHIPPED.** Static `services/manifests/heroes.json` deleted; boot-time `registerManifest` import removed from `apps/api/src/index.ts`; `app_manifests` is now optional; `services/apps.ts::registerApp` accepts an optional `manifest` payload and writes both `app_registry` + `app_manifests` rows in a single transaction (with `validateConfigSchemaShape` rejecting malformed schemas as 400 `AppManifestValidationError`); admin form at `/admin/apps` gained a collapsible "Managed config" section; `docs/architecture/integrator-quickstart.md` §1 documents the new path. Closes the deferred work flagged in note #3 above. See `spec-03d-deferred-hardening-backlog.md` §D12.
+> 5. Portal `770b01a` — **Stale "Last failed" timestamp self-heals.** Both webhook delivery success paths (`services/webhook-dispatcher.ts` inline first attempt + `routes/internal.ts` Cloud Tasks retry handler) now null `lastFailureAt` and `lastFailureReason` alongside `failureCount: 0` on 2xx. Surfaced when reviewing the admin webhook panel — the Heroes endpoint showed a red "Last failed 05/05/2026, 13:57:44" line despite hours of subsequent successful deliveries because the success-side reset never cleared the failure metadata.
+> 6. Portal `1f0da55` — **Disabled-endpoint admin reactivate.** New `POST /api/v1/apps/:id/webhooks/:endpointId/reactivate` route flips status back to `active`, zeroes failureCount, clears failure metadata, and audits with `reactivate_webhook_endpoint`. The Enable button on the admin webhook panel now routes through it; Disable side keeps generic PATCH. Eliminates the "manual SQL against prod" recovery path when Cloud Tasks DLQ exhausts an endpoint.
 
 Sequenced implementation checklist. Work top-to-bottom. Each block ends in a deployable PR.
 
@@ -271,11 +275,15 @@ Three bugs surfaced when `ENABLE_TAXONOMY_EVENTS=true` was first exercised again
 3. **Heroes — `PORTAL_SERVICE_ACCOUNT_EMAIL` phantom-project hardcode** *(commit `ef8b01c`, coms_aha_heroes)*
    The literal `coms-portal-run-sa@coms-portal-prod.iam.gserviceaccount.com` was hardcoded in three places (deploy.yml × 2 staging+prod jobs, `infra/modules/cloud-run/main.tf:172`). `coms-portal-prod` is not a real GCP project. The deployed Cloud Run env had been hand-edited at some point to the correct value (`@fbi-dev-484410`), but my deploy of `ee4ded5` overwrote that hand-edit with the bad source-of-truth, causing every inbound portal webhook to 401 on OIDC verification. Fixed by parameterising via `var.portal_service_account_email` (Tofu) + `${{ vars.PORTAL_SERVICE_ACCOUNT_EMAIL }}` (deploy.yml), with the GitHub repo variable set to the real SA. Tofu validate clean.
 
-**Operational debt surfaced (open):**
+**Operational debt — RESOLVED 2026-05-06:**
 
-- **Disabled-endpoint recovery** — when Cloud Tasks retries exhaust, `routes/internal.ts:144-182` flips `app_webhook_endpoints.status='disabled'` (acts as DLQ). There is no admin re-enable route today; recovery requires direct SQL (`UPDATE app_webhook_endpoints SET status='active', failure_count=0, last_failure_reason=NULL`). Worth a follow-up: either an admin reactivate endpoint on portal, or auto-reactivation on next manual ping. Tracked in coms_aha_heroes/TODOS.md.
+- ✅ **Disabled-endpoint recovery** — shipped portal `1f0da55`. `POST /api/v1/apps/:id/webhooks/:endpointId/reactivate` flips status back to `active`, zeroes failureCount, clears `lastFailureAt`/`lastFailureReason`, audits with `reactivate_webhook_endpoint`. Admin Enable button in `apps/web/.../admin/apps/[id]/+page.svelte` rewired through it. Direct-SQL recovery path no longer required.
 
-- **Smoke tests beyond webhooks** — webhook fan-out is now end-to-end green. The other items in §Remaining work #1 (login, sheet ingestion, admin flows, `/profile`) are still pending burn-in.
+- ✅ **Stale "Last failed" timestamp** (related, surfaced same-day) — shipped portal `770b01a`. Both webhook delivery success paths now null `lastFailureAt`/`lastFailureReason` on 2xx, so any endpoint that recovers organically self-heals on its next successful delivery without admin intervention.
+
+**Operational debt — still open:**
+
+- **Smoke tests beyond webhooks** — webhook fan-out is end-to-end green. The other items in §Remaining work #1 (login, sheet ingestion, admin flows, `/profile`) are still pending burn-in.
 
 ---
 
@@ -299,12 +307,13 @@ Heroes `origin/main` carries the full PR A2 deliverable through commit `f62f2be`
 6. ✅ **Cutover window executed** — TRUNCATE step skipped (Heroes prod was already in cutover-target state from the smoke-tests via live webhook handlers; destroying it would have meant repopulating from the same source).
 7. ⚠ **Deploy C verified NON-APPLICABLE** — `apps/api/src/db/migrations/cutover/0001_revoke_heroes_writes.sql` REVOKEs from `heroes_app_role`, but probing the portal Cloud SQL cluster showed that role does not exist; the Heroes DB user (`app`) holds zero grants on portal-owned tables. The architecture's strictness is enforced by separate Cloud SQL users on the same instance, not by REVOKE. Cutover migration README updated with the probe transcript.
 
-**Remaining work (post-cutover, ~7d burn-in window):**
+**Remaining work (post-cutover, ~7d burn-in window — gate elapses ~2026-05-12):**
 
 8. **PR 07-5** — drop legacy emit fields (`email`, `appRole`, `branch`) from `user.provisioned` / `user.updated`, bump `@coms-portal/shared` git+url pin v1.5.0 → v1.6.0 in `apps/api/package.json`, replace local payload type declarations in `taxonomy-events.ts` / `employment-resolution.ts` / `provisioning-events.ts` with imports from shared, force manifest `schemaVersion: 2`. Gated on Heroes Deploy A burn-in confirming stable. Detailed scope in §"PR 07-5" block above.
 9. **Heroes ops re-run sheet ingestion for points data** via `POST /api/aliases/resolve-batch` — separate operational step on Heroes side; not blocking. `pending_alias_resolution` is currently 0 and `--since-iso` is recorded for the eventual run.
 10. **Cleanup phases** (Heroes + portal) per §"Cleanup" blocks above — delete legacy webhook field-reader fallback, refresh CLAUDE.md, archive this TODO doc, update spec-00 timeline (already done as part of doc sync 2026-05-05).
-11. **Operational debt — disabled-endpoint admin reactivate** (from §"Post-Deploy A follow-up fixes"): when Cloud Tasks retries exhaust on a portal app webhook endpoint, `routes/internal.ts` flips it to `status='disabled'` (acts as DLQ) with no admin re-enable route. Worth ~30 lines + 2 tests; not blocking.
+
+✅ **Item 11 (disabled-endpoint admin reactivate) shipped 2026-05-06** as portal `1f0da55` — see Operational debt section above.
 
 **Prod baseline observed 2026-05-05 (informs the prod-as-rehearsal decision):**
 
