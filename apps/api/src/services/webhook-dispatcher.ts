@@ -258,10 +258,17 @@ async function inlineAttempt(
   try {
     await deliverWebhook(endpoint.url, endpoint.secret, event, jsonBody, eventId, occurredAt, fetchImpl, oidcToken, requestId)
 
-    // Success — reset failure state
+    // Success — reset failure state. Clearing lastFailureAt + lastFailureReason
+    // (not just resetting failureCount) is what makes a recovered endpoint
+    // stop showing the red "Last failed" timestamp in the admin panel.
     await db
       .update(appWebhookEndpoints)
-      .set({ failureCount: 0, lastDeliveredAt: now })
+      .set({
+        failureCount: 0,
+        lastDeliveredAt: now,
+        lastFailureAt: null,
+        lastFailureReason: null,
+      })
       .where(eq(appWebhookEndpoints.id, endpoint.id))
   } catch (err: unknown) {
     const reason = err instanceof Error ? err.message : String(err)

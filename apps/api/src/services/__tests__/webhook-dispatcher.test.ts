@@ -386,6 +386,29 @@ describe('dispatchPortalWebhook', () => {
     expect(successUpdate!.lastDeliveredAt).toBeInstanceOf(Date)
   })
 
+  test('on 2xx response, clears stale lastFailureAt and lastFailureReason', async () => {
+    // Endpoint that previously failed but is now healthy — the admin webhook
+    // panel was rendering the stale red "Last failed" timestamp forever.
+    const ep = makeEndpoint({
+      id: 'ep-recovered',
+      subscribedEvents: ['session.revoked'],
+      failureCount: 3,
+      lastFailureAt: new Date('2026-05-05T13:57:44Z'),
+      lastFailureReason: 'old transient 503',
+    })
+    endpointStore.push(ep)
+
+    await dispatchPortalWebhook('session.revoked', { userId: 'u-recovered' }, { fetchImpl: okFetch() })
+    await new Promise((r) => setTimeout(r, 0))
+
+    const successUpdate = dbUpdates.find(
+      (u) => u.id === ep.id && u.failureCount === 0,
+    )
+    expect(successUpdate).toBeDefined()
+    expect(successUpdate).toHaveProperty('lastFailureAt', null)
+    expect(successUpdate).toHaveProperty('lastFailureReason', null)
+  })
+
   test('on non-2xx, increments failureCount and sets lastFailureReason', async () => {
     const ep = makeEndpoint({ id: 'ep-fail', subscribedEvents: ['session.revoked'], failureCount: 0 })
     endpointStore.push(ep)

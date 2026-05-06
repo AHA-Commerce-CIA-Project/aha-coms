@@ -114,7 +114,13 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
         const now = new Date()
         await db
           .update(appWebhookEndpoints)
-          .set({ failureCount: 0, lastDeliveredAt: now, updatedAt: now })
+          .set({
+            failureCount: 0,
+            lastDeliveredAt: now,
+            lastFailureAt: null,
+            lastFailureReason: null,
+            updatedAt: now,
+          })
           .where(eq(appWebhookEndpoints.id, endpoint.id))
 
         log.info({
