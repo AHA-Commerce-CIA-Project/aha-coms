@@ -478,3 +478,48 @@ describe('user.provisioned payload — Spec 07 envelope (PR 07-3)', () => {
     expect(payload).toHaveProperty('appConfig')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Tests: user.updated payload — Spec 07 envelope (parity with user.provisioned)
+//
+// Heroes' user.updated handler bails when `user.portalSub` is missing — so
+// emitUserUpdated must dual-emit the same envelope shape as emitUserProvisioned.
+// Without this, role changes after onboarding silently fail to apply on Heroes.
+// ---------------------------------------------------------------------------
+
+describe('user.updated payload — Spec 07 envelope (regression)', () => {
+  test('payload carries user{portalSub,name,primaryAliasId} block', async () => {
+    setUser()
+    seedTwoEmails()
+    seedOneApp()
+    seedDefaultTaxonomies()
+
+    await emitUserUpdated('user-1', ['appRole'])
+
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ]
+    const userBlock = payload.user as Record<string, unknown>
+    expect(userBlock).toBeDefined()
+    expect(userBlock.portalSub).toBe('user-1')
+    expect(userBlock.name).toBe('Alice')
+    expect(userBlock.primaryAliasId).toBeNull()
+  })
+
+  test('payload carries contactEmail and employment block', async () => {
+    setUser()
+    seedTwoEmails()
+    seedOneApp()
+    seedDefaultTaxonomies()
+
+    await emitUserUpdated('user-1', ['appRole'])
+
+    const [, payload] = dispatchPortalWebhook.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ]
+    expect(payload.contactEmail).toBe('alice@ahacommerce.net')
+    expect(payload.employment).toBeDefined()
+  })
+})
