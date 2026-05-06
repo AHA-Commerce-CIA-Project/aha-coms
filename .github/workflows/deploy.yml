@@ -6,8 +6,9 @@ on:
     types: [completed]
     branches: [main]
 
+# Default to read-only; jobs that need WIF or more must opt in via job-level
+# permissions. Keeps blast radius small if a step is ever compromised.
 permissions:
-  id-token: write
   contents: read
 
 env:
@@ -28,23 +29,26 @@ jobs:
     name: Build & Push Image
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+      id-token: write  # WIF needs to mint an OIDC token
     outputs:
       image: ${{ steps.meta.outputs.image }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Authenticate to GCP (Workload Identity Federation)
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
@@ -52,14 +56,15 @@ jobs:
       - name: Derive image URI from commit SHA
         id: meta
         run: |
+          set -euo pipefail
           IMAGE="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/app:${{ github.event.workflow_run.head_sha }}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
       - name: Build & push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6
         with:
           context: .
           push: true
@@ -75,29 +80,32 @@ jobs:
     name: Migrate Staging & Deploy (0% Traffic)
     runs-on: ubuntu-latest
     needs: build-and-push
+    permissions:
+      contents: read
+      id-token: write  # WIF needs to mint an OIDC token
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
-          bun-version: latest
+          bun-version: 1.3.13
 
       - name: Cache bun install
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
@@ -109,12 +117,14 @@ jobs:
 
       - name: Download Cloud SQL Auth Proxy
         run: |
+          set -euo pipefail
           curl -fsSL -o cloud-sql-proxy \
             https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
 
       - name: Read DB credentials from Secret Manager
         run: |
+          set -euo pipefail
           DB_USER=$(gcloud secrets versions access latest --secret=coms-aha-heroes-db-user --project=${{ env.PROJECT_ID }})
           DB_PASSWORD=$(gcloud secrets versions access latest --secret=coms-aha-heroes-db-password --project=${{ env.PROJECT_ID }})
           echo "::add-mask::${DB_USER}"
@@ -127,15 +137,16 @@ jobs:
 
       - name: Run Drizzle migrations → staging
         run: |
-          # Start Auth Proxy; connects via TCP on localhost:5432
+          set -euo pipefail
+          # Start Auth Proxy; connects via TCP on localhost:5432.
+          # Trap on EXIT so the proxy is reaped even if the migration fails.
           ./cloud-sql-proxy --port 5432 "${{ env.DB_INSTANCE }}" &
           PROXY_PID=$!
+          trap 'kill "$PROXY_PID" 2>/dev/null || true' EXIT
           sleep 3
 
           DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/coms_aha_heroes_staging" \
             bun run db:migrate
-
-          kill "$PROXY_PID"
 
       - name: Deploy new image — 0% traffic, tag=staging
         run: |
@@ -155,6 +166,7 @@ jobs:
 
       - name: Smoke test staging revision
         run: |
+          set -euo pipefail
           STAGING_URL=$(
             gcloud run services describe "${{ env.SERVICE }}" \
               --region "${{ env.REGION }}" \
@@ -163,12 +175,18 @@ jobs:
             | head -n1
           )
 
+          healthz_ok=0
           for _ in $(seq 1 20); do
             if curl -fsS "${STAGING_URL%/}/api/healthz" | tee /tmp/staging-healthz.json | grep -q '"status":"ok"'; then
+              healthz_ok=1
               break
             fi
             sleep 3
           done
+          if [ "$healthz_ok" != "1" ]; then
+            echo "::error::staging /api/healthz never returned status=ok within 20 attempts"
+            exit 1
+          fi
 
           # Verify the SvelteKit bundle is serving: the root now 302s to the
           # portal sign-in (local /login was retired in 819e110). A 2xx/3xx
@@ -200,29 +218,32 @@ jobs:
     name: Migrate Production & Deploy (100% Traffic)
     runs-on: ubuntu-latest
     needs: [build-and-push, approve-production]
+    permissions:
+      contents: read
+      id-token: write  # WIF needs to mint an OIDC token
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
-          bun-version: latest
+          bun-version: 1.3.13
 
       - name: Cache bun install
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
@@ -234,12 +255,14 @@ jobs:
 
       - name: Download Cloud SQL Auth Proxy
         run: |
+          set -euo pipefail
           curl -fsSL -o cloud-sql-proxy \
             https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
 
       - name: Read DB credentials from Secret Manager
         run: |
+          set -euo pipefail
           DB_USER=$(gcloud secrets versions access latest --secret=coms-aha-heroes-db-user --project=${{ env.PROJECT_ID }})
           DB_PASSWORD=$(gcloud secrets versions access latest --secret=coms-aha-heroes-db-password --project=${{ env.PROJECT_ID }})
           echo "::add-mask::${DB_USER}"
@@ -252,14 +275,14 @@ jobs:
 
       - name: Run Drizzle migrations → production
         run: |
+          set -euo pipefail
           ./cloud-sql-proxy --port 5432 "${{ env.DB_INSTANCE }}" &
           PROXY_PID=$!
+          trap 'kill "$PROXY_PID" 2>/dev/null || true' EXIT
           sleep 3
 
           DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/coms_aha_heroes_production" \
             bun run db:migrate
-
-          kill "$PROXY_PID"
 
       - name: Deploy to Cloud Run — 100% traffic
         run: |
