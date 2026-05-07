@@ -23,7 +23,7 @@ import { describe, it, expect } from 'bun:test'
  */
 describe('Elysia route compose (regression test)', () => {
   it('imports apps/api/src/index.ts and serves a request without throwing', async () => {
-    const { app } = await import('../index.ts')
+    const { app } = await import('../index')
     // .handle() forces the router to build. A param-name conflict in any
     // mounted prefix throws here before any handler runs.
     const res = await app.handle(new Request('http://localhost/api/healthz'))
