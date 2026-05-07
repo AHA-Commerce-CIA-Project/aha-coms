@@ -1,4 +1,4 @@
-import type { TaxonomyUpsertedPayload } from '@coms-portal/shared'
+import type { TaxonomyUpsertedPayload } from '@coms-portal/sdk'
 import { sql } from 'drizzle-orm'
 import { db } from '@coms/shared/db'
 import { taxonomyCache } from '@coms/shared/db/schema'

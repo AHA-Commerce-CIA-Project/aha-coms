@@ -1,4 +1,4 @@
-import type { TaxonomyDeletedPayload } from '@coms-portal/shared'
+import type { TaxonomyDeletedPayload } from '@coms-portal/sdk'
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '@coms/shared/db'
 import { taxonomyCache } from '@coms/shared/db/schema'

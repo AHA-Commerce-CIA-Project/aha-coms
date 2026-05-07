@@ -1,4 +1,4 @@
-import type { AppConfigEvent } from '@coms-portal/shared'
+import type { AppConfigEvent } from '@coms-portal/sdk'
 import { db } from '@coms/shared/db'
 import { userConfigCache } from '@coms/shared/db/schema'
 import type { PortalEventHandler } from './dispatch'

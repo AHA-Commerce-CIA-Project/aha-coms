@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ServiceBar, Sidebar, MobileTopBar, MobileBottomNav } from '@coms-portal/ui/chrome'
   import { AccountWidget } from '@coms-portal/account-widget'
-  import { APP_LAUNCHER } from '@coms-portal/shared'
+  import { APP_LAUNCHER } from '@coms-portal/sdk'
   import {
     Trophy,
     LayoutDashboard,

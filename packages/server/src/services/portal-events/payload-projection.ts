@@ -3,7 +3,7 @@ import type {
   EmploymentUpdatedPayload,
   TaxonomyRef,
   WebhookUserEnvelope,
-} from '@coms-portal/shared'
+} from '@coms-portal/sdk'
 
 /**
  * The portal dual-emits the legacy `appRole` field at the top level of the

@@ -1,4 +1,4 @@
-import type { AliasDeletedPayload } from '@coms-portal/shared'
+import type { AliasDeletedPayload } from '@coms-portal/sdk'
 import { eq } from 'drizzle-orm'
 import { db } from '@coms/shared/db'
 import { aliasCache } from '@coms/shared/db/schema'

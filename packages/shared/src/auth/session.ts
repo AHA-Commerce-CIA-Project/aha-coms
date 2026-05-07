@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto'
 import { eq } from 'drizzle-orm'
-import type { PortalSessionUser } from '@coms-portal/shared/contracts/auth'
+import type { PortalSessionUser } from '@coms-portal/sdk'
 import { db } from '../db'
 import { authSession, emailCache, heroesProfiles } from '../db/schema'
 

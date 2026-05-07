@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import type { WebhookUserEnvelope } from '@coms-portal/shared'
+import type { WebhookUserEnvelope } from '@coms-portal/sdk'
 import {
   employmentUpdatedToDenormFields,
   envelopeToEmailCacheRow,

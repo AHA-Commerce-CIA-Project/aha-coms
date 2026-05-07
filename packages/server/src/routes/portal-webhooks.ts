@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia'
-import type { PortalWebhookEnvelope } from '@coms-portal/shared'
+import type { PortalWebhookEnvelope } from '@coms-portal/sdk'
 import { db } from '@coms/shared/db'
 import { portalWebhookEvents } from '@coms/shared/db/schema'
 import { verifyGoogleIdToken } from '../lib/oidc'

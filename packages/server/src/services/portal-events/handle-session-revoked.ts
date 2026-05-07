@@ -1,4 +1,4 @@
-import type { SessionRevokedPayload } from '@coms-portal/shared'
+import type { SessionRevokedPayload } from '@coms-portal/sdk'
 import { destroySessionsForPortalSub } from '@coms/shared/auth/session'
 import type { PortalEventHandler } from './dispatch'
 

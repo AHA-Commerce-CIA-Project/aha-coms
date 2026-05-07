@@ -1,4 +1,4 @@
-import type { AliasResolvedPayload } from '@coms-portal/shared'
+import type { AliasResolvedPayload } from '@coms-portal/sdk'
 import { db } from '@coms/shared/db'
 import { aliasCache } from '@coms/shared/db/schema'
 import { drainPendingAliasQueue } from '../sheet-sync-pending'

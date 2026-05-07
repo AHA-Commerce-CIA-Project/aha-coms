@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import type { TaxonomyUpsertedPayload } from '@coms-portal/shared'
+import type { TaxonomyUpsertedPayload } from '@coms-portal/sdk'
 import { pullTaxonomiesOnBoot } from './portal-bootstrap'
 import type { TaxonomySyncResponse } from '../lib/portal-api-client'
 

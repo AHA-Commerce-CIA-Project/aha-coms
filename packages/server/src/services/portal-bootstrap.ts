@@ -1,4 +1,4 @@
-import type { TaxonomyUpsertedPayload } from '@coms-portal/shared'
+import type { TaxonomyUpsertedPayload } from '@coms-portal/sdk'
 import { fetchTaxonomySync, type TaxonomySyncFetcher } from '../lib/portal-api-client'
 import { handleTaxonomyUpserted } from './portal-events/handle-taxonomy-upserted'
 import type { PortalEventHandler } from './portal-events/dispatch'
