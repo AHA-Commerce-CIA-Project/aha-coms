@@ -8,9 +8,24 @@
 
 ---
 
-## Status — 2026-05-07 (DRAFT)
+## Status — 2026-05-07 (DRAFT, partial)
 
-Specced; not started. Three PRs across two repos. Estimated effort: one day for one developer (half day for the smoketest verb + portal route, half day for the quickstart revision).
+Specced; PR A and PR C partially landed in `mrdoorba/coms_portal` (current commit). Three PRs across two repos. Estimated remaining effort: half a day for PR B (SDK CLI verb in `mrdoorba/coms-sdk`) plus the §2 deletion sweep in PR C once Spec 03 ships.
+
+**Landed in this commit (PR A + partial PR C):**
+
+- Portal route `POST /api/v1/apps/:slug/smoketest` (OIDC-authed via `requireAppToken`) at `apps/api/src/routes/app-smoketest.ts`, mounted in the `/v1` OIDC group in `apps/api/src/index.ts`. Returns the registry summary plus per-endpoint dispatch results so the CLI can render its three-step checklist in one round trip. Tests at `apps/api/src/routes/__tests__/app-smoketest.test.ts` (9 cases: auth, slug mismatch, registry miss, inactive app, zero endpoints, multi-endpoint dispatch, HTTP-failure capture, network-error capture, disabled-endpoint skip).
+- The route casts `'app.smoketest'` as `PortalWebhookEvent` inline (mirroring the existing `/test` route's `'session.revoked' as PortalWebhookEvent` pattern). Adding the constant formally to `PORTAL_WEBHOOK_EVENTS` lives in `mrdoorba/coms-shared` and ships there separately.
+- `docs/architecture/integrator-quickstart.md` revised: new §0 "Pick your path" (Greenfield / Retrofit / Non-TS), new §3.1 "Spec 07 envelope contract — four invariants", new §8 "Wire protocol reference" (broker-token JWT shape, HMAC scheme, HTTP endpoints, OIDC mint chain).
+
+**Deferred until Spec 03 (HS256 rip-out) ships:**
+
+- §2 of `integrator-quickstart.md` still walks readers through the dead `token_exchange` and `same_host_cookie` paths. A footnote in §2 flags both as legacy-pending-deletion. Stripping the prose belongs in the same PR cycle as Spec 03's portal-side rip; doing it earlier would have the doc lying about what the portal currently rejects.
+
+**Out-of-tree (cross-repo, not in this commit):**
+
+- **PR B** — `coms-portal-cli smoketest <slug>` verb. Lives in `mrdoorba/coms-sdk`. Same Google OIDC ID-token auth path as `register-manifest`. Three steps: registry check, app URL `GET <healthCheckPath>` (default `/`), webhook delivery via the new portal route.
+- **`'app.smoketest'` in `PORTAL_WEBHOOK_EVENTS`** — additive to `mrdoorba/coms-shared`; SDK re-export rides in the next SDK minor.
 
 ---
 

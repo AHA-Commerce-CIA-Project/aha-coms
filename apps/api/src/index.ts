@@ -33,6 +33,7 @@ import { taxonomiesRoutes } from './routes/taxonomies'
 import { userRoutes } from './routes/users'
 import { auditLogRoutes } from './routes/audit-log'
 import { appManifestRoutes } from './routes/app-manifest'
+import { appSmoketestRoutes } from './routes/app-smoketest'
 
 initGip()
 
@@ -134,5 +135,9 @@ export const app = new Elysia({ prefix: '/api' })
   // as auditLogRoutes; appManifestRoutes uses requireAppToken, so it must
   // not sit behind authPlugin's session-cookie gate.
   .group('/v1', (app) => app.use(appManifestRoutes))
+  // Spec 06 PR A — onboarding smoketest verb. Same OIDC auth path as
+  // appManifestRoutes; kept in its own group for the same session-cookie
+  // isolation reason.
+  .group('/v1', (app) => app.use(appSmoketestRoutes))
 
 export type App = typeof app
