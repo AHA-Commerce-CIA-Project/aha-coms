@@ -129,3 +129,80 @@ jobs:
 
       - name: OpenTofu validate
         run: tofu validate
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Drift guard — fails the PR if `tofu plan` detects any add/change/destroy
+  # against live state. Forces a developer to confront infra drift at PR time
+  # instead of letting it accumulate (issue #5).
+  #
+  # Gated on `vars.INFRA_PLAN_GUARD_ENABLED == 'true'` so the job stays a no-op
+  # until the deployer SA has the read scopes it needs:
+  #   - roles/storage.objectViewer on gs://coms-aha-heroes-tfstate
+  #     (to read state — `-lock=false` skips the lock write)
+  #   - roles/viewer on var.project_id (to read all managed resources)
+  # When those grants are live, set the repo variable
+  #   `gh variable set INFRA_PLAN_GUARD_ENABLED --body true`
+  # to flip this on. Until then, the job is skipped and PRs pass.
+  # ─────────────────────────────────────────────────────────────────────────────
+  infra-plan:
+    name: OpenTofu Plan (drift guard)
+    runs-on: ubuntu-latest
+    if: vars.INFRA_PLAN_GUARD_ENABLED == 'true'
+    permissions:
+      contents: read
+      id-token: write  # WIF needs to mint an OIDC token
+      pull-requests: write  # post plan summary as PR comment on drift
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      TF_INPUT: '0'
+      # Plan needs the same input variables that `tofu apply` resolves locally.
+      # alert_email is the only required (non-default) variable today.
+      TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+      TF_VAR_sheet_id_points: ${{ vars.SHEET_ID_POINTS }}
+      TF_VAR_sheet_id_employees: ${{ vars.SHEET_ID_EMPLOYEES }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Authenticate to GCP (WIF → deployer SA)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb  # v2
+
+      - name: OpenTofu init (with backend)
+        run: tofu init -input=false
+
+      # `-detailed-exitcode` returns 0 (no drift), 1 (error), or 2 (drift).
+      # `-lock=false` skips the state-lock write so a read-only viewer SA
+      # without storage.objectAdmin can still plan.
+      - name: OpenTofu plan
+        id: plan
+        run: |
+          set +e
+          tofu plan -detailed-exitcode -lock=false -no-color -out=tfplan.bin > plan.txt 2>&1
+          ec=$?
+          set -e
+          {
+            echo 'plan<<EOF_PLAN'
+            cat plan.txt
+            echo 'EOF_PLAN'
+          } >> "$GITHUB_OUTPUT"
+          echo "exitcode=${ec}" >> "$GITHUB_OUTPUT"
+          if [ "$ec" = "0" ]; then
+            echo "::notice::tofu plan clean — no drift."
+          elif [ "$ec" = "2" ]; then
+            echo "::error::tofu plan detected drift. See plan output below."
+            tail -n 200 plan.txt
+            exit 1
+          else
+            echo "::error::tofu plan failed (exit $ec). See plan output below."
+            tail -n 200 plan.txt
+            exit "$ec"
+          fi

@@ -39,25 +39,31 @@ locals {
   }
 }
 
+# The four auth secrets are managed as containers only — TF does NOT manage
+# the secret_versions. After a fresh `tofu apply` (e.g. disaster recovery /
+# spinning up a new project), populate each with a real value before the
+# first `gcloud run deploy`, otherwise Cloud Run rejects the deploy with
+# "secret has no enabled versions":
+#
+#   for s in coms-aha-heroes-auth-secret coms-aha-heroes-auth-url \
+#            coms-aha-heroes-google-client-id coms-aha-heroes-google-client-secret; do
+#     echo -n "REAL_VALUE_HERE" | gcloud secrets versions add "$s" \
+#       --project=fbi-dev-484410 --data-file=-
+#   done
+#
+# A previous revision of this module bootstrapped a placeholder version 1
+# under TF management. That pattern broke at first secret rotation: the
+# operator overwrote v1 with a real v2 and destroyed v1 for hygiene, but
+# `tofu plan` then proposed creating a new placeholder version (which would
+# become `:latest` and break Cloud Run's `--set-secrets …:latest` references
+# on the next deploy). The bootstrap is now an explicit, one-time runbook
+# step — manage the container in code, manage the data out-of-band.
 resource "google_secret_manager_secret" "auth" {
   for_each  = local.auth_secrets
   project   = var.project_id
   secret_id = each.key
   replication {
     auto {}
-  }
-}
-
-# Placeholder versions — Cloud Run requires at least one version to exist.
-# Overwrite with real values via:
-#   echo -n "real-value" | gcloud secrets versions add SECRET_ID --data-file=-
-resource "google_secret_manager_secret_version" "auth_placeholder" {
-  for_each    = local.auth_secrets
-  secret      = google_secret_manager_secret.auth[each.key].id
-  secret_data = "PLACEHOLDER_REPLACE_ME"
-
-  lifecycle {
-    ignore_changes = [secret_data]
   }
 }
 
@@ -109,11 +115,31 @@ resource "google_cloud_run_v2_service" "app" {
 
   deletion_protection = false
 
-  # Image is managed by the GitHub Actions deploy workflow, not OpenTofu.
-  # Without this, tofu apply resets the image to the placeholder default.
+  # Runtime ownership boundary: deploy.yml's `gcloud run deploy --set-env-vars
+  # / --set-secrets / --cpu-boost / --tag staging --no-traffic` is the source
+  # of truth for env, startup_cpu_boost, and the traffic block at runtime.
+  # The `image`, `template[0].containers[0].env`, the `resources.startup_cpu_boost`
+  # attribute, and `traffic` are therefore ignored once the resource exists —
+  # `tofu apply` can no longer strip the env vars deploy.yml sets, nor flip
+  # away from the staging-tagged revision route.
+  #
+  # `client` / `client_version` are server-side annotations the Cloud Run API
+  # sets to identify the last writer (gcloud, in our case). Without ignoring
+  # them, every `tofu apply` proposes setting them back to null and every
+  # `gcloud run deploy` writes them again — pointless drift cycle.
+  #
+  # The TF env blocks below remain as a *bootstrap* default so a fresh apply
+  # in a recovery scenario produces a Cloud Run service that starts (the
+  # secret-backed envs in particular are needed before deploy.yml ever runs).
+  # After the first `gcloud run deploy`, those values are inert.
   lifecycle {
     ignore_changes = [
       template[0].containers[0].image,
+      template[0].containers[0].env,
+      template[0].containers[0].resources[0].startup_cpu_boost,
+      traffic,
+      client,
+      client_version,
     ]
   }
 
@@ -216,7 +242,6 @@ resource "google_cloud_run_v2_service" "app" {
           SHEET_TAB_PENALTI         = var.sheet_sync_config.tab_penalti
           SHEET_TAB_POIN_AHA        = var.sheet_sync_config.tab_poin_aha
           SHEET_TAB_REDEEM          = var.sheet_sync_config.tab_redeem
-          SHEET_SYNC_INTERVAL_MS    = var.sheet_sync_config.sync_interval_ms
         } : {}
         content {
           name  = env.key
@@ -267,7 +292,6 @@ resource "google_cloud_run_v2_service" "app" {
     google_project_iam_member.cloud_run_sql_client,
     google_secret_manager_secret_iam_member.cloud_run_db_url_access,
     google_secret_manager_secret_iam_member.cloud_run_auth_access,
-    google_secret_manager_secret_version.auth_placeholder,
     google_project_service.iamcredentials,
   ]
 }

@@ -57,7 +57,6 @@ variable "sheet_sync_config" {
     tab_penalti        = string
     tab_poin_aha       = string
     tab_redeem         = string
-    sync_interval_ms   = string
   })
   default = {
     sheet_id_points    = ""
@@ -67,6 +66,5 @@ variable "sheet_sync_config" {
     tab_penalti        = "Poin Penalti"
     tab_poin_aha       = "Poin AHA"
     tab_redeem         = "Redeem Poin AHA"
-    sync_interval_ms   = "600000"
   }
 }

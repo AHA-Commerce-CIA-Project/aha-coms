@@ -242,6 +242,12 @@ jobs:
           DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/coms_aha_heroes_staging" \
             bun run db:migrate
 
+      # `--set-env-vars` and `--set-secrets` are AUTHORITATIVE for the runtime
+      # env. cloud-run.tf:google_cloud_run_v2_service.app declares
+      # `lifecycle.ignore_changes = [..., template[0].containers[0].env, ...]`
+      # so a future `tofu apply` cannot strip what's set here. The TF env
+      # blocks are bootstrap-only; if you add a new runtime env var, add it
+      # below — not in cloud-run.tf.
       - name: Deploy new image — 0% traffic, tag=staging
         run: |
           gcloud run deploy "${{ env.SERVICE }}" \

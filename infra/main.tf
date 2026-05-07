@@ -52,7 +52,6 @@ module "cloud_run" {
     tab_penalti        = "Poin Penalti"
     tab_poin_aha       = "Poin AHA"
     tab_redeem         = "Redeem Poin AHA"
-    sync_interval_ms   = "600000"
   }
 
   depends_on = [module.cloud_sql, module.storage, module.sheet_sync]
