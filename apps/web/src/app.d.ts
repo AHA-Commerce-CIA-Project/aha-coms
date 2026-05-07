@@ -1,6 +1,6 @@
 /// <reference types="@sveltejs/kit" />
 
-import type { AuthUser } from '~/middleware/auth'
+import type { AuthUser } from '@coms-portal/api/middleware/auth'
 
 declare global {
   namespace App {

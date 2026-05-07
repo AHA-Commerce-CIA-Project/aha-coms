@@ -1,6 +1,6 @@
 import type { Handle, HandleServerError } from '@sveltejs/kit'
 import { SESSION_COOKIE_NAME } from '@coms-portal/shared'
-import { validateSession } from '~/services/auth'
+import { validateSession } from '@coms-portal/api/services/auth'
 import { logger } from '$lib/logger'
 
 const AUTHED_PREFIX = '/(authed)'
