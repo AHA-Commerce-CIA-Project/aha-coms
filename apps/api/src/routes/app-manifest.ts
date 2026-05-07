@@ -17,19 +17,31 @@ import { MIN_MANIFEST_SCHEMA_VERSION } from '~/services/apps'
  * `services/manifests.ts:registerManifest` upsert (already enforces
  * `GREATEST(schemaVersion)` non-regression at the SQL layer).
  */
-export const appManifestRoutes = new Elysia({ prefix: '/apps/:slug/manifest' })
+// Prefix uses ':id' (not ':slug') because Elysia's underlying memoirist
+// router does not allow two different parameter names at the same path
+// position. apps.ts and app-webhooks.ts both register '/apps/:id/...' —
+// the param NAME must match across siblings at the same trie position
+// even when each route's handler interprets the captured value
+// differently. The SDK CLI sends the app slug ('heroes') in this slot, so
+// the value here is semantically a slug. The handler resolves it via
+// `requireAppToken` (which provides `app.slug`) and validates path ↔ token
+// ↔ body match before delegating to the upsert.
+export const appManifestRoutes = new Elysia({ prefix: '/apps/:id/manifest' })
   .use(requireAppToken())
   .post(
     '/',
     async ({ params, body, status, app }) => {
-      if (app.slug !== params.slug) {
+      // params.id holds the slug captured from the URL — see prefix comment.
+      const slugFromPath = params.id
+
+      if (app.slug !== slugFromPath) {
         throw status(403, { error: 'forbidden', reason: 'app_mismatch' })
       }
 
-      if (body.appId !== params.slug) {
+      if (body.appId !== slugFromPath) {
         throw status(409, {
           error: 'app_slug_mismatch',
-          reason: 'body.appId must equal :slug',
+          reason: 'body.appId must equal :id (the app slug in the URL)',
         })
       }
 
@@ -76,7 +88,7 @@ export const appManifestRoutes = new Elysia({ prefix: '/apps/:slug/manifest' })
       }
     },
     {
-      params: t.Object({ slug: t.String() }),
+      params: t.Object({ id: t.String() }),
       body: t.Object({
         appId: t.String({ minLength: 1 }),
         displayName: t.String({ minLength: 1 }),

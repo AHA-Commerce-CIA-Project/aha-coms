@@ -163,7 +163,7 @@ function reset() {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('POST /apps/:slug/manifest', () => {
+describe('POST /apps/:id/manifest', () => {
   beforeEach(reset)
 
   test('200 on a valid manifest matching the caller app', async () => {
@@ -192,7 +192,7 @@ describe('POST /apps/:slug/manifest', () => {
     expect(registerCalls.length).toBe(0)
   })
 
-  test('409 when body.appId does not match params.slug', async () => {
+  test('409 when body.appId does not match the slug captured from the URL', async () => {
     const app = makeApp()
     const res = await postManifest(
       app,
