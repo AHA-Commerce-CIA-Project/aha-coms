@@ -10,7 +10,7 @@
 
 ---
 
-## Status — 2026-05-07 (Specs 01 and 02 both SHIPPED)
+## Status — 2026-05-07 (Specs 01 and 02 SHIPPED; Spec 06 partial)
 
 Rev 4 status:
 
@@ -42,11 +42,29 @@ Rev 4 status:
   [coms-portal#3](https://github.com/mrdoorba/coms-portal/issues/3) (generalize route-compose canary, **closed by F11**),
   [coms-portal#4](https://github.com/mrdoorba/coms-portal/issues/4) (manifests test mocks, **closed by F10**),
   [coms-aha-heroes#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) (infra drift, **closed by F13**).
+- **Spec 03 (HS256 rip-out)** opened 2026-05-07 as a DRAFT
+  (commit `7e19e75`). Not started; gates Spec 06's §2 quickstart deletions.
+- **Spec 06 (Onboarding — Smoketest + Quickstart Revision)** **PARTIAL
+  SHIP 2026-05-07** (commit `fa78164`). PR A landed (portal route
+  `POST /api/v1/apps/:slug/smoketest` at
+  `apps/api/src/routes/app-smoketest.ts`, mounted in the `/v1` OIDC
+  group; 9-case test suite green). PR C partial: quickstart §0 ("Pick
+  your path"), §3.1 ("Spec 07 envelope contract — four invariants"),
+  and §8 ("Wire protocol reference") all landed; §2's `token_exchange`
+  / `same_host_cookie` deletions are footnoted and deferred until
+  Spec 03 ships the post-rip surface. PR B (`coms-portal-cli smoketest
+  <slug>` verb) lives in `mrdoorba/coms-sdk` and has not shipped; the
+  formal `'app.smoketest'` addition to `PORTAL_WEBHOOK_EVENTS` lives
+  in `mrdoorba/coms-shared` and rides whichever next minor goes out
+  there. The portal route casts the literal inline as
+  `PortalWebhookEvent` until then, mirroring the existing `/test`
+  route's `'session.revoked' as PortalWebhookEvent` pattern.
 - **Spec 04 / Spec 05** remain trigger-deferred (carried over from Rev 3 with original numbers).
 
-No Rev 4 work is currently scheduled. Specs 04 and 05 ship only when
-their respective triggers fire (see each spec's §Triggers to ship
-section).
+Open work: Spec 03 (HS256 rip-out) draft, plus the Spec 06
+follow-ups above (PR B in coms-sdk; coms-shared event constant; PR C
+§2 sweep gated on Spec 03). Specs 04 and 05 ship only when their
+respective triggers fire (see each spec's §Triggers to ship section).
 
 ---
 
@@ -56,6 +74,8 @@ section).
 |------|-------|--------|---------|
 | 01 | SDK v1.0 — Contract Lock & Onboarding Surface | **SHIPPED 2026-05-07** (`@coms-portal/sdk@v1.0.0`). | Triggered by post-Spec-08 onboarding-friction review. Shipped portal/SDK-side; Heroes adoption was carved off into Spec 02. SDK v2.0 (HS256 drop) was gated on "Heroes Phase 7" — Spec 02 §Q5 re-evaluates whether that gate is still meaningful (Heroes does not call `verifyBrokerToken`). |
 | 02 | SDK v1.0 Heroes Adoption & Verification | **SHIPPED 2026-05-07.** Five planned PRs + nine ship follow-up patches (F1–F9) + four post-ship follow-ups (F10–F13) landed; SDK released as `v1.2.0` git tag (originally planned at v1.1.0). AC #2 live-verified in production. | Triggered by post-Spec-01 Heroes inspection. Heroes consumes portal contracts via 16 type imports from `@coms-portal/shared` and uses the portal-server-side exchange flow for auth — the original H-1/H-2/H-3 breakdown was based on a stale model. Closed Spec 01's two structurally-weak acceptance criteria (#1 onboarding, #5 v0.1.x compat) via real-consumer verification. Four post-ship discoveries (browser-bundle barrel scan, google-auth-library WIF+impersonation gap, auth-action 403, memoirist param-name conflict that left Spec 01 §AC #7 a quiet false-positive for 2.5 weeks); all four filed follow-up issues (#1, #3, #4, #5) closed same day by F10/F11/F12/F13 — see [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md). |
+| 03 | HS256 rip-out | **DRAFT** opened 2026-05-07 (`7e19e75`). Not started. | Gates Spec 06's §2 quickstart deletions (`token_exchange` / `same_host_cookie` prose). See [spec-03-hs256-rip-out.md](spec-03-hs256-rip-out.md). |
+| 06 | Onboarding — Smoketest + Quickstart Revision | **PARTIAL SHIP 2026-05-07** (`fa78164`). PR A (portal smoketest route + 9-case test suite) and partial PR C (quickstart §0 / §3.1 / §8) landed in `mrdoorba/coms_portal`. PR B (`coms-portal-cli smoketest <slug>`) deferred to `mrdoorba/coms-sdk`. PR C's §2 deletions deferred until Spec 03 ships. | Triggered by post-Spec-02 architecture review of the superapp surface — six gaps identified (GCP SA provisioning, three-modes-documented-one-used, no retrofit path, no deploy-time smoketest, Spec 07 envelope tribal knowledge, non-TS path undocumented). See [spec-06-onboarding-scaffolding.md](spec-06-onboarding-scaffolding.md). |
 | 04 | Unified User Preferences (Theme + Language) | Architecture decided. Deferred. | Third H-app onboards, portal localizes, user-visible drift incident, or Rev 3 Spec 02 Phase 2+ ships. |
 | 05 | Suite Search / Command Palette | Architecture decided. Deferred. | N > 6 apps, first cross-app search request, an app builds its own palette, or recent-items demand. |
 
@@ -128,6 +148,20 @@ See [spec-01-sdk-v1.md](spec-01-sdk-v1.md) for the full surface, decisions log, 
 The five planned PRs landed in the recommended sequence (SA → VA → VB → HA → HB). Ship follow-up patches landed in the order F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9, each unblocking the next deploy attempt. AC #2 closed at 2026-05-07T05:42 UTC; production traffic shifted to 100% the same run. Post-ship F10, F11, F12, and F13 (closing #4, #3, #1, and #5 respectively) all landed later the same day; all four filed follow-up issues are closed.
 
 See [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md) for the discovery, decisions log, acceptance criteria, post-ship discoveries (D1–D4), and operator briefing for fresh sessions.
+
+---
+
+## Spec 06 PR sequence (partial ship 2026-05-07)
+
+| PR | Repo | Scope | Status |
+|----|------|---|---|
+| A | `mrdoorba/coms_portal` | New OIDC-authed route `POST /api/v1/apps/:id/smoketest` at `apps/api/src/routes/app-smoketest.ts` (mounted in the `/v1` requireAppToken group). Verifies registry row → active status, dispatches a synthetic `app.smoketest` envelope synchronously to every active webhook endpoint, returns `{ app, endpoints[], ok }`. The literal `'app.smoketest'` is cast inline as `PortalWebhookEvent` (the formal addition to `PORTAL_WEBHOOK_EVENTS` lives in `mrdoorba/coms-shared`). Test suite at `apps/api/src/routes/__tests__/app-smoketest.test.ts` — 9 cases (auth, slug-mismatch, registry-miss, inactive-app, zero-endpoint, multi-endpoint with envelope/header assertions, HTTP failure, network failure, disabled-endpoint skip). | SHIPPED — Portal `fa78164` |
+| C (partial) | `mrdoorba/coms_portal` | `docs/architecture/integrator-quickstart.md` revised: new §0 "Pick your path" (Greenfield / Retrofit / Non-TS subsections, framework-agnostic retrofit checklist of decisions + files + invariants + validation), new §3.1 "Spec 07 envelope contract — four invariants" (role from `envelope.appRole`, dedup by `eventId`, ack 2xx within 5s, HMAC required + OIDC additive), new §8 "Wire protocol reference" (ES256 JWT shape + JWKS URL, HMAC canonical-string format, HTTP endpoints with request/response shapes, OIDC mint chain). | SHIPPED — Portal `fa78164` |
+| B | `mrdoorba/coms-sdk` | `coms-portal-cli smoketest <slug>` verb. Same Google OIDC ID-token auth path as `register-manifest`. Three-step output: registry check, app URL `GET <healthCheckPath>`, webhook delivery via the new portal route. Bumps SDK to v1.3.0 (additive). Must consume the portal route's response shape verbatim. | NOT STARTED |
+| C (§2 deletions) | `mrdoorba/coms_portal` | Strip `token_exchange` and `same_host_cookie` from §2 prose; collapse to a single sentence noting they exist for legacy reasons and must not be used. Footnote in §2 currently flags both as legacy-pending-deletion. | DEFERRED — gated on Spec 03 (HS256 rip-out) shipping |
+| (cross-repo) | `mrdoorba/coms-shared` | Add `'app.smoketest'` to `PORTAL_WEBHOOK_EVENTS`; SDK re-export rides next minor. Once landed, the portal route's inline cast can be removed. | NOT STARTED |
+
+See [spec-06-onboarding-scaffolding.md](spec-06-onboarding-scaffolding.md) for the full problem statement, scope, decisions log, and acceptance criteria.
 
 ---
 
