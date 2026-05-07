@@ -289,6 +289,64 @@ jobs:
             | grep -Eq '^(2|3)[0-9]{2}$'
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # 2.5. Register the manifest with the portal (Rev 4 Spec 02 §HB).
+  #
+  # The manifest at packages/server/portal-manifest.ts is the source of
+  # truth for Heroes' app_manifests row in the portal database. Idempotent
+  # by design — the portal merges schemaVersion forward via GREATEST() and
+  # rejects same-or-lower bumps with a no-op. Run after staging deploys
+  # successfully so a broken manifest gates production behind the same
+  # smoke-test fence everything else depends on.
+  #
+  # IAM requirement: the WIF service account must hold
+  # roles/iam.serviceAccountTokenCreator on coms-aha-heroes-run-sa@... so
+  # google-github-actions/auth can mint OIDC ID tokens whose `email` claim
+  # matches the runtime SA the portal has registered for slug='heroes'.
+  # ─────────────────────────────────────────────────────────────────────────────
+  register-manifest:
+    name: Register Heroes manifest with portal
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    permissions:
+      contents: read
+      id-token: write  # WIF needs to mint an OIDC token
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Authenticate to GCP (impersonate runtime SA so the OIDC `email` claim matches the portal's registered serviceAccountEmail)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: coms-aha-heroes-run-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
+        with:
+          bun-version: 1.3.13
+
+      - name: Cache bun install
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Register manifest with portal
+        working-directory: packages/server
+        run: |
+          set -euo pipefail
+          bun x coms-portal-cli register-manifest \
+            --portal-url "${{ vars.PORTAL_ORIGIN }}" \
+            --app-slug heroes \
+            --manifest ./portal-manifest.ts
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # 3. Manual gate — requires a reviewer to approve via the "production"
   #    GitHub Environment before production is touched.
   #    Configure required reviewers at:
@@ -297,7 +355,7 @@ jobs:
   approve-production:
     name: Manual Approval — Production
     runs-on: ubuntu-latest
-    needs: deploy-staging
+    needs: [deploy-staging, register-manifest]
     environment: production
 
     steps:

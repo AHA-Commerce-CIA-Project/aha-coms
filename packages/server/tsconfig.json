@@ -12,6 +12,6 @@
       "@coms/shared/*": ["../shared/src/*"]
     }
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "portal-manifest.ts"],
   "exclude": ["node_modules", "dist", "src/functions/**", "**/*.test.ts"]
 }
