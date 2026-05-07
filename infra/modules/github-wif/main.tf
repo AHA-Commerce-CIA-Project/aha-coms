@@ -91,3 +91,31 @@ resource "google_service_account_iam_member" "deployer_mint_token_as_runtime" {
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }
+
+# ── CI Drift Guard read scopes (Rev 4 Spec 02 §F13) ──────────────────────────
+# `tofu plan` in ci.yml's infra-plan job needs to refresh every managed
+# resource — IAM policies, monitoring, Cloud Run, Secret Manager, etc. —
+# which the deployer SA's mutate-scoped roles above don't cover read-side
+# (run.admin lets you UpdateService but not ReadIamPolicy on unrelated
+# bindings, etc.). roles/viewer is the standard project-wide read role.
+# It expands the SA's blast radius from "deploy Cloud Run + impersonate
+# runtime SA" to "read everything in the project"; deemed acceptable
+# given the SA already holds run.admin + secretmanager.secretAccessor +
+# cloudsql.client. Narrow to per-product viewer roles if that ever shifts.
+resource "google_project_iam_member" "deployer_viewer" {
+  project = var.project_id
+  role    = "roles/viewer"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# Read state from the GCS-backed OpenTofu backend. The bucket is the literal
+# from `infra/backend.tf` — the backend block doesn't accept variables
+# (OpenTofu/Terraform limitation: backend config must be static), so the
+# name lives in two places by necessity. objectViewer is sufficient because
+# the infra-plan job uses `tofu plan -lock=false`; no lock-file write means
+# no objectAdmin needed.
+resource "google_storage_bucket_iam_member" "deployer_tfstate_reader" {
+  bucket = "coms-aha-heroes-tfstate"
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.deployer.email}"
+}
