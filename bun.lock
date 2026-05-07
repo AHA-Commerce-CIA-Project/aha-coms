@@ -27,7 +27,7 @@
       "name": "@coms/server",
       "version": "0.1.0",
       "dependencies": {
-        "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.1.1",
+        "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.2.0",
         "@coms/shared": "workspace:*",
         "@coms/web": "workspace:*",
         "@elysiajs/cors": "^1.3.0",
@@ -46,7 +46,7 @@
       "name": "@coms/shared",
       "version": "0.1.0",
       "dependencies": {
-        "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.1.1",
+        "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.2.0",
         "@sinclair/typebox": "^0.34.0",
         "drizzle-orm": "^0.45.0",
         "drizzle-typebox": "^0.2.0",
@@ -59,7 +59,7 @@
       "dependencies": {
         "@coms-portal/account-widget": "git+https://github.com/mrdoorba/coms-account-widget.git#v0.2.0",
         "@coms-portal/design-tokens": "git+https://github.com/mrdoorba/coms-design-tokens.git#v1.1.0",
-        "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.1.1",
+        "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.2.0",
         "@coms-portal/ui": "git+https://github.com/mrdoorba/coms-ui.git#v1.2.0",
         "@coms/server": "workspace:*",
         "@coms/shared": "workspace:*",
@@ -293,7 +293,7 @@
 
     "@coms-portal/design-tokens": ["@coms-portal/design-tokens@github:mrdoorba/coms-design-tokens#2ab5f3d", {}, "mrdoorba-coms-design-tokens-2ab5f3d", "sha512-w7PZKFIVxM3nYINH0FXpECBjRME/VR3jInp0my4g9MjNxE4kfpGAAnrEXxIk+tua5RTbX8gm8BTLKpq4jIRO6w=="],
 
-    "@coms-portal/sdk": ["@coms-portal/sdk@github:mrdoorba/coms-sdk#fc4153a", { "dependencies": { "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.6.0", "jose": "^6" }, "peerDependencies": { "elysia": "^1", "google-auth-library": "^9 || ^10" }, "optionalPeers": ["elysia", "google-auth-library"], "bin": { "coms-portal-cli": "./src/cli.ts" } }, "mrdoorba-coms-sdk-fc4153a", "sha512-Ni0bpboXVDohA/xYM+ByEamNxEcorN94r/qW/klMfQT+CMmoG4wH/IyjZKBlWZKWpmQaOVlQAPANL+m1eisStg=="],
+    "@coms-portal/sdk": ["@coms-portal/sdk@github:mrdoorba/coms-sdk#a91acc3", { "dependencies": { "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.6.0", "jose": "^6" }, "peerDependencies": { "elysia": "^1", "google-auth-library": "^9 || ^10" }, "optionalPeers": ["elysia", "google-auth-library"], "bin": { "coms-portal-cli": "./src/cli.ts" } }, "mrdoorba-coms-sdk-a91acc3", "sha512-iIvg5o0JiwdheIqtc4ww4ErKyl4vXVzrHvlcNLZhb3FT7qJ63D8BfThSGX9hvPSyAwXS4PpVNhYr+HLgcyjOWA=="],
 
     "@coms-portal/shared": ["@coms-portal/shared@github:mrdoorba/coms-shared#0af3637", {}, "mrdoorba-coms-shared-0af3637", "sha512-Ypz06ZUMwj+Nqfp1FD/MFHsK6/mJI19RDg7su9TWgNW4zj1tUcw8lFKCLN/k/GStRiYeBKtdZxRFGa+gw4AzIQ=="],
 
