@@ -15,6 +15,171 @@ export interface EmployeeInfoSyncResult {
   errors: string[]
 }
 
+const SYNC_CREATE_CONCURRENCY = 5
+
+type EmployeeMatchCandidate = { id: string; name: string }
+
+function buildIdentityUserDelta(
+  row: EmployeeInfoSheetRow,
+): Partial<typeof identityUsers.$inferInsert> {
+  const fields: Partial<typeof identityUsers.$inferInsert> = { updatedAt: new Date() }
+  if (row.phone) fields.phone = row.phone
+  if (row.birthDate) fields.birthDate = row.birthDate
+  if (row.position) fields.position = row.position
+  if (row.leaderName) fields.leaderName = row.leaderName
+  return fields
+}
+
+/**
+ * Upsert a personal email from a sheet row. addedBy='sheet_sync',
+ * verifiedAt=NOW() per Q4b trust-on-entry semantics. Skips silently if the
+ * address already exists anywhere (global unique constraint). isPrimary is
+ * true only if the user currently has no email rows.
+ */
+async function upsertPersonalEmailFromSheet(
+  userId: string,
+  personalEmail: string,
+): Promise<void> {
+  const emailNorm = personalEmail.toLowerCase().trim()
+
+  const existing = await db
+    .select({ id: identityUserEmails.id })
+    .from(identityUserEmails)
+    .where(eq(identityUserEmails.emailNormalized, emailNorm))
+    .limit(1)
+  if (existing.length > 0) return
+
+  const userPersonalRows = await db
+    .select({ id: identityUserEmails.id })
+    .from(identityUserEmails)
+    .where(eq(identityUserEmails.identityUserId, userId))
+    .limit(1)
+
+  await db
+    .insert(identityUserEmails)
+    .values({
+      identityUserId: userId,
+      email: personalEmail,
+      emailNormalized: emailNorm,
+      kind: 'personal',
+      isPrimary: userPersonalRows.length === 0,
+      verifiedAt: new Date(),
+      addedBy: 'sheet_sync',
+    })
+    .onConflictDoNothing()
+}
+
+async function applyMatchedSyncRow(
+  row: EmployeeInfoSheetRow,
+  match: EmployeeMatchCandidate,
+  result: EmployeeInfoSyncResult,
+): Promise<void> {
+  await db
+    .update(identityUsers)
+    .set(buildIdentityUserDelta(row))
+    .where(eq(identityUsers.id, match.id))
+
+  if (row.personalEmail) {
+    await upsertPersonalEmailFromSheet(match.id, row.personalEmail)
+  }
+
+  if (row.teamName) {
+    await upsertTeamMembership(match.id, row.teamName)
+  }
+
+  const displayEmail = await getDisplayEmail(match.id)
+  result.matched.push({
+    sheetName: row.fullName,
+    dbName: match.name,
+    email: displayEmail ?? '(no email)',
+  })
+  result.updated++
+}
+
+async function processSyncRow(
+  row: EmployeeInfoSheetRow,
+  employees: EmployeeMatchCandidate[],
+  result: EmployeeInfoSyncResult,
+  toCreate: EmployeeInfoSheetRow[],
+): Promise<void> {
+  const { match, score, ambiguous } = findBestMatch(row.fullName, employees)
+
+  if (ambiguous) {
+    result.unmatched.push({
+      sheetName: row.fullName,
+      reason: 'Multiple employees match — needs manual review',
+    })
+    return
+  }
+
+  if (!match || score === 0) {
+    if (row.personalEmail) {
+      toCreate.push(row)
+    } else {
+      result.unmatched.push({
+        sheetName: row.fullName,
+        reason: 'No matching employee found',
+      })
+    }
+    return
+  }
+
+  try {
+    await applyMatchedSyncRow(row, match, result)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    result.errors.push(`Failed to update ${match.name}: ${message}`)
+  }
+}
+
+async function createEmployeesFromSheetRows(
+  toCreate: EmployeeInfoSheetRow[],
+  result: EmployeeInfoSyncResult,
+): Promise<void> {
+  // Dynamic import preserved to avoid a future circular dep with ./employees.
+  const { createEmployee } = await import('./employees')
+
+  for (let i = 0; i < toCreate.length; i += SYNC_CREATE_CONCURRENCY) {
+    const batch = toCreate.slice(i, i + SYNC_CREATE_CONCURRENCY)
+    const settled = await Promise.allSettled(
+      batch.map((row) =>
+        createEmployee({
+          personalEmail: row.personalEmail,
+          name: row.fullName,
+          hasGoogleWorkspace: false,
+          source: 'sheet_sync',
+          addedBy: 'sheet_sync',
+        }).then((newUser) => ({ row, userId: newUser.id })),
+      ),
+    )
+    for (const [idx, s] of settled.entries()) {
+      if (s.status === 'fulfilled') {
+        result.created.push({
+          sheetName: s.value.row.fullName,
+          personalEmail: s.value.row.personalEmail,
+          userId: s.value.userId,
+        })
+        // Fire-and-forget: emit user.provisioned for sheet-sync-created users
+        // (Rev 2 gap: createEmployee has no team membership at this point so
+        // its own emit is a no-op; this fires after the batch where team context
+        // may be updated by subsequent sync runs).
+        emitUserProvisioned(s.value.userId).catch((err) => {
+          logger.error(
+            { err, userId: s.value.userId },
+            '[sheet-sync] emitUserProvisioned failed',
+          )
+        })
+      } else {
+        const row = batch[idx]!
+        const message = s.reason instanceof Error ? s.reason.message : String(s.reason)
+        result.errors.push(
+          `Failed to create user for ${row.fullName} (${row.personalEmail}): ${message}`,
+        )
+      }
+    }
+  }
+}
+
 export async function syncEmployeeInfo(): Promise<EmployeeInfoSyncResult> {
   const result: EmployeeInfoSyncResult = {
     updated: 0,
@@ -46,121 +211,10 @@ export async function syncEmployeeInfo(): Promise<EmployeeInfoSyncResult> {
   const toCreate: EmployeeInfoSheetRow[] = []
 
   for (const row of sheetRows) {
-    const { match, score, ambiguous } = findBestMatch(row.fullName, employees)
-
-    if (ambiguous) {
-      result.unmatched.push({
-        sheetName: row.fullName,
-        reason: 'Multiple employees match — needs manual review',
-      })
-      continue
-    }
-
-    if (!match || score === 0) {
-      // If the row has a personal email, queue for creation; otherwise mark unmatched
-      if (row.personalEmail) {
-        toCreate.push(row)
-      } else {
-        result.unmatched.push({
-          sheetName: row.fullName,
-          reason: 'No matching employee found',
-        })
-      }
-      continue
-    }
-
-    try {
-      // Build properly typed update payload — only set fields that have a value in the sheet
-      const fields: Partial<typeof identityUsers.$inferInsert> = { updatedAt: new Date() }
-      if (row.phone) fields.phone = row.phone
-      if (row.birthDate) fields.birthDate = row.birthDate
-      if (row.position) fields.position = row.position
-      if (row.leaderName) fields.leaderName = row.leaderName
-
-      await db.update(identityUsers).set(fields).where(eq(identityUsers.id, match.id))
-
-      // Upsert personalEmail into identity_user_emails if provided by the sheet.
-      // addedBy='sheet_sync', verifiedAt=NOW() per Q4b trust-on-entry semantics.
-      if (row.personalEmail) {
-        const now = new Date()
-        const emailNorm = row.personalEmail.toLowerCase().trim()
-        // Check if this personal email already exists for this user
-        const existing = await db
-          .select({ id: identityUserEmails.id })
-          .from(identityUserEmails)
-          .where(eq(identityUserEmails.emailNormalized, emailNorm))
-          .limit(1)
-        if (existing.length === 0) {
-          // Only insert if the address doesn't already exist anywhere (uniqueness constraint)
-          // and there's no personal email row yet for this user.
-          const userPersonalRows = await db
-            .select({ id: identityUserEmails.id })
-            .from(identityUserEmails)
-            .where(eq(identityUserEmails.identityUserId, match.id))
-            .limit(1)
-          await db.insert(identityUserEmails).values({
-            identityUserId: match.id,
-            email: row.personalEmail,
-            emailNormalized: emailNorm,
-            kind: 'personal',
-            isPrimary: userPersonalRows.length === 0, // primary if user has no emails yet
-            verifiedAt: now,
-            addedBy: 'sheet_sync',
-          }).onConflictDoNothing()
-        }
-      }
-
-      // Handle team membership
-      if (row.teamName) {
-        await upsertTeamMembership(match.id, row.teamName)
-      }
-
-      const displayEmail = await getDisplayEmail(match.id)
-      result.matched.push({ sheetName: row.fullName, dbName: match.name, email: displayEmail ?? '(no email)' })
-      result.updated++
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      result.errors.push(`Failed to update ${match.name}: ${message}`)
-    }
+    await processSyncRow(row, employees, result, toCreate)
   }
 
-  // Create non-workspace employees for unmatched rows that have a personal email
-  const { createEmployee } = await import('./employees')
-  const CONCURRENCY = 5
-  for (let i = 0; i < toCreate.length; i += CONCURRENCY) {
-    const batch = toCreate.slice(i, i + CONCURRENCY)
-    const settled = await Promise.allSettled(
-      batch.map((row) =>
-        createEmployee({
-          personalEmail: row.personalEmail,
-          name: row.fullName,
-          hasGoogleWorkspace: false,
-          source: 'sheet_sync',
-          addedBy: 'sheet_sync',
-        }).then((newUser) => ({ row, userId: newUser.id })),
-      ),
-    )
-    for (const [idx, s] of settled.entries()) {
-      if (s.status === 'fulfilled') {
-        result.created.push({
-          sheetName: s.value.row.fullName,
-          personalEmail: s.value.row.personalEmail,
-          userId: s.value.userId,
-        })
-        // Fire-and-forget: emit user.provisioned for sheet-sync-created users
-        // (Rev 2 gap: createEmployee has no team membership at this point so
-        // its own emit is a no-op; this fires after the batch where team context
-        // may be updated by subsequent sync runs).
-        emitUserProvisioned(s.value.userId).catch((err) => {
-          logger.error({ err, userId: s.value.userId }, '[sheet-sync] emitUserProvisioned failed')
-        })
-      } else {
-        const row = batch[idx]!
-        const message = s.reason instanceof Error ? s.reason.message : String(s.reason)
-        result.errors.push(`Failed to create user for ${row.fullName} (${row.personalEmail}): ${message}`)
-      }
-    }
-  }
+  await createEmployeesFromSheetRows(toCreate, result)
 
   return result
 }
