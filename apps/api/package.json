@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v0.1.1",
-    "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.6.0",
+    "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.7.0",
     "@elysiajs/cors": "^1.4.2",
     "@elysiajs/static": "^1.2",
     "@elysiajs/swagger": "^1.3.1",

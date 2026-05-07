@@ -39,9 +39,9 @@ PR A landed in `mrdoorba/coms_portal` `fa78164`; PR B landed in `mrdoorba/coms-s
 
 - §2 of `integrator-quickstart.md` still walks readers through the dead `token_exchange` and `same_host_cookie` paths. A footnote in §2 flags both as legacy-pending-deletion. Stripping the prose belongs in the same PR cycle as Spec 03's portal-side rip; doing it earlier would have the doc lying about what the portal currently rejects.
 
-**Out-of-tree (cross-repo, not yet shipped):**
+**SHIPPED — cross-repo (`mrdoorba/coms-shared` `6452869`, tag `v1.7.0`):**
 
-- **`'app.smoketest'` in `PORTAL_WEBHOOK_EVENTS`** — additive to `mrdoorba/coms-shared`. SDK re-export rides whichever next SDK minor goes out. Once landed, the portal route's `as PortalWebhookEvent` cast in `app-smoketest.ts` can be removed.
+- `'app.smoketest'` is now part of `PORTAL_WEBHOOK_EVENTS` (additive minor). The portal's `apps/api/package.json` and `apps/web/package.json` shared pins moved from `v1.6.0` → `v1.7.0`, and the inline `'app.smoketest' as PortalWebhookEvent` cast in `apps/api/src/routes/app-smoketest.ts` is now `const event: PortalWebhookEvent = 'app.smoketest'` — straight assignment, no cast. SDK re-export of the constant rides whichever next SDK minor goes out (the SDK already re-exports `PORTAL_WEBHOOK_EVENTS` as a barrel from shared, so it picks up the addition automatically once `@coms-portal/sdk`'s pin moves to `coms-shared@v1.7.0`).
 
 ---
 

@@ -82,12 +82,11 @@ export const appSmoketestRoutes = new Elysia({ prefix: '/apps/:id/smoketest' })
       const results = await Promise.all(
         endpointRows.map(async (endpoint) => {
           const eventId = crypto.randomUUID()
-          // 'app.smoketest' is asserted in the integrator quickstart's Spec 07
-          // envelope contract section. The literal is not yet in the
-          // PortalWebhookEvent union (lives in @coms-portal/shared); the cast
-          // mirrors the existing /test route's `'session.revoked' as
-          // PortalWebhookEvent` pattern.
-          const event = 'app.smoketest' as PortalWebhookEvent
+          // 'app.smoketest' is part of `PORTAL_WEBHOOK_EVENTS` as of
+          // `@coms-portal/shared@v1.7.0` (Rev 4 Spec 06 — see the package's
+          // CHANGELOG). No cast needed; the literal narrows to
+          // PortalWebhookEvent directly.
+          const event: PortalWebhookEvent = 'app.smoketest'
 
           const envelope: PortalWebhookEnvelope<{ note: string }> = {
             contractVersion: PORTAL_WEBHOOK_CONTRACT_VERSION,
