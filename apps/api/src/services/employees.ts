@@ -9,7 +9,11 @@ import { emitUserProvisioned, emitUserOffboarded, emitUserUpdated } from './prov
 import { seedAppUserConfigForUser } from './app-user-config'
 import { logger } from '~/logger'
 
-export async function createEmployee(data: {
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+type EmailAddedBy = 'admin' | 'csv_import' | 'sheet_sync' | 'bootstrap'
+
+export type CreateEmployeeInput = {
   /** Workspace (Google) email. Optional per Q4a — at least one of workspaceEmail/personalEmail required. */
   workspaceEmail?: string
   /** Personal email. Optional per Q4a — at least one of workspaceEmail/personalEmail required. */
@@ -29,73 +33,106 @@ export async function createEmployee(data: {
   hasGoogleWorkspace?: boolean
   source?: IdentityUserSource
   /** Override the addedBy value for identity_user_emails rows. Defaults to 'admin'. */
-  addedBy?: 'admin' | 'csv_import' | 'sheet_sync' | 'bootstrap'
-}): Promise<{ id: string; provisioningStatus: string; provisioningError?: string }> {
-  // Normalise: callers may pass `email` (workspace) or `workspaceEmail`. Prefer workspaceEmail.
-  const resolvedWorkspaceEmail = data.workspaceEmail ?? data.email ?? undefined
-  const resolvedPersonalEmail = data.personalEmail ?? undefined
-  const addedBy = data.addedBy ?? 'admin'
+  addedBy?: EmailAddedBy
+}
 
-  if (!resolvedWorkspaceEmail && !resolvedPersonalEmail) {
+type ResolvedCreateEmployeeEmails = {
+  workspaceEmail?: string
+  personalEmail?: string
+  addedBy: EmailAddedBy
+}
+
+function resolveCreateEmployeeEmails(data: CreateEmployeeInput): ResolvedCreateEmployeeEmails {
+  // Callers may pass `email` (workspace) or `workspaceEmail`. Prefer workspaceEmail.
+  const workspaceEmail = data.workspaceEmail ?? data.email ?? undefined
+  const personalEmail = data.personalEmail ?? undefined
+  const addedBy: EmailAddedBy = data.addedBy ?? 'admin'
+
+  if (!workspaceEmail && !personalEmail) {
     throw new Error('At least one of workspaceEmail or personalEmail is required (Q4a)')
   }
 
-  const [user] = await db.transaction(async (tx) => {
-    const insertedUsers = await tx
-      .insert(identityUsers)
-      .values({
-        name: data.name,
-        phone: data.phone,
-        department: data.department,
-        position: data.position,
-        branch: data.branch,
+  return { workspaceEmail, personalEmail, addedBy }
+}
 
-        birthDate: data.birthDate,
-        leaderName: data.leaderName,
-        portalRole: data.portalRole ?? 'employee',
-        hasGoogleWorkspace: data.hasGoogleWorkspace ?? false,
-        source: data.source ?? 'manual',
-        provisioningStatus: 'pending',
-        provisioningError: null,
-      } satisfies Omit<NewIdentityUser, 'id' | 'createdAt' | 'updatedAt'>)
-      .returning({ id: identityUsers.id })
+/**
+ * Insert workspace and/or personal email rows for a freshly-created identity user.
+ * Per Q4b/c: admin-entered emails are trusted on entry (verifiedAt set to now).
+ * Per Q8a: workspace takes isPrimary precedence; if both present, workspace=primary.
+ */
+async function insertIdentityEmailsForNewUser(
+  tx: Tx,
+  userId: string,
+  emails: ResolvedCreateEmployeeEmails,
+  now: Date,
+): Promise<void> {
+  if (emails.workspaceEmail) {
+    await tx.insert(identityUserEmails).values({
+      identityUserId: userId,
+      email: emails.workspaceEmail,
+      emailNormalized: emails.workspaceEmail.toLowerCase().trim(),
+      kind: 'workspace',
+      isPrimary: true,
+      verifiedAt: now,
+      addedBy: emails.addedBy,
+    })
+  }
+  if (emails.personalEmail) {
+    await tx.insert(identityUserEmails).values({
+      identityUserId: userId,
+      email: emails.personalEmail,
+      emailNormalized: emails.personalEmail.toLowerCase().trim(),
+      kind: 'personal',
+      isPrimary: !emails.workspaceEmail,
+      verifiedAt: now,
+      addedBy: emails.addedBy,
+    })
+  }
+}
 
-    const [insertedUser] = insertedUsers
+async function insertIdentityUserRow(
+  tx: Tx,
+  data: CreateEmployeeInput,
+): Promise<{ id: string }> {
+  const [insertedUser] = await tx
+    .insert(identityUsers)
+    .values({
+      name: data.name,
+      phone: data.phone,
+      department: data.department,
+      position: data.position,
+      branch: data.branch,
+
+      birthDate: data.birthDate,
+      leaderName: data.leaderName,
+      portalRole: data.portalRole ?? 'employee',
+      hasGoogleWorkspace: data.hasGoogleWorkspace ?? false,
+      source: data.source ?? 'manual',
+      provisioningStatus: 'pending',
+      provisioningError: null,
+    } satisfies Omit<NewIdentityUser, 'id' | 'createdAt' | 'updatedAt'>)
+    .returning({ id: identityUsers.id })
+  return insertedUser
+}
+
+export async function createEmployee(
+  data: CreateEmployeeInput,
+): Promise<{ id: string; provisioningStatus: string; provisioningError?: string }> {
+  const emails = resolveCreateEmployeeEmails(data)
+
+  const user = await db.transaction(async (tx) => {
+    const inserted = await insertIdentityUserRow(tx, data)
     const now = new Date()
 
-    // Insert email row(s) per Q4b/c: admin-entered emails are trusted on entry.
-    // Per Q8a: workspace takes isPrimary precedence; if both present, workspace=primary.
-    if (resolvedWorkspaceEmail) {
-      await tx.insert(identityUserEmails).values({
-        identityUserId: insertedUser.id,
-        email: resolvedWorkspaceEmail,
-        emailNormalized: resolvedWorkspaceEmail.toLowerCase().trim(),
-        kind: 'workspace',
-        isPrimary: true,
-        verifiedAt: now,
-        addedBy,
-      })
-    }
-    if (resolvedPersonalEmail) {
-      await tx.insert(identityUserEmails).values({
-        identityUserId: insertedUser.id,
-        email: resolvedPersonalEmail,
-        emailNormalized: resolvedPersonalEmail.toLowerCase().trim(),
-        kind: 'personal',
-        // isPrimary only if no workspace email (workspace takes precedence per Q8a)
-        isPrimary: !resolvedWorkspaceEmail,
-        verifiedAt: now,
-        addedBy,
-      })
-    }
+    await insertIdentityEmailsForNewUser(tx, inserted.id, emails, now)
 
     if (data.teamId) {
-      await tx.insert(teamMembers).values({ teamId: data.teamId, userId: insertedUser.id })
+      await tx.insert(teamMembers).values({ teamId: data.teamId, userId: inserted.id })
     }
 
-    await seedAppUserConfigForUser(tx, insertedUser.id)
+    await seedAppUserConfigForUser(tx, inserted.id)
 
-    return insertedUsers
+    return inserted
   })
 
   const provisioning = await processEmployeeProvisioning(user.id)
