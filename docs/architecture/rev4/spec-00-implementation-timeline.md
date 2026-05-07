@@ -10,7 +10,7 @@
 
 ---
 
-## Status — 2026-05-07 (Specs 01 and 02 SHIPPED; Spec 06 PR A + B + partial PR C SHIPPED)
+## Status — 2026-05-07 (Specs 01 and 02 SHIPPED; Spec 06 PR A + B + cross-repo SHIPPED; only §2 sweep remains)
 
 Rev 4 status:
 
@@ -45,25 +45,31 @@ Rev 4 status:
 - **Spec 03 (HS256 rip-out)** opened 2026-05-07 as a DRAFT
   (commit `7e19e75`). Not started; gates Spec 06's §2 quickstart deletions.
 - **Spec 06 (Onboarding — Smoketest + Quickstart Revision)** **PR A
-  + PR B SHIPPED 2026-05-07; partial PR C SHIPPED.** Portal commit
-  `fa78164` (PR A + partial PR C); SDK commit `9356049` tagged as
-  `@coms-portal/sdk@v1.3.0` (PR B). PR A landed the portal route
-  `POST /api/v1/apps/:slug/smoketest` at
+  + PR B + cross-repo addition SHIPPED 2026-05-07; partial PR C
+  SHIPPED.** Portal commit `fa78164` (PR A + partial PR C); SDK
+  commit `9356049` tagged as `@coms-portal/sdk@v1.3.0` (PR B); shared
+  commit `6452869` tagged as `@coms-portal/shared@v1.7.0` (cross-repo
+  addition); portal commit `00bf511` bumped the shared pin to v1.7.0
+  and removed the inline `as PortalWebhookEvent` cast. PR A landed
+  the portal route `POST /api/v1/apps/:slug/smoketest` at
   `apps/api/src/routes/app-smoketest.ts` (mounted in the `/v1` OIDC
   group; 9-case test suite green). PR B added `coms-portal-cli
   smoketest <slug>` plus the `runSmoketest` programmatic API to the
   SDK (11 module tests + 7 CLI integration tests, full SDK suite 106
   pass, typecheck clean; same exit-code matrix as register-manifest:
-  0/1/2/3 for success/auth/validation/network). PR C partial:
-  quickstart §0 ("Pick your path"), §3.1 ("Spec 07 envelope contract
-  — four invariants"), and §8 ("Wire protocol reference") all landed;
-  §2's `token_exchange` / `same_host_cookie` deletions are footnoted
-  and deferred until Spec 03 ships the post-rip surface. The formal
-  `'app.smoketest'` addition to `PORTAL_WEBHOOK_EVENTS` lives in
-  `mrdoorba/coms-shared` and rides whichever next minor goes out
-  there; the portal route casts the literal inline as
-  `PortalWebhookEvent` until then, mirroring the existing `/test`
-  route's `'session.revoked' as PortalWebhookEvent` pattern.
+  0/1/2/3 for success/auth/validation/network). The cross-repo
+  addition put `'app.smoketest'` formally into `PORTAL_WEBHOOK_EVENTS`
+  (3-case test in `v1_7_0-types.test.ts`; full shared suite 31 pass).
+  PR C partial: quickstart §0 ("Pick your path"), §3.1 ("Spec 07
+  envelope contract — four invariants"), and §8 ("Wire protocol
+  reference") all landed; §2's `token_exchange` / `same_host_cookie`
+  deletions are footnoted and deferred until Spec 03 ships the
+  post-rip surface. Sole remaining work: PR C's §2 sweep (gated on
+  Spec 03). Note: `mrdoorba/coms-sdk`'s own shared pin is still on
+  v1.6.0 — consumers importing `PORTAL_WEBHOOK_EVENTS` from the SDK
+  barrel will not see the new literal until the SDK bumps its pin
+  and cuts a minor. Consumer-side ergonomics, not contract
+  correctness; `runSmoketest` does not consult the constant.
 - **Spec 04 / Spec 05** remain trigger-deferred (carried over from Rev 3 with original numbers).
 
 Open work: Spec 03 (HS256 rip-out) draft, plus the Spec 06
@@ -80,7 +86,7 @@ respective triggers fire (see each spec's §Triggers to ship section).
 | 01 | SDK v1.0 — Contract Lock & Onboarding Surface | **SHIPPED 2026-05-07** (`@coms-portal/sdk@v1.0.0`). | Triggered by post-Spec-08 onboarding-friction review. Shipped portal/SDK-side; Heroes adoption was carved off into Spec 02. SDK v2.0 (HS256 drop) was gated on "Heroes Phase 7" — Spec 02 §Q5 re-evaluates whether that gate is still meaningful (Heroes does not call `verifyBrokerToken`). |
 | 02 | SDK v1.0 Heroes Adoption & Verification | **SHIPPED 2026-05-07.** Five planned PRs + nine ship follow-up patches (F1–F9) + four post-ship follow-ups (F10–F13) landed; SDK released as `v1.2.0` git tag (originally planned at v1.1.0). AC #2 live-verified in production. | Triggered by post-Spec-01 Heroes inspection. Heroes consumes portal contracts via 16 type imports from `@coms-portal/shared` and uses the portal-server-side exchange flow for auth — the original H-1/H-2/H-3 breakdown was based on a stale model. Closed Spec 01's two structurally-weak acceptance criteria (#1 onboarding, #5 v0.1.x compat) via real-consumer verification. Four post-ship discoveries (browser-bundle barrel scan, google-auth-library WIF+impersonation gap, auth-action 403, memoirist param-name conflict that left Spec 01 §AC #7 a quiet false-positive for 2.5 weeks); all four filed follow-up issues (#1, #3, #4, #5) closed same day by F10/F11/F12/F13 — see [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md). |
 | 03 | HS256 rip-out | **DRAFT** opened 2026-05-07 (`7e19e75`). Not started. | Gates Spec 06's §2 quickstart deletions (`token_exchange` / `same_host_cookie` prose). See [spec-03-hs256-rip-out.md](spec-03-hs256-rip-out.md). |
-| 06 | Onboarding — Smoketest + Quickstart Revision | **PR A + PR B SHIPPED 2026-05-07** (Portal `fa78164`; SDK `9356049` tag `v1.3.0`). PR C partial — §0 / §3.1 / §8 landed; §2 deletions deferred until Spec 03 ships. Cross-repo: `'app.smoketest'` formal addition to `PORTAL_WEBHOOK_EVENTS` in `mrdoorba/coms-shared` not yet shipped (portal route casts the literal inline). | Triggered by post-Spec-02 architecture review of the superapp surface — six gaps identified (GCP SA provisioning, three-modes-documented-one-used, no retrofit path, no deploy-time smoketest, Spec 07 envelope tribal knowledge, non-TS path undocumented). See [spec-06-onboarding-scaffolding.md](spec-06-onboarding-scaffolding.md). |
+| 06 | Onboarding — Smoketest + Quickstart Revision | **PR A + PR B + cross-repo SHIPPED 2026-05-07** (Portal `fa78164` + `00bf511`; SDK `9356049` tag `v1.3.0`; Shared `6452869` tag `v1.7.0`). PR C partial — §0 / §3.1 / §8 landed; §2 deletions deferred until Spec 03 ships. Sole remaining work: PR C's §2 sweep. | Triggered by post-Spec-02 architecture review of the superapp surface — six gaps identified (GCP SA provisioning, three-modes-documented-one-used, no retrofit path, no deploy-time smoketest, Spec 07 envelope tribal knowledge, non-TS path undocumented). See [spec-06-onboarding-scaffolding.md](spec-06-onboarding-scaffolding.md). |
 | 04 | Unified User Preferences (Theme + Language) | Architecture decided. Deferred. | Third H-app onboards, portal localizes, user-visible drift incident, or Rev 3 Spec 02 Phase 2+ ships. |
 | 05 | Suite Search / Command Palette | Architecture decided. Deferred. | N > 6 apps, first cross-app search request, an app builds its own palette, or recent-items demand. |
 
@@ -156,7 +162,7 @@ See [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md) for t
 
 ---
 
-## Spec 06 PR sequence (partial ship 2026-05-07)
+## Spec 06 PR sequence (PR A + B + cross-repo SHIPPED 2026-05-07; only §2 sweep remains)
 
 | PR | Repo | Scope | Status |
 |----|------|---|---|

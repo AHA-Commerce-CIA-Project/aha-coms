@@ -8,9 +8,11 @@
 
 ---
 
-## Status — 2026-05-07 (PR A + PR B SHIPPED; partial PR C SHIPPED)
+## Status — 2026-05-07 (PR A + PR B + cross-repo SHIPPED; partial PR C SHIPPED; only §2 sweep remains)
 
-PR A landed in `mrdoorba/coms_portal` `fa78164`; PR B landed in `mrdoorba/coms-sdk` `9356049` and tagged `v1.3.0`; PR C partial (§0 / §3.1 / §8) landed alongside PR A. Remaining effort: PR C's §2 deletion sweep (gated on Spec 03 shipping) and the cross-repo `'app.smoketest'` constant addition in `mrdoorba/coms-shared` (so the portal route's inline cast can be removed).
+PR A landed in `mrdoorba/coms_portal` `fa78164`; PR B landed in `mrdoorba/coms-sdk` `9356049` and tagged `v1.3.0`; cross-repo `'app.smoketest'` addition landed in `mrdoorba/coms-shared` `6452869` and tagged `v1.7.0`; the portal's shared pin moved to v1.7.0 in `00bf511` and the inline `as PortalWebhookEvent` cast is gone. PR C partial (§0 / §3.1 / §8) landed alongside PR A. **Sole remaining effort:** PR C's §2 deletion sweep, gated on Spec 03 (HS256 rip-out) shipping the post-rip surface.
+
+> **Follow-up not load-bearing on Spec 06:** `mrdoorba/coms-sdk`'s own `@coms-portal/shared` pin is still on `v1.6.0`. Consumers importing `PORTAL_WEBHOOK_EVENTS` from `@coms-portal/sdk` (which barrel-re-exports it) will not see `'app.smoketest'` in the tuple until the SDK bumps its shared pin and cuts a new minor. This does not block the smoketest verb itself — `runSmoketest` does not consult the constant; it dispatches the event by the literal string the portal expects on the wire. The bump is consumer-side ergonomics, not contract correctness.
 
 **SHIPPED — PR A (Portal `fa78164`):**
 
@@ -39,9 +41,9 @@ PR A landed in `mrdoorba/coms_portal` `fa78164`; PR B landed in `mrdoorba/coms-s
 
 - §2 of `integrator-quickstart.md` still walks readers through the dead `token_exchange` and `same_host_cookie` paths. A footnote in §2 flags both as legacy-pending-deletion. Stripping the prose belongs in the same PR cycle as Spec 03's portal-side rip; doing it earlier would have the doc lying about what the portal currently rejects.
 
-**SHIPPED — cross-repo (`mrdoorba/coms-shared` `6452869`, tag `v1.7.0`):**
+**SHIPPED — cross-repo (`mrdoorba/coms-shared` `6452869`, tag `v1.7.0`; portal consumer bump `00bf511`):**
 
-- `'app.smoketest'` is now part of `PORTAL_WEBHOOK_EVENTS` (additive minor). The portal's `apps/api/package.json` and `apps/web/package.json` shared pins moved from `v1.6.0` → `v1.7.0`, and the inline `'app.smoketest' as PortalWebhookEvent` cast in `apps/api/src/routes/app-smoketest.ts` is now `const event: PortalWebhookEvent = 'app.smoketest'` — straight assignment, no cast. SDK re-export of the constant rides whichever next SDK minor goes out (the SDK already re-exports `PORTAL_WEBHOOK_EVENTS` as a barrel from shared, so it picks up the addition automatically once `@coms-portal/sdk`'s pin moves to `coms-shared@v1.7.0`).
+- `'app.smoketest'` is now part of `PORTAL_WEBHOOK_EVENTS` in `coms-shared@v1.7.0` (additive minor). The portal's `apps/api/package.json` and `apps/web/package.json` shared pins moved to `v1.7.0` in `00bf511`, and the inline `'app.smoketest' as PortalWebhookEvent` cast in `apps/api/src/routes/app-smoketest.ts` collapsed to `const event: PortalWebhookEvent = 'app.smoketest'` — straight typed assignment, no cast. The SDK barrel-re-exports `PORTAL_WEBHOOK_EVENTS` from shared, but pins shared at `v1.6.0`; when the SDK next bumps its shared pin and cuts a minor, downstream consumers importing the constant from `@coms-portal/sdk` will see the new literal automatically.
 
 ---
 
