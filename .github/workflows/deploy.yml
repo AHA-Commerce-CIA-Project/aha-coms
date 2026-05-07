@@ -315,24 +315,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
-      # Mint the OIDC ID token at the action level via WIF + runtime SA
-      # impersonation. token_format: 'id_token' makes the action call
-      # IAMCredentials.generateIdToken on the impersonated SA — the same
-      # API google-auth-library would call internally if it supported the
-      # WIF + impersonation chain (it doesn't, as of v9 / v10). The audience
-      # is the portal URL exactly, matching what the portal's
-      # requireAppToken middleware verifies. id_token_include_email: true
-      # so the portal can match the `email` claim against the
-      # serviceAccountEmail it has registered for slug='heroes'.
-      - name: Authenticate to GCP & mint OIDC ID token for the portal
-        id: auth
+      # WIF authentication — yields ADC for the deployer SA. We do NOT ask
+      # the auth action for an id_token here; its IAMCredentials.generateIdToken
+      # call against the runtime SA returns 403 even with TokenCreator on the
+      # binding (subtle interaction with the impersonation chain that we
+      # don't unpick on the deploy hot path). Instead, mint the OIDC token
+      # in the next step via `gcloud auth print-identity-token --impersonate-
+      # service-account` — same IAMCredentials API, same role grant, but a
+      # client-path that's known to work with this binding shape.
+      - name: Authenticate to GCP (WIF → deployer SA ADC)
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: coms-aha-heroes-run-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
-          token_format: 'id_token'
-          id_token_audience: ${{ vars.PORTAL_ORIGIN }}
-          id_token_include_email: true
+          service_account: coms-aha-heroes-deployer-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3
+
+      # Mint the OIDC ID token via SA impersonation — the deployer SA holds
+      # roles/iam.serviceAccountTokenCreator on the runtime SA (see
+      # infra/modules/github-wif/main.tf:deployer_mint_token_as_runtime), so
+      # this call materialises the runtime SA's identity. --include-email is
+      # required so the portal's requireAppToken middleware can match the
+      # `email` claim against the serviceAccountEmail it has registered for
+      # slug='heroes'. Mask immediately so the token never appears in logs.
+      - name: Mint OIDC ID token for portal (impersonate runtime SA)
+        id: mint
+        run: |
+          set -euo pipefail
+          ID_TOKEN=$(gcloud auth print-identity-token \
+            --impersonate-service-account="coms-aha-heroes-run-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
+            --audiences="${{ vars.PORTAL_ORIGIN }}" \
+            --include-email)
+          echo "::add-mask::${ID_TOKEN}"
+          echo "id_token=${ID_TOKEN}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
@@ -356,8 +372,9 @@ jobs:
           # SDK v1.2.0+: when set, the CLI uses this token verbatim and does
           # not invoke google-auth-library. Required for WIF + service-account
           # impersonation chains, where GoogleAuth.getIdTokenClient cannot
-          # mint local ID tokens.
-          COMS_PORTAL_CLI_OIDC_TOKEN: ${{ steps.auth.outputs.id_token }}
+          # mint local ID tokens. The token is minted in the previous step
+          # via `gcloud auth print-identity-token --impersonate-service-account`.
+          COMS_PORTAL_CLI_OIDC_TOKEN: ${{ steps.mint.outputs.id_token }}
         run: |
           set -euo pipefail
           bun x coms-portal-cli register-manifest \
