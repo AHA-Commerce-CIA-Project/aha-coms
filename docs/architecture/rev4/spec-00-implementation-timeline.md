@@ -21,8 +21,8 @@ Rev 4 status:
 - **Spec 02 (SDK v1.0 Heroes Adoption & Verification)** SHIPPED 2026-05-07,
   AC #2 live-verified in production CD on the same day. Five planned PRs
   (SA / VA / VB / HA / HB) plus nine follow-up patches (F1–F9) at ship,
-  plus two post-ship follow-ups (F10–F11) that closed filed issues #3
-  and #4 the same day, shipped across three repos. SDK cut at `v1.2.0`
+  plus three post-ship follow-ups (F10–F12) that closed filed issues
+  #1, #3, and #4 the same day, shipped across three repos. SDK cut at `v1.2.0`
   (originally planned at v1.1.0; v1.1.1 + v1.2.0 patches added during
   the deploy loop — see `spec-02-sdk-v1-heroes-adoption.md`
   §Post-ship discoveries D1–D4).
@@ -37,11 +37,11 @@ Rev 4 status:
   `examples/onboarding-scratch/`). The "Heroes Phase 7" terminology is
   retired — SDK v2.0 is unblocked from Heroes' side as of today. Four
   filed follow-up issues captured class-of-bug fixes that fall outside
-  Spec 02's scope; #3 and #4 were closed same day by F10/F11:
-  [coms-sdk#1](https://github.com/mrdoorba/coms-sdk/issues/1) (web-bundle smoketest, open),
+  Spec 02's scope; #1, #3, and #4 were closed same day by F10/F11/F12:
+  [coms-sdk#1](https://github.com/mrdoorba/coms-sdk/issues/1) (web-bundle smoketest, **closed by F12**),
   [coms-portal#3](https://github.com/mrdoorba/coms-portal/issues/3) (generalize route-compose canary, **closed by F11**),
   [coms-portal#4](https://github.com/mrdoorba/coms-portal/issues/4) (manifests test mocks, **closed by F10**),
-  [coms-aha-heroes#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) (infra drift, open).
+  [coms-aha-heroes#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) (infra drift, open — sole remaining tracker entry).
 - **Spec 04 / Spec 05** remain trigger-deferred (carried over from Rev 3 with original numbers).
 
 No Rev 4 work is currently scheduled. Specs 04 and 05 ship only when
@@ -55,7 +55,7 @@ section).
 | Spec | Title | Status | Trigger / Sequencing |
 |------|-------|--------|---------|
 | 01 | SDK v1.0 — Contract Lock & Onboarding Surface | **SHIPPED 2026-05-07** (`@coms-portal/sdk@v1.0.0`). | Triggered by post-Spec-08 onboarding-friction review. Shipped portal/SDK-side; Heroes adoption was carved off into Spec 02. SDK v2.0 (HS256 drop) was gated on "Heroes Phase 7" — Spec 02 §Q5 re-evaluates whether that gate is still meaningful (Heroes does not call `verifyBrokerToken`). |
-| 02 | SDK v1.0 Heroes Adoption & Verification | **SHIPPED 2026-05-07.** Five planned PRs + nine ship follow-up patches (F1–F9) + two post-ship follow-ups (F10–F11) landed; SDK released as `v1.2.0` git tag (originally planned at v1.1.0). AC #2 live-verified in production. | Triggered by post-Spec-01 Heroes inspection. Heroes consumes portal contracts via 16 type imports from `@coms-portal/shared` and uses the portal-server-side exchange flow for auth — the original H-1/H-2/H-3 breakdown was based on a stale model. Closed Spec 01's two structurally-weak acceptance criteria (#1 onboarding, #5 v0.1.x compat) via real-consumer verification. Four post-ship discoveries (browser-bundle barrel scan, google-auth-library WIF+impersonation gap, auth-action 403, memoirist param-name conflict that left Spec 01 §AC #7 a quiet false-positive for 2.5 weeks); two of four filed follow-up issues (#3, #4) closed same day by F10/F11 — see [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md). |
+| 02 | SDK v1.0 Heroes Adoption & Verification | **SHIPPED 2026-05-07.** Five planned PRs + nine ship follow-up patches (F1–F9) + three post-ship follow-ups (F10–F12) landed; SDK released as `v1.2.0` git tag (originally planned at v1.1.0). AC #2 live-verified in production. | Triggered by post-Spec-01 Heroes inspection. Heroes consumes portal contracts via 16 type imports from `@coms-portal/shared` and uses the portal-server-side exchange flow for auth — the original H-1/H-2/H-3 breakdown was based on a stale model. Closed Spec 01's two structurally-weak acceptance criteria (#1 onboarding, #5 v0.1.x compat) via real-consumer verification. Four post-ship discoveries (browser-bundle barrel scan, google-auth-library WIF+impersonation gap, auth-action 403, memoirist param-name conflict that left Spec 01 §AC #7 a quiet false-positive for 2.5 weeks); three of four filed follow-up issues (#1, #3, #4) closed same day by F10/F11/F12 — see [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md). |
 | 04 | Unified User Preferences (Theme + Language) | Architecture decided. Deferred. | Third H-app onboards, portal localizes, user-visible drift incident, or Rev 3 Spec 02 Phase 2+ ships. |
 | 05 | Suite Search / Command Palette | Architecture decided. Deferred. | N > 6 apps, first cross-app search request, an app builds its own palette, or recent-items demand. |
 
@@ -106,23 +106,24 @@ See [spec-01-sdk-v1.md](spec-01-sdk-v1.md) for the full surface, decisions log, 
 | F8 | Portal route param `:slug` → `:id` (memoirist trie conflict with `apps.ts` / `app-webhooks.ts` that left Spec 01 §AC #7 a quiet false-positive for 2.5 weeks — D4) + `route-compose.test.ts` regression. | SHIPPED — Portal `abd3b21` |
 | F9 | Portal route-compose test fix (drop `.ts` extension to satisfy tsc strict). | SHIPPED — Portal `ce4d3c9` |
 
-### Post-ship follow-ups (closed filed issues #3, #4 same day)
+### Post-ship follow-ups (closed filed issues #1, #3, #4 same day)
 
 | # | Scope | Status | Closes |
 |----|---|---|---|
 | F10 | Portal: split `services/manifests.ts` into shell + `manifests-internal.ts` (Bun's process-global `mock.module` pollution + `export *` live-binding propagation were leaking partial-surface manifests mocks into `manifests.test.ts`). Const-bound re-exports (`export const X = impl.X`) break the propagation; the test now imports the impl directly and is isolated from polluters. | SHIPPED — Portal (current commit) | #4 |
 | F11 | Portal: `__tests__/route-compose.test.ts` generalised — walks `app.routes` and surfaces every memoirist param-name conflict with friendly diagnostics, plus two self-verification cases for the helper. Catches D4-shape bugs even if memoirist's compose-time throw ever stops firing. | SHIPPED — Portal (current commit) | #3 |
+| F12 | SDK: `examples/web-bundle-smoketest/` — Vite browser-bundle regression canary mirroring Heroes' `(authed)/+layout.svelte` import path (`APP_LAUNCHER` via `@coms-portal/sdk/constants/app-launcher` subpath). Programmatic `vite build` inside `bun:test`; asserts `dist/assets/*.js` is clean of `createHmac` / `node:crypto` / `timingSafeEqual` / `google-auth-library` / `GoogleAuth`, plus a `'COMS'` sentinel proving APP_LAUNCHER survived tree-shake. Verified the canary fires by flipping the entry to import from the SDK barrel — Rollup raised `MISSING_EXPORT` on `createHmac`, exactly D1's failure mode. SDK suite 88 pass (was 85). Pure additive — no `src/` or root-config changes. | SHIPPED — SDK `dcad4aa` | #1 |
 
 ### Filed follow-up issues
 
 | Issue | Repo | Origin | Risk | Status |
 |---|---|---|---|---|
-| [coms-sdk#1](https://github.com/mrdoorba/coms-sdk/issues/1) | SDK | D1 — close the browser-bundle verification gap | low (preventive) | open |
+| [coms-sdk#1](https://github.com/mrdoorba/coms-sdk/issues/1) | SDK | D1 — close the browser-bundle verification gap | low (preventive) | **closed by F12** |
 | [coms-portal#3](https://github.com/mrdoorba/coms-portal/issues/3) | Portal | D4 — generalize route-compose canary to walk the full route table | low (preventive) | **closed by F11** |
 | [coms-portal#4](https://github.com/mrdoorba/coms-portal/issues/4) | Portal | Surfaced during Spec 02 — `manifests.test.ts` mock infra; CD's typecheck-and-tests gate is structurally non-functional | medium | **closed by F10** |
 | [coms-aha-heroes#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) | Heroes | Surfaced during F1 `tofu apply -target` — `cloud_run.app` env-var drift would strip `PORTAL_ORIGIN` etc. on next full apply | **high (real prod risk)** | open |
 
-The five planned PRs landed in the recommended sequence (SA → VA → VB → HA → HB). Ship follow-up patches landed in the order F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9, each unblocking the next deploy attempt. AC #2 closed at 2026-05-07T05:42 UTC; production traffic shifted to 100% the same run. Post-ship F10 and F11 (closing #4 and #3 respectively) landed later the same day.
+The five planned PRs landed in the recommended sequence (SA → VA → VB → HA → HB). Ship follow-up patches landed in the order F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9, each unblocking the next deploy attempt. AC #2 closed at 2026-05-07T05:42 UTC; production traffic shifted to 100% the same run. Post-ship F10, F11, and F12 (closing #4, #3, and #1 respectively) all landed later the same day; only `coms-aha-heroes#5` (infra drift) remains open.
 
 See [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md) for the discovery, decisions log, acceptance criteria, post-ship discoveries (D1–D4), and operator briefing for fresh sessions.
 

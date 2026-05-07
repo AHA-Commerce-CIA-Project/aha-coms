@@ -1,6 +1,6 @@
 # Rev 4 — Spec 02: SDK v1.0 Heroes Adoption & Verification
 
-> **Status: SHIPPED 2026-05-07** — five planned PRs landed, four follow-up bugs (D1–D4) surfaced at deploy time, nine follow-up patches (F1–F9) landed at ship, two post-ship follow-ups (F10–F11) closed filed issues #3 and #4 same day, AC #2 verified live in production. SDK released as `@coms-portal/sdk@v1.2.0`.
+> **Status: SHIPPED 2026-05-07** — five planned PRs landed, four follow-up bugs (D1–D4) surfaced at deploy time, nine follow-up patches (F1–F9) landed at ship, three post-ship follow-ups (F10–F12) closed filed issues #1, #3, #4 same day, AC #2 verified live in production. SDK released as `@coms-portal/sdk@v1.2.0`.
 
 ## Commit ledger (all repos, draft → production-verified)
 
@@ -34,6 +34,7 @@
 |---|---|---|---|---|
 | F10 | Portal: split `services/manifests.ts` into shell + `manifests-internal.ts` to break the cross-file mock pollution loop. Bun's `mock.module` is process-global and keyed by resolved abs path, AND `export *` propagates a mock through the live binding to the source module — so any mock on `manifests.ts` was poisoning `manifests-internal.ts` too. The shell now uses const-bound re-exports (`export const X = impl.X`) which capture function references at load time and stand alone; `manifests.test.ts` imports `'../manifests-internal'` directly and is now isolated from the polluters | `mrdoorba/coms_portal` (current commit) | — | #4 |
 | F11 | Portal: `__tests__/route-compose.test.ts` generalised — alongside the original "first request doesn't throw" check, walks the composed `app.routes` trie and explicitly surfaces every memoirist param-name conflict with a friendly diagnostic (conflicting position + both route paths + both names), so a future D4-style mismatch is caught even if memoirist's compose-time throw ever stops firing. Two self-verification cases guard the helper against silent regressions | `mrdoorba/coms_portal` (current commit) | — | #3 |
+| F12 | SDK: `examples/web-bundle-smoketest/` — Vite browser-bundle regression canary. Reproduces Heroes' `(authed)/+layout.svelte` import path (`APP_LAUNCHER` via the `@coms-portal/sdk/constants/app-launcher` subpath), runs Vite programmatically inside `bun:test`, and asserts `dist/assets/*.js` contains none of `createHmac` / `node:crypto` / `timingSafeEqual` / `google-auth-library` / `GoogleAuth`, plus a `'COMS'` sentinel proving APP_LAUNCHER survived tree-shake. Verified the canary fires by temporarily flipping the entry to import from the SDK barrel — Rollup raised `MISSING_EXPORT` on `createHmac`, exactly D1's failure mode. SDK suite now 88 pass (was 85, +3). Pure additive — no `src/` or root-config changes; `vite` is a dev-dep of the example only | `mrdoorba/coms-sdk` `dcad4aa` | — | #1 |
 
 ### Portal docs
 
@@ -125,12 +126,12 @@ Four issues filed at SHIPPED time, capturing class-of-bug fixes that fall outsid
 
 | Issue | Repo | Title | Origin | Status |
 |---|---|---|---|---|
-| [#1](https://github.com/mrdoorba/coms-sdk/issues/1) | `coms-sdk` | Add `examples/web-bundle-smoketest/` — verify SDK works in browser bundles | D1 | open |
+| [#1](https://github.com/mrdoorba/coms-sdk/issues/1) | `coms-sdk` | Add `examples/web-bundle-smoketest/` — verify SDK works in browser bundles | D1 | **closed** by F12 |
 | [#3](https://github.com/mrdoorba/coms-portal/issues/3) | `coms-portal` | Generalize route-compose regression test — assert no param-name conflicts across any prefix | D4 | **closed** by F11 |
 | [#4](https://github.com/mrdoorba/coms-portal/issues/4) | `coms-portal` | Fix pre-existing test failures in `apps/api/src/services/__tests__/manifests.test.ts` | Surfaced during Spec 02 — pre-existing, blocks the CD typecheck-and-tests gate from being meaningful | **closed** by F10 |
 | [#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) | `coms_aha_heroes` | Reconcile infra drift between OpenTofu config and live Cloud Run state | Surfaced during F1 `tofu apply -target` — pre-existing, has real prod env-var risk | open |
 
-Two of the four are now closed (F10, F11 same day as ship). The remaining two are tracker entries, not scheduled work. Pick up in any order; #5 has the most production risk, #1 closes the verification gap that produced D1.
+Three of the four are now closed (F10, F11, F12 — all same day as ship). The remaining tracker entry is `coms_aha_heroes#5` (infra drift between OpenTofu config and live Cloud Run state); it is the highest-production-risk leftover and the only Spec 02 thread still warm.
 
 ---
 
