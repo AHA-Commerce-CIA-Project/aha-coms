@@ -1,27 +1,27 @@
 # Rev 4 — Spec 01: SDK v1.0 — Contract Lock & Onboarding Surface
 
-> **Status: DRAFT — opened 2026-05-07.** Trigger fired: post-Spec-08 architecture review identified H-app onboarding friction as the #1 platform-quality gap. Owner: Mr. Door (solo).
+> **Status: SHIPPED 2026-05-07** as `@coms-portal/sdk@v1.0.0`. Trigger fired: post-Spec-08 architecture review identified H-app onboarding friction as the #1 platform-quality gap. Owner: Mr. Door (solo).
 >
 > **Prerequisites:** Rev 3 closed (Spec 06 dual-email, Spec 07 org-taxonomies, Spec 08 Heroes cutover all SHIPPED). Hotspot refactors landed 2026-05-07 (`82d54dc..18016d9`) — broker dispatcher, employee paths, web↔api decoupling — putting the broker verifier seam in shape for SDK extraction.
 >
-> **Sequencing rule:** SDK v1.0 ships entirely on the portal/SDK side; **no Heroes changes are required for v1.0**. Heroes adoption is opt-in and post-v1.0. SDK v2.0 (HS256 drop) is gated on Heroes Phase 7 (HS256-verify drop).
+> **Sequencing rule:** SDK v1.0 shipped entirely on the portal/SDK side; **no Heroes changes were required for v1.0**. Heroes adoption is opt-in and post-v1.0. SDK v2.0 (HS256 drop) is gated on Heroes Phase 7 (HS256-verify drop).
 
 ---
 
-## Status — 2026-05-07 (drafted)
+## Status — 2026-05-07 (SHIPPED)
 
-No PRs landed yet. Spec drafted with all eight decisions locked. PR breakdown (A → H) below.
+All eight PRs (A → H) landed across `mrdoorba/coms-sdk` (eight commits, `85573b5..v1.0.0`) and `mrdoorba/coms_portal` (PR D portal-side route, `cb34577`). SDK released as `v1.0.0` git tag.
 
 | PR | Scope | Status |
 |----|---|---|
-| A | SDK repo prep — version-bump strategy, CHANGELOG header for v1.0 milestone, baseline test pass on v0.1.1 surface. | Pending |
-| B | Typed webhook envelope (`PortalWebhookEnvelope<T>`, `defineWebhookHandler`, `getAppRole`). | Pending |
-| C | Contract-version constants + `assertContractVersionCompatible` + `ContractVersionMismatchError`. | Pending |
-| D | Manifest helpers (`defineManifest` author-time validator + `registerManifest` runtime client) + portal-side `POST /v1/apps/:slug/manifest` route under `requireAppToken`. | Pending |
-| E | `coms-portal-cli` binary (`bin` entry in SDK package.json). Single command: `register-manifest`. | Pending |
-| F | Elysia adapter at `@coms-portal/sdk/elysia` subpath — `requireBrokerAuth()` plugin. | Pending |
-| G | Test-kit at `@coms-portal/sdk/testing` subpath — `mintTestBrokerToken`, `buildEnvelope`, `stubJwks`. | Pending |
-| H | v1.0 cut: README rewrite, migration guide v0 → v1, SUPPORTED_VERSIONS update, semver lock, GitHub release tag `v1.0.0`. | Pending |
+| A | SDK repo prep — version-bump strategy, CHANGELOG header for v1.0 milestone, baseline test pass on v0.1.1 surface. | SHIPPED — SDK `85573b5` (v0.2.0) |
+| B | Typed webhook envelope (`PortalWebhookEnvelope<T>`, `defineWebhookHandler`, `getAppRole`). | SHIPPED — SDK `fc75e1c` (v0.3.0) |
+| C | Contract-version constants + `assertContractVersionCompatible` + `ContractVersionMismatchError`. | SHIPPED — SDK `5c44844` (v0.4.0) |
+| D | Manifest helpers (`defineManifest` author-time validator + `registerManifest` runtime client) + portal-side `POST /v1/apps/:slug/manifest` route under `requireAppToken`. | SHIPPED — SDK `8fd6de3` (v0.5.0) + portal `cb34577` |
+| E | `coms-portal-cli` binary (`bin` entry in SDK package.json). Single command: `register-manifest`. | SHIPPED — SDK `c9be52f` (v0.6.0) |
+| F | Elysia adapter at `@coms-portal/sdk/elysia` subpath — `requireBrokerAuth()` plugin. | SHIPPED — SDK `888bc30` (v0.7.0) |
+| G | Test-kit at `@coms-portal/sdk/testing` subpath — `mintTestBrokerToken`, `buildEnvelope`, `stubJwks`. | SHIPPED — SDK `b5cbc22` (v0.8.0) |
+| H | v1.0 cut: README rewrite, migration guide v0 → v1, SUPPORTED_VERSIONS update, semver lock, GitHub release tag `v1.0.0`. | SHIPPED — SDK `v1.0.0` tag |
 
 Heroes-side PRs (separate repo, post-v1.0, optional):
 

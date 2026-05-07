@@ -10,14 +10,18 @@
 
 ---
 
-## Status — 2026-05-07 (Spec 01 drafted)
+## Status — 2026-05-07 (Spec 01 SHIPPED)
 
 Rev 4 status:
 
-- **Spec 01 (SDK v1.0)** drafted 2026-05-07 with all eight decisions (Q1–Q10) locked. Trigger fired: post-Spec-08 architecture review identified H-app onboarding friction as the platform-quality gap. PRs A → H scheduled below; ships entirely on the portal/SDK side, no Heroes coupling.
+- **Spec 01 (SDK v1.0)** SHIPPED 2026-05-07. PRs A → H all landed in
+  `mrdoorba/coms-sdk` (eight commits between `85573b5` and the v1.0.0 cut)
+  plus the portal-side route in `mrdoorba/coms_portal` (commit `cb34577`).
+  SDK released as `v1.0.0` git tag. Heroes-side adoption (H-1, H-2, H-3)
+  remains optional and unscheduled.
 - **Spec 04 / Spec 05** remain trigger-deferred (carried over from Rev 3 with original numbers).
 
-The next scheduled work is Spec 01 PR A (SDK repo prep + version-bump strategy). Specs 04 and 05 ship only when their respective triggers fire (see each spec's §Triggers to ship section).
+No Rev 4 spec is currently active. Specs 04 and 05 ship only when their respective triggers fire (see each spec's §Triggers to ship section); a new Rev 4 spec opens when the next trigger fires.
 
 ---
 
@@ -25,7 +29,7 @@ The next scheduled work is Spec 01 PR A (SDK repo prep + version-bump strategy).
 
 | Spec | Title | Status | Trigger / Sequencing |
 |------|-------|--------|---------|
-| 01 | SDK v1.0 — Contract Lock & Onboarding Surface | **Drafted 2026-05-07. PR A pending.** | Triggered by post-Spec-08 onboarding-friction review. Ships portal/SDK-side; Heroes adoption is opt-in post-v1.0. SDK v2.0 (HS256 drop) gated on Heroes Phase 7. |
+| 01 | SDK v1.0 — Contract Lock & Onboarding Surface | **SHIPPED 2026-05-07** (`@coms-portal/sdk@v1.0.0`). | Triggered by post-Spec-08 onboarding-friction review. Shipped portal/SDK-side; Heroes adoption is opt-in post-v1.0. SDK v2.0 (HS256 drop) gated on Heroes Phase 7. |
 | 04 | Unified User Preferences (Theme + Language) | Architecture decided. Deferred. | Third H-app onboards, portal localizes, user-visible drift incident, or Rev 3 Spec 02 Phase 2+ ships. |
 | 05 | Suite Search / Command Palette | Architecture decided. Deferred. | N > 6 apps, first cross-app search request, an app builds its own palette, or recent-items demand. |
 
@@ -33,20 +37,20 @@ When a deferred spec's trigger fires, it moves from deferred to scheduled and it
 
 ---
 
-## Spec 01 PR sequence (active work)
+## Spec 01 PR sequence (shipped 2026-05-07)
 
 | PR | Scope | Status |
 |----|---|---|
-| A | SDK repo prep — version-bump strategy, CHANGELOG header for v1.0 milestone, baseline test pass on v0.1.1 surface, add `@coms-portal/shared` runtime dep. | Pending |
-| B | Typed webhook envelope (`PortalWebhookEnvelope<T>`, `defineWebhookHandler`, `getAppRole`). | Pending |
-| C | Contract-version constants + `assertContractVersionCompatible` + `ContractVersionMismatchError`. | Pending |
-| D | Manifest helpers (`defineManifest` + `registerManifest`) + portal-side `POST /v1/apps/:slug/manifest` route under `requireAppToken`. | Pending |
-| E | `coms-portal-cli` binary (`bin` entry in SDK package.json). Single command: `register-manifest`. | Pending |
-| F | Elysia adapter at `@coms-portal/sdk/elysia` subpath — `requireBrokerAuth()` plugin. | Pending |
-| G | Test-kit at `@coms-portal/sdk/testing` subpath — `mintTestBrokerToken`, `buildEnvelope`, `stubJwks`. | Pending |
-| H | v1.0 cut: README rewrite, MIGRATION.md, SUPPORTED_VERSIONS update, semver lock, `v1.0.0` git tag. | Pending |
+| A | SDK repo prep — version-bump strategy, CHANGELOG header for v1.0 milestone, baseline test pass on v0.1.1 surface, add `@coms-portal/shared` runtime dep. | SHIPPED — SDK `85573b5` (v0.2.0) |
+| B | Typed webhook envelope (`PortalWebhookEnvelope<T>`, `defineWebhookHandler`, `getAppRole`). | SHIPPED — SDK `fc75e1c` (v0.3.0) |
+| C | Contract-version constants + `assertContractVersionCompatible` + `ContractVersionMismatchError`. | SHIPPED — SDK `5c44844` (v0.4.0) |
+| D | Manifest helpers (`defineManifest` + `registerManifest`) + portal-side `POST /v1/apps/:slug/manifest` route under `requireAppToken`. | SHIPPED — SDK `8fd6de3` (v0.5.0) + portal `cb34577` |
+| E | `coms-portal-cli` binary (`bin` entry in SDK package.json). Single command: `register-manifest`. | SHIPPED — SDK `c9be52f` (v0.6.0) |
+| F | Elysia adapter at `@coms-portal/sdk/elysia` subpath — `requireBrokerAuth()` plugin. | SHIPPED — SDK `888bc30` (v0.7.0) |
+| G | Test-kit at `@coms-portal/sdk/testing` subpath — `mintTestBrokerToken`, `buildEnvelope`, `stubJwks`. | SHIPPED — SDK `b5cbc22` (v0.8.0) |
+| H | v1.0 cut: README rewrite, MIGRATION.md, SUPPORTED_VERSIONS update, semver lock, `v1.0.0` git tag. | SHIPPED — SDK `v1.0.0` tag |
 
-PRs A–G can ship in any order after A lands; H depends on all prior. See [spec-01-sdk-v1.md](spec-01-sdk-v1.md) for the full surface, decisions log, and acceptance criteria.
+See [spec-01-sdk-v1.md](spec-01-sdk-v1.md) for the full surface, decisions log, and acceptance criteria.
 
 ---
 
