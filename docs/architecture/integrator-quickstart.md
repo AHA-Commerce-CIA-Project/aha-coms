@@ -4,13 +4,15 @@
 
 **Prerequisites:** Node.js or Bun runtime. Your app registered in COMS Portal (see §1).
 
-**SDK:** `@coms-portal/sdk` v0.1.0 — install once, use for everything below.
+**SDK:** `@coms-portal/sdk` v1.3.0 — install once, use for everything below.
 
 ```bash
-bun add git+https://github.com/mrdoorba/coms-sdk.git#v0.1.0
+bun add git+https://github.com/mrdoorba/coms-sdk.git#v1.3.0
 # or
-npm install git+https://github.com/mrdoorba/coms-sdk.git#v0.1.0
+npm install git+https://github.com/mrdoorba/coms-sdk.git#v1.3.0
 ```
+
+> **What v1.3.0 ships:** the v1.0 contract surface (broker-token verifier, webhook signer/verifier, alias resolver, audit-log client, Elysia adapter, test-kit, `defineManifest` + `registerManifest`), v1.1's `APP_LAUNCHER` re-export, v1.2's pre-minted-token CD path (`COMS_PORTAL_CLI_OIDC_TOKEN`), and v1.3's onboarding smoketest — `runSmoketest` programmatic API plus the `coms-portal-cli smoketest <slug>` verb.
 
 ---
 
@@ -24,7 +26,7 @@ You're standing up a new app from scratch and the only constraint is "it integra
 
 1. Register the app via the admin App Registry UI (§1). Pick `slug`, `name`, `url`, leave `handoffMode` at `one_time_code`.
 2. `bun add @coms-portal/sdk` and follow §2 (broker handoff) plus §3 (webhook receiver). The SDK ships the verifier, signer, and types — wire each into your framework's idiom (e.g. an Elysia route, a Next.js Route Handler, a Hono handler). Per Spec 06: there is no canonical starter repo — the framework choice is yours.
-3. Validate with `bunx coms-portal-cli smoketest <slug>` (Spec 06 PR B). The CLI exercises the registry, your URL, and your webhook receiver from a CD pipeline using your runtime SA's OIDC token; on success it prints `Smoketest OK`.
+3. Validate with `bunx coms-portal-cli smoketest <slug>` (shipped in SDK v1.3.0). The CLI exercises the registry, your URL, and your webhook receiver from a CD pipeline using your runtime SA's OIDC token; on success it prints `Smoketest OK.`. Exit codes mirror `register-manifest`: 0 success, 1 auth failure, 2 validation, 3 network/portal.
 
 That's the whole loop. No framework-specific code in this doc — pick what your team already runs.
 

@@ -8,24 +8,40 @@
 
 ---
 
-## Status — 2026-05-07 (DRAFT, partial)
+## Status — 2026-05-07 (PR A + PR B SHIPPED; partial PR C SHIPPED)
 
-Specced; PR A and PR C partially landed in `mrdoorba/coms_portal` (current commit). Three PRs across two repos. Estimated remaining effort: half a day for PR B (SDK CLI verb in `mrdoorba/coms-sdk`) plus the §2 deletion sweep in PR C once Spec 03 ships.
+PR A landed in `mrdoorba/coms_portal` `fa78164`; PR B landed in `mrdoorba/coms-sdk` `9356049` and tagged `v1.3.0`; PR C partial (§0 / §3.1 / §8) landed alongside PR A. Remaining effort: PR C's §2 deletion sweep (gated on Spec 03 shipping) and the cross-repo `'app.smoketest'` constant addition in `mrdoorba/coms-shared` (so the portal route's inline cast can be removed).
 
-**Landed in this commit (PR A + partial PR C):**
+**SHIPPED — PR A (Portal `fa78164`):**
 
 - Portal route `POST /api/v1/apps/:slug/smoketest` (OIDC-authed via `requireAppToken`) at `apps/api/src/routes/app-smoketest.ts`, mounted in the `/v1` OIDC group in `apps/api/src/index.ts`. Returns the registry summary plus per-endpoint dispatch results so the CLI can render its three-step checklist in one round trip. Tests at `apps/api/src/routes/__tests__/app-smoketest.test.ts` (9 cases: auth, slug mismatch, registry miss, inactive app, zero endpoints, multi-endpoint dispatch, HTTP-failure capture, network-error capture, disabled-endpoint skip).
 - The route casts `'app.smoketest'` as `PortalWebhookEvent` inline (mirroring the existing `/test` route's `'session.revoked' as PortalWebhookEvent` pattern). Adding the constant formally to `PORTAL_WEBHOOK_EVENTS` lives in `mrdoorba/coms-shared` and ships there separately.
+
+**SHIPPED — PR B (SDK `9356049`, tag `v1.3.0`):**
+
+- `runSmoketest` programmatic API in `src/smoketest.ts` — wraps the portal route plus a client-side `GET <app.url><healthPath>` probe and returns a structured `SmoketestResult` with per-step outcomes. Public surface exports it from `src/index.ts` under the v1.3 marker.
+- `coms-portal-cli smoketest <slug>` verb in `src/cli.ts` — same auth resolution as `register-manifest` (`COMS_PORTAL_CLI_OIDC_TOKEN` → `COMS_PORTAL_CLI_TEST_TOKEN` → ADC), exit codes 0/1/2/3 (success / auth / validation / network), `--health-path` override defaulting to `/`. Renders a three-step report:
+  ```
+  [1/3] Registry check     → app registered, status=active, handoff_mode=one_time_code
+  [2/3] App URL reachable  → GET https://your-app.example/
+                              ✓ 200 OK (134ms)
+  [3/3] Webhook delivery   → POST <portal>/api/v1/apps/<slug>/smoketest
+                              ✓ endpoint=…  status=200  latency=87ms
+  Smoketest OK.
+  ```
+- 11 module tests (`src/__tests__/smoketest.test.ts`) plus 7 CLI integration tests (`src/__tests__/cli.test.ts`). Full SDK suite 106 pass / 0 fail; `tsc --noEmit` clean.
+
+**SHIPPED — partial PR C (Portal `fa78164`):**
+
 - `docs/architecture/integrator-quickstart.md` revised: new §0 "Pick your path" (Greenfield / Retrofit / Non-TS), new §3.1 "Spec 07 envelope contract — four invariants", new §8 "Wire protocol reference" (broker-token JWT shape, HMAC scheme, HTTP endpoints, OIDC mint chain).
 
 **Deferred until Spec 03 (HS256 rip-out) ships:**
 
 - §2 of `integrator-quickstart.md` still walks readers through the dead `token_exchange` and `same_host_cookie` paths. A footnote in §2 flags both as legacy-pending-deletion. Stripping the prose belongs in the same PR cycle as Spec 03's portal-side rip; doing it earlier would have the doc lying about what the portal currently rejects.
 
-**Out-of-tree (cross-repo, not in this commit):**
+**Out-of-tree (cross-repo, not yet shipped):**
 
-- **PR B** — `coms-portal-cli smoketest <slug>` verb. Lives in `mrdoorba/coms-sdk`. Same Google OIDC ID-token auth path as `register-manifest`. Three steps: registry check, app URL `GET <healthCheckPath>` (default `/`), webhook delivery via the new portal route.
-- **`'app.smoketest'` in `PORTAL_WEBHOOK_EVENTS`** — additive to `mrdoorba/coms-shared`; SDK re-export rides in the next SDK minor.
+- **`'app.smoketest'` in `PORTAL_WEBHOOK_EVENTS`** — additive to `mrdoorba/coms-shared`. SDK re-export rides whichever next SDK minor goes out. Once landed, the portal route's `as PortalWebhookEvent` cast in `app-smoketest.ts` can be removed.
 
 ---
 
