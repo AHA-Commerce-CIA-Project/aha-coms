@@ -9,7 +9,7 @@ Provisions a Docker container image registry (`coms-aha-heroes-repo`) in Google 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `main.tf` | Creates `google_artifact_registry_repository` (DOCKER format) with two cleanup policies: KEEP the 5 most recent versions, DELETE everything else (`older_than = "0s"` — KEEP takes precedence) |
+| `main.tf` | Creates `google_artifact_registry_repository` (DOCKER format) with two cleanup policies: KEEP the 5 most recent versions, DELETE everything else (`tag_state = "ANY"` — KEEP takes precedence) |
 | `variables.tf` | Input variables: `project_id`, `region` |
 | `outputs.tf` | Exposes the repository hostname for use by `cloud-run/` and CI/CD |
 

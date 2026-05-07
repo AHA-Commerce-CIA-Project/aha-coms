@@ -17,13 +17,15 @@ resource "google_artifact_registry_repository" "docker" {
     }
   }
 
-  # DELETE: every other version. older_than = "0s" matches all versions;
+  # DELETE: every other version. tag_state = "ANY" matches all versions;
   # the KEEP rule above takes precedence and protects the latest 5.
+  # (older_than = "0s" looks equivalent but GCP drops it on read-back, causing
+  # perpetual drift — use tag_state instead.)
   cleanup_policies {
     id     = "delete-everything-else"
     action = "DELETE"
     condition {
-      older_than = "0s"
+      tag_state = "ANY"
     }
   }
 }
