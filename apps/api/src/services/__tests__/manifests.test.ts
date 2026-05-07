@@ -54,13 +54,20 @@ mock.module('~/db', () => ({
   },
 }))
 
+// Import via `manifests-internal` (NOT `manifests`) so this test exercises
+// the real implementation regardless of cross-file mock pollution. Other test
+// files (e.g. `app-user-config.test.ts`, `app-manifest.test.ts`) call
+// `mock.module('../manifests', ...)` / `mock.module('~/services/manifests', ...)`,
+// which is process-global in Bun — the cached mocked module would otherwise
+// mask `validateConfig` / `validateConfigSchemaShape` / `registerManifest`
+// when this test runs after them in the same `bun test` invocation.
 const {
   validateConfig,
   seedDefaults,
   registerManifest,
   loadAllManifests,
   validateConfigSchemaShape,
-} = await import('../manifests')
+} = await import('../manifests-internal')
 
 // ---------------------------------------------------------------------------
 // Fixtures — Heroes-shaped manifest used as a reference. The static

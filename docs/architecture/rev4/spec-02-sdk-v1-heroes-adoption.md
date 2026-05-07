@@ -1,6 +1,6 @@
 # Rev 4 — Spec 02: SDK v1.0 Heroes Adoption & Verification
 
-> **Status: SHIPPED 2026-05-07** — five planned PRs landed, four follow-up bugs surfaced at deploy time, four follow-up patches landed, AC #2 verified live in production. SDK released as `@coms-portal/sdk@v1.2.0`.
+> **Status: SHIPPED 2026-05-07** — five planned PRs landed, four follow-up bugs (D1–D4) surfaced at deploy time, nine follow-up patches (F1–F9) landed at ship, two post-ship follow-ups (F10–F11) closed filed issues #3 and #4 same day, AC #2 verified live in production. SDK released as `@coms-portal/sdk@v1.2.0`.
 
 ## Commit ledger (all repos, draft → production-verified)
 
@@ -27,6 +27,13 @@
 | F7 | Heroes workflow swaps to `gcloud auth print-identity-token --impersonate-service-account` (auth action's id_token path returned 403) | `mrdoorba/coms_aha_heroes` `137aa0a` | — |
 | F8 | Portal route param rename `:slug` → `:id` (memoirist trie conflict with `apps.ts` / `app-webhooks.ts`) + `route-compose.test.ts` regression | `mrdoorba/coms_portal` `abd3b21` | — |
 | F9 | Portal route-compose test extension fix (drop `.ts` to satisfy tsc) | `mrdoorba/coms_portal` `ce4d3c9` | — |
+
+### Post-ship follow-ups (closed filed issues #3, #4 same day as ship)
+
+| # | Scope | Repo / commit | Tag | Closes |
+|---|---|---|---|---|
+| F10 | Portal: split `services/manifests.ts` into shell + `manifests-internal.ts` to break the cross-file mock pollution loop. Bun's `mock.module` is process-global and keyed by resolved abs path, AND `export *` propagates a mock through the live binding to the source module — so any mock on `manifests.ts` was poisoning `manifests-internal.ts` too. The shell now uses const-bound re-exports (`export const X = impl.X`) which capture function references at load time and stand alone; `manifests.test.ts` imports `'../manifests-internal'` directly and is now isolated from the polluters | `mrdoorba/coms_portal` (current commit) | — | #4 |
+| F11 | Portal: `__tests__/route-compose.test.ts` generalised — alongside the original "first request doesn't throw" check, walks the composed `app.routes` trie and explicitly surfaces every memoirist param-name conflict with a friendly diagnostic (conflicting position + both route paths + both names), so a future D4-style mismatch is caught even if memoirist's compose-time throw ever stops firing. Two self-verification cases guard the helper against silent regressions | `mrdoorba/coms_portal` (current commit) | — | #3 |
 
 ### Portal docs
 
@@ -108,7 +115,7 @@ Cloud Run kept serving from the last healthy revision (pre-`cb34577`), so extern
 
 **Fix:** F8 — rename the prefix's param from `:slug` to `:id` to match siblings. The captured value is still semantically a slug; only the param NAME changes (memoirist conflicts on names, not values). The handler's match logic is unaffected. Added `apps/api/src/__tests__/route-compose.test.ts` that imports the composed app and dispatches one request — forces memoirist to build, catches any future param-name collision at unit-test time. F9 — drop a `.ts` extension the test inadvertently used (tsc strict).
 
-**Why neither Spec 01 PR D's tests nor portal CI caught it:** `app-manifest.test.ts` exercises the route in isolation (no sibling routes); `bun apps/api/server.ts` runs only at deploy time on the runtime image. Filed as `mrdoorba/coms-portal#3` (generalize the canary).
+**Why neither Spec 01 PR D's tests nor portal CI caught it:** `app-manifest.test.ts` exercises the route in isolation (no sibling routes); `bun apps/api/server.ts` runs only at deploy time on the runtime image. Filed as `mrdoorba/coms-portal#3` (generalize the canary); closed by F11 above — the canary now walks `app.routes` proactively rather than relying on memoirist's lazy throw.
 
 ---
 
@@ -116,14 +123,14 @@ Cloud Run kept serving from the last healthy revision (pre-`cb34577`), so extern
 
 Four issues filed at SHIPPED time, capturing class-of-bug fixes that fall outside Spec 02's scope but are direct consequences of the post-ship discoveries:
 
-| Issue | Repo | Title | Origin |
-|---|---|---|---|
-| [#1](https://github.com/mrdoorba/coms-sdk/issues/1) | `coms-sdk` | Add `examples/web-bundle-smoketest/` — verify SDK works in browser bundles | D1 |
-| [#3](https://github.com/mrdoorba/coms-portal/issues/3) | `coms-portal` | Generalize route-compose regression test — assert no param-name conflicts across any prefix | D4 |
-| [#4](https://github.com/mrdoorba/coms-portal/issues/4) | `coms-portal` | Fix pre-existing test failures in `apps/api/src/services/__tests__/manifests.test.ts` | Surfaced during Spec 02 — pre-existing, blocks the CD typecheck-and-tests gate from being meaningful |
-| [#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) | `coms_aha_heroes` | Reconcile infra drift between OpenTofu config and live Cloud Run state | Surfaced during F1 `tofu apply -target` — pre-existing, has real prod env-var risk |
+| Issue | Repo | Title | Origin | Status |
+|---|---|---|---|---|
+| [#1](https://github.com/mrdoorba/coms-sdk/issues/1) | `coms-sdk` | Add `examples/web-bundle-smoketest/` — verify SDK works in browser bundles | D1 | open |
+| [#3](https://github.com/mrdoorba/coms-portal/issues/3) | `coms-portal` | Generalize route-compose regression test — assert no param-name conflicts across any prefix | D4 | **closed** by F11 |
+| [#4](https://github.com/mrdoorba/coms-portal/issues/4) | `coms-portal` | Fix pre-existing test failures in `apps/api/src/services/__tests__/manifests.test.ts` | Surfaced during Spec 02 — pre-existing, blocks the CD typecheck-and-tests gate from being meaningful | **closed** by F10 |
+| [#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) | `coms_aha_heroes` | Reconcile infra drift between OpenTofu config and live Cloud Run state | Surfaced during F1 `tofu apply -target` — pre-existing, has real prod env-var risk | open |
 
-These are tracker entries, not scheduled work. Pick up in any order; #5 has the most production risk, #1 closes the verification gap that produced D1.
+Two of the four are now closed (F10, F11 same day as ship). The remaining two are tracker entries, not scheduled work. Pick up in any order; #5 has the most production risk, #1 closes the verification gap that produced D1.
 
 ---
 
