@@ -1,15 +1,15 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-03 | Updated: 2026-04-03 -->
+<!-- Generated: 2026-04-03 | Updated: 2026-05-07 -->
 
 # artifact-registry
 
 ## Purpose
-Provisions a Docker container image registry (`coms-aha-heroes-repo`) in Google Artifact Registry with automated cleanup policies to control storage costs: keep the latest 5 images, delete images older than 30 days.
+Provisions a Docker container image registry (`coms-aha-heroes-repo`) in Google Artifact Registry with an automated cleanup policy: retain only the 5 most recent image versions; everything else is deleted regardless of age.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `main.tf` | Creates `google_artifact_registry_repository` (DOCKER format) with two cleanup policies: KEEP latest 5 tagged images, DELETE untagged/old images after 30 days |
+| `main.tf` | Creates `google_artifact_registry_repository` (DOCKER format) with two cleanup policies: KEEP the 5 most recent versions, DELETE everything else (`older_than = "0s"` — KEEP takes precedence) |
 | `variables.tf` | Input variables: `project_id`, `region` |
 | `outputs.tf` | Exposes the repository hostname for use by `cloud-run/` and CI/CD |
 

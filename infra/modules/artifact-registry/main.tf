@@ -17,12 +17,13 @@ resource "google_artifact_registry_repository" "docker" {
     }
   }
 
-  # DELETE: any image version older than 30 days
+  # DELETE: every other version. older_than = "0s" matches all versions;
+  # the KEEP rule above takes precedence and protects the latest 5.
   cleanup_policies {
-    id     = "delete-stale-images"
+    id     = "delete-everything-else"
     action = "DELETE"
     condition {
-      older_than = "2592000s" # 30 days in seconds
+      older_than = "0s"
     }
   }
 }
