@@ -17,7 +17,7 @@
     "generate:schemas": "bun run scripts/generate-schemas.ts"
   },
   "dependencies": {
-    "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.1.0",
+    "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.1.1",
     "@sinclair/typebox": "^0.34.0",
     "drizzle-orm": "^0.45.0",
     "drizzle-typebox": "^0.2.0",
