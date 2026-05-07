@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.0] - 2026-05-07
+
+### Added
+- `'app.smoketest'` to `PORTAL_WEBHOOK_EVENTS` (Rev 4 Spec 06). The portal dispatches this synthetic event synchronously to every active webhook endpoint when `coms-portal-cli smoketest <slug>` runs. Receivers should recognise the name and ack 2xx without business-side processing — no payload to mutate state on. The event bypasses the standard subscribe-and-fan-out flow because the smoketest is a registration-time probe of the integration loop, not a business event consumers opt into.
+
+### Compatibility
+- Pure additive — `PORTAL_WEBHOOK_EVENTS` only widens. All v1.6.0 names, types, and shapes are preserved. v1.6.x consumers compile unchanged. The portal's `app-smoketest.ts` route can drop its inline `'app.smoketest' as PortalWebhookEvent` cast once the consumer pin moves to v1.7.0.
+
 ## [1.6.0] - 2026-05-04
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "@coms-portal/shared",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Shared contracts, types, and constants for the COMS portal platform",
   "type": "module",
   "license": "UNLICENSED",

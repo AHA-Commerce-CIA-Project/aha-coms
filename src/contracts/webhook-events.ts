@@ -32,6 +32,12 @@ export const PORTAL_WEBHOOK_EVENTS = [
   'alias.deleted',
   'alias.resolved',
   'alias.updated',
+  // Rev 4 Spec 06 — synthetic onboarding probe. The portal dispatches this
+  // event synchronously (not via the standard subscribe-and-fan-out flow) to
+  // every active webhook endpoint when `coms-portal-cli smoketest <slug>`
+  // runs. Receivers should recognise the name and ack 2xx without
+  // business-side processing.
+  'app.smoketest',
   'app_config.updated',
   'employment.updated',
   'session.revoked',
