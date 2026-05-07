@@ -5,7 +5,7 @@
 node_modules
 
 # Build artifacts
-dist
+**/dist
 .output
 .nitro
 packages/web/.svelte-kit
