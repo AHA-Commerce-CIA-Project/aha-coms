@@ -55,6 +55,7 @@ export interface EmployeeCsvImportResult {
 }
 
 export const MAX_EMPLOYEE_IMPORT_CSV_BYTES = 2 * 1024 * 1024
+const CSV_IMPORT_CREATE_CONCURRENCY = 5
 
 const HEADER_KEYS = {
   firstName: 'first name [required]',
@@ -180,10 +181,30 @@ export function parseGoogleAdminUsersCsv(csv: string): ParsedGoogleAdminUserRow[
   })
 }
 
-export async function importEmployeesFromGoogleAdminCsv(
-  csv: string,
-  options?: { preview?: boolean },
-): Promise<EmployeeCsvImportResult> {
+type ImportAccumulator = {
+  preview: EmployeeCsvImportResult['preview']
+  created: EmployeeCsvImportResult['created']
+  skipped: EmployeeCsvImportResult['skipped']
+  flagged: EmployeeCsvImportResult['flagged']
+  errors: EmployeeCsvImportResult['errors']
+}
+
+type CollisionContext = {
+  existingEmails: Set<string>
+  collisionByEmail: Map<string, string>
+  collisionUserNameById: Map<string, string>
+  nonWorkspaceUsers: Array<{ id: string; name: string }>
+}
+
+type CsvImportDeps = {
+  db: typeof import('~/db')['db']
+  identityUsers: typeof import('~/db/schema')['identityUsers']
+  identityUserEmails: typeof import('~/db/schema')['identityUserEmails']
+  createEmployee: typeof import('./employees')['createEmployee']
+  emitUserProvisioned: typeof import('./provisioning-events')['emitUserProvisioned']
+}
+
+async function loadCsvImportDeps(): Promise<CsvImportDeps> {
   const [{ db }, { identityUsers, identityUserEmails }, { createEmployee }, { emitUserProvisioned }] =
     await Promise.all([
       import('~/db'),
@@ -191,19 +212,23 @@ export async function importEmployeesFromGoogleAdminCsv(
       import('./employees'),
       import('./provisioning-events'),
     ])
+  return { db, identityUsers, identityUserEmails, createEmployee, emitUserProvisioned }
+}
 
-  const mode = options?.preview ? 'preview' : 'commit'
-  const rows = parseGoogleAdminUsersCsv(csv)
-  const preview: EmployeeCsvImportResult['preview'] = []
-  const created: EmployeeCsvImportResult['created'] = []
-  const skipped: EmployeeCsvImportResult['skipped'] = []
-  const flagged: EmployeeCsvImportResult['flagged'] = []
-  const errors: EmployeeCsvImportResult['errors'] = []
+/**
+ * Build the collision-detection lookup tables for a CSV import.
+ *
+ * PR D Spec 06: collision detection scans BOTH workspace and personal emails
+ * (the CSV may now carry an optional Personal Email column). Rows where any
+ * candidate address already exists go to flagged[] (not skipped[]) carrying
+ * collisionUserId + collisionUserName so the admin can resolve the conflict.
+ */
+async function loadCollisionContext(
+  rows: ParsedGoogleAdminUserRow[],
+  deps: CsvImportDeps,
+): Promise<CollisionContext> {
+  const { db, identityUsers, identityUserEmails } = deps
 
-  // PR D Spec 06: collision detection now scans BOTH workspace and personal emails
-  // (the CSV may now carry an optional Personal Email column). Rows where any
-  // candidate address already exists go to flagged[] (not skipped[]) carrying
-  // collisionUserId and collisionUserName so the admin can resolve the conflict.
   const validRows = rows.filter((row) => row.email)
   const allCandidateEmails = [
     ...validRows.map((row) => row.email.toLowerCase().trim()),
@@ -212,6 +237,7 @@ export async function importEmployeesFromGoogleAdminCsv(
       .filter((e): e is string => !!e),
   ]
   const uniqueEmailsNormalized = [...new Set(allCandidateEmails)]
+
   const [existingEmailRows, nonWorkspaceUsers] = await Promise.all([
     uniqueEmailsNormalized.length
       ? db
@@ -222,18 +248,15 @@ export async function importEmployeesFromGoogleAdminCsv(
           .from(identityUserEmails)
           .where(inArray(identityUserEmails.emailNormalized, uniqueEmailsNormalized))
       : Promise.resolve([]),
-    // For name-collision flagging: load non-workspace users with their display email.
-    // We fetch id+name here; email is resolved lazily per matched row below.
     db
       .select({ id: identityUsers.id, name: identityUsers.name })
       .from(identityUsers)
       .where(eq(identityUsers.hasGoogleWorkspace, false)),
   ])
 
-  // emailNormalized → identityUserId map for resolving collision target user
   const collisionByEmail = new Map<string, string>()
   for (const r of existingEmailRows) collisionByEmail.set(r.emailNormalized, r.identityUserId)
-  // identityUserId → display name (look up once per affected user)
+
   const collisionUserIds = [...new Set([...collisionByEmail.values()])]
   let collisionUserNameById = new Map<string, string>()
   if (collisionUserIds.length > 0) {
@@ -243,95 +266,156 @@ export async function importEmployeesFromGoogleAdminCsv(
       .where(inArray(identityUsers.id, collisionUserIds))
     collisionUserNameById = new Map(userRows.map((u) => [u.id, u.name]))
   }
+
   const existingEmails = new Set(existingEmailRows.map((r) => r.emailNormalized))
 
-  const pendingRows: ParsedGoogleAdminUserRow[] = []
+  return { existingEmails, collisionByEmail, collisionUserNameById, nonWorkspaceUsers }
+}
 
-  for (const row of rows) {
-    if (!row.email) {
-      skipped.push({ rowNumber: row.rowNumber, reason: 'Missing email address' })
-      continue
-    }
+/**
+ * Determine which (if any) candidate email on this row already exists in the
+ * registry. Workspace takes precedence over personal — matches the original
+ * priority ordering before the refactor.
+ */
+function findCollidingEmail(
+  row: ParsedGoogleAdminUserRow,
+  existingEmails: Set<string>,
+): string | null {
+  const workspaceNorm = row.email.toLowerCase().trim()
+  if (existingEmails.has(workspaceNorm)) return workspaceNorm
 
-    if (!row.fullName) {
-      skipped.push({ rowNumber: row.rowNumber, email: row.email, reason: 'Missing full name' })
-      continue
-    }
+  const personalNorm = row.personalEmail?.toLowerCase().trim() ?? ''
+  if (personalNorm && existingEmails.has(personalNorm)) return personalNorm
 
-    if (row.status.toLowerCase() !== 'active') {
-      skipped.push({ rowNumber: row.rowNumber, email: row.email, reason: `Skipped status ${row.status || 'unknown'}` })
-      continue
-    }
+  return null
+}
 
-    const workspaceNorm = row.email.toLowerCase().trim()
-    const personalNorm = row.personalEmail?.toLowerCase().trim() ?? ''
+function pushEmailCollision(
+  row: ParsedGoogleAdminUserRow,
+  collidingEmail: string,
+  ctx: CollisionContext,
+  acc: ImportAccumulator,
+): void {
+  const collisionUserId = ctx.collisionByEmail.get(collidingEmail) ?? ''
+  const collisionUserName = ctx.collisionUserNameById.get(collisionUserId) ?? '(unknown)'
+  acc.flagged.push({
+    rowNumber: row.rowNumber,
+    csvEmail: row.email,
+    csvWorkspaceEmail: row.email,
+    csvPersonalEmail: row.personalEmail || undefined,
+    csvName: row.fullName,
+    csvDepartment: row.department,
+    csvPosition: row.position,
+    csvPhone: row.phone,
+    collisionKind: 'email_collision',
+    collisionEmail: collidingEmail,
+    collisionUserId,
+    collisionUserName,
+    existingId: collisionUserId,
+    existingName: collisionUserName,
+    existingEmail: collidingEmail,
+  })
+}
 
-    // PR D: email collision flagging — surface the conflicting target user so the
-    // admin can decide whether to merge identities, change the address, or skip.
-    const collidingEmail = existingEmails.has(workspaceNorm)
-      ? workspaceNorm
-      : personalNorm && existingEmails.has(personalNorm)
-        ? personalNorm
-        : null
-    if (collidingEmail) {
-      const collisionUserId = collisionByEmail.get(collidingEmail) ?? ''
-      const collisionUserName = collisionUserNameById.get(collisionUserId) ?? '(unknown)'
-      flagged.push({
-        rowNumber: row.rowNumber,
-        csvEmail: row.email,
-        csvWorkspaceEmail: row.email,
-        csvPersonalEmail: row.personalEmail || undefined,
-        csvName: row.fullName,
-        csvDepartment: row.department,
-        csvPosition: row.position,
-        csvPhone: row.phone,
-        collisionKind: 'email_collision',
-        collisionEmail: collidingEmail,
-        collisionUserId,
-        collisionUserName,
-        existingId: collisionUserId,
-        existingName: collisionUserName,
-        existingEmail: collidingEmail,
-      })
-      continue
-    }
+async function pushNameCollision(
+  row: ParsedGoogleAdminUserRow,
+  nwMatch: { id: string; name: string } | null | undefined,
+  nwAmbiguous: boolean,
+  acc: ImportAccumulator,
+): Promise<void> {
+  const matchedEmail = nwAmbiguous
+    ? '(ambiguous)'
+    : await getDisplayEmail(nwMatch!.id).then((e) => e ?? '(no email)')
+  acc.flagged.push({
+    rowNumber: row.rowNumber,
+    csvEmail: row.email,
+    csvWorkspaceEmail: row.email,
+    csvPersonalEmail: row.personalEmail || undefined,
+    csvName: row.fullName,
+    csvDepartment: row.department,
+    csvPosition: row.position,
+    csvPhone: row.phone,
+    collisionKind: 'name_collision',
+    existingId: nwAmbiguous ? '' : nwMatch!.id,
+    existingName: nwAmbiguous ? '(multiple matches)' : nwMatch!.name,
+    existingEmail: matchedEmail,
+  })
+}
 
-    const { match: nwMatch, score: nwScore, ambiguous: nwAmbiguous } = findBestMatch(row.fullName, nonWorkspaceUsers)
-    if (nwScore > 0) {
-      // Resolve display email for the matched non-workspace user
-      const matchedEmail = nwAmbiguous ? '(ambiguous)' : await getDisplayEmail(nwMatch!.id).then((e) => e ?? '(no email)')
-      flagged.push({
-        rowNumber: row.rowNumber,
-        csvEmail: row.email,
-        csvWorkspaceEmail: row.email,
-        csvPersonalEmail: row.personalEmail || undefined,
-        csvName: row.fullName,
-        csvDepartment: row.department,
-        csvPosition: row.position,
-        csvPhone: row.phone,
-        collisionKind: 'name_collision',
-        existingId: nwAmbiguous ? '' : nwMatch!.id,
-        existingName: nwAmbiguous ? '(multiple matches)' : nwMatch!.name,
-        existingEmail: matchedEmail,
-      })
-      continue
-    }
+function pushSkipReasonForRow(
+  row: ParsedGoogleAdminUserRow,
+  acc: ImportAccumulator,
+): boolean {
+  if (!row.email) {
+    acc.skipped.push({ rowNumber: row.rowNumber, reason: 'Missing email address' })
+    return true
+  }
+  if (!row.fullName) {
+    acc.skipped.push({ rowNumber: row.rowNumber, email: row.email, reason: 'Missing full name' })
+    return true
+  }
+  if (row.status.toLowerCase() !== 'active') {
+    acc.skipped.push({
+      rowNumber: row.rowNumber,
+      email: row.email,
+      reason: `Skipped status ${row.status || 'unknown'}`,
+    })
+    return true
+  }
+  return false
+}
 
-    if (mode === 'preview') {
-      preview.push({
-        rowNumber: row.rowNumber,
-        email: row.email,
-        name: row.fullName,
-      })
-      continue
-    }
+/**
+ * Classify a single row into skipped / flagged / preview / pending. Mutates
+ * the passed accumulator and pushes pending rows to the supplied list when
+ * mode === 'commit' and no collision is detected.
+ */
+async function classifyImportRow(
+  row: ParsedGoogleAdminUserRow,
+  ctx: CollisionContext,
+  mode: 'preview' | 'commit',
+  acc: ImportAccumulator,
+  pendingRows: ParsedGoogleAdminUserRow[],
+): Promise<void> {
+  if (pushSkipReasonForRow(row, acc)) return
 
-    pendingRows.push(row)
+  const collidingEmail = findCollidingEmail(row, ctx.existingEmails)
+  if (collidingEmail) {
+    pushEmailCollision(row, collidingEmail, ctx, acc)
+    return
   }
 
-  const CONCURRENCY = 5
-  for (let i = 0; i < pendingRows.length; i += CONCURRENCY) {
-    const batch = pendingRows.slice(i, i + CONCURRENCY)
+  const { match: nwMatch, score: nwScore, ambiguous: nwAmbiguous } = findBestMatch(
+    row.fullName,
+    ctx.nonWorkspaceUsers,
+  )
+  if (nwScore > 0) {
+    await pushNameCollision(row, nwMatch, nwAmbiguous, acc)
+    return
+  }
+
+  if (mode === 'preview') {
+    acc.preview.push({
+      rowNumber: row.rowNumber,
+      email: row.email,
+      name: row.fullName,
+    })
+    return
+  }
+
+  pendingRows.push(row)
+}
+
+async function createImportedEmployees(
+  pendingRows: ParsedGoogleAdminUserRow[],
+  ctx: CollisionContext,
+  acc: ImportAccumulator,
+  deps: CsvImportDeps,
+): Promise<void> {
+  const { createEmployee } = deps
+
+  for (let i = 0; i < pendingRows.length; i += CSV_IMPORT_CREATE_CONCURRENCY) {
+    const batch = pendingRows.slice(i, i + CSV_IMPORT_CREATE_CONCURRENCY)
     const results = await Promise.allSettled(
       batch.map(async (row) => {
         const result = await createEmployee({
@@ -350,27 +434,27 @@ export async function importEmployeesFromGoogleAdminCsv(
       }),
     )
 
-    for (const settled of results) {
+    for (const [idx, settled] of results.entries()) {
       if (settled.status === 'fulfilled') {
         const { row, result } = settled.value
-        existingEmails.add(row.email)
-        created.push({
+        ctx.existingEmails.add(row.email)
+        acc.created.push({
           rowNumber: row.rowNumber,
           id: result.id,
           email: row.email,
           name: row.fullName,
         })
         if (result.provisioningStatus === 'failed') {
-          errors.push({
+          acc.errors.push({
             rowNumber: row.rowNumber,
             email: row.email,
             message: `Employee created but provisioning failed: ${result.provisioningError ?? 'Unknown provisioning error'}`,
           })
         }
       } else {
-        const row = batch[results.indexOf(settled)]!
+        const row = batch[idx]!
         const error = settled.reason
-        errors.push({
+        acc.errors.push({
           rowNumber: row.rowNumber,
           email: row.email,
           message: error instanceof Error ? error.message : 'Unknown import error',
@@ -378,29 +462,61 @@ export async function importEmployeesFromGoogleAdminCsv(
       }
     }
   }
+}
 
-  if (created.length > 0) {
-    Promise.all(
-      created.map((c) =>
-        emitUserProvisioned(c.id).catch((err) => {
-          logger.error({ err, userId: c.id }, '[provisioning-events] emitUserProvisioned failed')
-        }),
-      ),
-    ).catch(() => {})
+function emitProvisionedEvents(
+  acc: ImportAccumulator,
+  emitUserProvisioned: CsvImportDeps['emitUserProvisioned'],
+): void {
+  if (acc.created.length === 0) return
+  Promise.all(
+    acc.created.map((c) =>
+      emitUserProvisioned(c.id).catch((err) => {
+        logger.error({ err, userId: c.id }, '[provisioning-events] emitUserProvisioned failed')
+      }),
+    ),
+  ).catch(() => {})
+}
+
+export async function importEmployeesFromGoogleAdminCsv(
+  csv: string,
+  options?: { preview?: boolean },
+): Promise<EmployeeCsvImportResult> {
+  const deps = await loadCsvImportDeps()
+
+  const mode = options?.preview ? 'preview' : 'commit'
+  const rows = parseGoogleAdminUsersCsv(csv)
+
+  const acc: ImportAccumulator = {
+    preview: [],
+    created: [],
+    skipped: [],
+    flagged: [],
+    errors: [],
   }
+
+  const ctx = await loadCollisionContext(rows, deps)
+  const pendingRows: ParsedGoogleAdminUserRow[] = []
+
+  for (const row of rows) {
+    await classifyImportRow(row, ctx, mode, acc, pendingRows)
+  }
+
+  await createImportedEmployees(pendingRows, ctx, acc, deps)
+  emitProvisionedEvents(acc, deps.emitUserProvisioned)
 
   return {
     mode,
     parsedCount: rows.length,
-    previewCount: preview.length,
-    createdCount: created.length,
-    skippedCount: skipped.length,
-    flaggedCount: flagged.length,
-    errorCount: errors.length,
-    preview,
-    created,
-    skipped,
-    flagged,
-    errors,
+    previewCount: acc.preview.length,
+    createdCount: acc.created.length,
+    skippedCount: acc.skipped.length,
+    flaggedCount: acc.flagged.length,
+    errorCount: acc.errors.length,
+    preview: acc.preview,
+    created: acc.created,
+    skipped: acc.skipped,
+    flagged: acc.flagged,
+    errors: acc.errors,
   }
 }
