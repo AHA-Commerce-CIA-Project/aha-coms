@@ -1,18 +1,38 @@
 # Rev 4 — Spec 02: SDK v1.0 Heroes Adoption & Verification
 
-> **Status: DRAFT — opened 2026-05-07.** Trigger fired: Spec 01 SHIPPED v1.0.0 the same day; the eight acceptance criteria were verified against the SDK's own test suite, but the Heroes-side coordination section of Spec 01 was based on a stale model of how Heroes actually consumes portal contracts. This spec corrects that model and locks the real Heroes-side adoption plan. Owner: Mr. Door (solo).
+> **Status: SHIPPED 2026-05-07.** Drafted and shipped same day. All five PRs landed across three repos. SDK released as `@coms-portal/sdk@v1.1.0`.
+>
+> | PR | Repo / commit | Tag |
+> |---|---|---|
+> | SA — `APP_LAUNCHER` re-export | `mrdoorba/coms-sdk` `c98b2c5` | `v1.1.0` |
+> | VA — `examples/v0-compat-smoketest/` | `mrdoorba/coms-sdk` `e854e97` | — |
+> | VB — `examples/onboarding-scratch/` | `mrdoorba/coms-sdk` `f8ae1b4` | — |
+> | HA — Heroes 16-import migration | `mrdoorba/coms_aha_heroes` `d59a5ca` | — |
+> | HB — Heroes manifest-as-code + CD step | `mrdoorba/coms_aha_heroes` `536099d` | — |
+> | Portal docs amend (this file + Spec 01 §coordination + Spec 00 timeline) | `mrdoorba/coms_portal` (current commit) | — |
 >
 > **Prerequisites:** Spec 01 SHIPPED (`@coms-portal/sdk@v1.0.0` tagged 2026-05-07; portal-side `POST /v1/apps/:slug/manifest` route landed in `cb34577`).
 >
 > **Sequencing rule:** This spec ships entirely on the Heroes side, against the already-published v1.0.0 SDK. No further SDK or portal changes are required. SDK v2.0 (HS256 drop) was previously gated on Heroes Phase 7; this spec re-evaluates whether that gate is still meaningful given what Heroes actually does today.
 
+## Acceptance result (recorded at SHIPPED time)
+
+1. **AC #1 — Heroes typecheck after import migration:** `bun run --filter=* typecheck` exits 0 across all three Heroes packages (5993 svelte-check files, 0 errors, 0 warnings) on PR HA's working tree, identical to `main` pre-migration.
+2. **AC #2 — Heroes manifest-as-code first run is a no-op:** *Pending live CD verification* — first deploy after this spec lands must come back as a GREATEST(schemaVersion) no-op against `slug='heroes'`. Manifest fixture in `packages/server/portal-manifest.ts` mirrors the portal's seeded fixture (schemaVersion 2, taxonomies `[branches, teams, departments]`, configSchema `{leaderboard_eligible, starting_points}`).
+3. **AC #3 — Spec 01 §AC #5 falsifiable:** PR VA (`mrdoorba/coms-sdk` `e854e97`) ships `examples/v0-compat-smoketest/index.ts`; `bun run examples/v0-compat-smoketest/index.ts` exits 0 with all 6 v0 names resolving as functions.
+4. **AC #4 — Spec 01 §AC #1 substantiated:** PR VB (`mrdoorba/coms-sdk` `f8ae1b4`) ships `examples/onboarding-scratch/`. Recorded LOC against Spec 01's "~30 lines" claim: `portal-manifest.ts` 11 non-blank, `server.ts` 30 non-blank as written in Spec 01 verbatim, total 41 — claim verified. With 7 lines of testability scaffolding (factory + options interface), total integration glue is 48 non-blank lines.
+5. **AC #5 — SDK v2.0 gate explicitly unblocked-from-Heroes:** Portal docs amended in `docs/architecture/rev4/spec-01-sdk-v1.md` §"Heroes-side coordination" and `docs/architecture/rev4/spec-00-implementation-timeline.md`. The "Heroes Phase 7" terminology is retired.
+6. **AC #6 — 16-import inventory re-captured after PR HA:** `grep -rn "from ['\"]@coms-portal/shared" packages` (excluding `node_modules`, `.svelte-kit`, build artefacts) returns 0 matches in `coms_aha_heroes` post-migration. The same grep returns 16 `@coms-portal/sdk` matches.
+7. **AC #7 — No regression in the SDK's test suite:** PR SA's `v1.1.0` cut runs 84 tests (was 81 pre-spec; +3 from `app-launcher-reexport.test.ts`), 0 fail. `bun run typecheck` clean. Portal typecheck untouched (no portal code changed by this spec, only docs).
+8. **AC #8 — Spec 02 marked SHIPPED in spec-00:** Done in this commit.
+
 ---
 
-## Status — 2026-05-07 (drafted, all eight decisions locked, no PRs landed)
+## Status — 2026-05-07 (drafted and SHIPPED same day; all five PRs landed)
 
 Spec 01 PR breakdown closed with all eight PRs SHIPPED (A → H, plus the portal-side route in PR D). The Heroes-side coordination block in Spec 01 enumerated three optional adoption PRs (H-1 broker verifier, H-2 manifest-as-code, H-3 HS256 verify drop) and described H-3 as "**the prerequisite for SDK v2.0**". That breakdown assumed Heroes had an in-repo broker-token JWT verifier that needed migration. Inspection of `coms_aha_heroes` on the same day shows **Heroes has no such verifier** — it uses the portal's one-time `portal_code` exchange flow for user auth, and Google OIDC ID-token verification (`verifyGoogleIdToken`) for portal-webhook authentication. Neither path goes through `verifyBrokerToken` or `verifyWebhookSignature`.
 
-The discovery doesn't invalidate Spec 01's v1.0 cut — the SDK's surface and acceptance criteria stand — but it does shift what "Heroes adopts SDK v1.0" actually means.
+The discovery doesn't invalidate Spec 01's v1.0 cut — the SDK's surface and acceptance criteria stand — but it does shift what "Heroes adopts SDK v1.0" actually means. This spec corrects the model and ships the real adoption plan: the five PRs (SA / VA / VB / HA / HB) all landed the same day the spec was drafted; per-PR commit SHAs are recorded in the SHIPPED status block at the top of this file.
 
 ---
 

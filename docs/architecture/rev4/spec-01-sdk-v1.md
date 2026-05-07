@@ -419,15 +419,23 @@ Every PR includes its own tests (the SDK repo already has `bun test` wired). Eac
 
 ## Heroes-side coordination
 
+> **Amended 2026-05-07 — Spec 02 supersedes this section.** The
+> placeholders below were drafted before the Heroes auth model was
+> inspected; Heroes never had an in-repo broker verifier (H-1 is moot)
+> and never called `verifyBrokerToken` (H-3 / "Heroes Phase 7" is moot
+> as a v2.0 gate). See [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md)
+> §Discovery for the actual model and §Q5 for the v2.0 gate
+> re-evaluation. The "Heroes Phase 7" terminology is retired.
+
 Heroes is in dual-mode (HS256 + ES256 verify) as of Phase 6 (shipped 2026-05-06). This spec ships entirely without touching Heroes.
 
-**Three optional Heroes-side adoption PRs**, in any order, after SDK v1.0 ships:
+**Heroes-side adoption work moved to Spec 02 (SDK v1.0 Heroes Adoption & Verification):**
 
-- **H-1: Adopt SDK broker verifier.** Heroes' in-repo broker-verifier code → `import { verifyBrokerToken } from '@coms-portal/sdk'`. Removes ~150 lines of duplicated infrastructure.
-- **H-2: Adopt manifest-as-code.** Heroes ships `portal-manifest.ts` in its repo + adds `coms-portal-cli register-manifest` to its CD pipeline. Replaces today's admin-UI POST flow.
-- **H-3: Heroes Phase 7 — drop HS256 verify path.** Heroes only accepts ES256 broker tokens. **This is the prerequisite for SDK v2.0.**
+- **H-1 (retired by discovery).** Heroes has no in-repo broker verifier to migrate — user auth runs through the portal's one-time `portal_code` exchange flow, not direct broker-token decode. The 150-line refactor described here does not exist.
+- **H-2 → Spec 02 §HB.** Heroes' manifest-as-code (`portal-manifest.ts` + `coms-portal-cli register-manifest` in CD) ships in Spec 02 PR HB.
+- **H-3 (retired by discovery).** "Heroes Phase 7" was the prerequisite for SDK v2.0 because the SDK keeps HS256 verification in 1.x for legacy consumers. Heroes is not such a consumer — `verifyBrokerToken` is never called. The remaining v2.0 gate is "no SDK consumer relies on HS256 verify"; today's known consumer set is `{Heroes}` and Heroes' HS256 call set is empty. **SDK v2.0 is unblocked from Heroes' side as of 2026-05-07** (Spec 02 §Q5).
 
-H-1 and H-2 are pure Heroes-side concerns and don't gate anything in this spec. H-3 gates SDK v2.0 only — not v1.0.
+Spec 02 also adds two SDK-repo verification artefacts (PRs VA and VB) that close §AC #1 and §AC #5 against real consumer code rather than the SDK's own test suite, plus PR SA which cuts SDK v1.1.0 with a single APP_LAUNCHER re-export so Heroes can complete the import migration in Spec 02 PR HA without leaving a stranded `@coms-portal/shared` import.
 
 ---
 
