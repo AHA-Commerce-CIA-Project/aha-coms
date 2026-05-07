@@ -18,15 +18,28 @@ Rev 4 status:
   `mrdoorba/coms-sdk` (eight commits between `85573b5` and the v1.0.0 cut)
   plus the portal-side route in `mrdoorba/coms_portal` (commit `cb34577`).
   SDK released as `v1.0.0` git tag.
-- **Spec 02 (SDK v1.0 Heroes Adoption & Verification)** SHIPPED 2026-05-07.
-  All five PRs (SA / VA / VB / HA / HB) landed across three repos. SDK
-  cut `v1.1.0` (`APP_LAUNCHER` re-export); Heroes migrated all 16
-  `@coms-portal/shared` imports to `@coms-portal/sdk` and adopted
-  manifest-as-code via `coms-portal-cli register-manifest` in CD. Spec 01's
-  two structurally-weak acceptance criteria (#1 onboarding, #5 v0.1.x
-  compat) are now falsifiable against real consumers (`examples/v0-compat-smoketest/`
-  and `examples/onboarding-scratch/`). The "Heroes Phase 7" terminology
-  is retired — SDK v2.0 is unblocked from Heroes' side as of today.
+- **Spec 02 (SDK v1.0 Heroes Adoption & Verification)** SHIPPED 2026-05-07,
+  AC #2 live-verified in production CD on the same day. Five planned PRs
+  (SA / VA / VB / HA / HB) plus nine follow-up patches (F1–F9) shipped
+  across three repos. SDK cut at `v1.2.0` (originally planned at v1.1.0;
+  v1.1.1 + v1.2.0 patches added during the deploy loop — see
+  `spec-02-sdk-v1-heroes-adoption.md` §Post-ship discoveries D1–D4).
+  Heroes migrated all 16 `@coms-portal/shared` imports to
+  `@coms-portal/sdk`, adopted manifest-as-code via `coms-portal-cli
+  register-manifest` in CD, and the first live registration logged
+  `schemaVersion=2, registeredAt=2026-05-07T05:42:32.600Z` — the planned
+  GREATEST(schemaVersion) no-op against the seeded `app_manifests` row
+  for `slug='heroes'`. Spec 01's two structurally-weak acceptance
+  criteria (#1 onboarding, #5 v0.1.x compat) are now falsifiable against
+  real consumers (`examples/v0-compat-smoketest/` and
+  `examples/onboarding-scratch/`). The "Heroes Phase 7" terminology is
+  retired — SDK v2.0 is unblocked from Heroes' side as of today. Four
+  filed follow-up issues capture class-of-bug fixes that fall outside
+  Spec 02's scope:
+  [coms-sdk#1](https://github.com/mrdoorba/coms-sdk/issues/1) (web-bundle smoketest),
+  [coms-portal#3](https://github.com/mrdoorba/coms-portal/issues/3) (generalize route-compose canary),
+  [coms-portal#4](https://github.com/mrdoorba/coms-portal/issues/4) (manifests test mocks),
+  [coms-aha-heroes#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) (infra drift).
 - **Spec 04 / Spec 05** remain trigger-deferred (carried over from Rev 3 with original numbers).
 
 No Rev 4 work is currently scheduled. Specs 04 and 05 ship only when
@@ -40,7 +53,7 @@ section).
 | Spec | Title | Status | Trigger / Sequencing |
 |------|-------|--------|---------|
 | 01 | SDK v1.0 — Contract Lock & Onboarding Surface | **SHIPPED 2026-05-07** (`@coms-portal/sdk@v1.0.0`). | Triggered by post-Spec-08 onboarding-friction review. Shipped portal/SDK-side; Heroes adoption was carved off into Spec 02. SDK v2.0 (HS256 drop) was gated on "Heroes Phase 7" — Spec 02 §Q5 re-evaluates whether that gate is still meaningful (Heroes does not call `verifyBrokerToken`). |
-| 02 | SDK v1.0 Heroes Adoption & Verification | **SHIPPED 2026-05-07.** All five PRs landed; SDK released as `v1.1.0` git tag. | Triggered by post-Spec-01 Heroes inspection. Heroes consumes portal contracts via 16 type imports from `@coms-portal/shared` and uses the portal-server-side exchange flow for auth — the original H-1/H-2/H-3 breakdown was based on a stale model. Closed Spec 01's two structurally-weak acceptance criteria (#1 onboarding, #5 v0.1.x compat) via real-consumer verification. |
+| 02 | SDK v1.0 Heroes Adoption & Verification | **SHIPPED 2026-05-07.** Five planned PRs + nine follow-up patches landed; SDK released as `v1.2.0` git tag (originally planned at v1.1.0). AC #2 live-verified in production. | Triggered by post-Spec-01 Heroes inspection. Heroes consumes portal contracts via 16 type imports from `@coms-portal/shared` and uses the portal-server-side exchange flow for auth — the original H-1/H-2/H-3 breakdown was based on a stale model. Closed Spec 01's two structurally-weak acceptance criteria (#1 onboarding, #5 v0.1.x compat) via real-consumer verification. Four post-ship discoveries (browser-bundle barrel scan, google-auth-library WIF+impersonation gap, auth-action 403, memoirist param-name conflict that left Spec 01 §AC #7 a quiet false-positive for 2.5 weeks) and four filed follow-up issues — see [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md). |
 | 04 | Unified User Preferences (Theme + Language) | Architecture decided. Deferred. | Third H-app onboards, portal localizes, user-visible drift incident, or Rev 3 Spec 02 Phase 2+ ships. |
 | 05 | Suite Search / Command Palette | Architecture decided. Deferred. | N > 6 apps, first cross-app search request, an app builds its own palette, or recent-items demand. |
 
@@ -67,15 +80,42 @@ See [spec-01-sdk-v1.md](spec-01-sdk-v1.md) for the full surface, decisions log, 
 
 ## Spec 02 PR sequence (shipped 2026-05-07)
 
+### Planned PRs
+
 | PR | Scope | Status |
 |----|---|---|
-| SA | SDK — add `APP_LAUNCHER` re-export to `@coms-portal/sdk` top-level (single line). Cuts `v1.1.0`. | SHIPPED — SDK `c98b2c5` (v1.1.0 tag) |
-| VA | SDK — `examples/v0-compat-smoketest/`. Consumer importing the v0.1.x surface from v1.0.0; closes Spec 01 §AC #5. | SHIPPED — SDK `e854e97` |
-| VB | SDK — `examples/onboarding-scratch/`. Minimal Elysia H-app reproducing Spec 01 §Surface "Sample H-app integration"; measures actual LOC against the "~30 lines" claim, closes Spec 01 §AC #1. | SHIPPED — SDK `f8ae1b4` |
-| HA | Heroes — drop-in re-export audit. Replace all 16 `@coms-portal/shared` import sites with `@coms-portal/sdk` (`APP_LAUNCHER` once SA ships). Pure import-source migration; no semantic changes. | SHIPPED — Heroes `d59a5ca` |
-| HB | Heroes — manifest-as-code. Write `portal-manifest.ts` mirroring the current `app_manifests` row for `slug='heroes'`; add `coms-portal-cli register-manifest` to the CD pipeline. | SHIPPED — Heroes `536099d` |
+| SA | SDK — add `APP_LAUNCHER` re-export to `@coms-portal/sdk` top-level. Cuts `v1.1.0`. | SHIPPED — SDK `c98b2c5` (v1.1.0 tag) |
+| VA | SDK — `examples/v0-compat-smoketest/`. Closes Spec 01 §AC #5. | SHIPPED — SDK `e854e97` |
+| VB | SDK — `examples/onboarding-scratch/`. Closes Spec 01 §AC #1. | SHIPPED — SDK `f8ae1b4` |
+| HA | Heroes — replace 16 `@coms-portal/shared` import sites with `@coms-portal/sdk`. Pure import-source migration. | SHIPPED — Heroes `d59a5ca` |
+| HB | Heroes — `portal-manifest.ts` source-of-truth + `coms-portal-cli register-manifest` in CD. | SHIPPED — Heroes `536099d` |
 
-The five PRs landed in the recommended sequence (SA → VA → VB → HA → HB). Spec 01 §AC #1 and §AC #5 are now both falsifiable against real consumer code. See [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md) for the discovery, decisions log, and acceptance criteria.
+### Follow-up patches (discovered while shipping; see [spec-02 §Post-ship discoveries](spec-02-sdk-v1-heroes-adoption.md))
+
+| # | Scope | Status |
+|----|---|---|
+| F1 | Heroes infra: `iam.serviceAccountTokenCreator` for deployer SA on runtime SA (OpenTofu, `tofu apply` against live state). | SHIPPED — Heroes `527b77a` |
+| F2 | Heroes lockfile regen against the published `v1.1.0` SDK tag. | SHIPPED — Heroes `0412ce0` |
+| F3 | SDK `sideEffects: false` + `./constants/app-launcher` subpath. Fixes Vite/esbuild barrel scan dragging `node:crypto` and `google-auth-library` into Heroes' browser bundle (D1). | SHIPPED — SDK `fc4153a` (v1.1.1 tag) |
+| F4 | Heroes consumes v1.1.1; `(authed)/+layout.svelte` flips to subpath import. | SHIPPED — Heroes `a74f320` |
+| F5 | SDK CLI accepts `COMS_PORTAL_CLI_OIDC_TOKEN` env-var (production WIF + impersonation path; google-auth-library cannot mint OIDC ID tokens for that chain — D2). | SHIPPED — SDK `a91acc3` (v1.2.0 tag) |
+| F6 | Heroes consumes v1.2.0; auth action set to `token_format: 'id_token'`. | SHIPPED — Heroes `a2d25f8` |
+| F7 | Heroes workflow swaps to `gcloud auth print-identity-token --impersonate-service-account` (auth action's id_token path returned 403 against same TokenCreator binding — D3). | SHIPPED — Heroes `137aa0a` |
+| F8 | Portal route param `:slug` → `:id` (memoirist trie conflict with `apps.ts` / `app-webhooks.ts` that left Spec 01 §AC #7 a quiet false-positive for 2.5 weeks — D4) + `route-compose.test.ts` regression. | SHIPPED — Portal `abd3b21` |
+| F9 | Portal route-compose test fix (drop `.ts` extension to satisfy tsc strict). | SHIPPED — Portal `ce4d3c9` |
+
+### Filed follow-up issues
+
+| Issue | Repo | Origin | Risk |
+|---|---|---|---|
+| [coms-sdk#1](https://github.com/mrdoorba/coms-sdk/issues/1) | SDK | D1 — close the browser-bundle verification gap | low (preventive) |
+| [coms-portal#3](https://github.com/mrdoorba/coms-portal/issues/3) | Portal | D4 — generalize route-compose canary to walk the full route table | low (preventive) |
+| [coms-portal#4](https://github.com/mrdoorba/coms-portal/issues/4) | Portal | Surfaced during Spec 02 — `manifests.test.ts` mock infra; CD's typecheck-and-tests gate is structurally non-functional | medium |
+| [coms-aha-heroes#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) | Heroes | Surfaced during F1 `tofu apply -target` — `cloud_run.app` env-var drift would strip `PORTAL_ORIGIN` etc. on next full apply | **high (real prod risk)** |
+
+The five planned PRs landed in the recommended sequence (SA → VA → VB → HA → HB). Follow-up patches landed in the order F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9, each unblocking the next deploy attempt. AC #2 closed at 2026-05-07T05:42 UTC; production traffic shifted to 100% the same run.
+
+See [spec-02-sdk-v1-heroes-adoption.md](spec-02-sdk-v1-heroes-adoption.md) for the discovery, decisions log, acceptance criteria, post-ship discoveries (D1–D4), and operator briefing for fresh sessions.
 
 ---
 

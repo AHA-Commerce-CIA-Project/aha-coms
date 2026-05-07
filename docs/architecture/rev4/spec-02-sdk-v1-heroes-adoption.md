@@ -1,30 +1,142 @@
 # Rev 4 — Spec 02: SDK v1.0 Heroes Adoption & Verification
 
-> **Status: SHIPPED 2026-05-07.** Drafted and shipped same day. All five PRs landed across three repos. SDK released as `@coms-portal/sdk@v1.1.0`.
->
-> | PR | Repo / commit | Tag |
-> |---|---|---|
-> | SA — `APP_LAUNCHER` re-export | `mrdoorba/coms-sdk` `c98b2c5` | `v1.1.0` |
-> | VA — `examples/v0-compat-smoketest/` | `mrdoorba/coms-sdk` `e854e97` | — |
-> | VB — `examples/onboarding-scratch/` | `mrdoorba/coms-sdk` `f8ae1b4` | — |
-> | HA — Heroes 16-import migration | `mrdoorba/coms_aha_heroes` `d59a5ca` | — |
-> | HB — Heroes manifest-as-code + CD step | `mrdoorba/coms_aha_heroes` `536099d` | — |
-> | Portal docs amend (this file + Spec 01 §coordination + Spec 00 timeline) | `mrdoorba/coms_portal` (current commit) | — |
->
-> **Prerequisites:** Spec 01 SHIPPED (`@coms-portal/sdk@v1.0.0` tagged 2026-05-07; portal-side `POST /v1/apps/:slug/manifest` route landed in `cb34577`).
->
-> **Sequencing rule:** This spec ships entirely on the Heroes side, against the already-published v1.0.0 SDK. No further SDK or portal changes are required. SDK v2.0 (HS256 drop) was previously gated on Heroes Phase 7; this spec re-evaluates whether that gate is still meaningful given what Heroes actually does today.
+> **Status: SHIPPED 2026-05-07** — five planned PRs landed, four follow-up bugs surfaced at deploy time, four follow-up patches landed, AC #2 verified live in production. SDK released as `@coms-portal/sdk@v1.2.0`.
 
-## Acceptance result (recorded at SHIPPED time)
+## Commit ledger (all repos, draft → production-verified)
+
+### Planned PRs (the five from §PR breakdown)
+
+| PR | Scope | Repo / commit | Tag |
+|---|---|---|---|
+| SA | `APP_LAUNCHER` re-export through SDK barrel | `mrdoorba/coms-sdk` `c98b2c5` | `v1.1.0` |
+| VA | `examples/v0-compat-smoketest/` | `mrdoorba/coms-sdk` `e854e97` | — |
+| VB | `examples/onboarding-scratch/` | `mrdoorba/coms-sdk` `f8ae1b4` | — |
+| HA | Heroes 16-import migration to `@coms-portal/sdk` | `mrdoorba/coms_aha_heroes` `d59a5ca` | — |
+| HB | Heroes `portal-manifest.ts` + `register-manifest` CD step | `mrdoorba/coms_aha_heroes` `536099d` | — |
+
+### Follow-up patches (discovered while shipping; see §Post-ship discoveries)
+
+| # | Scope | Repo / commit | Tag |
+|---|---|---|---|
+| F1 | Heroes infra: `iam.serviceAccountTokenCreator` for deployer SA on runtime SA (OpenTofu) | `mrdoorba/coms_aha_heroes` `527b77a` | — |
+| F2 | Heroes lockfile regen against published `v1.1.0` | `mrdoorba/coms_aha_heroes` `0412ce0` | — |
+| F3 | SDK `sideEffects: false` + `./constants/app-launcher` subpath (browser-bundle fix) | `mrdoorba/coms-sdk` `fc4153a` | `v1.1.1` |
+| F4 | Heroes consumes v1.1.1; layout flips to subpath import | `mrdoorba/coms_aha_heroes` `a74f320` | — |
+| F5 | SDK `COMS_PORTAL_CLI_OIDC_TOKEN` env-var path on the CLI (production WIF + impersonation) | `mrdoorba/coms-sdk` `a91acc3` | `v1.2.0` |
+| F6 | Heroes consumes v1.2.0; auth action to `token_format: id_token` | `mrdoorba/coms_aha_heroes` `a2d25f8` | — |
+| F7 | Heroes workflow swaps to `gcloud auth print-identity-token --impersonate-service-account` (auth action's id_token path returned 403) | `mrdoorba/coms_aha_heroes` `137aa0a` | — |
+| F8 | Portal route param rename `:slug` → `:id` (memoirist trie conflict with `apps.ts` / `app-webhooks.ts`) + `route-compose.test.ts` regression | `mrdoorba/coms_portal` `abd3b21` | — |
+| F9 | Portal route-compose test extension fix (drop `.ts` to satisfy tsc) | `mrdoorba/coms_portal` `ce4d3c9` | — |
+
+### Portal docs
+
+| Scope | Repo / commit |
+|---|---|
+| Spec 02 marked SHIPPED, Spec 01 §coordination amended, Spec 00 timeline updated | `mrdoorba/coms_portal` `8736d0d` |
+| Spec 02 commit ledger + post-ship discoveries (this update) | `mrdoorba/coms_portal` (current commit) |
+
+**Prerequisites:** Spec 01 SHIPPED (`@coms-portal/sdk@v1.0.0` tagged 2026-05-07; portal-side `POST /v1/apps/:slug/manifest` route landed in `cb34577` — though see §Post-ship discoveries D4 for why that route did not actually serve traffic until F8).
+
+**Sequencing rule:** This spec was drafted as a Heroes-side-only piece against an already-published v1.0.0 SDK. The follow-up patches show that assumption did not hold — three of the four discovered bugs required SDK or portal changes.
+
+---
+
+## Acceptance result (live-verified at SHIPPED time)
 
 1. **AC #1 — Heroes typecheck after import migration:** `bun run --filter=* typecheck` exits 0 across all three Heroes packages (5993 svelte-check files, 0 errors, 0 warnings) on PR HA's working tree, identical to `main` pre-migration.
-2. **AC #2 — Heroes manifest-as-code first run is a no-op:** *Pending live CD verification* — first deploy after this spec lands must come back as a GREATEST(schemaVersion) no-op against `slug='heroes'`. Manifest fixture in `packages/server/portal-manifest.ts` mirrors the portal's seeded fixture (schemaVersion 2, taxonomies `[branches, teams, departments]`, configSchema `{leaderboard_eligible, starting_points}`).
+2. **AC #2 — Heroes manifest-as-code first run is a no-op:** ✅ Verified live in production CD. Heroes deploy run `25477615331` (re-run of the gcloud-mint workflow after F8 portal fix, 2026-05-07T05:42 UTC) logged: `Registered manifest for "heroes" — schemaVersion=2, registeredAt=2026-05-07T05:42:32.600Z`. The recorded `schemaVersion=2` is identical to the row already in `app_manifests` for `slug='heroes'` — the GREATEST(schemaVersion) non-regression rule turned the call into a no-op as planned. Production traffic shifted to 100% on the same run.
 3. **AC #3 — Spec 01 §AC #5 falsifiable:** PR VA (`mrdoorba/coms-sdk` `e854e97`) ships `examples/v0-compat-smoketest/index.ts`; `bun run examples/v0-compat-smoketest/index.ts` exits 0 with all 6 v0 names resolving as functions.
 4. **AC #4 — Spec 01 §AC #1 substantiated:** PR VB (`mrdoorba/coms-sdk` `f8ae1b4`) ships `examples/onboarding-scratch/`. Recorded LOC against Spec 01's "~30 lines" claim: `portal-manifest.ts` 11 non-blank, `server.ts` 30 non-blank as written in Spec 01 verbatim, total 41 — claim verified. With 7 lines of testability scaffolding (factory + options interface), total integration glue is 48 non-blank lines.
 5. **AC #5 — SDK v2.0 gate explicitly unblocked-from-Heroes:** Portal docs amended in `docs/architecture/rev4/spec-01-sdk-v1.md` §"Heroes-side coordination" and `docs/architecture/rev4/spec-00-implementation-timeline.md`. The "Heroes Phase 7" terminology is retired.
-6. **AC #6 — 16-import inventory re-captured after PR HA:** `grep -rn "from ['\"]@coms-portal/shared" packages` (excluding `node_modules`, `.svelte-kit`, build artefacts) returns 0 matches in `coms_aha_heroes` post-migration. The same grep returns 16 `@coms-portal/sdk` matches.
-7. **AC #7 — No regression in the SDK's test suite:** PR SA's `v1.1.0` cut runs 84 tests (was 81 pre-spec; +3 from `app-launcher-reexport.test.ts`), 0 fail. `bun run typecheck` clean. Portal typecheck untouched (no portal code changed by this spec, only docs).
-8. **AC #8 — Spec 02 marked SHIPPED in spec-00:** Done in this commit.
+6. **AC #6 — 16-import inventory re-captured after PR HA:** `grep -rn "from ['\"]@coms-portal/shared" packages` (excluding `node_modules`, `.svelte-kit`, build artefacts) returns 0 matches in `coms_aha_heroes` post-migration. Post-F4 the count of `@coms-portal/sdk` imports is still 16: 15 top-level barrel imports (server-side, type-only) plus 1 subpath import (`@coms-portal/sdk/constants/app-launcher`, browser-bundled).
+7. **AC #7 — No regression in the SDK's test suite:** Final SDK release at `v1.2.0` runs 85 tests (was 81 pre-spec; +4 from `app-launcher-reexport.test.ts` and `cli.test.ts:COMS_PORTAL_CLI_OIDC_TOKEN`), 0 fail. `bun run typecheck` clean. Portal typecheck untouched by Spec 02's planned PRs; F8/F9 added one test file (`route-compose.test.ts`) and renamed one route param.
+8. **AC #8 — Spec 02 marked SHIPPED in spec-00:** Done. Spec 00 timeline now records all five planned PRs, the nine follow-up patches, and the SDK tag at `v1.2.0`.
+
+---
+
+## Post-ship discoveries
+
+Four bugs surfaced between the planned PRs landing and AC #2 being live-verified. None invalidates the spec; each is documented here so a future operator can recognize the failure mode.
+
+### D1 — SDK barrel barred browser bundles
+
+**Symptom:** Heroes' first CD run after F1 (the IAM apply, run `25477146036`) died at `vite-plugin-sveltekit-compile`:
+
+> `node_modules/.bun/@coms-portal+sdk@.../webhook.ts (1:9): "createHmac" is not exported by "__vite-browser-external"`
+
+**Cause:** `(authed)/+layout.svelte` imports `APP_LAUNCHER` from the SDK barrel. The SDK's `package.json` had no `sideEffects` declaration, so Vite/Rollup treated every barrel re-export as potentially-side-effectful and pulled `webhook.ts` (`node:crypto`) and `manifest.ts` (lazy `google-auth-library`) into the browser graph. Tree-shaking does not look at consumer code — it conservatively keeps the whole module if it cannot prove the module is pure.
+
+**Fix:** F3 — declared `"sideEffects": false` package-wide AND opened a `./constants/app-launcher` subpath. F4 — Heroes' layout imports `from '@coms-portal/sdk/constants/app-launcher'`. The subpath sidesteps barrel scanning entirely; the `sideEffects: false` is the right declaration regardless. SDK cut at `v1.1.1`.
+
+**Why neither §VA nor §VB caught it:** Both verification artefacts run in Node/Bun. Spec 02 has no browser-bundle smoketest. Filed as `mrdoorba/coms-sdk#1`.
+
+### D2 — google-auth-library cannot mint OIDC ID tokens for WIF + impersonation chains
+
+**Symptom:** Heroes' second CD run (after F4 unblocked the build, run `25477146036`) reached `register-manifest` and died with:
+
+> `coms-portal-cli: auth failure: Cannot fetch ID token in this environment, use GCE or set the GOOGLE_APPLICATION_CREDENTIALS environment variable to a service account credentials JSON file.`
+
+`GOOGLE_APPLICATION_CREDENTIALS` was set; the message is misleading.
+
+**Cause:** SDK `manifest.ts:defaultGetIdToken` calls `new GoogleAuth().getIdTokenClient(audience)`. With external_account credentials (WIF) chained through `service_account_impersonation_url`, google-auth-library v9 / v10 has no path to mint an OIDC ID token through the impersonation — `getIdTokenClient` only knows how to wrap local-signing credentials. There is no public `Impersonated.fetchIdToken` shape that SDK code can use without dynamic-typing through library internals.
+
+**Fix:** F5 — added `COMS_PORTAL_CLI_OIDC_TOKEN` env var to the SDK CLI. When set, the CLI uses the value as the `Authorization: Bearer …` header verbatim and does not invoke google-auth-library at all. The CD environment becomes responsible for minting; the CLI becomes a thin HTTP shim. SDK cut at `v1.2.0`. The existing ADC path remains the default for environments that mint locally (GCE / Cloud Run / SA-key files / `gcloud auth application-default login`).
+
+### D3 — `google-github-actions/auth` `token_format: 'id_token'` returns 403 on this binding
+
+**Symptom:** F6 wired the workflow to ask the auth action for an ID token. The action called `IAMCredentials.generateIdToken` and got back:
+
+> `403 PERMISSION_DENIED — iam.serviceAccounts.getOpenIdToken denied on resource (or it may not exist)`
+
+The deployer SA holds `roles/iam.serviceAccountTokenCreator` on the runtime SA — the role that explicitly grants `iam.serviceAccounts.getOpenIdToken`. Verified live with `gcloud iam service-accounts get-iam-policy`. A user-shell `gcloud auth print-identity-token --impersonate-service-account` against the same binding worked and returned a well-formed ID token.
+
+**Cause:** Unexplained. Same role grant, same target SA, same audience, same IAMCredentials API — but the auth-action client path returns 403 while the gcloud client path succeeds. Likely a subtle difference in how each tool composes the impersonation chain or formats the audience, but diagnosing it was not on the deploy hot path.
+
+**Fix:** F7 — drop the auth action's `token_format: 'id_token'` request. Instead: authenticate via the auth action (deployer SA ADC), then in a separate step call `gcloud auth print-identity-token --impersonate-service-account=<runtime-sa> --audiences=<portal-url> --include-email`, mask the output, thread it into `register-manifest` via `COMS_PORTAL_CLI_OIDC_TOKEN`. Same role, same API, but a client path known to work with this binding shape.
+
+**Why this matters for future H-app onboarders:** The canonical "modern" pattern from the auth action's docs (`token_format: 'id_token'`) does not work here. New H-apps that copy Heroes' deploy.yml inherit the gcloud-mint workaround. If GitHub or Google fix the upstream, F7 should be reverted to the canonical form — the SDK-side env-var hook (F5) accepts either source.
+
+### D4 — Portal route never served traffic until 2026-05-07
+
+**Symptom:** F7 unblocked auth; the CLI's POST reached the portal and got back a SvelteKit 404 page from `https://coms-portal-app-….run.app/api/v1/apps/heroes/manifest`. Other portal API routes worked (e.g. `/api/v1/audit-log` returned 401). Only the manifest route 404'd.
+
+**Cause:** Spec 01 PR D mounted `appManifestRoutes` at prefix `/apps/:slug/manifest` in `cb34577`. `apps.ts` and `app-webhooks.ts` already register `/apps/:id/...` siblings. Elysia's underlying memoirist router rejects two different parameter names at the same trie position; the conflict throws at `app.handle` / `app.listen()` compose time. Cloud Run revisions cb34577-onwards (`coms-portal-app-00227-pmc` and every revision since, including the deploy of `8736d0d` two hours earlier) crashed at TCP probe with:
+
+> `error: Cannot create route "/api/v1/apps/:slug/manifest/" with parameter "slug" because a route already exists with a different parameter name ("id") in the same location`
+
+Cloud Run kept serving from the last healthy revision (pre-`cb34577`), so external traffic continued — but the manifest route was never live. **Spec 01 §AC #7 ("Portal POST /v1/apps/:slug/manifest is live") was not actually satisfied at v1.0.0 ship time** — it was a quiet false-positive that survived 2.5 weeks because no consumer exercised the route.
+
+**Fix:** F8 — rename the prefix's param from `:slug` to `:id` to match siblings. The captured value is still semantically a slug; only the param NAME changes (memoirist conflicts on names, not values). The handler's match logic is unaffected. Added `apps/api/src/__tests__/route-compose.test.ts` that imports the composed app and dispatches one request — forces memoirist to build, catches any future param-name collision at unit-test time. F9 — drop a `.ts` extension the test inadvertently used (tsc strict).
+
+**Why neither Spec 01 PR D's tests nor portal CI caught it:** `app-manifest.test.ts` exercises the route in isolation (no sibling routes); `bun apps/api/server.ts` runs only at deploy time on the runtime image. Filed as `mrdoorba/coms-portal#3` (generalize the canary).
+
+---
+
+## Filed follow-up issues
+
+Four issues filed at SHIPPED time, capturing class-of-bug fixes that fall outside Spec 02's scope but are direct consequences of the post-ship discoveries:
+
+| Issue | Repo | Title | Origin |
+|---|---|---|---|
+| [#1](https://github.com/mrdoorba/coms-sdk/issues/1) | `coms-sdk` | Add `examples/web-bundle-smoketest/` — verify SDK works in browser bundles | D1 |
+| [#3](https://github.com/mrdoorba/coms-portal/issues/3) | `coms-portal` | Generalize route-compose regression test — assert no param-name conflicts across any prefix | D4 |
+| [#4](https://github.com/mrdoorba/coms-portal/issues/4) | `coms-portal` | Fix pre-existing test failures in `apps/api/src/services/__tests__/manifests.test.ts` | Surfaced during Spec 02 — pre-existing, blocks the CD typecheck-and-tests gate from being meaningful |
+| [#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) | `coms_aha_heroes` | Reconcile infra drift between OpenTofu config and live Cloud Run state | Surfaced during F1 `tofu apply -target` — pre-existing, has real prod env-var risk |
+
+These are tracker entries, not scheduled work. Pick up in any order; #5 has the most production risk, #1 closes the verification gap that produced D1.
+
+---
+
+## Operator briefing — what a future session needs to know
+
+If you `git pull` and want to ramp on Spec 02 from a clean conversation:
+
+1. **Read this entire file before changing code.** The §Commit ledger is the single source of truth for what shipped; the §Post-ship discoveries are the single source of truth for why each follow-up patch exists.
+2. **The SDK is at `v1.2.0`,** not v1.1.0 as originally planned. Two patch/minor bumps shipped during the discovery loop. New consumers should pin `git+https://github.com/mrdoorba/coms-sdk.git#v1.2.0`.
+3. **Heroes' workflow uses `gcloud auth print-identity-token --impersonate-service-account` (F7), not the auth action's `token_format: 'id_token'` (F6).** The latter returns 403 against this binding shape for reasons unknown. If you change Heroes' `register-manifest` step or copy it to a new H-app, keep the gcloud path.
+4. **Heroes' `(authed)/+layout.svelte` imports `APP_LAUNCHER` from the `@coms-portal/sdk/constants/app-launcher` subpath, NOT the barrel.** Other Heroes files use the barrel safely (server-side, type-only imports). If a future Heroes file imports from the barrel from a browser-bundled context, the build crashes with `createHmac is not exported by __vite-browser-external` — flip it to the subpath.
+5. **Portal route param under `/api/v1/apps/:X/...` is `:id`, NOT `:slug`** — even when the captured value is a slug string. memoirist requires param-name uniformity across siblings at the same trie position. The `route-compose.test.ts` regression test catches new conflicts. If it fails at startup, look for a sibling that introduced a different param name.
+6. **AC #2 was the last criterion to verify.** It is now closed. There is no further Spec 02 work in flight; pick from the four filed follow-up issues if you want to keep the thread warm.
 
 ---
 
