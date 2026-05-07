@@ -376,6 +376,120 @@ export async function createBrokerHandoff(
   }
 }
 
+async function exchangeCodeHandoff(
+  appSlug: string,
+  code: string,
+): Promise<PortalBrokerExchangePayload> {
+  const handoff = await db.query.authHandoffs.findFirst({
+    where: eq(authHandoffs.codeHash, hashCode(code)),
+  })
+
+  if (
+    !handoff ||
+    handoff.appSlug !== appSlug ||
+    handoff.consumedAt ||
+    handoff.expiresAt <= new Date()
+  ) {
+    throw new BrokerValidationError('Invalid or expired handoff code')
+  }
+
+  await db
+    .update(authHandoffs)
+    .set({ consumedAt: new Date() })
+    .where(eq(authHandoffs.id, handoff.id))
+
+  return {
+    appSlug: handoff.appSlug,
+    brokeredAt: new Date().toISOString(),
+    expiresAt: handoff.expiresAt.toISOString(),
+    redirectTo: handoff.redirectTo ?? null,
+    sessionUser: {
+      id: handoff.userId,
+      gipUid: handoff.gipUid,
+      email: handoff.email,
+      name: handoff.name,
+      portalRole: handoff.portalRole as PortalSessionUser['portalRole'],
+      teamIds: handoff.teamIds ?? [],
+      apps: handoff.apps ?? [],
+    },
+  }
+}
+
+/**
+ * Verify an HS256 broker token using the per-app symmetric secret.
+ * Accepts both the URL-form and legacy bare-string issuers during the
+ * dual-mode transition window (see PORTAL_BROKER_ISSUER docblock).
+ */
+async function verifyHS256BrokerToken(
+  token: string,
+  app: BrokerCapableApp,
+  appSlug: string,
+): Promise<BrokerTokenPayload & { exp?: number }> {
+  const secret = getBrokerSecretForApp(app)
+  const { payload } = await jwtVerify<BrokerTokenPayload>(token, secret, {
+    issuer: [PORTAL_BROKER_ISSUER, LEGACY_PORTAL_BROKER_ISSUER],
+    audience: brokerAudienceFor(appSlug),
+  })
+  return payload
+}
+
+/**
+ * Discriminate verification by the JWT's `alg` header (Rev 2 §01 dual-mode).
+ * HS256 → legacy per-app symmetric secret. ES256 → fetch the matching public
+ * JWK by `kid` from `portal_broker_signing_keys` (active + retiring rows).
+ * Anything else → reject.
+ */
+async function verifyBrokerToken(
+  token: string,
+  app: BrokerCapableApp,
+  appSlug: string,
+): Promise<BrokerTokenPayload & { exp?: number }> {
+  let header
+  try {
+    header = decodeProtectedHeader(token)
+  } catch {
+    throw new BrokerValidationError('Malformed broker token header')
+  }
+
+  if (header.alg === 'ES256') {
+    return verifyES256BrokerToken(token, appSlug)
+  }
+  if (header.alg === 'HS256') {
+    return verifyHS256BrokerToken(token, app, appSlug)
+  }
+  throw new BrokerValidationError(`Unsupported token alg: ${header.alg ?? 'unknown'}`)
+}
+
+async function exchangeTokenHandoff(
+  appSlug: string,
+  token: string,
+): Promise<PortalBrokerExchangePayload> {
+  const app = await db.query.appRegistry.findFirst({
+    where: eq(appRegistry.slug, appSlug),
+    columns: {
+      slug: true,
+      url: true,
+      transportMode: true,
+      handoffMode: true,
+      brokerOrigin: true,
+      status: true,
+      brokerSigningSecret: true,
+    },
+  })
+  if (!app) throw new BrokerValidationError('App not found')
+
+  const payload = await verifyBrokerToken(token, app, appSlug)
+
+  if (payload.appSlug !== appSlug) {
+    throw new BrokerValidationError('Token audience does not match requested app')
+  }
+
+  return payloadToExchangeResponse(
+    payload,
+    new Date((payload.exp ?? Math.floor(Date.now() / 1000)) * 1000),
+  )
+}
+
 export async function exchangeBrokerHandoff(input: {
   appSlug: string
   code?: string
@@ -384,77 +498,10 @@ export async function exchangeBrokerHandoff(input: {
   if (!!input.code === !!input.token) {
     throw new BrokerValidationError('Provide exactly one of code or token')
   }
-
   if (input.code) {
-    const handoff = await db.query.authHandoffs.findFirst({
-      where: eq(authHandoffs.codeHash, hashCode(input.code)),
-    })
-
-    if (!handoff || handoff.appSlug !== input.appSlug || handoff.consumedAt || handoff.expiresAt <= new Date()) {
-      throw new BrokerValidationError('Invalid or expired handoff code')
-    }
-
-    await db
-      .update(authHandoffs)
-      .set({ consumedAt: new Date() })
-      .where(eq(authHandoffs.id, handoff.id))
-
-    return {
-      appSlug: handoff.appSlug,
-      brokeredAt: new Date().toISOString(),
-      expiresAt: handoff.expiresAt.toISOString(),
-      redirectTo: handoff.redirectTo ?? null,
-      sessionUser: {
-        id: handoff.userId,
-        gipUid: handoff.gipUid,
-        email: handoff.email,
-        name: handoff.name,
-        portalRole: handoff.portalRole as PortalSessionUser['portalRole'],
-        teamIds: handoff.teamIds ?? [],
-        apps: handoff.apps ?? [],
-      },
-    }
+    return exchangeCodeHandoff(input.appSlug, input.code)
   }
-
-  const app = await db.query.appRegistry.findFirst({
-    where: eq(appRegistry.slug, input.appSlug),
-    columns: { slug: true, url: true, transportMode: true, handoffMode: true, brokerOrigin: true, status: true, brokerSigningSecret: true },
-  })
-  if (!app) throw new BrokerValidationError('App not found')
-
-  // Discriminate verification by the JWT's `alg` header (Rev 2 §01
-  // dual-mode). HS256 → legacy per-app symmetric secret. ES256 → fetch
-  // the matching public JWK by `kid` from `portal_broker_signing_keys`
-  // (active + retiring rows). Anything else → reject.
-  let header
-  try {
-    header = decodeProtectedHeader(input.token!)
-  } catch {
-    throw new BrokerValidationError('Malformed broker token header')
-  }
-
-  let payload: BrokerTokenPayload & { exp?: number }
-  if (header.alg === 'ES256') {
-    payload = await verifyES256BrokerToken(input.token!, input.appSlug)
-  } else if (header.alg === 'HS256') {
-    const secret = getBrokerSecretForApp(app)
-    const verified = await jwtVerify<BrokerTokenPayload>(input.token!, secret, {
-      issuer: [PORTAL_BROKER_ISSUER, LEGACY_PORTAL_BROKER_ISSUER],
-      audience: brokerAudienceFor(input.appSlug),
-    })
-    payload = verified.payload
-  } else {
-    throw new BrokerValidationError(`Unsupported token alg: ${header.alg ?? 'unknown'}`)
-  }
-
-  if (payload.appSlug !== input.appSlug) {
-    throw new BrokerValidationError('Token audience does not match requested app')
-  }
-
-  return payloadToExchangeResponse(
-    payload,
-    new Date((payload.exp ?? Math.floor(Date.now() / 1000)) * 1000),
-  )
+  return exchangeTokenHandoff(input.appSlug, input.token!)
 }
 
 /**
