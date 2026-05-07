@@ -32,6 +32,7 @@ import { aliasesRoutes } from './routes/aliases'
 import { taxonomiesRoutes } from './routes/taxonomies'
 import { userRoutes } from './routes/users'
 import { auditLogRoutes } from './routes/audit-log'
+import { appManifestRoutes } from './routes/app-manifest'
 
 initGip()
 
@@ -129,5 +130,9 @@ export const app = new Elysia({ prefix: '/api' })
   // Broker-token authenticated routes — separate /v1 group so session-cookie
   // authPlugin does not interfere with the broker bearer-token auth scheme.
   .group('/v1', (app) => app.use(auditLogRoutes))
+  // App-token (Google OIDC) authenticated routes — same isolation rationale
+  // as auditLogRoutes; appManifestRoutes uses requireAppToken, so it must
+  // not sit behind authPlugin's session-cookie gate.
+  .group('/v1', (app) => app.use(appManifestRoutes))
 
 export type App = typeof app
