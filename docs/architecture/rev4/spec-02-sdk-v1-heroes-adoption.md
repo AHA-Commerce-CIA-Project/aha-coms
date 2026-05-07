@@ -1,6 +1,6 @@
 # Rev 4 — Spec 02: SDK v1.0 Heroes Adoption & Verification
 
-> **Status: SHIPPED 2026-05-07** — five planned PRs landed, four follow-up bugs (D1–D4) surfaced at deploy time, nine follow-up patches (F1–F9) landed at ship, three post-ship follow-ups (F10–F12) closed filed issues #1, #3, #4 same day, AC #2 verified live in production. SDK released as `@coms-portal/sdk@v1.2.0`.
+> **Status: SHIPPED 2026-05-07** — five planned PRs landed, four follow-up bugs (D1–D4) surfaced at deploy time, nine follow-up patches (F1–F9) landed at ship, four post-ship follow-ups (F10–F13) closed all four filed issues (#1, #3, #4, #5) same day, AC #2 verified live in production. SDK released as `@coms-portal/sdk@v1.2.0`.
 
 ## Commit ledger (all repos, draft → production-verified)
 
@@ -28,13 +28,14 @@
 | F8 | Portal route param rename `:slug` → `:id` (memoirist trie conflict with `apps.ts` / `app-webhooks.ts`) + `route-compose.test.ts` regression | `mrdoorba/coms_portal` `abd3b21` | — |
 | F9 | Portal route-compose test extension fix (drop `.ts` to satisfy tsc) | `mrdoorba/coms_portal` `ce4d3c9` | — |
 
-### Post-ship follow-ups (closed filed issues #3, #4 same day as ship)
+### Post-ship follow-ups (closed all four filed issues same day as ship)
 
 | # | Scope | Repo / commit | Tag | Closes |
 |---|---|---|---|---|
 | F10 | Portal: split `services/manifests.ts` into shell + `manifests-internal.ts` to break the cross-file mock pollution loop. Bun's `mock.module` is process-global and keyed by resolved abs path, AND `export *` propagates a mock through the live binding to the source module — so any mock on `manifests.ts` was poisoning `manifests-internal.ts` too. The shell now uses const-bound re-exports (`export const X = impl.X`) which capture function references at load time and stand alone; `manifests.test.ts` imports `'../manifests-internal'` directly and is now isolated from the polluters | `mrdoorba/coms_portal` (current commit) | — | #4 |
 | F11 | Portal: `__tests__/route-compose.test.ts` generalised — alongside the original "first request doesn't throw" check, walks the composed `app.routes` trie and explicitly surfaces every memoirist param-name conflict with a friendly diagnostic (conflicting position + both route paths + both names), so a future D4-style mismatch is caught even if memoirist's compose-time throw ever stops firing. Two self-verification cases guard the helper against silent regressions | `mrdoorba/coms_portal` (current commit) | — | #3 |
 | F12 | SDK: `examples/web-bundle-smoketest/` — Vite browser-bundle regression canary. Reproduces Heroes' `(authed)/+layout.svelte` import path (`APP_LAUNCHER` via the `@coms-portal/sdk/constants/app-launcher` subpath), runs Vite programmatically inside `bun:test`, and asserts `dist/assets/*.js` contains none of `createHmac` / `node:crypto` / `timingSafeEqual` / `google-auth-library` / `GoogleAuth`, plus a `'COMS'` sentinel proving APP_LAUNCHER survived tree-shake. Verified the canary fires by temporarily flipping the entry to import from the SDK barrel — Rollup raised `MISSING_EXPORT` on `createHmac`, exactly D1's failure mode. SDK suite now 88 pass (was 85, +3). Pure additive — no `src/` or root-config changes; `vite` is a dev-dep of the example only | `mrdoorba/coms-sdk` `dcad4aa` | — | #1 |
+| F13 | Heroes infra: silence Cloud Run drift permanently. `lifecycle.ignore_changes` on `cloud_run.app` extended to `[image, env, startup_cpu_boost, traffic, client, client_version]` — every prior `tofu apply` (without `-target`) would have stripped Heroes' production env vars (`PORTAL_ORIGIN`, `PUBLIC_PORTAL_ORIGIN`, `PORTAL_APP_SLUG`, `PUBLIC_APP_ORIGIN`, `DB_POOL_MAX`) and proposed re-writing `PLACEHOLDER_REPLACE_ME` over the four `auth_*` secret versions (which deploy.yml pins `:latest` → hard auth outage). The issue's "Safe to apply" claim for the auth_placeholder was wrong: live state shows v1 destroyed (operator hygiene after writing v2 with real data 2026-04-01), so apply would have created v3 with the placeholder and the next deploy would have served it. Removed the `auth_placeholder` block from code, `tofu state rm` on the four orphan entries, runbook moved to a comment block on the secret container. Also dropped vestigial `SHEET_SYNC_INTERVAL_MS` (read by zero application code) and the two never-applied `portal_introspect_*` alert_policies (single-operator setup, no actionable signal beyond what the portal's own monitoring catches first). Added `infra-plan` PR check in `ci.yml` gated on `vars.INFRA_PLAN_GUARD_ENABLED == 'true'` — flip on once the deployer SA has `roles/viewer` + `roles/storage.objectViewer` on `gs://coms-aha-heroes-tfstate`. `tofu plan` from a clean checkout: 0 to add, 0 to change, 0 to destroy | `mrdoorba/coms_aha_heroes` `4aecd2e` | — | #5 |
 
 ### Portal docs
 
@@ -129,9 +130,9 @@ Four issues filed at SHIPPED time, capturing class-of-bug fixes that fall outsid
 | [#1](https://github.com/mrdoorba/coms-sdk/issues/1) | `coms-sdk` | Add `examples/web-bundle-smoketest/` — verify SDK works in browser bundles | D1 | **closed** by F12 |
 | [#3](https://github.com/mrdoorba/coms-portal/issues/3) | `coms-portal` | Generalize route-compose regression test — assert no param-name conflicts across any prefix | D4 | **closed** by F11 |
 | [#4](https://github.com/mrdoorba/coms-portal/issues/4) | `coms-portal` | Fix pre-existing test failures in `apps/api/src/services/__tests__/manifests.test.ts` | Surfaced during Spec 02 — pre-existing, blocks the CD typecheck-and-tests gate from being meaningful | **closed** by F10 |
-| [#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) | `coms_aha_heroes` | Reconcile infra drift between OpenTofu config and live Cloud Run state | Surfaced during F1 `tofu apply -target` — pre-existing, has real prod env-var risk | open |
+| [#5](https://github.com/mrdoorba/coms-aha-heroes/issues/5) | `coms_aha_heroes` | Reconcile infra drift between OpenTofu config and live Cloud Run state | Surfaced during F1 `tofu apply -target` — pre-existing, has real prod env-var risk | **closed** by F13 |
 
-Three of the four are now closed (F10, F11, F12 — all same day as ship). The remaining tracker entry is `coms_aha_heroes#5` (infra drift between OpenTofu config and live Cloud Run state); it is the highest-production-risk leftover and the only Spec 02 thread still warm.
+All four are now closed (F10, F11, F12, F13 — all same day as ship). No Spec 02 thread remains warm; the only deferred work is flipping `vars.INFRA_PLAN_GUARD_ENABLED` to `'true'` once the deployer SA gets `roles/viewer` + `roles/storage.objectViewer` (operator action, not Spec 02's authority).
 
 ---
 
@@ -144,7 +145,7 @@ If you `git pull` and want to ramp on Spec 02 from a clean conversation:
 3. **Heroes' workflow uses `gcloud auth print-identity-token --impersonate-service-account` (F7), not the auth action's `token_format: 'id_token'` (F6).** The latter returns 403 against this binding shape for reasons unknown. If you change Heroes' `register-manifest` step or copy it to a new H-app, keep the gcloud path.
 4. **Heroes' `(authed)/+layout.svelte` imports `APP_LAUNCHER` from the `@coms-portal/sdk/constants/app-launcher` subpath, NOT the barrel.** Other Heroes files use the barrel safely (server-side, type-only imports). If a future Heroes file imports from the barrel from a browser-bundled context, the build crashes with `createHmac is not exported by __vite-browser-external` — flip it to the subpath.
 5. **Portal route param under `/api/v1/apps/:X/...` is `:id`, NOT `:slug`** — even when the captured value is a slug string. memoirist requires param-name uniformity across siblings at the same trie position. The `route-compose.test.ts` regression test catches new conflicts. If it fails at startup, look for a sibling that introduced a different param name.
-6. **AC #2 was the last criterion to verify.** It is now closed. There is no further Spec 02 work in flight; pick from the four filed follow-up issues if you want to keep the thread warm.
+6. **AC #2 was the last criterion to verify.** It is now closed. All four filed follow-up issues are closed (F10/F11/F12/F13). No Spec 02 thread remains warm.
 
 ---
 
