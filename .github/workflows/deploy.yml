@@ -28,6 +28,12 @@ env:
   SERVICE: coms-aha-heroes-app
   # Full connection name used by Cloud SQL Auth Proxy and Cloud Run volume
   DB_INSTANCE: fbi-dev-484410:asia-southeast2:coms-aha-heroes-db
+  # Opt JavaScript actions onto Node 24 ahead of the 2026-06-02 default
+  # flip — silences the deprecation annotations that fire today on
+  # actions/cache, docker/build-push-action, docker/setup-buildx-action.
+  # ci.yml already sets this; mirror here so push-to-main runs match.
+  # Removable once Node 24 is the runner default (no-op after that).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
