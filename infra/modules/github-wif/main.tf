@@ -79,3 +79,15 @@ resource "google_service_account_iam_member" "deployer_act_as_runtime" {
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }
+
+# Mint OIDC ID tokens on behalf of the runtime SA. Used by the
+# register-manifest CD step (Rev 4 Spec 02 §HB) — google-github-actions/auth
+# impersonates the runtime SA via this binding so the OIDC token's `email`
+# claim matches the serviceAccountEmail the portal has registered for
+# slug='heroes'. Without this, `bun x coms-portal-cli register-manifest`
+# exits 1 with an auth failure before the request leaves the runner.
+resource "google_service_account_iam_member" "deployer_mint_token_as_runtime" {
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${var.cloud_run_service_account_email}"
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.deployer.email}"
+}
