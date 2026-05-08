@@ -88,6 +88,31 @@ export type RoutedRows = {
   unresolved: UnresolvedRow[]
 }
 
+/** A sheet row parsed into achievement-point fields, before alias resolution. */
+export type ParsedPoint = {
+  sheetRow: SheetRow
+  reason: string
+  screenshotUrl: string | null
+  points: number
+  kittaComponent: string | null
+  createdAt: Date
+}
+
+/** Shape passed to db.insert(achievementPoints).values(...). */
+export type PointInsertRow = {
+  branchKey: string
+  userId: string
+  categoryId: string
+  points: number
+  reason: string
+  screenshotUrl: string | null
+  kittaComponent: 'K' | 'I' | 'T1' | 'T2' | 'A' | null
+  status: 'active'
+  submittedBy: string
+  createdAt: Date
+  updatedAt: Date
+}
+
 /** Dependency injection seam for tests. */
 export type ResolveAndRouteDeps = {
   resolver?: (input: { names: string[] }) => Promise<{
@@ -107,6 +132,82 @@ export type ResolveAndRouteDeps = {
 
 const BATCH_SIZE = 100
 const ALIAS_BATCH_SIZE = 1000
+
+function formatCreatedSecond(d: Date): string {
+  return (
+    `${d.getUTCFullYear()}-` +
+    `${String(d.getUTCMonth() + 1).padStart(2, '0')}-` +
+    `${String(d.getUTCDate()).padStart(2, '0')} ` +
+    `${String(d.getUTCHours()).padStart(2, '0')}:` +
+    `${String(d.getUTCMinutes()).padStart(2, '0')}:` +
+    `${String(d.getUTCSeconds()).padStart(2, '0')}`
+  )
+}
+
+/**
+ * Build the achievement_points insert payload for active rows. Pure function:
+ * no DB, no I/O. Extracted so the dedup-by-rowIdx contract is unit-testable.
+ *
+ * Two sheet rows that share a name (e.g. one person with multiple Penalti
+ * entries) MUST land as two distinct inserts. Indexing by `rowIdx` instead of
+ * `rawNameNormalized` is what guarantees that — keying by name collapses
+ * `parsedRows` to a single survivor and replicates it across every active
+ * entry.
+ */
+export function buildPointsToInsert(args: {
+  parsedRows: ParsedPoint[]
+  routedActive: ActiveRow[]
+  dbCounts: Map<string, number>
+  branchKey: string
+  categoryId: string
+  categoryCode: string
+  adminProfileId: string | undefined
+  now: Date
+}): { toInsert: PointInsertRow[]; processed: number } {
+  const parsedByIdx = new Map(args.parsedRows.map((p) => [p.sheetRow.rowIdx, p]))
+  const sheetCounts = new Map<string, number>()
+  const toInsert: PointInsertRow[] = []
+  let processed = 0
+
+  for (const activeRow of args.routedActive) {
+    const meta = parsedByIdx.get(activeRow.row.rowIdx)
+    if (!meta) continue
+
+    const createdSecond = formatCreatedSecond(meta.createdAt)
+    const dedupKey = `${activeRow.portalSub}|${meta.reason}|${meta.points}|${createdSecond}`
+
+    const seenInSheet = (sheetCounts.get(dedupKey) ?? 0) + 1
+    sheetCounts.set(dedupKey, seenInSheet)
+
+    if (seenInSheet <= (args.dbCounts.get(dedupKey) ?? 0)) {
+      processed++
+      continue
+    }
+
+    const submittedBy =
+      args.categoryCode === 'BINTANG'
+        ? activeRow.portalSub
+        : (args.adminProfileId ?? activeRow.portalSub)
+
+    toInsert.push({
+      branchKey: args.branchKey,
+      userId: activeRow.portalSub,
+      categoryId: args.categoryId,
+      points: meta.points,
+      reason: meta.reason,
+      screenshotUrl: meta.screenshotUrl,
+      kittaComponent: meta.kittaComponent as 'K' | 'I' | 'T1' | 'T2' | 'A' | null,
+      status: 'active',
+      submittedBy,
+      createdAt: meta.createdAt,
+      updatedAt: args.now,
+    })
+
+    processed++
+  }
+
+  return { toInsert, processed }
+}
 
 type TabNames = {
   employees: string
@@ -286,6 +387,9 @@ export async function syncEmployees(
     const employmentStatus = row[headerIndex.STATUS]?.trim()
     const talentaId = row[headerIndex.TALENTA_ID]?.trim()
 
+    // Trailing blank rows from the sheet are not data — skip silently.
+    if (row.every((cell) => !cell?.trim())) continue
+
     if (!name) {
       failed++
       errors.push({ tab: tabName, row: i + 2, name: '', error: 'Missing name' })
@@ -438,14 +542,6 @@ export async function syncPoints(
   const errors: SyncResult['errors'] = []
 
   // 1. Parse all rows first, collect names that need resolution
-  type ParsedPoint = {
-    sheetRow: SheetRow
-    reason: string
-    screenshotUrl: string | null
-    points: number
-    kittaComponent: string | null
-    createdAt: Date
-  }
   const parsedRows: ParsedPoint[] = []
 
   for (const [i, row] of dataRows.entries()) {
@@ -453,6 +549,9 @@ export async function syncPoints(
     const nameRaw = row[headerIndex.NAME]?.trim()
     const reasonRaw = row[headerIndex.REASON]?.trim()
     const screenshotRaw = row[headerIndex.SCREENSHOT]?.trim()
+
+    // Trailing blank rows from the sheet are not data — skip silently.
+    if (row.every((cell) => !cell?.trim())) continue
 
     if (!timestampRaw || !nameRaw) {
       failed++
@@ -544,10 +643,7 @@ export async function syncPoints(
   await writeTombstonedRows(routed.tombstoned, sheetId, db)
   processed += routed.tombstoned.length
 
-  // 5. Outcome 1 — insert achievement_points for active rows
-  // Build lookup: normalised name → parsed data
-  const parsedByNorm = new Map(parsedRows.map((p) => [p.sheetRow.rawNameNormalized, p]))
-
+  // 5. Outcome 1 — insert achievement_points for active rows.
   // Find system admin user for submittedBy fallback (single query)
   const [adminProfile] = await db
     .select({ id: heroesProfiles.id })
@@ -572,56 +668,18 @@ export async function syncPoints(
     dbCounts.set(key, (dbCounts.get(key) ?? 0) + 1)
   }
 
-  const sheetCounts = new Map<string, number>()
-
-  const toInsert: Array<{
-    branchKey: string
-    userId: string
-    categoryId: string
-    points: number
-    reason: string
-    screenshotUrl: string | null
-    kittaComponent: 'K' | 'I' | 'T1' | 'T2' | 'A' | null
-    status: 'active'
-    submittedBy: string
-    createdAt: Date
-    updatedAt: Date
-  }> = []
-
-  for (const activeRow of routed.active) {
-    const meta = parsedByNorm.get(activeRow.row.rawNameNormalized)
-    if (!meta) continue
-
-    const createdSecond = `${meta.createdAt.getUTCFullYear()}-${String(meta.createdAt.getUTCMonth() + 1).padStart(2, '0')}-${String(meta.createdAt.getUTCDate()).padStart(2, '0')} ${String(meta.createdAt.getUTCHours()).padStart(2, '0')}:${String(meta.createdAt.getUTCMinutes()).padStart(2, '0')}:${String(meta.createdAt.getUTCSeconds()).padStart(2, '0')}`
-    const dedupKey = `${activeRow.portalSub}|${meta.reason}|${meta.points}|${createdSecond}`
-
-    const seenInSheet = (sheetCounts.get(dedupKey) ?? 0) + 1
-    sheetCounts.set(dedupKey, seenInSheet)
-
-    if (seenInSheet <= (dbCounts.get(dedupKey) ?? 0)) {
-      processed++
-      continue
-    }
-
-    const submittedBy =
-      categoryCode === 'BINTANG' ? activeRow.portalSub : (adminProfile?.id ?? activeRow.portalSub)
-
-    toInsert.push({
-      branchKey,
-      userId: activeRow.portalSub,
-      categoryId: cat.id,
-      points: meta.points,
-      reason: meta.reason,
-      screenshotUrl: meta.screenshotUrl,
-      kittaComponent: meta.kittaComponent as 'K' | 'I' | 'T1' | 'T2' | 'A' | null,
-      status: 'active',
-      submittedBy,
-      createdAt: meta.createdAt,
-      updatedAt: new Date(),
-    })
-
-    processed++
-  }
+  const built = buildPointsToInsert({
+    parsedRows,
+    routedActive: routed.active,
+    dbCounts,
+    branchKey,
+    categoryId: cat.id,
+    categoryCode,
+    adminProfileId: adminProfile?.id,
+    now: new Date(),
+  })
+  const toInsert = built.toInsert
+  processed += built.processed
 
   // Batch insert
   for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
@@ -702,6 +760,9 @@ export async function syncRedemptions(
     const nameRaw = row[headerIndex.NAME]?.trim()
     const rewardRaw = row[headerIndex.REWARD]?.trim()
     const notesRaw = row[headerIndex.NOTES]?.trim()
+
+    // Trailing blank rows from the sheet are not data — skip silently.
+    if (row.every((cell) => !cell?.trim())) continue
 
     if (!timestampRaw || !nameRaw || !rewardRaw) {
       failed++
@@ -790,11 +851,14 @@ export async function syncRedemptions(
   processed += routed.tombstoned.length
 
   // 7. Collect and batch-create missing rewards
-  const parsedByNorm = new Map(parsedRows.map((p) => [p.sheetRow.rawNameNormalized, p]))
+  // Index by sheet row index, not name — multiple sheet rows can share a name
+  // (e.g. one person redeeming several rewards). Keying by name would collapse
+  // them and replicate the survivor across every active entry.
+  const parsedByIdx = new Map(parsedRows.map((p) => [p.sheetRow.rowIdx, p]))
 
   const missingRewardKeys = new Set<string>()
   for (const activeRow of routed.active) {
-    const meta = parsedByNorm.get(activeRow.row.rawNameNormalized)
+    const meta = parsedByIdx.get(activeRow.row.rowIdx)
     if (!meta) continue
     const key = `${meta.reward.name}|${meta.reward.cost}`
     if (!rewardMap.has(key)) missingRewardKeys.add(key)
@@ -839,7 +903,7 @@ export async function syncRedemptions(
   }> = []
 
   for (const activeRow of routed.active) {
-    const meta = parsedByNorm.get(activeRow.row.rawNameNormalized)
+    const meta = parsedByIdx.get(activeRow.row.rowIdx)
     if (!meta) continue
 
     const rewardKey = `${meta.reward.name}|${meta.reward.cost}`
@@ -951,6 +1015,10 @@ export async function runFullSync(
   direction: 'import' | 'resync' = 'import',
 ) {
   const db = (tx ?? defaultDb) as unknown as DbClient
+  // Audit operations always run on defaultDb so the job record persists even
+  // when the work transaction (during a resync) rolls back. Without this, a
+  // failed resync would leave no trace in sheet_sync_jobs for operators.
+  const auditDb = defaultDb as unknown as DbClient
 
   const job = await createJob(
     {
@@ -964,12 +1032,16 @@ export async function runFullSync(
       rowsProcessed: 0,
       rowsFailed: 0,
     },
-    db,
+    auditDb,
   )
 
   let totalProcessed = 0
   let totalFailed = 0
   const allErrors: SyncResult['errors'] = []
+  // Catastrophic step failures (a whole syncEmployees/syncPoints/etc. throw,
+  // not per-row failures). Surfaced after the fact so that, when this run is
+  // inside a transaction (resync), the caller can rollback by re-throwing.
+  const stepFailures: unknown[] = []
 
   const runStep = async (fn: () => Promise<SyncResult>) => {
     try {
@@ -980,6 +1052,7 @@ export async function runFullSync(
     } catch (err) {
       console.error('[sheet-sync] step failed', err)
       totalFailed++
+      stepFailures.push(err)
       allErrors.push({
         tab: 'unknown',
         row: 0,
@@ -1015,8 +1088,16 @@ export async function runFullSync(
       errorLog: allErrors.length > 0 ? allErrors : null,
       completedAt: new Date(),
     },
-    db,
+    auditDb,
   )
+
+  // When invoked inside a transaction (i.e. from runFullResync), any
+  // catastrophic step failure must propagate so the surrounding tx rolls back
+  // — otherwise the wipe would commit with partially-imported data. For
+  // incremental sync (no tx), we swallow as before so partial progress sticks.
+  if (tx && stepFailures.length > 0) {
+    throw stepFailures[0]
+  }
 
   return {
     jobId: job.id,
@@ -1028,22 +1109,27 @@ export async function runFullSync(
 
 /**
  * Wipe all transactional data for the branch, then re-import from the sheet.
- * Use this to fix data issues or for initial setup.
- * Once the app generates its own data, use runFullSync instead (incremental dedup).
+ *
+ * The wipe and the import run inside one DB transaction so the operation is
+ * idempotent: if any step throws, Postgres rolls back the wipe and the table
+ * is left exactly as it was before the click. Safe to invoke at any time.
+ *
+ * The audit job record (`sheet_sync_jobs`) is intentionally written via
+ * `defaultDb` inside `runFullSync`, *not* the tx — that way a failed resync
+ * still leaves a row behind for operators to inspect.
  */
 export async function runFullResync(
   sheetIds: { points: string; employees: string },
   tabNames: TabNames,
   branchKey: string,
   startedBy?: string,
+  db: DbClient = defaultDb as unknown as DbClient,
 ) {
-  const db = defaultDb as unknown as DbClient
+  return db.transaction(async (tx) => {
+    await tx.delete(redemptions).where(eq(redemptions.branchKey, branchKey))
+    await tx.delete(achievementPoints).where(eq(achievementPoints.branchKey, branchKey))
+    await tx.delete(pointSummaries).where(eq(pointSummaries.branchKey, branchKey))
 
-  // Wipe then re-import without a wrapping transaction — a single
-  // transaction would time out on large datasets (14k+ rows).
-  await db.delete(redemptions).where(eq(redemptions.branchKey, branchKey))
-  await db.delete(achievementPoints).where(eq(achievementPoints.branchKey, branchKey))
-  await db.delete(pointSummaries).where(eq(pointSummaries.branchKey, branchKey))
-
-  return runFullSync(sheetIds, tabNames, branchKey, startedBy, undefined, 'resync')
+    return runFullSync(sheetIds, tabNames, branchKey, startedBy, tx, 'resync')
+  })
 }
