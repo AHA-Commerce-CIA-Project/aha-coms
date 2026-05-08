@@ -92,12 +92,12 @@
   ]
 
   const adminNavItems = [
-    { href: '/users', label: m.nav_users() as string, icon: Users as AnyIcon },
+    { href: '/admin/users', label: m.nav_users() as string, icon: Users as AnyIcon },
     { href: '/teams', label: m.nav_teams() as string, icon: Building2 as AnyIcon },
     { href: '/reports', label: m.nav_reports() as string, icon: BarChart3 as AnyIcon },
     { href: '/admin/audit-log', label: m.nav_audit_log() as string, icon: FileText as AnyIcon },
     { href: '/admin/sheet-sync', label: m.nav_sheet_sync() as string, icon: RefreshCw as AnyIcon },
-    { href: '/settings', label: m.nav_settings() as string, icon: Settings as AnyIcon },
+    { href: '/admin/settings', label: m.nav_settings() as string, icon: Settings as AnyIcon },
   ]
 
   // Slide-over admin menu items (all items, for mobile full-nav panel)
@@ -106,12 +106,12 @@
     { href: '/points', label: m.nav_points() as string, icon: Award as AnyIcon },
     { href: '/rewards', label: m.nav_rewards() as string, icon: Gift as AnyIcon },
     { href: '/redemptions', label: m.nav_redemptions() as string, icon: ShoppingCart as AnyIcon },
-    { href: '/users', label: m.nav_users() as string, icon: Users as AnyIcon },
+    { href: '/admin/users', label: m.nav_users() as string, icon: Users as AnyIcon },
     { href: '/teams', label: m.nav_teams() as string, icon: Building2 as AnyIcon },
     { href: '/reports', label: m.nav_reports() as string, icon: BarChart3 as AnyIcon },
     { href: '/admin/audit-log', label: m.nav_audit_log() as string, icon: FileText as AnyIcon },
     { href: '/admin/sheet-sync', label: m.nav_sheet_sync() as string, icon: RefreshCw as AnyIcon },
-    { href: '/settings', label: m.nav_settings() as string, icon: Settings as AnyIcon },
+    { href: '/admin/settings', label: m.nav_settings() as string, icon: Settings as AnyIcon },
   ]
 
   const sidebarSections = $derived([
