@@ -49,7 +49,7 @@
   const ADMIN_ITEMS: CommandItem[] = [
     { id: 'users', label: () => m.nav_users(), href: '/admin/users', icon: Users, group: 'admin' },
     { id: 'teams', label: () => m.nav_teams(), href: '/teams', icon: Building2, group: 'admin' },
-    { id: 'reports', label: () => m.nav_reports(), href: '/reports', icon: BarChart3, group: 'admin' },
+    { id: 'reports', label: () => m.nav_reports(), href: '/admin/reports', icon: BarChart3, group: 'admin' },
     { id: 'audit-log', label: () => m.nav_audit_log(), href: '/admin/audit-log', icon: FileText, group: 'admin' },
     { id: 'sheet-sync', label: () => 'Sheet Sync', href: '/admin/sheet-sync', icon: RefreshCw, group: 'admin' },
     { id: 'settings', label: () => m.nav_settings(), href: '/admin/settings', icon: Settings, group: 'admin' },
