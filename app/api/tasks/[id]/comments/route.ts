@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
 import { sanitizeRichText, isHtml, htmlToPlainText } from '@/lib/sanitize';
+import { mirrorCommentToReply } from '@/lib/syncCommentReply';
 
 // GET — Fetch comments for a task
 // Public access with token, or authenticated
@@ -33,6 +34,9 @@ export async function GET(
         where: { taskId: id },
         include: {
             authorUser: { select: { name: true, image: true } },
+            reactions: {
+                include: { user: { select: { id: true, name: true } } },
+            },
         },
         orderBy: { createdAt: 'asc' },
     });
@@ -49,6 +53,17 @@ export async function GET(
         created_at: c.createdAt.toISOString(),
         updated_at: c.updatedAt.toISOString(),
         edited: c.updatedAt.getTime() - c.createdAt.getTime() > 1000,
+        // mirrored=true means this comment came from / is paired with the
+        // source channel's thread reply. UI uses it to show a subtle "via
+        // channel" indicator and gates whether reactions/edits also propagate.
+        mirrored: !!c.mirrorReplyId,
+        reactions: c.reactions.map(r => ({
+            id: r.id,
+            emoji: r.emoji,
+            user_id: r.userId,
+            user_name: r.user?.name || null,
+            created_at: r.createdAt.toISOString(),
+        })),
     })));
 }
 
@@ -83,22 +98,29 @@ export async function POST(
     };
 
     let notifyAssigneeTask: { assigneeId: string; title: string; taskToken: string | null } | null = null;
+    // Direct Assign cards (task.channelMessageId !== null) suppress the
+    // task-comment notification & requester email — by request: comments on
+    // these card modals are mirrored to the channel thread, and the channel
+    // already drives its own thread notifications.
+    let isCardTask = false;
 
     if (token) {
         // Public requester comment — verify token
         const task = await prisma.task.findFirst({
             where: { id, taskToken: token.toUpperCase() },
-            select: { id: true, assigneeId: true, title: true, taskToken: true },
+            select: { id: true, assigneeId: true, title: true, taskToken: true, channelMessageId: true },
         });
         if (!task) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 403 });
         }
 
+        isCardTask = !!task.channelMessageId;
+
         commentData.authorName = authorName || 'Requester';
         commentData.authorEmail = authorEmail || null;
 
         // Defer notification until after the comment is created so we can attach comment_id
-        if (task.assigneeId) {
+        if (task.assigneeId && !isCardTask) {
             notifyAssigneeTask = { assigneeId: task.assigneeId, title: task.title, taskToken: task.taskToken };
         }
     } else {
@@ -117,13 +139,15 @@ export async function POST(
         commentData.authorName = user?.name || 'Team Member';
         commentData.authorEmail = user?.email || null;
 
-        // Send email notification to requester
+        // Send email notification to requester (skipped for Direct Assign cards)
         const task = await prisma.task.findUnique({
             where: { id },
-            select: { requesterEmail: true, requesterName: true, title: true, taskToken: true },
+            select: { requesterEmail: true, requesterName: true, title: true, taskToken: true, channelMessageId: true },
         });
 
-        if (task?.requesterEmail) {
+        isCardTask = !!task?.channelMessageId;
+
+        if (task?.requesterEmail && !isCardTask) {
             // Fire-and-forget email
             const { sendViaAppsScript } = await import('@/lib/email');
             const { getAppUrl } = await import('@/lib/appUrl');
@@ -165,6 +189,19 @@ export async function POST(
                 message: `${commentData.authorName} commented on "${notifyAssigneeTask.title}": "${visibleText.substring(0, 80)}${visibleText.length > 80 ? '...' : ''}"`,
                 data: { task_id: id, task_token: notifyAssigneeTask.taskToken, comment_id: comment.id },
             },
+        });
+    }
+
+    // Mirror to the source channel's thread when the task is a Direct Assign
+    // card. Best-effort — fire-and-forget so a mirror failure never blocks the
+    // user-facing comment write.
+    if (isCardTask) {
+        await mirrorCommentToReply({
+            commentId: comment.id,
+            taskId: id,
+            authorUserId: comment.authorUserId,
+            message: comment.message,
+            attachments: (comment.attachments ?? []) as any,
         });
     }
 

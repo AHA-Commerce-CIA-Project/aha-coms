@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
 import { htmlToPlainText } from '@/lib/sanitize';
+import { mirrorReplyToComment } from '@/lib/syncCommentReply';
 
 // GET /api/channels/[channelId]/[messageId]/replies
 export async function GET(
@@ -113,6 +114,22 @@ export async function POST(
   if (notifications.length > 0) {
     await prisma.notification.createMany({ data: notifications });
   }
+
+  // Mirror to TaskComment when this thread belongs to a Direct Assign card.
+  // Best-effort, no-op for regular channel messages.
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { name: true, email: true },
+  });
+  await mirrorReplyToComment({
+    replyId: reply.id,
+    messageId,
+    senderId: session.user.id,
+    senderName: me?.name || session.user.name || 'Team Member',
+    senderEmail: me?.email || null,
+    content: reply.content,
+    attachments: (reply.attachments ?? []) as any,
+  });
 
   return NextResponse.json(reply, { status: 201 });
 }

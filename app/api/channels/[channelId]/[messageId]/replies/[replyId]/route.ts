@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
+import { mirrorReplyEdit, mirrorReplyDelete } from '@/lib/syncCommentReply';
 
 // PATCH - Edit reply (only by sender)
 export async function PATCH(
@@ -36,6 +37,9 @@ export async function PATCH(
       reactions: { include: { user: { select: { id: true, name: true } } } },
     },
   });
+
+  // Mirror to TaskComment if this reply belongs to a Direct Assign card.
+  await mirrorReplyEdit({ replyId, content: updated.content });
 
   return NextResponse.json(updated);
 }
@@ -75,6 +79,9 @@ export async function DELETE(
       data: { replyCount: { decrement: 1 } },
     }),
   ]);
+
+  // Cascade delete to the mirrored TaskComment if any.
+  await mirrorReplyDelete({ replyId });
 
   return NextResponse.json({ success: true });
 }

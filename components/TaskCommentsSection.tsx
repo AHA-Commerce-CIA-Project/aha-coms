@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageSquare, Send as SendIcon, Pencil, X as XIcon, Check, Loader2, Paperclip, Smile, AtSign, ListOrdered, List } from 'lucide-react';
+import { MessageSquare, Send as SendIcon, Pencil, X as XIcon, Check, Loader2, Paperclip, Smile, AtSign, ListOrdered, List, Hash, SmilePlus } from 'lucide-react';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { linkifyText, linkifyHtml } from '@/lib/linkify';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
@@ -16,6 +16,14 @@ interface CommentAttachment {
     isImage?: boolean;
 }
 
+interface CommentReaction {
+    id: string;
+    emoji: string;
+    user_id: string;
+    user_name: string | null;
+    created_at: string;
+}
+
 interface Comment {
     id: string;
     author_name: string;
@@ -28,6 +36,9 @@ interface Comment {
     created_at: string;
     updated_at?: string;
     edited?: boolean;
+    // Phase-2 sync: true when this comment is paired with a channel-thread reply.
+    mirrored?: boolean;
+    reactions?: CommentReaction[];
 }
 
 interface Props {
@@ -104,6 +115,9 @@ export function TaskCommentsSection({
     const editRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    // Tracks which comment is currently requesting an emoji to react with.
+    // null = no picker open. Only one picker is active at a time.
+    const [reactionPickerCommentId, setReactionPickerCommentId] = useState<string | null>(null);
     // Active formatting state for the toolbar — tracks the current selection's
     // queryCommandState so buttons can highlight while the caret is inside
     // bold/italic/list ranges.
@@ -614,6 +628,44 @@ export function TaskCommentsSection({
         setEditingAttachments([]);
     };
 
+    // Toggle a reaction emoji on a comment. Optimistically updates the local
+    // comments state on a clean response so the picker closes instantly without
+    // needing to re-fetch every time. Network failures revert by re-fetching.
+    const toggleReaction = useCallback(async (commentId: string, emoji: string) => {
+        if (!currentUserId) return; // /track public users can't react.
+        try {
+            const res = await fetch(`${apiBase}/${commentId}/reactions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emoji }),
+            });
+            if (!res.ok) {
+                fetchComments();
+                return;
+            }
+            const data = await res.json();
+            setComments(prev => prev.map(c => {
+                if (c.id !== commentId) return c;
+                const reactions = Array.isArray(c.reactions) ? [...c.reactions] : [];
+                if (data.action === 'added' && data.reaction) {
+                    reactions.push({
+                        id: data.reaction.id,
+                        emoji: data.reaction.emoji,
+                        user_id: data.reaction.userId,
+                        user_name: data.reaction.user?.name || null,
+                        created_at: data.reaction.createdAt,
+                    });
+                } else if (data.action === 'removed') {
+                    const idx = reactions.findIndex(r => r.user_id === currentUserId && r.emoji === emoji);
+                    if (idx >= 0) reactions.splice(idx, 1);
+                }
+                return { ...c, reactions };
+            }));
+        } catch {
+            fetchComments();
+        }
+    }, [apiBase, currentUserId, fetchComments]);
+
     const saveEdit = async (commentId: string) => {
         const html = (editRef.current?.innerHTML || editingDraft).trim();
         const plain = (editRef.current?.textContent || '').trim();
@@ -766,6 +818,17 @@ export function TaskCommentsSection({
                                         {c.edited && (
                                             <span className={`${metaSize} text-slate-400 italic`}>edited</span>
                                         )}
+                                        {c.mirrored && (
+                                            // Subtle marker: this comment is paired with a thread
+                                            // reply on the source channel (Direct Assign card).
+                                            // Edits, deletes, and reactions stay in sync.
+                                            <span
+                                                className={`${metaSize} inline-flex items-center gap-0.5 text-indigo-500 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-full`}
+                                                title="Synced with channel thread"
+                                            >
+                                                <Hash className="w-2.5 h-2.5" /> via channel
+                                            </span>
+                                        )}
                                         {editable && !isEditing && (
                                             <button
                                                 onClick={() => startEdit(c)}
@@ -876,6 +939,66 @@ export function TaskCommentsSection({
                                                     ))}
                                                 </div>
                                             )}
+
+                                            {/* Reactions row — group existing reactions by emoji
+                                                so duplicate reactions show as count pills, then a
+                                                trailing "+ add" button opens the picker for this
+                                                comment. Only shown for authenticated users. */}
+                                            {currentUserId && (() => {
+                                                const reactions = Array.isArray(c.reactions) ? c.reactions : [];
+                                                const grouped = new Map<string, { emoji: string; count: number; mine: boolean; names: string[] }>();
+                                                for (const r of reactions) {
+                                                    const g = grouped.get(r.emoji) || { emoji: r.emoji, count: 0, mine: false, names: [] };
+                                                    g.count += 1;
+                                                    if (r.user_id === currentUserId) g.mine = true;
+                                                    if (r.user_name) g.names.push(r.user_name);
+                                                    grouped.set(r.emoji, g);
+                                                }
+                                                const groups = Array.from(grouped.values());
+                                                const showRow = groups.length > 0 || true; // always show "+ add" button
+                                                if (!showRow) return null;
+                                                return (
+                                                    <div className="flex flex-wrap items-center gap-1 mt-1.5 relative">
+                                                        {groups.map((g) => (
+                                                            <button
+                                                                key={g.emoji}
+                                                                type="button"
+                                                                onClick={() => toggleReaction(c.id, g.emoji)}
+                                                                title={g.names.join(', ')}
+                                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                                                                    g.mine
+                                                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                                                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                                }`}
+                                                            >
+                                                                <span>{g.emoji}</span>
+                                                                <span className="font-semibold">{g.count}</span>
+                                                            </button>
+                                                        ))}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setReactionPickerCommentId(prev => prev === c.id ? null : c.id)}
+                                                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border border-dashed transition-colors ${
+                                                                reactionPickerCommentId === c.id
+                                                                    ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                                                                    : 'border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-300'
+                                                            } opacity-0 group-hover:opacity-100 ${groups.length > 0 ? 'opacity-100' : ''}`}
+                                                            title="Add reaction"
+                                                        >
+                                                            <SmilePlus className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <EmojiPicker
+                                                            open={reactionPickerCommentId === c.id}
+                                                            onClose={() => setReactionPickerCommentId(null)}
+                                                            onSelect={(emoji) => {
+                                                                toggleReaction(c.id, emoji);
+                                                                setReactionPickerCommentId(null);
+                                                            }}
+                                                            position="below"
+                                                        />
+                                                    </div>
+                                                );
+                                            })()}
                                         </>
                                     )}
                                 </div>

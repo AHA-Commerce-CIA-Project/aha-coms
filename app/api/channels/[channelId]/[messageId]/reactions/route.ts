@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
+import { mirrorReactionFromReply } from '@/lib/syncCommentReply';
 
 // POST /api/channels/[channelId]/[messageId]/reactions - Toggle reaction
 export async function POST(
@@ -31,6 +32,9 @@ export async function POST(
   if (existing) {
     // Remove reaction
     await prisma.messageReaction.delete({ where: { id: existing.id } });
+    if (replyId) {
+      await mirrorReactionFromReply({ userId: session.user.id, emoji, replyId, action: 'removed' });
+    }
     return NextResponse.json({ action: 'removed' });
   } else {
     // Add reaction
@@ -42,6 +46,9 @@ export async function POST(
       },
       include: { user: { select: { id: true, name: true } } },
     });
+    if (replyId) {
+      await mirrorReactionFromReply({ userId: session.user.id, emoji, replyId, action: 'added' });
+    }
     return NextResponse.json({ action: 'added', reaction });
   }
 }

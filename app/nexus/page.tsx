@@ -864,6 +864,13 @@ function NexusContent() {
                                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                                         <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${urgency?.bg || 'bg-slate-200'} ${urgency?.color || 'text-slate-900'}`} style={urgency?.style}>{urgency?.label || '—'}</span>
                                         <span className={`inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold border ${status.bg} ${status.color}`}>{status.label}</span>
+                                        {/* "Help wanted" pill — flags rows that surfaced into Open Queue
+                                            via the needs_help broadcast (not claimable, helpers welcome). */}
+                                        {ticket.needs_help && (
+                                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-500 text-white">
+                                                🙋 Help wanted
+                                            </span>
+                                        )}
                                         <span className="ml-auto font-mono text-[11px] text-indigo-500">{ticket.task_token || '—'}</span>
                                     </div>
                                     <p className="font-semibold text-slate-900 text-sm leading-snug mb-2 break-words flex items-start gap-1.5 flex-wrap">
@@ -1000,6 +1007,13 @@ function NexusContent() {
                                                 <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-medium border ${status.bg} ${status.color}`}>
                                                     {status.label}
                                                 </span>
+                                                {/* "Help wanted" pill — distinguishes help-flagged rows
+                                                    surfaced via needs_help (not claimable, helpers welcome). */}
+                                                {ticket.needs_help && (
+                                                    <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-500 text-white">
+                                                        🙋 Help wanted
+                                                    </span>
+                                                )}
                                             </td>
                                             {isLeader && (
                                                 <td className="px-4 py-3 relative" onClick={(e) => e.stopPropagation()}>

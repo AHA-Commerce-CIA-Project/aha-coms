@@ -42,9 +42,23 @@ export async function GET() {
 
     const tasks = await prisma.task.findMany({
         where: {
-            // Direct-assigned tasks now live in /team-inbox; direct-requests live in DM threads.
-            source: { notIn: ['direct_request', 'direct_assign'] },
-            ...teamScope,
+            // Two-branch surface:
+            //   1. Regular Open Queue items — not direct_request/direct_assign,
+            //      scoped to my team (or broad for master).
+            //   2. Help-flagged tasks of ANY source — broadcast company-wide so
+            //      direct_request/direct_assign recipients who flag needs_help
+            //      can be discovered by helpers from other teams. Limited to
+            //      active statuses so done/archived help requests don't linger.
+            OR: [
+                {
+                    source: { notIn: ['direct_request', 'direct_assign'] },
+                    ...teamScope,
+                },
+                {
+                    needsHelp: true,
+                    status: { notIn: ['done', 'archived'] },
+                },
+            ],
         },
         include: {
             assignee: {
