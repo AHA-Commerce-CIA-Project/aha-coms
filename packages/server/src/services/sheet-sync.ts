@@ -90,7 +90,7 @@ export type RoutedRows = {
 
 /** Dependency injection seam for tests. */
 export type ResolveAndRouteDeps = {
-  resolver?: (input: { rawNames: string[] }) => Promise<{
+  resolver?: (input: { names: string[] }) => Promise<{
     resolved: Array<{
       rawNameNormalized: string
       aliasId: string
@@ -143,7 +143,7 @@ export async function resolveAndRouteRows(
     chunks.push(uniqueNames.slice(i, i + ALIAS_BATCH_SIZE))
   }
 
-  const chunkResults = await Promise.all(chunks.map((batch) => resolver({ rawNames: batch })))
+  const chunkResults = await Promise.all(chunks.map((batch) => resolver({ names: batch })))
 
   // Merge chunk results into lookup maps
   const resolvedMap = new Map<

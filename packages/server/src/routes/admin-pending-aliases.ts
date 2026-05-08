@@ -39,7 +39,7 @@ export type SweepDeps = {
       rawPayload: unknown
     }>
   >
-  resolveNames: (input: { rawNames: string[] }) => Promise<{
+  resolveNames: (input: { names: string[] }) => Promise<{
     resolved: ResolvedEntry[]
     unresolved: string[]
   }>
@@ -133,7 +133,7 @@ export async function sweepPendingAliasesWithDeps(deps: SweepDeps): Promise<Swee
   for (let i = 0; i < uniqueNames.length; i += ALIAS_BATCH_SIZE) {
     const batch = uniqueNames.slice(i, i + ALIAS_BATCH_SIZE)
     try {
-      const result = await deps.resolveNames({ rawNames: batch })
+      const result = await deps.resolveNames({ names: batch })
       for (const r of result.resolved) {
         resolvedMap.set(r.rawNameNormalized, {
           portalSub: r.portalSub,

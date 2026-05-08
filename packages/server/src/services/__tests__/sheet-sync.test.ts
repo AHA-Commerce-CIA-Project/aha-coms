@@ -30,7 +30,7 @@ const makeRow = (name: string, rowIdx: number): SheetRow => ({
 describe('resolveAndRouteRows', () => {
   it('outcome 1: active resolved row lands in .active bucket', async () => {
     const rows = [makeRow('Alice', 0)]
-    const resolver = mock(async (_: { rawNames: string[] }) => ({
+    const resolver = mock(async (_: { names: string[] }) => ({
       resolved: [
         {
           rawNameNormalized: 'alice',
@@ -54,7 +54,7 @@ describe('resolveAndRouteRows', () => {
 
   it('outcome 2: tombstoned resolved row lands in .tombstoned bucket', async () => {
     const rows = [makeRow('Bob', 0)]
-    const resolver = mock(async (_: { rawNames: string[] }) => ({
+    const resolver = mock(async (_: { names: string[] }) => ({
       resolved: [
         {
           rawNameNormalized: 'bob',
@@ -78,7 +78,7 @@ describe('resolveAndRouteRows', () => {
 
   it('outcome 3: unresolved name lands in .unresolved bucket', async () => {
     const rows = [makeRow('Charlie', 0)]
-    const resolver = mock(async (_: { rawNames: string[] }) => ({
+    const resolver = mock(async (_: { names: string[] }) => ({
       resolved: [],
       unresolved: ['charlie'],
     }))
@@ -93,7 +93,7 @@ describe('resolveAndRouteRows', () => {
 
   it('outcome 4: batch failure throws and surfaces error', async () => {
     const rows = [makeRow('Dave', 0)]
-    const resolver = mock(async (_: { rawNames: string[] }) => {
+    const resolver = mock(async (_: { names: string[] }) => {
       throw new Error('portal unavailable')
     })
 
@@ -104,7 +104,7 @@ describe('resolveAndRouteRows', () => {
 
   it('handles mixed active + tombstoned + unresolved in one batch', async () => {
     const rows = [makeRow('Alice', 0), makeRow('Bob', 1), makeRow('Charlie', 2)]
-    const resolver = mock(async (_: { rawNames: string[] }) => ({
+    const resolver = mock(async (_: { names: string[] }) => ({
       resolved: [
         {
           rawNameNormalized: 'alice',
@@ -136,8 +136,8 @@ describe('resolveAndRouteRows', () => {
   it('chunks batches of >1000 names and calls resolver multiple times', async () => {
     // 1001 rows — should trigger 2 resolver calls
     const rows = Array.from({ length: 1001 }, (_, i) => makeRow(`user${i}`, i))
-    const resolver = mock(async (input: { rawNames: string[] }) => ({
-      resolved: input.rawNames.map((n) => ({
+    const resolver = mock(async (input: { names: string[] }) => ({
+      resolved: input.names.map((n) => ({
         rawNameNormalized: n,
         aliasId: `aid-${n}`,
         portalSub: `ps-${n}`,

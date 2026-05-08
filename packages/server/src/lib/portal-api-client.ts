@@ -13,7 +13,7 @@ export interface TaxonomySyncResponse {
 }
 
 export interface AliasResolveBatchInput {
-  rawNames: string[]
+  names: string[]
 }
 
 export interface AliasResolveBatchResponse {
