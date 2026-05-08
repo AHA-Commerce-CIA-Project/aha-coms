@@ -57,18 +57,55 @@ export async function fetchTaxonomySync(): Promise<TaxonomySyncResponse> {
   return response.data
 }
 
+/**
+ * Wire shape returned by the portal at /api/aliases/resolve-batch.
+ * Each input name comes back as a {input, match} pair where match is
+ * null for an unresolved name. Heroes' downstream code prefers a
+ * pre-bucketed {resolved, unresolved} shape, so this client is the
+ * boundary that translates between the two.
+ */
+interface PortalResolveBatchWire {
+  results: Array<{
+    input: string
+    match: null | {
+      portalSub: string
+      aliasId: string
+      isPrimary: boolean
+      tombstoned: boolean
+      deactivatedAt: string | null
+    }
+  }>
+}
+
 export async function resolveAliasesBatch(
   input: AliasResolveBatchInput,
 ): Promise<AliasResolveBatchResponse> {
   const portalUrl = getPortalBaseUrl()
   const client = await getIdTokenClient(portalUrl)
-  const response = await client.request<AliasResolveBatchResponse>({
+  const response = await client.request<PortalResolveBatchWire>({
     url: new URL('/api/aliases/resolve-batch', portalUrl).toString(),
     method: 'POST',
     data: input,
     headers: { 'content-type': 'application/json' },
   })
-  return response.data
+
+  const resolved: AliasResolveBatchResponse['resolved'] = []
+  const unresolved: string[] = []
+  for (const r of response.data.results) {
+    if (r.match === null) {
+      unresolved.push(r.input)
+    } else {
+      resolved.push({
+        rawNameNormalized: r.input,
+        aliasId: r.match.aliasId,
+        portalSub: r.match.portalSub,
+        isPrimary: r.match.isPrimary,
+        tombstoned: r.match.tombstoned,
+        deactivatedAt: r.match.deactivatedAt,
+      })
+    }
+  }
+  return { resolved, unresolved }
 }
 
 export type TaxonomySyncFetcher = () => Promise<TaxonomySyncResponse>
