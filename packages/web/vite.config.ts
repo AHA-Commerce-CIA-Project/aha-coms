@@ -17,8 +17,8 @@ export default defineConfig({
       registerType: 'prompt',
       manifest: false,
       workbox: {
-        navigateFallback: '/',
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        navigateFallback: null,
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2}'],
         runtimeCaching: [
           {
             urlPattern: /^\/api\//,
