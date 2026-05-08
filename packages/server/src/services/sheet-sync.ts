@@ -25,6 +25,28 @@ import { getDb } from '../repositories/base'
 import { buildHeaderIndex, parseReward, parseTimestamp } from './sheet-sync-helpers'
 import { resolveAliasesBatch as defaultResolveAliasesBatch } from '../lib/portal-api-client'
 
+/**
+ * Render an unknown thrown value as a useful string for errorLog. Plain
+ * objects (e.g. GaxiosError-shaped throws from google-auth-library) lose
+ * everything under String(err) because their toString returns "[object
+ * Object]"; JSON.stringify with non-enumerable property names keeps the
+ * code/status/response detail that points at the real cause.
+ */
+function stringifyError(err: unknown): string {
+  if (err instanceof Error) {
+    const extras = JSON.stringify(err, Object.getOwnPropertyNames(err))
+    return extras === '{}' ? err.message : `${err.message} | ${extras}`
+  }
+  if (err && typeof err === 'object') {
+    try {
+      return JSON.stringify(err, Object.getOwnPropertyNames(err))
+    } catch {
+      return String(err)
+    }
+  }
+  return String(err)
+}
+
 // ── Public types ────────────────────────────────────────────────────────────
 
 export type SyncResult = {
@@ -308,7 +330,7 @@ export async function syncEmployees(
       tab: tabName,
       row: 0,
       name: '',
-      error: `resolveAliasesBatch failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `resolveAliasesBatch failed: ${stringifyError(err)}`,
     })
     return { processed, failed: failed + parsed.length, errors }
   }
@@ -509,7 +531,7 @@ export async function syncPoints(
       tab: tabName,
       row: 0,
       name: '',
-      error: `resolveAliasesBatch failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `resolveAliasesBatch failed: ${stringifyError(err)}`,
     })
     return { processed, failed: failed + parsedRows.length, errors }
   }
@@ -754,7 +776,7 @@ export async function syncRedemptions(
       tab: tabName,
       row: 0,
       name: '',
-      error: `resolveAliasesBatch failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `resolveAliasesBatch failed: ${stringifyError(err)}`,
     })
     return { processed, failed: failed + parsedRows.length, errors }
   }
@@ -889,7 +911,7 @@ export async function recalculatePointSummaries(branchKey: string, tx?: DbClient
   // Single SQL: compute all summaries and upsert in one shot
   // Uses heroesProfiles (not users) as the identity source.
   await db.execute(sql`
-    INSERT INTO point_summaries (id, user_id, branch_id, bintang_count, penalti_points_sum, direct_poin_aha, redeemed_total, updated_at)
+    INSERT INTO point_summaries (id, user_id, branch_key, bintang_count, penalti_points_sum, direct_poin_aha, redeemed_total, updated_at)
     SELECT
       gen_random_uuid(),
       hp.id,
@@ -956,12 +978,13 @@ export async function runFullSync(
       totalFailed += result.failed
       allErrors.push(...result.errors)
     } catch (err) {
+      console.error('[sheet-sync] step failed', err)
       totalFailed++
       allErrors.push({
         tab: 'unknown',
         row: 0,
         name: '',
-        error: err instanceof Error ? err.message : String(err),
+        error: stringifyError(err),
       })
     }
   }
