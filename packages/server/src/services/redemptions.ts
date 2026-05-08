@@ -33,7 +33,7 @@ export async function requestRedemption(
 
     const created = await redemptionsRepo.createRedemption(
       {
-        branchId: ctx.actor.branchKey,
+        branchKey: ctx.actor.branchKey,
         userId: ctx.actor.id,
         rewardId: input.rewardId,
         pointsSpent: reward.pointCost,
@@ -133,7 +133,7 @@ export async function approveRedemption(id: string, ctx: ServiceContext) {
 
     await createNotification(
       {
-        branchId: redemption.branchId ?? ctx.actor.branchKey,
+        branchKey: redemption.branchKey ?? ctx.actor.branchKey,
         userId: redemption.userId,
         type: 'redemption_approved',
         title: `Your redemption request for "${redemption.rewardName}" has been approved`,
@@ -187,7 +187,7 @@ export async function rejectRedemption(
 
     await createNotification(
       {
-        branchId: redemption.branchId ?? ctx.actor.branchKey,
+        branchKey: redemption.branchKey ?? ctx.actor.branchKey,
         userId: redemption.userId,
         type: 'redemption_rejected',
         title: `Your redemption request for "${redemption.rewardName}" has been rejected`,

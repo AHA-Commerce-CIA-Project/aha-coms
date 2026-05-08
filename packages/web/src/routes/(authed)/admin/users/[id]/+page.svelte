@@ -117,10 +117,10 @@
             <p class="mt-1 text-sm font-medium">{user.position}</p>
           </div>
         {/if}
-        {#if user.branchId}
+        {#if user.branchKey}
           <div>
             <p class="text-xs text-muted-foreground">{m.profile_branch()}</p>
-            <p class="mt-1 text-sm font-medium">{user.branchId}</p>
+            <p class="mt-1 text-sm font-medium">{user.branchKey}</p>
           </div>
         {/if}
       </div>

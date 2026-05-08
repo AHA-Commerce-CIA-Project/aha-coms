@@ -49,7 +49,7 @@ export async function approvePoint(
 
     await createNotification(
       {
-        branchId: ctx.actor.branchKey,
+        branchKey: ctx.actor.branchKey,
         userId: targetUser.id,
         type: 'point_approved',
         title: `Your ${categoryLabel} submission has been approved`,
@@ -62,7 +62,7 @@ export async function approvePoint(
     if (point.submittedBy !== targetUser.id) {
       await createNotification(
         {
-          branchId: ctx.actor.branchKey,
+          branchKey: ctx.actor.branchKey,
           userId: point.submittedBy,
           type: 'point_approved',
           title: `Your ${categoryLabel} submission has been approved`,
@@ -116,7 +116,7 @@ export async function rejectPoint(
 
     await createNotification(
       {
-        branchId: ctx.actor.branchKey,
+        branchKey: ctx.actor.branchKey,
         userId: targetUser.id,
         type: 'point_rejected',
         title: `Your ${categoryLabel} submission has been rejected${rejectionSuffix}`,
@@ -129,7 +129,7 @@ export async function rejectPoint(
     if (point.submittedBy !== targetUser.id) {
       await createNotification(
         {
-          branchId: ctx.actor.branchKey,
+          branchKey: ctx.actor.branchKey,
           userId: point.submittedBy,
           type: 'point_rejected',
           title: `Your ${categoryLabel} submission has been rejected${rejectionSuffix}`,
@@ -185,7 +185,7 @@ export async function revokePoint(
 
     await createNotification(
       {
-        branchId: ctx.actor.branchKey,
+        branchKey: ctx.actor.branchKey,
         userId: targetUser.id,
         type: 'point_rejected',
         title: `Your ${categoryLabel} point has been revoked${revokeSuffix}`,

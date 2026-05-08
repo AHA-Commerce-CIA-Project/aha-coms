@@ -79,7 +79,7 @@ export async function getTeamById(key: string, tx?: DbClient) {
 }
 
 export async function createTeam(
-  _data: { name: string; branchId?: string; leaderId?: string | null },
+  _data: { name: string; branchKey?: string; leaderId?: string | null },
   _tx?: DbClient,
 ): Promise<TeamRow> {
   throw new Error('Teams are managed by the portal taxonomy feed. Direct creation is not supported.')

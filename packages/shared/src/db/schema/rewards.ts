@@ -15,7 +15,7 @@ export const rewards = pgTable(
   'rewards',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id'),
+    branchKey: varchar('branch_key', { length: 128 }),
     name: varchar('name', { length: 200 }).notNull(),
     description: text('description'),
     pointCost: integer('point_cost').notNull(),
@@ -25,7 +25,7 @@ export const rewards = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index('idx_rewards_branch').on(t.branchId),
+    index('idx_rewards_branch').on(t.branchKey),
     check('chk_point_cost_positive', sql`point_cost > 0`),
   ],
 )

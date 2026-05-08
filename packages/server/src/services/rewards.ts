@@ -35,7 +35,7 @@ export async function createReward(input: CreateRewardInput, ctx: ServiceContext
   const created = await withRLS(ctx.actor, (db) =>
     rewardsRepo.createReward(
       {
-        branchId: ctx.actor.branchKey,
+        branchKey: ctx.actor.branchKey,
         name: input.name,
         description: input.description,
         pointCost: input.pointCost,

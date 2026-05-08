@@ -33,9 +33,9 @@ export async function withRLS<T>(
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT
       set_config('app.current_user_id', ${rlsCtx.id}, true),
-      set_config('app.current_branch_id', ${rlsCtx.branchKey ?? ''}, true),
+      set_config('app.current_branch_key', ${rlsCtx.branchKey ?? ''}, true),
       set_config('app.current_role', ${rlsCtx.role}, true),
-      set_config('app.current_team_id', ${rlsCtx.teamKey ?? ''}, true)`)
+      set_config('app.current_team_key', ${rlsCtx.teamKey ?? ''}, true)`)
     return fn(tx as unknown as DbClient)
   })
 }

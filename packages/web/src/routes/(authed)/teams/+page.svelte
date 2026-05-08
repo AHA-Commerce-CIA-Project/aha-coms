@@ -10,7 +10,7 @@
     id: string
     name: string
     branchCode?: string
-    branchId?: string
+    branchKey?: string
     leaderId?: string | null
     leaderName?: string | null
     memberCount?: number

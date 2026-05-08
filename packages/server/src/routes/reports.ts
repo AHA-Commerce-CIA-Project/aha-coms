@@ -23,5 +23,5 @@ export const reportsRoute = new Elysia({ prefix: '/reports' })
   }, { query: t.Object({
     startDate: t.Optional(t.String()),
     endDate: t.Optional(t.String()),
-    branchId: t.Optional(t.String({ format: 'uuid' })),
+    branchKey: t.Optional(t.String({ maxLength: 128 })),
   }) })

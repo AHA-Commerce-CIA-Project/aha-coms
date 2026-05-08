@@ -227,7 +227,7 @@ async function writeTombstonedRows(
 export async function syncEmployees(
   sheetId: string,
   tabName: string,
-  branchId: string,
+  branchKey: string,
   tx?: DbClient,
   deps: ResolveAndRouteDeps = {},
 ): Promise<SyncResult> {
@@ -335,8 +335,8 @@ export async function syncEmployees(
         .insert(heroesProfiles)
         .values({
           id: activeRow.portalSub,
-          branchKey: branchId,
-          branchValueSnapshot: branchId,
+          branchKey: branchKey,
+          branchValueSnapshot: branchKey,
           name: activeRow.row.rawName,
           ...(meta.attendanceName ? { attendanceName: meta.attendanceName } : {}),
           ...(meta.employmentStatus ? { employmentStatus: meta.employmentStatus } : {}),
@@ -379,7 +379,7 @@ export async function syncPoints(
   sheetId: string,
   tabName: string,
   categoryCode: string,
-  branchId: string,
+  branchKey: string,
   tx?: DbClient,
   deps: ResolveAndRouteDeps = {},
 ): Promise<SyncResult> {
@@ -530,7 +530,7 @@ export async function syncPoints(
   const [adminProfile] = await db
     .select({ id: heroesProfiles.id })
     .from(heroesProfiles)
-    .where(eq(heroesProfiles.branchKey, branchId))
+    .where(eq(heroesProfiles.branchKey, branchKey))
     .limit(1)
 
   // Pre-load existing points for dedup (single query)
@@ -542,7 +542,7 @@ export async function syncPoints(
       createdSecond: sql<string>`to_char(${achievementPoints.createdAt}, 'YYYY-MM-DD HH24:MI:SS')`,
     })
     .from(achievementPoints)
-    .where(and(eq(achievementPoints.branchId, branchId), eq(achievementPoints.categoryId, cat.id)))
+    .where(and(eq(achievementPoints.branchKey, branchKey), eq(achievementPoints.categoryId, cat.id)))
 
   const dbCounts = new Map<string, number>()
   for (const p of existingPoints) {
@@ -553,7 +553,7 @@ export async function syncPoints(
   const sheetCounts = new Map<string, number>()
 
   const toInsert: Array<{
-    branchId: string
+    branchKey: string
     userId: string
     categoryId: string
     points: number
@@ -585,7 +585,7 @@ export async function syncPoints(
       categoryCode === 'BINTANG' ? activeRow.portalSub : (adminProfile?.id ?? activeRow.portalSub)
 
     toInsert.push({
-      branchId,
+      branchKey,
       userId: activeRow.portalSub,
       categoryId: cat.id,
       points: meta.points,
@@ -631,7 +631,7 @@ export async function syncPoints(
 export async function syncRedemptions(
   sheetId: string,
   tabName: string,
-  branchId: string,
+  branchKey: string,
   tx?: DbClient,
   deps: ResolveAndRouteDeps = {},
 ): Promise<SyncResult> {
@@ -660,7 +660,7 @@ export async function syncRedemptions(
       createdSecond: sql<string>`to_char(${redemptions.createdAt}, 'YYYY-MM-DD HH24:MI:SS')`,
     })
     .from(redemptions)
-    .where(eq(redemptions.branchId, branchId))
+    .where(eq(redemptions.branchKey, branchKey))
 
   const redemptionDedupSet = new Set(
     existingRedemptionRows.map((r) => `${r.userId}|${r.rewardId}|${r.createdSecond}`),
@@ -781,7 +781,7 @@ export async function syncRedemptions(
   if (missingRewardKeys.size > 0) {
     const newRewards = [...missingRewardKeys].map((key) => {
       const [name, cost] = key.split('|')
-      return { name, pointCost: Number(cost), branchId, isActive: true }
+      return { name, pointCost: Number(cost), branchKey, isActive: true }
     })
 
     const created = await db
@@ -806,7 +806,7 @@ export async function syncRedemptions(
 
   // 8. Outcome 1 — insert redemptions for active rows
   const toInsert: Array<{
-    branchId: string
+    branchKey: string
     userId: string
     rewardId: string
     pointsSpent: number
@@ -842,7 +842,7 @@ export async function syncRedemptions(
     }
 
     toInsert.push({
-      branchId,
+      branchKey,
       userId: activeRow.portalSub,
       rewardId,
       pointsSpent: meta.reward.cost,
@@ -883,7 +883,7 @@ export async function syncRedemptions(
 
 // ── recalculatePointSummaries ───────────────────────────────────────────────
 
-export async function recalculatePointSummaries(branchId: string, tx?: DbClient): Promise<void> {
+export async function recalculatePointSummaries(branchKey: string, tx?: DbClient): Promise<void> {
   const db = getDb(tx)
 
   // Single SQL: compute all summaries and upsert in one shot
@@ -907,7 +907,7 @@ export async function recalculatePointSummaries(branchId: string, tx?: DbClient)
       FROM redemptions r
       WHERE r.user_id = hp.id AND r.status = 'approved'
     ) rd ON TRUE
-    WHERE hp.branch_key = ${branchId}
+    WHERE hp.branch_key = ${branchKey}
     GROUP BY hp.id, hp.branch_key, rd.redeemed
     ON CONFLICT (user_id) DO UPDATE SET
       bintang_count = EXCLUDED.bintang_count,
@@ -923,7 +923,7 @@ export async function recalculatePointSummaries(branchId: string, tx?: DbClient)
 export async function runFullSync(
   sheetIds: { points: string; employees: string },
   tabNames: TabNames,
-  branchId: string,
+  branchKey: string,
   startedBy?: string,
   tx?: DbClient,
   direction: 'import' | 'resync' = 'import',
@@ -932,7 +932,7 @@ export async function runFullSync(
 
   const job = await createJob(
     {
-      branchId,
+      branchKey,
       direction,
       sheetId: `${sheetIds.employees},${sheetIds.points}`,
       sheetName: Object.values(tabNames).join(', '),
@@ -966,14 +966,14 @@ export async function runFullSync(
     }
   }
 
-  await runStep(() => syncEmployees(sheetIds.employees, tabNames.employees, branchId, db))
-  await runStep(() => syncPoints(sheetIds.points, tabNames.bintang, 'BINTANG', branchId, db))
-  await runStep(() => syncPoints(sheetIds.points, tabNames.penalti, 'PENALTI', branchId, db))
-  await runStep(() => syncPoints(sheetIds.points, tabNames.poinAha, 'POIN_AHA', branchId, db))
-  await runStep(() => syncRedemptions(sheetIds.points, tabNames.redeem, branchId, db))
+  await runStep(() => syncEmployees(sheetIds.employees, tabNames.employees, branchKey, db))
+  await runStep(() => syncPoints(sheetIds.points, tabNames.bintang, 'BINTANG', branchKey, db))
+  await runStep(() => syncPoints(sheetIds.points, tabNames.penalti, 'PENALTI', branchKey, db))
+  await runStep(() => syncPoints(sheetIds.points, tabNames.poinAha, 'POIN_AHA', branchKey, db))
+  await runStep(() => syncRedemptions(sheetIds.points, tabNames.redeem, branchKey, db))
 
   try {
-    await recalculatePointSummaries(branchId, db)
+    await recalculatePointSummaries(branchKey, db)
   } catch (err) {
     allErrors.push({
       tab: 'point_summaries',
@@ -1011,16 +1011,16 @@ export async function runFullSync(
 export async function runFullResync(
   sheetIds: { points: string; employees: string },
   tabNames: TabNames,
-  branchId: string,
+  branchKey: string,
   startedBy?: string,
 ) {
   const db = defaultDb as unknown as DbClient
 
   // Wipe then re-import without a wrapping transaction — a single
   // transaction would time out on large datasets (14k+ rows).
-  await db.delete(redemptions).where(eq(redemptions.branchId, branchId))
-  await db.delete(achievementPoints).where(eq(achievementPoints.branchId, branchId))
-  await db.delete(pointSummaries).where(eq(pointSummaries.branchId, branchId))
+  await db.delete(redemptions).where(eq(redemptions.branchKey, branchKey))
+  await db.delete(achievementPoints).where(eq(achievementPoints.branchKey, branchKey))
+  await db.delete(pointSummaries).where(eq(pointSummaries.branchKey, branchKey))
 
-  return runFullSync(sheetIds, tabNames, branchId, startedBy, undefined, 'resync')
+  return runFullSync(sheetIds, tabNames, branchKey, startedBy, undefined, 'resync')
 }

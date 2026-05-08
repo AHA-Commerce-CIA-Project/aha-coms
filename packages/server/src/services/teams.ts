@@ -60,7 +60,7 @@ export async function createTeam(input: CreateTeamInput, ctx: ServiceContext) {
     const created = await teamsRepo.createTeam(
       {
         name: input.name,
-        branchId: input.branchId,
+        branchKey: input.branchKey,
         leaderId: input.leaderId ?? null,
       },
       db,

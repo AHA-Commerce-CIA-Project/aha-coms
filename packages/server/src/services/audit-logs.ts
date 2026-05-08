@@ -13,10 +13,10 @@ export async function listAuditLogs(input: ListAuditLogsInput, ctx: ServiceConte
   }
 
   // Admin and HR see all branches
-  const branchId = ctx.actor.role === 'admin' || ctx.actor.role === 'hr' ? null : ctx.actor.branchKey
+  const branchKey = ctx.actor.role === 'admin' || ctx.actor.role === 'hr' ? null : ctx.actor.branchKey
 
   const { rows, total } = await withRLS(ctx.actor, (db) =>
-    auditLogsRepo.listAuditLogs(input, branchId, db),
+    auditLogsRepo.listAuditLogs(input, branchKey, db),
   )
 
   return {

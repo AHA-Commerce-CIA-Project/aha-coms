@@ -18,7 +18,7 @@ export const achievementPoints = pgTable(
   'achievement_points',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id'),
+    branchKey: varchar('branch_key', { length: 128 }),
     userId: uuid('user_id')
       .notNull()
       .references(() => heroesProfiles.id),
@@ -44,9 +44,9 @@ export const achievementPoints = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index('idx_points_branch').on(t.branchId),
-    index('idx_points_branch_created').on(t.branchId, t.createdAt.desc()),
-    index('idx_points_branch_user').on(t.branchId, t.userId),
+    index('idx_points_branch').on(t.branchKey),
+    index('idx_points_branch_created').on(t.branchKey, t.createdAt.desc()),
+    index('idx_points_branch_user').on(t.branchKey, t.userId),
     index('idx_points_user').on(t.userId),
     index('idx_points_status').on(t.status),
     index('idx_points_category').on(t.categoryId),

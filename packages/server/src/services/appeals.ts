@@ -86,7 +86,7 @@ export async function fileAppeal(
     for (const hr of hrUsers) {
       await createNotification(
         {
-          branchId: ctx.actor.branchKey,
+          branchKey: ctx.actor.branchKey,
           userId: hr.id,
           type: 'appeal_needs_resolution',
           title: `${ctx.actor.name} has appealed a Penalti — needs resolution`,
@@ -166,7 +166,7 @@ export async function resolveAppeal(
     // Notify appellant
     await createNotification(
       {
-        branchId: ctx.actor.branchKey,
+        branchKey: ctx.actor.branchKey,
         userId: appellant.id,
         type: 'appeal_resolved',
         title: `Your appeal has been ${statusLabel}`,

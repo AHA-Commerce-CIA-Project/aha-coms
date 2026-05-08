@@ -5,7 +5,7 @@ export const auditLogs = pgTable(
   'audit_logs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id'),
+    branchKey: varchar('branch_key', { length: 128 }),
     actorId: uuid('actor_id')
       .notNull()
       .references(() => heroesProfiles.id),
@@ -18,7 +18,7 @@ export const auditLogs = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index('idx_audit_branch').on(t.branchId),
+    index('idx_audit_branch').on(t.branchKey),
     index('idx_audit_actor').on(t.actorId),
     index('idx_audit_entity').on(t.entityType, t.entityId),
   ],

@@ -28,7 +28,7 @@ export const load: PageServerLoad = async ({ locals, fetch, params }) => {
       teamName: string | null
       department: string | null
       position: string | null
-      branchId: string | null
+      branchKey: string | null
       isActive: boolean
       createdAt: string
     },

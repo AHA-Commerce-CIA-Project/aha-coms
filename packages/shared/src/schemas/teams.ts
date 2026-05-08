@@ -2,7 +2,7 @@ import { Type as t, type Static } from '@sinclair/typebox'
 
 export const createTeamSchema = t.Object({
   name: t.String({ minLength: 1, maxLength: 100 }),
-  branchId: t.String({ format: 'uuid' }),
+  branchKey: t.String({ maxLength: 128 }),
   leaderId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
 })
 

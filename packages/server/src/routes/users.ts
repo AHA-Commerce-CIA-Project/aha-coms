@@ -47,7 +47,7 @@ export const usersRoute = new Elysia({ prefix: '/users' })
     isActive: t.Optional(t.BooleanString()),
     department: t.Optional(t.String({ maxLength: 100 })),
     position: t.Optional(t.String({ maxLength: 100 })),
-    branchId: t.Optional(t.String({ format: 'uuid' })),
+    branchKey: t.Optional(t.String({ maxLength: 128 })),
   }) })
 
   // GET /users/:id — single user

@@ -6,7 +6,7 @@ export const sheetSyncJobs = pgTable(
   'sheet_sync_jobs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id'),
+    branchKey: varchar('branch_key', { length: 128 }),
     direction: varchar('direction', { length: 10 }).notNull(),
     sheetId: varchar('sheet_id', { length: 255 }).notNull(),
     sheetName: varchar('sheet_name', { length: 100 }),

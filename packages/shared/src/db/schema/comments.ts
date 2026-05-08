@@ -6,7 +6,7 @@ export const comments = pgTable(
   'comments',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id'),
+    branchKey: varchar('branch_key', { length: 128 }),
     entityType: varchar('entity_type', { length: 30 }).notNull(),
     entityId: uuid('entity_id').notNull(),
     authorId: uuid('author_id')
@@ -18,7 +18,7 @@ export const comments = pgTable(
   },
   (t) => [
     index('idx_comments_entity').on(t.entityType, t.entityId),
-    index('idx_comments_branch').on(t.branchId),
+    index('idx_comments_branch').on(t.branchKey),
     check(
       'chk_entity_type',
       sql`entity_type IN ('achievement', 'challenge', 'appeal')`,

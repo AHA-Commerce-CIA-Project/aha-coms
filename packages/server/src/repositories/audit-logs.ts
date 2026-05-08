@@ -11,15 +11,15 @@ export type AuditLogRow = typeof auditLogs.$inferSelect & {
 
 export async function listAuditLogs(
   input: ListAuditLogsInput,
-  branchId: string | null,
+  branchKey: string | null,
   tx?: DbClient,
 ): Promise<{ rows: AuditLogRow[]; total: number }> {
   const db = getDb(tx)
   const offset = (input.page - 1) * input.limit
 
   const conditions = []
-  if (branchId !== null) {
-    conditions.push(eq(auditLogs.branchId, branchId))
+  if (branchKey !== null) {
+    conditions.push(eq(auditLogs.branchKey, branchKey))
   }
   if (input.action) {
     conditions.push(eq(auditLogs.action, input.action))
@@ -43,7 +43,7 @@ export async function listAuditLogs(
     db
       .select({
         id: auditLogs.id,
-        branchId: auditLogs.branchId,
+        branchKey: auditLogs.branchKey,
         actorId: auditLogs.actorId,
         action: auditLogs.action,
         entityType: auditLogs.entityType,

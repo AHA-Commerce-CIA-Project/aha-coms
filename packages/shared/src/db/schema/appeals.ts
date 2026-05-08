@@ -7,7 +7,7 @@ export const appeals = pgTable(
   'appeals',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id'),
+    branchKey: varchar('branch_key', { length: 128 }),
     achievementId: uuid('achievement_id')
       .notNull()
       .references(() => achievementPoints.id),
@@ -24,7 +24,7 @@ export const appeals = pgTable(
   },
   (t) => [
     index('idx_appeals_achievement').on(t.achievementId),
-    index('idx_appeals_branch').on(t.branchId),
+    index('idx_appeals_branch').on(t.branchKey),
     check(
       'chk_appeal_status',
       sql`status IN ('open', 'upheld', 'overturned')`,

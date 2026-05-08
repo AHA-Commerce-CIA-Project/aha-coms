@@ -1,4 +1,4 @@
-import { pgTable, uuid, integer, text, timestamp, index, check } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, integer, text, timestamp, index, check } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { redemptionStatusEnum } from './enums'
 import { heroesProfiles } from './heroes-profiles'
@@ -8,7 +8,7 @@ export const redemptions = pgTable(
   'redemptions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id'),
+    branchKey: varchar('branch_key', { length: 128 }),
     userId: uuid('user_id')
       .notNull()
       .references(() => heroesProfiles.id),
@@ -26,7 +26,7 @@ export const redemptions = pgTable(
   },
   (t) => [
     index('idx_redemptions_user').on(t.userId),
-    index('idx_redemptions_branch').on(t.branchId),
+    index('idx_redemptions_branch').on(t.branchKey),
     check('chk_points_spent_positive', sql`points_spent > 0`),
   ],
 )

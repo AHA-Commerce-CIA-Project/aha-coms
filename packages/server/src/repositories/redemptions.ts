@@ -49,7 +49,7 @@ export async function listRedemptions(
     db
       .select({
         id: redemptions.id,
-        branchId: redemptions.branchId,
+        branchKey: redemptions.branchKey,
         userId: redemptions.userId,
         rewardId: redemptions.rewardId,
         pointsSpent: redemptions.pointsSpent,
@@ -88,7 +88,7 @@ export async function getRedemptionById(id: string, tx?: DbClient) {
   const [result] = await db
     .select({
       id: redemptions.id,
-      branchId: redemptions.branchId,
+      branchKey: redemptions.branchKey,
       userId: redemptions.userId,
       rewardId: redemptions.rewardId,
       pointsSpent: redemptions.pointsSpent,

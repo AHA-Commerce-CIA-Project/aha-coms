@@ -5,7 +5,7 @@ export const createUserSchema = t.Object({
   email: t.String({ format: 'email' }),
   name: t.String({ minLength: 1, maxLength: 255 }),
   role: t.Union(USER_ROLES.map((r) => t.Literal(r))),
-  branchId: t.String({ format: 'uuid' }),
+  branchKey: t.String({ maxLength: 128 }),
   teamId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
   department: t.Optional(t.String({ maxLength: 100 })),
   position: t.Optional(t.String({ maxLength: 100 })),
@@ -33,7 +33,7 @@ export const listUsersSchema = t.Object({
   isActive: t.Optional(t.Boolean()),
   department: t.Optional(t.String({ maxLength: 100 })),
   position: t.Optional(t.String({ maxLength: 100 })),
-  branchId: t.Optional(t.String({ format: 'uuid' })),
+  branchKey: t.Optional(t.String({ maxLength: 128 })),
 })
 
 export type CreateUserInput = Static<typeof createUserSchema>

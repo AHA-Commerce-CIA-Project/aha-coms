@@ -14,7 +14,7 @@ export const notifications = pgTable(
   'notifications',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    branchId: uuid('branch_id'),
+    branchKey: varchar('branch_key', { length: 128 }),
     userId: uuid('user_id')
       .notNull()
       .references(() => heroesProfiles.id),
@@ -32,6 +32,6 @@ export const notifications = pgTable(
     index('idx_notifications_read_cleanup')
       .on(t.readAt)
       .where(sql`is_read = true`),
-    index('idx_notifications_branch').on(t.branchId),
+    index('idx_notifications_branch').on(t.branchKey),
   ],
 )

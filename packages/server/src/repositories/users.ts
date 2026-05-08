@@ -28,7 +28,7 @@ type ListUsersOpts = {
   readonly isActive?: boolean
   readonly department?: string
   readonly position?: string
-  readonly branchId?: string
+  readonly branchKey?: string
 }
 
 export async function listUsers(opts: ListUsersOpts, tx?: DbClient) {
@@ -38,7 +38,7 @@ export async function listUsers(opts: ListUsersOpts, tx?: DbClient) {
   if (opts.isActive !== undefined) conditions.push(eq(heroesProfiles.isActive, opts.isActive))
   if (opts.search) conditions.push(ilike(heroesProfiles.name, `%${opts.search}%`))
   if (opts.teamId) conditions.push(eq(heroesProfiles.teamKey, opts.teamId))
-  if (opts.branchId) conditions.push(eq(heroesProfiles.branchKey, opts.branchId))
+  if (opts.branchKey) conditions.push(eq(heroesProfiles.branchKey, opts.branchKey))
   if (opts.position) conditions.push(ilike(heroesProfiles.position, `%${opts.position}%`))
 
   const where = conditions.length > 0 ? and(...conditions) : undefined

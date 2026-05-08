@@ -129,7 +129,7 @@ async function defaultInsertPoint(row: PendingAliasRow, portalSub: string): Prom
   if (!cat) throw new Error('Category BINTANG not found')
 
   await db.insert(achievementPoints).values({
-    branchId: 'default', // branchId should be stored in rawPayload — see Directive
+    branchKey: 'default', // branchKey should be stored in rawPayload — see Directive
     userId: portalSub,
     categoryId: cat.id,
     points: p.points,
@@ -171,7 +171,7 @@ async function defaultInsertRedemption(row: PendingAliasRow, portalSub: string):
   }
 
   await db.insert(redemptions).values({
-    branchId: 'default', // branchId should be stored in rawPayload — see Directive
+    branchKey: 'default', // branchKey should be stored in rawPayload — see Directive
     userId: portalSub,
     rewardId: reward.id,
     pointsSpent: parsedReward.cost,
@@ -190,7 +190,7 @@ async function defaultUpsertProfile(row: PendingAliasRow, portalSub: string): Pr
     .values({
       id: portalSub,
       name: (p.name as string) ?? row.rawName,
-      branchKey: 'default', // branchId should be stored in rawPayload — see Directive
+      branchKey: 'default', // branchKey should be stored in rawPayload — see Directive
       branchValueSnapshot: 'default',
       teamValueSnapshot: (p.teamName as string) ?? null,
       ...(p.attendanceName ? { attendanceName: p.attendanceName as string } : {}),

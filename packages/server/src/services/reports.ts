@@ -25,7 +25,7 @@ export async function getDashboardStats(
 
   return withRLS(ctx.actor, async (db) => {
     const branchKey =
-      ctx.actor.role === 'admin' || ctx.actor.role === 'hr' ? (input.branchId ?? null) : ctx.actor.branchKey
+      ctx.actor.role === 'admin' || ctx.actor.role === 'hr' ? (input.branchKey ?? null) : ctx.actor.branchKey
 
     const baseConditions = []
     if (branchKey !== null) {
