@@ -20,7 +20,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed-admin": "bun scripts/seed-admin.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "spec07:register-fast": "bun scripts/spec07-register-fast.ts",
+    "spec07:provision-fast-orphans": "bun scripts/spec07-provision-fast-orphans.ts"
   },
   "dependencies": {
     "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v0.1.1",
