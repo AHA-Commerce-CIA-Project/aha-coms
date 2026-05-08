@@ -1,5 +1,5 @@
 // AHA COMSS Service Worker
-const CACHE_NAME = 'aha-comss-v3';
+const CACHE_NAME = 'aha-comss-v48';
 const STATIC_ASSETS = [
     '/',
     '/aha-logo.png',
@@ -42,8 +42,13 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Skip API calls (always go to network)
+    // Skip API calls and SSE streams (always go to network)
     if (url.pathname.startsWith('/api/')) {
+        return;
+    }
+
+    // Skip SSE/streaming requests
+    if (request.headers.get('accept')?.includes('text/event-stream')) {
         return;
     }
 
@@ -77,6 +82,10 @@ self.addEventListener('fetch', (event) => {
                 }
                 return response;
             })
-            .catch(() => caches.match(request))
+            .catch(() =>
+                caches.match(request).then((cached) =>
+                    cached || caches.match('/') || new Response('Offline', { status: 503 })
+                )
+            )
     );
 });

@@ -8,14 +8,29 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { id: true, name: true, teamId: true },
+        select: { id: true, name: true, teamId: true, activeSecondsToday: true, activeDate: true },
     });
     if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    // My active tasks (urgent/today)
+    // Active time today (WIB) — only count if activeDate is today (WIB)
+    const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+    const nowWIB_ = new Date(Date.now() + WIB_OFFSET_MS);
+    const todayWIB_ = new Date(Date.UTC(
+        nowWIB_.getUTCFullYear(),
+        nowWIB_.getUTCMonth(),
+        nowWIB_.getUTCDate(),
+    ));
+    const isToday = user.activeDate &&
+        new Date(user.activeDate).getTime() === todayWIB_.getTime();
+    const activeSecondsToday = isToday ? user.activeSecondsToday : 0;
+
+    // My active tasks (urgent/today) — primary assignee OR approved helper
     const myTasks = await prisma.task.findMany({
         where: {
-            assigneeId: session.user.id,
+            OR: [
+                { assigneeId: session.user.id },
+                { collaborators: { some: { userId: session.user.id, status: 'approved' } } },
+            ],
             status: { in: ['in-progress', 'todo', 'review', 'pending_completion_details'] },
         },
         select: {
@@ -66,16 +81,22 @@ export async function GET() {
     let teamMembers: any[] = [];
     if (user.teamId) {
         teamMembers = await prisma.user.findMany({
-            where: { teamId: user.teamId },
+            where: { teamId: user.teamId, accountStatus: 'active' },
             select: { id: true, name: true, email: true, image: true, role: true, status: true, lastSeenAt: true },
             orderBy: { name: 'asc' },
-            take: 8,
         });
     }
 
-    // Stats & Insights
+    // Stats & Insights — include tasks where user is approved helper so collaboration
+    // shows up in personal stats (completion rate, avg difficulty, thisWeekCompleted).
     const allMyTasks = await prisma.task.findMany({
-        where: { assigneeId: session.user.id, NOT: { status: 'archived' } },
+        where: {
+            OR: [
+                { assigneeId: session.user.id },
+                { collaborators: { some: { userId: session.user.id, status: 'approved' } } },
+            ],
+            NOT: { status: 'archived' },
+        },
         select: { status: true, urgency: true, createdAt: true, completedAt: true, actualTimeSpent: true, timeUnit: true, difficultyScore: true },
     });
     const completedCount = allMyTasks.filter(t => t.status === 'done').length;
@@ -154,6 +175,7 @@ export async function GET() {
             orbitCompleted: orbitCompletedCount,
             avgRating,
             totalReviews,
+            activeSecondsToday,
         },
     });
 }

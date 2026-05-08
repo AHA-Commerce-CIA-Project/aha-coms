@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
+import { htmlToPlainText } from '@/lib/sanitize';
 
 // GET /api/channels/[channelId]/[messageId]/replies
 export async function GET(
@@ -100,7 +101,7 @@ export async function POST(
     title: mentionSet.has(u.id)
       ? `${session.user.name} mentioned you in a thread in #${channel?.name || 'channel'}`
       : `${session.user.name} replied in a thread in #${channel?.name || 'channel'}`,
-    message: content?.substring(0, 80) || 'sent an attachment',
+    message: htmlToPlainText(content).substring(0, 80) || 'sent an attachment',
     data: {
       channel_id: channelId,
       message_id: messageId,

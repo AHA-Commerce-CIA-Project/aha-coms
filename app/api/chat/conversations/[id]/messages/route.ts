@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
+import { htmlToPlainText } from '@/lib/sanitize';
 
 // GET — Fetch messages for a conversation (paginated)
 export async function GET(
@@ -44,6 +45,9 @@ export async function GET(
             sender: {
                 select: { id: true, name: true, image: true },
             },
+            reactions: {
+                include: { user: { select: { id: true, name: true } } },
+            },
         },
     });
 
@@ -56,8 +60,12 @@ export async function GET(
             content: m.content,
             attachments: m.attachments || [],
             senderId: m.senderId,
-            senderName: m.sender.name,
-            senderImage: m.sender.image,
+            sender: { id: m.sender.id, name: m.sender.name, image: m.sender.image },
+            type: (m as any).type || 'text',
+            taskId: (m as any).taskId || null,
+            taskSnapshot: (m as any).taskSnapshot || null,
+            isEdited: (m as any).isEdited || false,
+            reactions: m.reactions.map(r => ({ id: r.id, emoji: r.emoji, userId: r.userId, user: r.user })),
             createdAt: m.createdAt.toISOString(),
         })),
         nextCursor: hasMore ? data[data.length - 1].id : null,
@@ -91,14 +99,19 @@ export async function POST(
     const body = await request.json();
     const { content, attachments } = body;
 
+    // Strip empty contenteditable HTML wrappers (e.g. "<br><div><br></div>") so
+    // image-only sends don't persist visible cruft and leak into the DM list
+    // preview. If plain-text content is empty after stripping tags, treat it
+    // as no text at all.
+    const trimmedContent = (content || '').trim();
+    const plain = htmlToPlainText(trimmedContent);
+    const messageContent = plain.length > 0 ? trimmedContent : '';
+    const messageAttachments = Array.isArray(attachments) ? attachments : [];
+
     // Must have content or attachments
-    if ((!content || !content.trim()) && (!attachments || attachments.length === 0)) {
+    if (!messageContent && messageAttachments.length === 0) {
         return NextResponse.json({ error: 'Message content or attachments are required' }, { status: 400 });
     }
-
-    // Create the message and update conversation timestamp
-    const messageContent = content?.trim() || '';
-    const messageAttachments = Array.isArray(attachments) ? attachments : [];
 
     const [message] = await prisma.$transaction([
         prisma.directMessage.create({
@@ -127,6 +140,11 @@ export async function POST(
         }),
     ]);
 
+    // Notification preview should mirror what the recipient will see — strip
+    // HTML so the toast and bell list don't show raw `<br>` / mention-chip
+    // markup.
+    const plainForNotif = htmlToPlainText(messageContent);
+
     // Create a notification for the other participant
     const otherParticipant = await prisma.conversationParticipant.findFirst({
         where: {
@@ -136,7 +154,7 @@ export async function POST(
     });
 
     if (otherParticipant) {
-        let notifMessage = messageContent;
+        let notifMessage = plainForNotif;
         if (!notifMessage && messageAttachments.length > 0) {
             notifMessage = `📎 Sent ${messageAttachments.length} file${messageAttachments.length > 1 ? 's' : ''}`;
         }

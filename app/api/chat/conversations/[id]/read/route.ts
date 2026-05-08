@@ -33,5 +33,23 @@ export async function PUT(
         data: { lastReadAt: new Date() },
     });
 
+    // Also clear the corresponding dm_message notifications so the bell badge
+    // and the DMs tab in the notification dropdown sync to "read" the moment
+    // the user actually opens the conversation. Without this, opening a DM
+    // resets lastReadAt but leaves stale notifications visible — the exact
+    // bug the user reported.
+    await prisma.notification.updateMany({
+        where: {
+            userId,
+            type: 'dm_message',
+            read: false,
+            data: {
+                path: ['conversation_id'],
+                equals: conversationId,
+            },
+        },
+        data: { read: true },
+    });
+
     return NextResponse.json({ success: true });
 }

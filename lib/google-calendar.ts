@@ -97,25 +97,43 @@ export async function getCalendarEvents(userId: string, year: number, month: num
             maxResults: 100,
         });
 
-        return (res.data.items || []).map(event => ({
-            google_event_id: event.id,
-            owner_id: userId,
-            title: event.summary || 'Untitled',
-            description: event.description || null,
-            meeting_date: event.start?.date || (event.start?.dateTime
-                ? new Date(event.start.dateTime).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
-                : ''),
-            start_time: event.start?.dateTime
-                ? new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
-                : '00:00',
-            end_time: event.end?.dateTime
-                ? new Date(event.end.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
-                : '23:59',
-            location: event.location || null,
-            source: 'google_calendar',
-            status: event.status === 'cancelled' ? 'cancelled' : 'confirmed',
-            guests: [],
-        }));
+        return (res.data.items || []).map(event => {
+            const hangoutLink = event.hangoutLink
+                || event.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri
+                || null;
+            const organizerName = event.organizer?.displayName
+                || event.organizer?.email
+                || null;
+            const attendees = (event.attendees || []).map(a => ({
+                id: a.email || '',
+                email: a.email || '',
+                name: a.displayName || a.email || '',
+                responseStatus: a.responseStatus || 'needsAction',
+                organizer: a.organizer || false,
+            }));
+            return {
+                google_event_id: event.id,
+                owner_id: userId,
+                title: event.summary || 'Untitled',
+                description: event.description || null,
+                meeting_date: event.start?.date || (event.start?.dateTime
+                    ? new Date(event.start.dateTime).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+                    : ''),
+                start_time: event.start?.dateTime
+                    ? new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
+                    : '00:00',
+                end_time: event.end?.dateTime
+                    ? new Date(event.end.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
+                    : '23:59',
+                location: event.location || null,
+                source: 'google_calendar',
+                status: event.status === 'cancelled' ? 'cancelled' : 'confirmed',
+                guests: attendees,
+                meeting_link: hangoutLink,
+                organizer_name: organizerName,
+                organizer_email: event.organizer?.email || null,
+            };
+        });
     } catch (err: any) {
         console.error('Google Calendar fetch error:', err.message);
         return [];

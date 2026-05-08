@@ -16,6 +16,86 @@ async function verifyAdmin() {
     return session;
 }
 
+// GET — Fetch a single user's public profile (any authenticated user)
+export async function GET(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+) {
+    const session = await requireAuth();
+    if (!session) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+
+    const [user, tasksDone, ratingAgg] = await Promise.all([
+        prisma.user.findUnique({
+            where: { id },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                image: true,
+                role: true,
+                status: true,
+                lastSeenAt: true,
+                activeSecondsToday: true,
+                activeDate: true,
+                createdAt: true,
+                team: { select: { name: true } },
+            },
+        }),
+        prisma.task.count({
+            where: {
+                status: 'done',
+                OR: [{ assigneeId: id }, { completedBy: id }],
+            },
+        }),
+        prisma.taskReview.aggregate({
+            where: {
+                reviewerType: 'requester',
+                task: { assigneeId: id, status: 'done' },
+            },
+            _avg: { rating: true },
+            _count: { rating: true },
+        }),
+    ]);
+
+    if (!user) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Only count activeSecondsToday if the stored date is today (WIB)
+    const WIB_OFFSET = 7 * 60 * 60 * 1000;
+    const nowWIB = new Date(Date.now() + WIB_OFFSET);
+    const todayWIB = new Date(Date.UTC(
+        nowWIB.getUTCFullYear(),
+        nowWIB.getUTCMonth(),
+        nowWIB.getUTCDate(),
+    ));
+    const isToday = user.activeDate
+        && new Date(user.activeDate).getTime() === todayWIB.getTime();
+
+    const avgRaw = ratingAgg._avg.rating;
+    const avgRating = avgRaw != null ? Math.round(Number(avgRaw) * 10) / 10 : null;
+
+    return NextResponse.json({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+        status: user.status,
+        teamName: user.team?.name || null,
+        lastSeenAt: user.lastSeenAt?.toISOString() || null,
+        activeSecondsToday: isToday ? user.activeSecondsToday : 0,
+        tasksDone,
+        avgRating,
+        ratingCount: ratingAgg._count.rating,
+        joinedAt: user.createdAt.toISOString(),
+    });
+}
+
 // PUT — Update user (Master/Admin only)
 export async function PUT(
     request: NextRequest,

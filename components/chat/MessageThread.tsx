@@ -3,6 +3,9 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { FileText, Download, ExternalLink, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { htmlToPlainText } from '@/lib/sanitize';
+import { ImageLightbox as SharedImageLightbox } from '@/components/ImageLightbox';
+import { DirectAssignCard } from '@/components/channels/DirectAssignCard';
 
 interface Attachment {
     url: string;
@@ -77,39 +80,18 @@ function getFileIcon(type: string): string {
     return '📎';
 }
 
-// Lightbox component for image preview
-function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
-    useEffect(() => {
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
-        };
-        document.addEventListener('keydown', handleEsc);
-        return () => document.removeEventListener('keydown', handleEsc);
-    }, [onClose]);
-
-    return (
-        <div
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-8"
-            onClick={onClose}
-        >
-            <button
-                onClick={onClose}
-                className="absolute top-6 right-6 p-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors"
-            >
-                <X className="w-6 h-6" />
-            </button>
-            <img
-                src={src}
-                alt={alt}
-                className="max-w-full max-h-full rounded-xl shadow-2xl object-contain"
-                onClick={(e) => e.stopPropagation()}
-            />
-        </div>
-    );
-}
-
-// Attachment renderer
-function AttachmentRenderer({ attachment, isOwn }: { attachment: Attachment; isOwn: boolean }) {
+// Attachment renderer — uses the shared ImageLightbox so multi-image messages
+// get prev/next nav. The full sibling-image gallery is threaded down so the
+// lightbox knows what to paginate through.
+function AttachmentRenderer({
+    attachment,
+    isOwn,
+    siblingImageUrls,
+}: {
+    attachment: Attachment;
+    isOwn: boolean;
+    siblingImageUrls: string[];
+}) {
     const [lightboxOpen, setLightboxOpen] = useState(false);
 
     if (attachment.isImage) {
@@ -127,9 +109,10 @@ function AttachmentRenderer({ attachment, isOwn }: { attachment: Attachment; isO
                     />
                 </button>
                 {lightboxOpen && (
-                    <ImageLightbox
+                    <SharedImageLightbox
                         src={attachment.url}
                         alt={attachment.name}
+                        images={siblingImageUrls}
                         onClose={() => setLightboxOpen(false)}
                     />
                 )}
@@ -323,24 +306,116 @@ export function MessageThread({
                                         </div>
                                     )}
 
-                                    {/* Text bubble */}
-                                    {hasText && (
-                                        <div
-                                            className={cn(
-                                                'px-4 py-2.5 text-sm leading-relaxed break-words',
-                                                isOwn
-                                                    ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-md shadow-sm'
-                                                    : 'bg-slate-100 text-slate-800 rounded-2xl rounded-tl-md'
-                                            )}
-                                        >
-                                            {msg.content.split('\n').map((line, i) => (
-                                                <span key={i}>
-                                                    {line}
-                                                    {i < msg.content.split('\n').length - 1 && <br />}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
+                                    {/* Text bubble — with forward-card unfurl */}
+                                    {hasText && (() => {
+                                        const fwdMatch = msg.content.match(/<!--forward:(.*?)-->/s);
+                                        if (fwdMatch) {
+                                            try {
+                                                const fwd = JSON.parse(fwdMatch[1]);
+                                                const userMsg = msg.content.replace(/<!--forward:.*?-->/s, '').trim();
+                                                const fwdDate = fwd.date
+                                                    ? new Date(fwd.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                                    : null;
+                                                return (
+                                                    <div className={cn(
+                                                        'rounded-2xl px-3 py-2.5 max-w-full',
+                                                        isOwn
+                                                            ? 'bg-indigo-50 border border-indigo-100'
+                                                            : 'bg-slate-50 border border-slate-200',
+                                                    )}>
+                                                        {userMsg && (
+                                                            <p className="text-sm text-slate-700 whitespace-pre-wrap break-words mb-2">
+                                                                {userMsg}
+                                                            </p>
+                                                        )}
+                                                        {/* Forwarded tasks render as a live DirectAssignCard. The
+                                                            receiver gets the same orange "TASK REQUEST" card with
+                                                            claim/complete/status — not a static text quote. */}
+                                                        {fwd.isTask && fwd.taskId ? (
+                                                            <DirectAssignCard
+                                                                taskId={fwd.taskId}
+                                                                previewTitle={fwd.taskToken ? `Task ${fwd.taskToken}` : 'Task'}
+                                                                previewBody={htmlToPlainText(fwd.content || '')}
+                                                                currentUserId={currentUserId}
+                                                            />
+                                                        ) : (
+                                                        <div className="border-l-4 border-indigo-400 bg-white rounded-r-xl p-3 shadow-sm">
+                                                            <div className="flex items-center gap-2 mb-1.5">
+                                                                <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                                                                    {fwd.author?.charAt(0)?.toUpperCase() || '?'}
+                                                                </div>
+                                                                <span className="text-sm font-bold text-slate-900 truncate">{fwd.author}</span>
+                                                            </div>
+                                                            <p className="text-[14px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed line-clamp-6">
+                                                                {htmlToPlainText(fwd.content)}
+                                                            </p>
+                                                        </div>
+                                                        )}
+                                                        {/* Source footer — Slack-style */}
+                                                        <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 mt-2 text-xs">
+                                                            <span className="text-slate-400">Forwarded from</span>
+                                                            {fwd.channelName ? (
+                                                                <a href={`/channels?channel=${fwd.channelId || ''}`} className="font-semibold text-slate-700 hover:text-indigo-600 hover:underline">
+                                                                    #{fwd.channelName}
+                                                                </a>
+                                                            ) : fwd.isTask ? (
+                                                                <span className="font-semibold text-slate-700">
+                                                                    {fwd.taskToken ? `Task ${fwd.taskToken}` : 'a task'}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="font-semibold text-slate-700">{fwd.author}</span>
+                                                            )}
+                                                            {fwdDate && (
+                                                                <>
+                                                                    <span className="text-slate-300">·</span>
+                                                                    <span className="text-slate-400">{fwdDate}</span>
+                                                                </>
+                                                            )}
+                                                            {(fwd.channelId && fwd.messageId) || (fwd.isTask && (fwd.taskToken || fwd.taskId)) ? (
+                                                                <>
+                                                                    <span className="text-slate-300">·</span>
+                                                                    {fwd.channelId && fwd.messageId ? (
+                                                                        <a
+                                                                            href={`/channels?channel=${fwd.channelId}&highlight=${fwd.messageId}`}
+                                                                            className="text-indigo-600 hover:text-indigo-700 font-semibold hover:underline"
+                                                                        >
+                                                                            View message
+                                                                        </a>
+                                                                    ) : (
+                                                                        <a
+                                                                            href={fwd.taskToken
+                                                                                ? `/nexus?highlight_token=${fwd.taskToken}&open=true`
+                                                                                : `/channels?task=${fwd.taskId}`}
+                                                                            className="text-indigo-600 hover:text-indigo-700 font-semibold hover:underline"
+                                                                        >
+                                                                            View task
+                                                                        </a>
+                                                                    )}
+                                                                </>
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            } catch {}
+                                        }
+                                        return (
+                                            <div
+                                                className={cn(
+                                                    'px-4 py-2.5 text-sm leading-relaxed break-words',
+                                                    isOwn
+                                                        ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-md shadow-sm'
+                                                        : 'bg-slate-100 text-slate-800 rounded-2xl rounded-tl-md'
+                                                )}
+                                            >
+                                                {msg.content.split('\n').map((line, i) => (
+                                                    <span key={i}>
+                                                        {line}
+                                                        {i < msg.content.split('\n').length - 1 && <br />}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* Attachments */}
                                     {hasAttachments && (
@@ -348,13 +423,19 @@ export function MessageThread({
                                             'flex flex-col gap-1',
                                             isOwn ? 'items-end' : 'items-start'
                                         )}>
-                                            {msgAttachments.map((att, attIdx) => (
-                                                <AttachmentRenderer
-                                                    key={attIdx}
-                                                    attachment={att}
-                                                    isOwn={isOwn}
-                                                />
-                                            ))}
+                                            {(() => {
+                                                const siblingImageUrls = msgAttachments
+                                                    .filter((a) => a.isImage)
+                                                    .map((a) => a.url);
+                                                return msgAttachments.map((att, attIdx) => (
+                                                    <AttachmentRenderer
+                                                        key={attIdx}
+                                                        attachment={att}
+                                                        isOwn={isOwn}
+                                                        siblingImageUrls={siblingImageUrls}
+                                                    />
+                                                ));
+                                            })()}
                                         </div>
                                     )}
 

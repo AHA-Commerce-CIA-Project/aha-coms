@@ -21,7 +21,7 @@ export async function GET() {
             participants: {
                 include: {
                     user: {
-                        select: { id: true, name: true, image: true, email: true },
+                        select: { id: true, name: true, image: true, email: true, lastSeenAt: true, role: true, team: { select: { name: true } } },
                     },
                 },
             },
@@ -82,10 +82,12 @@ export async function GET() {
         unreadCounts[conv.id] = count;
     }
 
-    const result = data.map((d) => ({
-        ...d,
-        unreadCount: unreadCounts[d.id] || 0,
-    }));
+    const result = data
+        .filter((d) => d.otherUser !== null)
+        .map((d) => ({
+            ...d,
+            unreadCount: unreadCounts[d.id] || 0,
+        }));
 
     return NextResponse.json(result);
 }
@@ -131,7 +133,7 @@ export async function POST(request: NextRequest) {
             participants: {
                 include: {
                     user: {
-                        select: { id: true, name: true, image: true, email: true },
+                        select: { id: true, name: true, image: true, email: true, lastSeenAt: true, role: true, team: { select: { name: true } } },
                     },
                 },
             },
@@ -160,7 +162,7 @@ export async function POST(request: NextRequest) {
             participants: {
                 include: {
                     user: {
-                        select: { id: true, name: true, image: true, email: true },
+                        select: { id: true, name: true, image: true, email: true, lastSeenAt: true, role: true, team: { select: { name: true } } },
                     },
                 },
             },

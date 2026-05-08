@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
 import { logActivity } from '@/lib/activity-log';
+import { htmlToPlainText } from '@/lib/sanitize';
 
 // GET /api/channels/[channelId]/messages - Paginated messages
 export async function GET(
@@ -47,9 +48,25 @@ export async function GET(
   const hasMore = messages.length > limit;
   if (hasMore) messages.pop();
 
+  // Return the user's lastReadAt for this channel so the client can anchor
+  // its initial scroll at the first unread message instead of the bottom.
+  // Only meaningful on the initial fetch (no cursor); paginated calls can
+  // ignore it.
+  let lastReadAt: string | null = null;
+  if (!cursor) {
+    const status = await prisma.channelReadStatus.findUnique({
+      where: {
+        channelId_userId: { channelId, userId: session.user.id },
+      },
+      select: { lastReadAt: true },
+    });
+    lastReadAt = status?.lastReadAt?.toISOString() ?? null;
+  }
+
   return NextResponse.json({
     messages,
     nextCursor: hasMore ? messages[messages.length - 1].id : null,
+    lastReadAt,
   });
 }
 
@@ -66,7 +83,14 @@ export async function POST(
   const { channelId } = await params;
   const { content, attachments = [], mentions = [] } = await request.json();
 
-  if ((!content || content.trim().length === 0) && attachments.length === 0) {
+  // Strip empty contenteditable HTML wrappers (e.g. "<br><div><br></div>") so
+  // image-only sends don't persist invisible cruft and leak into channel
+  // previews.
+  const trimmedContent = (content || '').trim();
+  const plainContent = htmlToPlainText(trimmedContent);
+  const messageContent = plainContent.length > 0 ? trimmedContent : '';
+
+  if (!messageContent && attachments.length === 0) {
     return NextResponse.json({ error: 'Message content or attachments required' }, { status: 400 });
   }
 
@@ -74,7 +98,7 @@ export async function POST(
     data: {
       channelId,
       senderId: session.user.id,
-      content: content?.trim() || '',
+      content: messageContent,
       attachments,
       mentions,
     },
@@ -118,14 +142,37 @@ export async function POST(
     });
   }
 
-  const mentionSet = new Set(mentions);
+  const mentionSet = new Set<string>(mentions);
+
+  // Expand team-handle mentions (@tfbi, @tpr, …) — pull each handle's members
+  // into the mention set so they get a "you were mentioned" notification.
+  const handleMatches = new Set<string>();
+  const plain = htmlToPlainText(content || '');
+  for (const m of plain.matchAll(/@([a-z0-9][a-z0-9_-]{1,29})/gi)) {
+    handleMatches.add(m[1].toLowerCase());
+  }
+  if (handleMatches.size > 0) {
+    const teams = await prisma.team.findMany({
+      where: { mentionHandle: { in: Array.from(handleMatches) } },
+      select: {
+        mentionHandle: true,
+        users: { select: { id: true } },
+      },
+    });
+    for (const t of teams) {
+      for (const u of t.users) {
+        if (u.id !== session.user.id) mentionSet.add(u.id);
+      }
+    }
+  }
+
   const notifications = targetUsers.map((u) => ({
     userId: u.id,
     type: mentionSet.has(u.id) ? 'mention' : 'channel_message',
     title: mentionSet.has(u.id)
       ? `${session.user.name} mentioned you in #${channel?.name || 'channel'}`
       : `${session.user.name} posted in #${channel?.name || 'channel'}`,
-    message: content?.substring(0, 80) || 'sent an attachment',
+    message: htmlToPlainText(content).substring(0, 80) || 'sent an attachment',
     data: {
       channel_id: channelId,
       message_id: message.id,

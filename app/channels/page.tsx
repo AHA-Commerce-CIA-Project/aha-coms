@@ -12,8 +12,9 @@ import { ThreadPanel } from '@/components/channels/ThreadPanel';
 import { CreateChannelModal } from '@/components/channels/CreateChannelModal';
 import { EditChannelModal } from '@/components/channels/EditChannelModal';
 import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';
+import { TeamInboxTaskModal, TeamInboxTask } from '@/components/TeamInboxTaskModal';
 import { Hash, MessageSquare, AlertTriangle, Trash2 } from 'lucide-react';
-import { PageTabs } from '@/components/PageTabs';
+import { useAppStore } from '@/lib/store';
 
 interface Attachment {
   url: string;
@@ -29,6 +30,7 @@ interface Channel {
   description: string | null;
   createdBy: string;
   isPrivate?: boolean;
+  purpose?: string;
   allowedTeamIds?: string[];
   visibleToAllTeams?: boolean;
   creator: { id: string; name: string };
@@ -64,18 +66,27 @@ function ChannelsPageContent() {
   const { isLeader } = useAuth();
 
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [purpose, setPurpose] = useState<'discussion' | 'assign_task'>('discussion');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loadingChannels, setLoadingChannels] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createWithUserIds, setCreateWithUserIds] = useState<string[] | undefined>(undefined);
+  const setDirectAssignOpen = useAppStore((s) => s.setDirectAssignOpen);
+  // Subscribe to Direct Assign submit ticks so we can refresh the feed when
+  // the user converts a message into a task — the new endpoint edits the source
+  // message in place and the SSE stream only pushes inserts, not updates.
+  const directAssignSubmittedTick = useAppStore((s) => s.directAssignSubmittedTick);
   const [threadMessage, setThreadMessage] = useState<Message | null>(null);
   const [users, setUsers] = useState<MentionUser[]>([]);
+  const [teams, setTeams] = useState<{ id: string; name: string; mentionHandle: string }[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ messages: any[]; replies: any[] } | null>(null);
   const [searching, setSearching] = useState(false);
   const [perChannelUnread, setPerChannelUnread] = useState<Record<string, number>>({});
+  const [perPurposeUnread, setPerPurposeUnread] = useState<{ discussion: number; assign_task: number }>({ discussion: 0, assign_task: 0 });
   const [dmUnreadTotal, setDmUnreadTotal] = useState(0);
   const [typingUsers, setTypingUsers] = useState<{ id: string; name: string }[]>([]);
   const [forwardMessage, setForwardMessage] = useState<any | null>(null);
@@ -84,6 +95,18 @@ function ChannelsPageContent() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
+
+  // Direct-assign task detail modal — opened from Team Inbox deep-link (?task=<id>)
+  // and from clicking a DirectAssignCard inside a channel.
+  const [taskDetail, setTaskDetail] = useState<TeamInboxTask | null>(null);
+  const openTaskDetail = useCallback(async (taskId: string) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/full`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setTaskDetail(data);
+    } catch {}
+  }, []);
 
   const messageIdsRef = useRef<Set<string>>(new Set());
 
@@ -105,19 +128,26 @@ function ChannelsPageContent() {
     }
   }, [session, isPending, router]);
 
-  // Fetch users for @mentions
+  // Fetch users + teams for @mentions
   useEffect(() => {
     if (!session) return;
     fetch('/api/chat/users')
       .then((res) => res.ok ? res.json() : [])
       .then(setUsers)
       .catch(() => {});
+    fetch('/api/teams')
+      .then((res) => res.ok ? res.json() : [])
+      .then((list: { id: string; name: string; mentionHandle: string | null }[]) => {
+        // Only teams with a mention handle are usable in @-completion.
+        setTeams(list.filter(t => !!t.mentionHandle).map(t => ({ id: t.id, name: t.name, mentionHandle: t.mentionHandle as string })));
+      })
+      .catch(() => {});
   }, [session]);
 
-  // Fetch channels
+  // Fetch channels — scoped by the active purpose toggle.
   const fetchChannels = useCallback(async () => {
     try {
-      const res = await fetch('/api/channels');
+      const res = await fetch(`/api/channels?purpose=${encodeURIComponent(purpose)}`);
       if (res.ok) {
         const data = await res.json();
         setChannels(data);
@@ -126,7 +156,7 @@ function ChannelsPageContent() {
     } catch {
       setLoadingChannels(false);
     }
-  }, []);
+  }, [purpose]);
 
   useEffect(() => {
     if (!session) return;
@@ -136,16 +166,48 @@ function ChannelsPageContent() {
     return () => clearInterval(interval);
   }, [session, fetchChannels]);
 
-  // Auto-select channel from URL query param
+  // Switch to the right purpose tab when ?purpose=<discussion|assign_task> is
+  // in the URL — must run before the channel-list fetches so the resolver
+  // below finds the target channel in the filtered list.
+  useEffect(() => {
+    const purposeParam = searchParamsObj.get('purpose');
+    if (purposeParam === 'discussion' || purposeParam === 'assign_task') {
+      setPurpose(purposeParam);
+    }
+  }, [searchParamsObj]);
+
+  // Auto-select channel from URL query param. If the deep-linked channel isn't
+  // in the currently-loaded purpose's list (e.g. user clicked "View message"
+  // on a forwarded direct-assign card while sitting on the Discussion tab),
+  // flip the purpose toggle once so the channel can be found. The ref
+  // prevents an infinite ping-pong when the channel doesn't exist in either
+  // purpose (revoked, deleted, etc).
+  const flippedPurposeForChannelRef = useRef<string | null>(null);
   useEffect(() => {
     const channelParam = searchParamsObj.get('channel');
-    if (channelParam && channels.length > 0 && !selectedChannel) {
-      const ch = channels.find((c) => c.id === channelParam);
-      if (ch) {
-        handleSelectChannel(ch);
-      }
+    if (!channelParam || selectedChannel) return;
+    if (channels.length === 0) return;
+    const ch = channels.find((c) => c.id === channelParam);
+    if (ch) {
+      handleSelectChannel(ch);
+      flippedPurposeForChannelRef.current = null;
+      return;
     }
-  }, [channels, searchParamsObj]);
+    // Not found in current purpose — try the other tab once.
+    if (flippedPurposeForChannelRef.current !== channelParam) {
+      flippedPurposeForChannelRef.current = channelParam;
+      setPurpose(p => (p === 'discussion' ? 'assign_task' : 'discussion'));
+    }
+  }, [channels, searchParamsObj, selectedChannel]);
+
+  // Open create-channel modal with pre-selected members from ?createWith=<userId>(,<userId>)
+  useEffect(() => {
+    const createWith = searchParamsObj.get('createWith');
+    if (createWith) {
+      setCreateWithUserIds(createWith.split(',').filter(Boolean));
+      setShowCreateModal(true);
+    }
+  }, [searchParamsObj]);
 
   // Highlight message from URL query param (from "Open in channel" / Later page)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
@@ -165,6 +227,20 @@ function ChannelsPageContent() {
     }
   }, [messages, searchParamsObj]);
 
+  // Auto-open the task detail modal when ?task=<id> is in the URL. Used by
+  // /later → "Open task" for direct_assign tasks (which can't be opened from
+  // /nexus since the queue excludes them). Runs once per id so re-renders
+  // don't keep reopening the modal after the user closes it.
+  const openedTaskRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!session) return;
+    const taskParam = searchParamsObj.get('task');
+    if (!taskParam) return;
+    if (openedTaskRef.current === taskParam) return;
+    openedTaskRef.current = taskParam;
+    openTaskDetail(taskParam);
+  }, [searchParamsObj, session, openTaskDetail]);
+
   // Fetch per-channel unread counts + DM total unread (for tab badges)
   useEffect(() => {
     if (!session) return;
@@ -177,6 +253,10 @@ function ChannelsPageContent() {
         if (chRes.ok) {
           const data = await chRes.json();
           setPerChannelUnread(data.perChannel || {});
+          setPerPurposeUnread({
+            discussion: data.perPurpose?.discussion || 0,
+            assign_task: data.perPurpose?.assign_task || 0,
+          });
         }
         if (dmRes.ok) {
           const data = await dmRes.json();
@@ -234,7 +314,13 @@ function ChannelsPageContent() {
         setMessages((prev) => {
           const existingIds = new Set(prev.map((m) => m.id));
           const unique = newMsgs.filter((m) => !existingIds.has(m.id));
-          return unique.length > 0 ? [...prev, ...unique] : prev;
+          if (unique.length === 0) return prev;
+          // State is newest-first. SSE delivers asc (oldest→newest); reverse the
+          // batch so the newest of the batch lands at index 0, then prepend.
+          // Without this, new messages drift to the END of state and end up at
+          // the TOP of the feed after the display reverse.
+          const newestFirst = unique.slice().reverse();
+          return [...newestFirst, ...prev];
         });
       } catch {}
     });
@@ -256,6 +342,14 @@ function ChannelsPageContent() {
 
     return () => es.close();
   }, [selectedChannel, fetchMessages]);
+
+  // Refetch the feed when a Direct Assign succeeds — the source message was
+  // edited in place by the server, so SSE (which only fires on inserts) won't
+  // push it. Cheap full refetch is fine here; it only fires on submit.
+  useEffect(() => {
+    if (!selectedChannel || directAssignSubmittedTick === 0) return;
+    fetchMessages(selectedChannel.id);
+  }, [directAssignSubmittedTick, selectedChannel, fetchMessages]);
 
   // Search messages
   useEffect(() => {
@@ -387,16 +481,19 @@ function ChannelsPageContent() {
   if (!session) return null;
 
   return (
-    <div className="-mx-6 -mt-6">
-      <div className="px-6 pt-4 pb-2">
-        <PageTabs tabs={[
-          { href: '/channels', label: 'Channels', badge: Object.values(perChannelUnread).reduce((s, n) => s + (n || 0), 0) },
-          { href: '/messages', label: 'Messages', badge: dmUnreadTotal },
-        ]} />
-      </div>
-    <div className="flex" style={{ height: 'calc(100vh - 168px)' }}>
-      {/* Channel list */}
-      <div className="w-[280px] border-r border-slate-200 flex-shrink-0">
+    <div>
+    <div
+      // Mobile: subtract TopNav (~64px) + BottomNav (~72px) + safe-area, so the
+      // composer at the bottom of the feed isn't covered by the bottom tab bar.
+      // Desktop: original 120px gutter (TopNav + breadcrumb + page padding).
+      className="flex bg-white rounded-none sm:rounded-2xl border-0 sm:border border-slate-200 shadow-sm overflow-hidden -mx-3 sm:mx-0 h-[calc(100vh-150px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-120px)]"
+    >
+      {/* Channel list — on mobile this is the *only* visible panel until the
+          user picks a channel; selecting one swaps to the feed via the visibility
+          classes below. md+ keeps the classic two-pane layout. */}
+      <div
+        className={`${selectedChannel ? 'hidden md:flex' : 'flex'} w-full md:w-[280px] border-r border-slate-200 flex-shrink-0 flex-col min-h-0`}
+      >
         <ChannelList
           channels={channels.map((ch) => ({
             ...ch,
@@ -407,11 +504,19 @@ function ChannelsPageContent() {
           onCreateChannel={() => setShowCreateModal(true)}
           isLeader={isLeader}
           loading={loadingChannels}
+          purpose={purpose}
+          purposeUnread={perPurposeUnread}
+          onPurposeChange={(p) => {
+            setPurpose(p);
+            // Clear current selection — it might not belong to the new tab.
+            setSelectedChannel(null);
+          }}
         />
       </div>
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main content area — hidden on mobile until a channel is picked, so the
+          channel list gets full screen for browsing. */}
+      <div className={`${selectedChannel ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-w-0`}>
         {selectedChannel ? (
           <>
             <ChannelHeader
@@ -420,12 +525,15 @@ function ChannelsPageContent() {
               isPrivate={(selectedChannel as any).isPrivate}
               memberCount={(selectedChannel as any).memberCount}
               channelId={selectedChannel.id}
+              purpose={selectedChannel.purpose}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               searching={searching}
               isCreator={selectedChannel.createdBy === session.user.id}
               onDelete={openDeleteConfirm}
               onEdit={() => setEditModalOpen(true)}
+              onDirectAssign={() => setDirectAssignOpen(true, { channelId: selectedChannel.id })}
+              onBack={() => setSelectedChannel(null)}
             />
             {searchResults ? (
               <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -527,18 +635,68 @@ function ChannelsPageContent() {
                   onReaction={handleReaction}
                   onSave={handleSave}
                   onMessageUpdated={() => fetchMessages(selectedChannel.id)}
-                  onForward={(msg) => setForwardMessage({
-                    originalAuthor: msg.sender.name,
-                    originalContent: msg.content?.replace(/<!--forward:.*?-->/s, '').trim() || '',
-                    originalAttachments: msg.attachments || [],
-                    originalChannelName: selectedChannel.name,
-                    originalChannelId: selectedChannel.id,
-                    originalMessageId: msg.id,
-                    originalDate: msg.createdAt,
-                  })}
+                  onForward={async (msg) => {
+                    const raw = msg.content || '';
+                    // Detect direct-assign cards forwarded from a channel — they
+                    // carry a <!--direct_assign:TASK_ID--> marker. We pull the
+                    // task id out so the forward goes through the same path as
+                    // /team-inbox / /nexus and renders as a real DirectAssignCard
+                    // at the receiver, with a "Forwarded from Task X" footer.
+                    const daMatch = raw.match(/<!--direct_assign:([^\s>]+?)-->/);
+                    const taskId = daMatch?.[1]?.trim() || undefined;
+                    let taskToken: string | undefined;
+                    if (taskId) {
+                      try {
+                        const r = await fetch(`/api/tasks/${taskId}/card`);
+                        if (r.ok) {
+                          const data = await r.json();
+                          taskToken = data.task_token || undefined;
+                        }
+                      } catch {}
+                    }
+                    setForwardMessage({
+                      originalAuthor: msg.sender.name,
+                      originalAuthorImage: msg.sender.image,
+                      originalContent: raw
+                        .replace(/<!--forward:.*?-->/s, '')
+                        .replace(/<!--direct_assign:[^\s>]+?-->/g, '')
+                        .trim(),
+                      originalAttachments: msg.attachments || [],
+                      originalChannelName: selectedChannel.name,
+                      originalChannelId: selectedChannel.id,
+                      originalMessageId: msg.id,
+                      originalDate: msg.createdAt,
+                      ...(taskId
+                        ? { isTaskForward: true, taskId, taskToken }
+                        : {}),
+                    });
+                  }}
+                  onDirectAssign={(msg) => {
+                    // Convert this chat message into a Direct Assign task.
+                    // The modal will pre-fill description + attachments and submit
+                    // to /api/tasks/direct-assign-from-message, which transforms
+                    // this same message into a card in place.
+                    const raw = msg.content || '';
+                    const atts = msg.attachments || [];
+                    const images = atts
+                      .filter((a: any) => a.isImage || (a.type || '').startsWith('image/'))
+                      .map((a: any) => ({ url: a.url, preview: a.url }));
+                    const fileUrls = atts
+                      .filter((a: any) => !(a.isImage || (a.type || '').startsWith('image/')))
+                      .map((a: any) => a.url);
+                    setDirectAssignOpen(true, {
+                      channelId: selectedChannel.id,
+                      sourceMessageId: msg.id,
+                      defaultDescription: raw,
+                      defaultImages: images,
+                      defaultFileUrls: fileUrls,
+                    });
+                  }}
                   allUsers={users}
+                  allTeams={teams}
                   highlightedMessageId={highlightedMessageId}
                   scrollTrigger={scrollTrigger}
+                  onOpenTaskDetail={openTaskDetail}
                 />
                 {/* Typing indicator */}
                 {typingUsers.length > 0 && (
@@ -562,6 +720,7 @@ function ChannelsPageContent() {
                   channelName={selectedChannel.name}
                   onSend={handleSendMessage}
                   users={users}
+                  teams={teams}
                   onTypingUsersChange={handleTypingUsersChange}
                 />
               </>
@@ -590,15 +749,18 @@ function ChannelsPageContent() {
             onClose={() => setThreadMessage(null)}
             users={users}
             onReplyCountChange={handleReplyCountChange}
+            onOpenTaskDetail={openTaskDetail}
           />
         </div>
       )}
 
-      {/* Create channel modal */}
+      {/* Create channel modal — inherits the active purpose so the new channel is scoped correctly. */}
       <CreateChannelModal
         open={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={() => { setShowCreateModal(false); setCreateWithUserIds(undefined); }}
         onCreated={fetchChannels}
+        purpose={purpose}
+        preselectedMemberIds={createWithUserIds}
       />
 
       {/* Edit channel modal */}
@@ -611,6 +773,16 @@ function ChannelsPageContent() {
           fetchChannels();
         }}
       />
+
+      {/* Direct-assign task detail modal — opened via deep-link or DirectAssignCard */}
+      {taskDetail && (
+        <TeamInboxTaskModal
+          task={taskDetail}
+          currentUserId={session?.user?.id}
+          onClose={() => setTaskDetail(null)}
+          onChange={() => taskDetail && openTaskDetail(taskDetail.id)}
+        />
+      )}
       {/* Delete channel confirmation modal */}
       {deleteConfirmOpen && selectedChannel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -677,6 +849,7 @@ function ChannelsPageContent() {
         open={!!forwardMessage}
         onClose={() => setForwardMessage(null)}
         originalAuthor={forwardMessage?.originalAuthor || ''}
+        originalAuthorImage={forwardMessage?.originalAuthorImage}
         originalContent={forwardMessage?.originalContent || ''}
         originalAttachments={forwardMessage?.originalAttachments || []}
         originalChannelName={forwardMessage?.originalChannelName}
@@ -685,6 +858,7 @@ function ChannelsPageContent() {
         originalDate={forwardMessage?.originalDate}
         isTaskForward={forwardMessage?.isTaskForward}
         taskToken={forwardMessage?.taskToken}
+        taskId={forwardMessage?.taskId}
       />
     </div>
     </div>

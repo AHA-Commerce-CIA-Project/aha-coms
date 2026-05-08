@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Hash, Plus, Search, Lock } from 'lucide-react';
+import { Hash, Plus, Search, Lock, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useDrafts } from '@/lib/useDrafts';
 
 interface Channel {
   id: string;
@@ -22,6 +23,9 @@ interface ChannelListProps {
   onCreateChannel: () => void;
   isLeader: boolean;
   loading: boolean;
+  purpose?: 'discussion' | 'assign_task';
+  purposeUnread?: { discussion: number; assign_task: number };
+  onPurposeChange?: (purpose: 'discussion' | 'assign_task') => void;
 }
 
 export function ChannelList({
@@ -31,8 +35,12 @@ export function ChannelList({
   onCreateChannel,
   isLeader,
   loading,
+  purpose,
+  purposeUnread,
+  onPurposeChange,
 }: ChannelListProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const draftIds = useDrafts();
 
   const filtered = channels.filter((ch) =>
     ch.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -42,17 +50,59 @@ export function ChannelList({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-        <h2 className="text-lg font-bold text-slate-800">Channels</h2>
-        {(
-          <button
-            onClick={onCreateChannel}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-            title="Create channel"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        )}
+        <h2 className="text-lg font-bold text-slate-800">
+          {purpose === 'assign_task' ? 'Assign Task' : 'Channels'}
+        </h2>
+        <button
+          onClick={onCreateChannel}
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+          title={purpose === 'assign_task' ? 'Create Assign Task channel' : 'Create channel'}
+        >
+          <Plus className="w-4 h-4" />
+        </button>
       </div>
+
+      {/* Purpose toggle — renders only when a handler is provided. */}
+      {onPurposeChange && (
+        <div className="px-4 pt-2">
+          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+            <button
+              type="button"
+              onClick={() => onPurposeChange('discussion')}
+              className={cn(
+                'relative flex-1 px-2 py-1.5 text-xs font-semibold rounded-md transition-colors inline-flex items-center justify-center gap-1.5',
+                purpose === 'discussion'
+                  ? 'bg-white text-indigo-700 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              )}
+            >
+              Channels
+              {purposeUnread && purposeUnread.discussion > 0 && purpose !== 'discussion' && (
+                <span className="min-w-[16px] h-4 px-1 inline-flex items-center justify-center text-[9px] font-bold bg-rose-500 text-white rounded-full">
+                  {purposeUnread.discussion > 99 ? '99+' : purposeUnread.discussion}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => onPurposeChange('assign_task')}
+              className={cn(
+                'relative flex-1 px-2 py-1.5 text-xs font-semibold rounded-md transition-colors inline-flex items-center justify-center gap-1.5',
+                purpose === 'assign_task'
+                  ? 'bg-white text-indigo-700 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              )}
+            >
+              Assign Task
+              {purposeUnread && purposeUnread.assign_task > 0 && purpose !== 'assign_task' && (
+                <span className="min-w-[16px] h-4 px-1 inline-flex items-center justify-center text-[9px] font-bold bg-rose-500 text-white rounded-full">
+                  {purposeUnread.assign_task > 99 ? '99+' : purposeUnread.assign_task}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="px-4 py-2">
@@ -122,11 +172,16 @@ export function ChannelList({
                     </span>
                   ) : null}
                 </div>
-                {channel.description && (
+                {draftIds.has(channel.id) ? (
+                  <p className="text-xs italic text-rose-500 font-medium truncate mt-0.5 flex items-center gap-1">
+                    <Pencil className="w-3 h-3" />
+                    draft
+                  </p>
+                ) : channel.description ? (
                   <p className="text-xs text-slate-400 truncate mt-0.5">
                     {channel.description}
                   </p>
-                )}
+                ) : null}
               </div>
             </button>
           ))

@@ -5,14 +5,20 @@ import { useAuth } from '@/lib/auth-context';
 import { useSearchParams } from 'next/navigation';
 import { Search, PenSquare, X, Send, Paperclip, Image as ImageIcon, Smile, ChevronLeft, Plus, ClipboardList, Clock, CheckCircle2, Pencil, Trash2, Bookmark } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
-import { PageTabs } from '@/components/PageTabs';
 import { ChannelMessageComposer } from '@/components/channels/ChannelMessageComposer';
+import { ImageLightbox } from '@/components/ImageLightbox';
+import { PresenceDot } from '@/components/PresenceDot';
+import { linkifyHtml } from '@/lib/linkify';
+import { htmlToPlainText } from '@/lib/sanitize';
+import { useDrafts } from '@/lib/useDrafts';
+import { useAppStore } from '@/lib/store';
 
 interface OtherUser {
     id: string;
     name: string;
     image: string | null;
     email: string;
+    lastSeenAt?: string | null;
 }
 
 interface ConversationItem {
@@ -20,6 +26,10 @@ interface ConversationItem {
     otherUser: OtherUser | null;
     lastMessage: { content: string; senderId: string; senderName: string; createdAt: string } | null;
     unreadCount: number;
+    // Server returns the participant's lastReadAt in /api/chat/conversations.
+    // Captured at click-time so we can anchor scroll on the first unread message
+    // even after the read endpoint bumps the value to "now".
+    lastReadAt: string | null;
     updatedAt: string;
 }
 
@@ -41,19 +51,23 @@ interface UserOption {
     role: string;
 }
 
-function DmMessageItem({ msg, isOwn, isEdited, images, docs, reactionGroups, onReaction, onEdit, onDelete, onImageClick }: {
+function DmMessageItem({ msg, isOwn, isEdited, images, docs, reactionGroups, onReaction, onEdit, onDelete, onImageClick, onAvatarClick }: {
     msg: DmMessage; isOwn: boolean; isEdited: boolean; images: any[]; docs: any[];
     reactionGroups: Record<string, { emoji: string; users: string[]; hasOwn: boolean }>;
     onReaction: (id: string, emoji: string) => void; onEdit: (id: string, content: string) => void;
     onDelete: (id: string) => void; onImageClick: (url: string) => void;
+    onAvatarClick: (userId: string) => void;
 }) {
     const [showActions, setShowActions] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
     const [editing, setEditing] = useState(false);
-    const [editContent, setEditContent] = useState(msg.content);
+    // DM composer now stores rich HTML — convert to plaintext for the edit
+    // textarea so the user sees readable text, not raw <div>/<br> markup.
+    const [editContent, setEditContent] = useState(htmlToPlainText(msg.content));
 
     return (
         <div
+            id={`dm-msg-${msg.id}`}
             className="group relative px-6 py-2 hover:bg-slate-50 transition-colors"
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => { setShowActions(false); setShowEmoji(false); }}
@@ -76,7 +90,7 @@ function DmMessageItem({ msg, isOwn, isEdited, images, docs, reactionGroups, onR
                     {isOwn && (
                         <>
                             <div className="w-px h-5 bg-slate-200" />
-                            <button onClick={() => { setEditing(true); setEditContent(msg.content); }}
+                            <button onClick={() => { setEditing(true); setEditContent(htmlToPlainText(msg.content)); }}
                                 className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50" title="Edit">
                                 <Pencil className="w-4 h-4" />
                             </button>
@@ -90,11 +104,18 @@ function DmMessageItem({ msg, isOwn, isEdited, images, docs, reactionGroups, onR
             )}
 
             <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-sm font-bold overflow-hidden">
-                    {msg.sender?.image ? (
-                        <img src={msg.sender.image} alt="" className="w-10 h-10 rounded-full object-cover" />
-                    ) : (msg.sender?.name?.charAt(0) || '?').toUpperCase()}
-                </div>
+                <button
+                    type="button"
+                    onClick={() => msg.sender?.id && onAvatarClick(msg.sender.id)}
+                    className="relative flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    aria-label={`Open profile for ${msg.sender?.name || 'user'}`}
+                >
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold overflow-hidden">
+                        {msg.sender?.image ? (
+                            <img src={msg.sender.image} alt="" className="w-10 h-10 rounded-full object-cover" />
+                        ) : (msg.sender?.name?.charAt(0) || '?').toUpperCase()}
+                    </div>
+                </button>
                 <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 mb-0.5">
                         <span className="font-bold text-base text-slate-800">{msg.sender?.name || 'Unknown'}</span>
@@ -120,7 +141,23 @@ function DmMessageItem({ msg, isOwn, isEdited, images, docs, reactionGroups, onR
                         </div>
                     ) : (
                         <>
-                            {msg.content && <p className="text-[15px] text-slate-800 whitespace-pre-wrap leading-relaxed">{msg.content}</p>}
+                            {/* Skip the bubble entirely when content is just contenteditable
+                                cruft like "<br><div><br></div>" — common with image-only sends.
+                                Without this guard the cruft renders as an empty grey bubble
+                                above the attachment. */}
+                            {msg.content && htmlToPlainText(msg.content).length > 0 && (
+                                /<[a-z][\s\S]*>/i.test(msg.content) ? (
+                                    <div
+                                        className="text-[15px] text-slate-800 leading-relaxed [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
+                                        dangerouslySetInnerHTML={{ __html: linkifyHtml(msg.content) }}
+                                    />
+                                ) : (
+                                    <p
+                                        className="text-[15px] text-slate-800 whitespace-pre-wrap leading-relaxed [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
+                                        dangerouslySetInnerHTML={{ __html: linkifyHtml(msg.content) }}
+                                    />
+                                )
+                            )}
                             {images.length > 0 && (
                                 <div className="flex flex-wrap gap-2 mt-2">
                                     {images.map((img: any, i: number) => (
@@ -182,6 +219,20 @@ function formatTime(dateStr: string) {
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatDateDivider(dateStr: string) {
+    const d = new Date(dateStr);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+    });
+}
+
 export default function MessagesPageWrapper() {
     return (
         <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>}>
@@ -217,6 +268,26 @@ function MessagesPage() {
     const [taskSubmitting, setTaskSubmitting] = useState(false);
     const msgEndRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
+    const draftIds = useDrafts();
+    const setProfileUser = useAppStore((s) => s.setProfileUser);
+    // Tracks the conversation we last did the initial scroll for, so the
+    // instant-jump-to-bottom only runs once per open instead of on every
+    // SSE message tick.
+    const initialScrolledRef = useRef<string | null>(null);
+
+    const openProfileForUser = useCallback(async (userId: string) => {
+        try {
+            const res = await fetch(`/api/users/${userId}`);
+            if (res.ok) {
+                const profile = await res.json();
+                // If the clicked user is the partner of the currently-open DM,
+                // hide "Send DM" — that button would just navigate them back to
+                // the conversation they're already viewing.
+                const hideSendDm = !!selected?.otherUser && selected.otherUser.id === userId;
+                setProfileUser(profile, { showAddToConversation: true, hideSendDm });
+            }
+        } catch {}
+    }, [setProfileUser, selected]);
 
     const fetchConversations = useCallback(async () => {
         try {
@@ -235,8 +306,12 @@ function MessagesPage() {
             const res = await fetch(`/api/chat/conversations/${convoId}/messages`);
             if (res.ok) {
                 const data = await res.json();
-                setMessages(data.messages || data);
-                // Mark as read
+                // API returns newest-first for pagination; reverse so render is chronological
+                // (oldest at top, newest at bottom) matching standard chat UX.
+                const list: any[] = data.messages || data;
+                setMessages(Array.isArray(list) ? [...list].reverse() : []);
+                // Mark as read — also clears dm_message notifications for this
+                // conversation server-side so the bell badge syncs immediately.
                 fetch(`/api/chat/conversations/${convoId}/read`, { method: 'PUT' }).catch(() => {});
             }
         } catch {} finally { setLoadingMessages(false); }
@@ -306,10 +381,26 @@ function MessagesPage() {
         return () => es.close();
     }, [selected, user, fetchConversations]);
 
-    // Auto-scroll on new messages
+    // Scroll on conversation open / new messages.
+    //
+    // First render of a conversation: instant jump to bottom (latest message),
+    // matching what users expect from chat apps. Subsequent SSE-delivered
+    // messages smooth-scroll to bottom too. The instant jump on initial avoids
+    // the smooth-scroll-mid-render glitch that previously left the user
+    // "in the middle".
     useEffect(() => {
+        if (!selected || messages.length === 0) return;
+
+        if (initialScrolledRef.current !== selected.id) {
+            initialScrolledRef.current = selected.id;
+            requestAnimationFrame(() => {
+                msgEndRef.current?.scrollIntoView({ behavior: 'auto' });
+            });
+            return;
+        }
+
         msgEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+    }, [messages, selected]);
 
     const handleSelectConvo = (convo: ConversationItem) => {
         setSelected(convo);
@@ -327,7 +418,7 @@ function MessagesPage() {
             if (res.ok) {
                 const data = await res.json();
                 await fetchConversations();
-                const convo = { id: data.id, otherUser: data.otherUser, lastMessage: null, unreadCount: 0, updatedAt: new Date().toISOString() };
+                const convo = { id: data.id, otherUser: data.otherUser, lastMessage: null, unreadCount: 0, lastReadAt: null, updatedAt: new Date().toISOString() };
                 handleSelectConvo(convo);
                 setShowNewDm(false);
             }
@@ -442,13 +533,11 @@ function MessagesPage() {
 
     return (
         <div>
-            <PageTabs tabs={[
-                { href: '/channels', label: 'Channels', badge: channelUnreadTotal },
-                { href: '/messages', label: 'Messages', badge: conversations.reduce((s, c) => s + (c.unreadCount || 0), 0) },
-            ]} />
-        <div className="flex bg-white rounded-2xl border border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 168px)' }}>
+        <div
+            className="flex bg-white rounded-none sm:rounded-2xl border-0 sm:border border-slate-200 shadow-sm overflow-hidden -mx-3 sm:mx-0 h-[calc(100vh-150px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-120px)]"
+        >
             {/* Left: Conversation list */}
-            <div className={`w-full md:w-[420px] lg:w-[460px] flex-shrink-0 border-r border-slate-200 flex flex-col ${mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`w-full md:w-[420px] lg:w-[460px] flex-shrink-0 border-r border-slate-200 flex flex-col min-w-0 ${mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
                 <div className="px-4 py-3 border-b border-slate-200">
                     <div className="flex items-center justify-between mb-3">
                         <h2 className="text-lg font-bold text-slate-900">Direct messages</h2>
@@ -511,7 +600,14 @@ function MessagesPage() {
                             onClick={() => handleSelectConvo(convo)}
                             className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors border-b border-slate-100 ${selected?.id === convo.id ? 'bg-indigo-50' : ''}`}
                         >
-                            <div className="relative flex-shrink-0">
+                            <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => { e.stopPropagation(); if (convo.otherUser?.id) openProfileForUser(convo.otherUser.id); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter' && convo.otherUser?.id) { e.stopPropagation(); openProfileForUser(convo.otherUser.id); } }}
+                                className="relative flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                aria-label={`Open profile for ${convo.otherUser?.name || 'user'}`}
+                            >
                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold overflow-hidden">
                                     {convo.otherUser?.image ? (
                                         <img src={convo.otherUser.image} alt="" className="w-10 h-10 rounded-full object-cover" />
@@ -519,12 +615,13 @@ function MessagesPage() {
                                         convo.otherUser?.name?.charAt(0).toUpperCase() || '?'
                                     )}
                                 </div>
+                                <PresenceDot lastSeenAt={convo.otherUser?.lastSeenAt} />
                                 {convo.unreadCount > 0 && (
                                     <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                                         {convo.unreadCount > 9 ? '9+' : convo.unreadCount}
                                     </span>
                                 )}
-                            </div>
+                            </span>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between">
                                     <span className={`text-sm truncate ${convo.unreadCount > 0 ? 'font-bold text-slate-900' : 'font-medium text-slate-700'}`}>
@@ -534,11 +631,26 @@ function MessagesPage() {
                                         {convo.lastMessage ? formatRelative(convo.lastMessage.createdAt) : ''}
                                     </span>
                                 </div>
-                                {convo.lastMessage && (
-                                    <p className={`text-xs truncate mt-0.5 ${convo.unreadCount > 0 ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>
-                                        {convo.lastMessage.senderId === user?.id ? 'You: ' : ''}{convo.lastMessage.content || 'sent an attachment'}
+                                {draftIds.has(convo.id) ? (
+                                    <p className="text-xs italic text-rose-500 font-medium truncate mt-0.5 flex items-center gap-1">
+                                        <Pencil className="w-3 h-3" />
+                                        draft
                                     </p>
-                                )}
+                                ) : convo.lastMessage ? (() => {
+                                    // Strip HTML chrome (mention chips, contenteditable wrappers like
+                                    // "<br><div><br></div>", forward markers) so the preview shows clean
+                                    // text. Empty after stripping → fall back to "sent an attachment".
+                                    const rawPreview = (convo.lastMessage.content || '')
+                                        .replace(/<!--forward:.*?-->/sg, '')
+                                        .replace(/<!--direct_assign:[^\s>]+?-->/g, '');
+                                    const plain = htmlToPlainText(rawPreview);
+                                    const previewText = plain || 'sent an attachment';
+                                    return (
+                                        <p className={`text-xs truncate mt-0.5 ${convo.unreadCount > 0 ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>
+                                            {convo.lastMessage.senderId === user?.id ? 'You: ' : ''}{previewText}
+                                        </p>
+                                    );
+                                })() : null}
                             </div>
                         </button>
                     ))}
@@ -546,8 +658,9 @@ function MessagesPage() {
 
             </div>
 
-            {/* Right: Message thread */}
-            <div className={`flex-1 flex flex-col ${!mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
+            {/* Right: Message thread. min-w-0 lets the composer shrink to fit
+                 below md so the Send button isn't pushed off the right edge. */}
+            <div className={`flex-1 min-w-0 flex flex-col ${!mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
                 {selected ? (
                     <>
                         {/* Header */}
@@ -555,13 +668,21 @@ function MessagesPage() {
                             <button onClick={() => setMobileShowThread(false)} className="md:hidden p-1 text-slate-400">
                                 <ChevronLeft className="w-5 h-5" />
                             </button>
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold overflow-hidden">
-                                {selected.otherUser?.image ? (
-                                    <img src={selected.otherUser.image} alt="" className="w-9 h-9 rounded-full object-cover" />
-                                ) : (
-                                    selected.otherUser?.name?.charAt(0).toUpperCase() || '?'
-                                )}
-                            </div>
+                            <button
+                                type="button"
+                                onClick={() => selected.otherUser?.id && openProfileForUser(selected.otherUser.id)}
+                                className="relative flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                aria-label={`Open profile for ${selected.otherUser?.name || 'user'}`}
+                            >
+                                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold overflow-hidden">
+                                    {selected.otherUser?.image ? (
+                                        <img src={selected.otherUser.image} alt="" className="w-9 h-9 rounded-full object-cover" />
+                                    ) : (
+                                        selected.otherUser?.name?.charAt(0).toUpperCase() || '?'
+                                    )}
+                                </div>
+                                <PresenceDot lastSeenAt={selected.otherUser?.lastSeenAt} />
+                            </button>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold text-slate-900 truncate">{selected.otherUser?.name}</p>
                                 <p className="text-xs text-slate-400 truncate">{selected.otherUser?.email}</p>
@@ -632,85 +753,104 @@ function MessagesPage() {
                                     <p className="text-slate-500 text-sm">No messages match &ldquo;{msgSearch}&rdquo;</p>
                                     <button onClick={() => setMsgSearch('')} className="mt-2 text-sm text-indigo-600 hover:underline">Clear search</button>
                                 </div>
-                            ) : filteredMessages.map(msg => {
-                                const msgType = (msg as any).type || 'text';
-                                const snapshot = (msg as any).taskSnapshot as any;
+                            ) : (() => {
+                                const rendered: React.ReactNode[] = [];
+                                let lastDate = '';
+                                for (const msg of filteredMessages) {
+                                    const msgDate = new Date(msg.createdAt).toDateString();
+                                    if (msgDate !== lastDate) {
+                                        rendered.push(
+                                            <div key={`divider-${msg.id}`} className="flex items-center gap-4 px-6 py-3">
+                                                <div className="flex-1 h-px bg-slate-200" />
+                                                <span className="text-xs font-medium text-slate-400">{formatDateDivider(msg.createdAt)}</span>
+                                                <div className="flex-1 h-px bg-slate-200" />
+                                            </div>
+                                        );
+                                        lastDate = msgDate;
+                                    }
 
-                                if (msgType === 'status_update') {
-                                    return (
-                                        <div key={msg.id} className="flex justify-center py-2">
-                                            <span className="text-[11px] text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
-                                                {msg.content || 'Task updated'} · {formatTime(msg.createdAt)}
-                                            </span>
-                                        </div>
-                                    );
-                                }
+                                    const msgType = (msg as any).type || 'text';
+                                    const snapshot = (msg as any).taskSnapshot as any;
 
-                                if (msgType === 'task_card' && snapshot) {
-                                    const urgencyColors: Record<string, string> = { P1: 'bg-rose-500 text-white', P2: 'bg-orange-500 text-white', P3: 'bg-amber-400 text-white', P4: 'bg-emerald-500 text-white', '5-minute': 'bg-sky-400 text-white' };
-                                    const statusLabels: Record<string, { label: string; color: string }> = { todo: { label: 'New', color: 'text-sky-600 bg-sky-50' }, 'in-progress': { label: 'In Progress', color: 'text-indigo-600 bg-indigo-50' }, done: { label: 'Completed', color: 'text-emerald-600 bg-emerald-50' } };
-                                    const st = statusLabels[snapshot.status] || statusLabels.todo;
-                                    return (
-                                        <div key={msg.id} className="px-6 py-3">
-                                            <div className="max-w-md bg-white border-2 border-indigo-200 rounded-2xl p-4 shadow-sm">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <ClipboardList className="w-4 h-4 text-indigo-500" />
-                                                    <span className="text-xs font-semibold text-indigo-500">Task Created</span>
-                                                    <span className="text-[10px] text-slate-400 ml-auto">{formatTime(msg.createdAt)}</span>
-                                                </div>
-                                                <div className="flex items-start gap-2 mb-2">
-                                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${urgencyColors[snapshot.urgency] || 'bg-slate-200'}`}>{snapshot.urgency || 'P3'}</span>
-                                                    <h4 className="text-sm font-bold text-slate-900 flex-1">{snapshot.title}</h4>
-                                                </div>
-                                                <div className="flex items-center justify-between text-xs text-slate-500">
-                                                    <span>Assigned to: <strong className="text-slate-700">{snapshot.assigneeName}</strong></span>
-                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${st.color}`}>{st.label}</span>
-                                                </div>
-                                                {snapshot.dueDate && (
-                                                    <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
-                                                        <Clock className="w-3 h-3" />
-                                                        <span>Deadline: {new Date(snapshot.dueDate).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                                    if (msgType === 'status_update') {
+                                        rendered.push(
+                                            <div key={msg.id} id={`dm-msg-${msg.id}`} className="flex justify-center py-2">
+                                                <span className="text-[11px] text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
+                                                    {msg.content || 'Task updated'} · {formatTime(msg.createdAt)}
+                                                </span>
+                                            </div>
+                                        );
+                                        continue;
+                                    }
+
+                                    if (msgType === 'task_card' && snapshot) {
+                                        const urgencyColors: Record<string, string> = { P1: 'bg-rose-500 text-white', P2: 'bg-orange-500 text-white', P3: 'bg-amber-400 text-white', P4: 'bg-emerald-500 text-white', '5-minute': 'bg-sky-400 text-white' };
+                                        const statusLabels: Record<string, { label: string; color: string }> = { todo: { label: 'New', color: 'text-sky-600 bg-sky-50' }, 'in-progress': { label: 'In Progress', color: 'text-indigo-600 bg-indigo-50' }, done: { label: 'Completed', color: 'text-emerald-600 bg-emerald-50' } };
+                                        const st = statusLabels[snapshot.status] || statusLabels.todo;
+                                        rendered.push(
+                                            <div key={msg.id} id={`dm-msg-${msg.id}`} className="px-6 py-3">
+                                                <div className="max-w-md bg-white border-2 border-indigo-200 rounded-2xl p-4 shadow-sm">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <ClipboardList className="w-4 h-4 text-indigo-500" />
+                                                        <span className="text-xs font-semibold text-indigo-500">Task Created</span>
+                                                        <span className="text-[10px] text-slate-400 ml-auto">{formatTime(msg.createdAt)}</span>
                                                     </div>
-                                                )}
-                                                <div className="mt-3 pt-2 border-t border-slate-100">
-                                                    <a href={`/nexus?task=${snapshot.id}&action=view`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">View Details →</a>
+                                                    <div className="flex items-start gap-2 mb-2">
+                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${urgencyColors[snapshot.urgency] || 'bg-slate-200'}`}>{snapshot.urgency || 'P3'}</span>
+                                                        <h4 className="text-sm font-bold text-slate-900 flex-1">{snapshot.title}</h4>
+                                                    </div>
+                                                    <div className="flex items-center justify-between text-xs text-slate-500">
+                                                        <span>Assigned to: <strong className="text-slate-700">{snapshot.assigneeName}</strong></span>
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${st.color}`}>{st.label}</span>
+                                                    </div>
+                                                    {snapshot.dueDate && (
+                                                        <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
+                                                            <Clock className="w-3 h-3" />
+                                                            <span>Deadline: {new Date(snapshot.dueDate).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="mt-3 pt-2 border-t border-slate-100">
+                                                        <a href={`/nexus?task=${snapshot.id}&action=view`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">View Details →</a>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
+                                        );
+                                        continue;
+                                    }
+
+                                    const attachments = (Array.isArray(msg.attachments) ? msg.attachments : []) as any[];
+                                    const images = attachments.filter((a: any) => a?.isImage);
+                                    const docs = attachments.filter((a: any) => a && !a.isImage);
+                                    const isOwn = msg.senderId === user?.id;
+                                    const reactions = (msg as any).reactions || [];
+                                    const isEdited = (msg as any).isEdited || false;
+
+                                    const reactionGroups: Record<string, { emoji: string; users: string[]; hasOwn: boolean }> = {};
+                                    reactions.forEach((r: any) => {
+                                        if (!reactionGroups[r.emoji]) reactionGroups[r.emoji] = { emoji: r.emoji, users: [], hasOwn: false };
+                                        reactionGroups[r.emoji].users.push(r.user?.name || '?');
+                                        if (r.userId === user?.id) reactionGroups[r.emoji].hasOwn = true;
+                                    });
+
+                                    rendered.push(
+                                        <DmMessageItem
+                                            key={msg.id}
+                                            msg={msg}
+                                            isOwn={isOwn}
+                                            isEdited={isEdited}
+                                            images={images}
+                                            docs={docs}
+                                            reactionGroups={reactionGroups}
+                                            onReaction={handleReaction}
+                                            onEdit={handleEditMsg}
+                                            onDelete={handleDeleteMsg}
+                                            onImageClick={setLightboxUrl}
+                                            onAvatarClick={openProfileForUser}
+                                        />
                                     );
                                 }
-
-                                const attachments = (Array.isArray(msg.attachments) ? msg.attachments : []) as any[];
-                                const images = attachments.filter((a: any) => a?.isImage);
-                                const docs = attachments.filter((a: any) => a && !a.isImage);
-                                const isOwn = msg.senderId === user?.id;
-                                const reactions = (msg as any).reactions || [];
-                                const isEdited = (msg as any).isEdited || false;
-
-                                // Group reactions by emoji
-                                const reactionGroups: Record<string, { emoji: string; users: string[]; hasOwn: boolean }> = {};
-                                reactions.forEach((r: any) => {
-                                    if (!reactionGroups[r.emoji]) reactionGroups[r.emoji] = { emoji: r.emoji, users: [], hasOwn: false };
-                                    reactionGroups[r.emoji].users.push(r.user?.name || '?');
-                                    if (r.userId === user?.id) reactionGroups[r.emoji].hasOwn = true;
-                                });
-
-                                return (
-                                    <DmMessageItem
-                                        key={msg.id}
-                                        msg={msg}
-                                        isOwn={isOwn}
-                                        isEdited={isEdited}
-                                        images={images}
-                                        docs={docs}
-                                        reactionGroups={reactionGroups}
-                                        onReaction={handleReaction}
-                                        onEdit={handleEditMsg}
-                                        onDelete={handleDeleteMsg}
-                                        onImageClick={setLightboxUrl}
-                                    />
-                                );
-                            })}
+                                return rendered;
+                            })()}
                             <div ref={msgEndRef} />
                         </div>
 
@@ -852,13 +992,8 @@ function MessagesPage() {
                 </div>
             )}
 
-            {/* Lightbox */}
-            {lightboxUrl && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6" onClick={() => setLightboxUrl(null)}>
-                    <button onClick={(e) => { e.stopPropagation(); setLightboxUrl(null); }} className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"><X className="w-5 h-5" /></button>
-                    <img src={lightboxUrl} alt="Preview" className="max-w-[95vw] max-h-[90vh] object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
-                </div>
-            )}
+            {/* Lightbox — closes on ESC (document-level listener) and backdrop click */}
+            <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
         </div>
         </div>
     );

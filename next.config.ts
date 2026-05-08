@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  outputFileTracingIncludes: {
+    '/api/profile/avatar': ['./node_modules/sharp/**/*'],
+  },
+  serverExternalPackages: ['sharp'],
 };
 
 export default nextConfig;

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Paperclip, Image as ImageIcon, Send, X, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Code } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
-import { MentionAutocomplete } from './MentionAutocomplete';
+import { MentionAutocomplete, type MentionAutocompleteHandle, type MentionTeam, type MentionTarget } from './MentionAutocomplete';
 import { Smile } from 'lucide-react';
 import { ImageLightbox } from '@/components/ImageLightbox';
 
@@ -34,6 +34,7 @@ interface ChannelMessageComposerProps {
   disabled?: boolean;
   placeholder?: string;
   users: MentionUser[];
+  teams?: MentionTeam[];
   onTypingUsersChange?: (users: TypingUser[]) => void;
 }
 
@@ -44,6 +45,7 @@ export function ChannelMessageComposer({
   disabled,
   placeholder,
   users,
+  teams = [],
   onTypingUsersChange,
 }: ChannelMessageComposerProps) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -58,6 +60,7 @@ export function ChannelMessageComposer({
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const mentionRef = useRef<MentionAutocompleteHandle>(null);
 
   // Emit typing event (throttled to once per 2 seconds)
   const emitTyping = useCallback(() => {
@@ -88,6 +91,64 @@ export function ChannelMessageComposer({
     return () => { active = false; clearInterval(interval); };
   }, [channelId, onTypingUsersChange]);
 
+  // Per-channel draft persistence (Slack-style): preserve typed content per
+  // channel so switching away keeps the draft, and returning restores it.
+  // We *remove* the draft from storage when loading so the active channel
+  // never shows up in the "has draft" indicator — the in-memory editor owns
+  // it until the user switches away again.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    let draft = '';
+    if (channelId) {
+      try {
+        draft = localStorage.getItem(`composer-draft:${channelId}`) || '';
+        if (draft) {
+          localStorage.removeItem(`composer-draft:${channelId}`);
+          window.dispatchEvent(new Event('composer-draft-change'));
+        }
+      } catch {}
+    }
+    editor.innerHTML = draft;
+    setShowToolbar(false);
+
+    return () => {
+      if (!channelId) return;
+      const html = editor.innerHTML;
+      const text = editor.textContent || '';
+      const key = `composer-draft:${channelId}`;
+      try {
+        if (text.trim()) localStorage.setItem(key, html);
+        else localStorage.removeItem(key);
+        window.dispatchEvent(new Event('composer-draft-change'));
+      } catch {}
+    };
+  }, [channelId]);
+
+  // Persist draft on tab close / page hide so refreshes don't lose it.
+  useEffect(() => {
+    if (!channelId) return;
+    const persist = () => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const html = editor.innerHTML;
+      const text = editor.textContent || '';
+      const key = `composer-draft:${channelId}`;
+      try {
+        if (text.trim()) localStorage.setItem(key, html);
+        else localStorage.removeItem(key);
+        window.dispatchEvent(new Event('composer-draft-change'));
+      } catch {}
+    };
+    window.addEventListener('beforeunload', persist);
+    window.addEventListener('pagehide', persist);
+    return () => {
+      window.removeEventListener('beforeunload', persist);
+      window.removeEventListener('pagehide', persist);
+    };
+  }, [channelId]);
+
   // Check active formatting at cursor
   const updateActiveFormats = useCallback(() => {
     setActiveFormats({
@@ -106,10 +167,144 @@ export function ChannelMessageComposer({
     return () => document.removeEventListener('selectionchange', handler);
   }, [updateActiveFormats]);
 
+  // List commands (insertOrderedList / insertUnorderedList) operate on the
+  // current block element. Shift+Enter inserts a soft <br> WITHIN that block,
+  // so the line "above" the caret is part of the same block — clicking the
+  // list button after a Shift+Enter makes the WHOLE block (including the
+  // pre-break content) the list item, instead of just the new line.
+  //
+  // Fix: before invoking the list command, split the current block on every
+  // <br> so each soft-broken line becomes its own block. The browser's list
+  // command then turns just the caret-line block into the new list item.
+  const splitSoftBreaksAtCaret = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
+
+    const range = sel.getRangeAt(0);
+    // Walk up to the nearest block ancestor. If we hit an LI we're already
+    // inside a list — leave the toggle to execCommand. If nothing matches,
+    // treat the editor itself as the block.
+    let block: HTMLElement | null = null;
+    let n: Node | null = range.startContainer;
+    while (n && n !== editor) {
+      if (n.nodeType === Node.ELEMENT_NODE) {
+        const tag = (n as HTMLElement).tagName;
+        if (tag === 'LI') return;
+        if (tag === 'DIV' || tag === 'P') { block = n as HTMLElement; break; }
+      }
+      n = n.parentNode;
+    }
+    if (!block) block = editor;
+
+    if (!/<br\b[^>]*>/i.test(block.innerHTML)) return;
+
+    // Anchor the caret with a marker we can re-find after rewriting innerHTML.
+    const marker = document.createElement('span');
+    marker.setAttribute('data-caret-marker', '1');
+    range.insertNode(marker);
+
+    const parts = block.innerHTML.split(/<br\b[^>]*>/i);
+    block.innerHTML = parts.map(p => `<div>${p && p.trim().length > 0 ? p : '<br>'}</div>`).join('');
+
+    const restored = block.querySelector('span[data-caret-marker="1"]');
+    if (restored) {
+      const newRange = document.createRange();
+      newRange.setStartBefore(restored);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+      restored.remove();
+    }
+  };
+
   const execFormat = (command: string, value?: string) => {
     editorRef.current?.focus();
+    if (command === 'insertOrderedList' || command === 'insertUnorderedList') {
+      splitSoftBreaksAtCaret();
+    }
     document.execCommand(command, false, value);
     updateActiveFormats();
+  };
+
+  // Slack-style list behavior: when the caret is inside an <li>, a soft-line-
+  // break key (Shift+Enter, since plain Enter sends in this composer) should
+  // create the NEXT list item — not a <br> inside the current item. On an
+  // empty <li>, the same key exits the list and drops the caret into a fresh
+  // block below it (so a stray Shift+Enter "ends" the list naturally).
+  // Returns true if we handled the keystroke; the caller should preventDefault.
+  const tryListAwareSoftBreak = (): boolean => {
+    const editor = editorRef.current;
+    if (!editor) return false;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    if (!editor.contains(range.startContainer)) return false;
+
+    let li: HTMLElement | null = null;
+    let n: Node | null = range.startContainer;
+    while (n && n !== editor) {
+      if (n.nodeType === Node.ELEMENT_NODE && (n as HTMLElement).tagName === 'LI') {
+        li = n as HTMLElement;
+        break;
+      }
+      n = n.parentNode;
+    }
+    if (!li) return false;
+
+    const isEmpty = !(li.textContent || '').trim();
+    if (isEmpty) {
+      // Exit the list: remove the empty <li>, drop a new <div><br></div> after
+      // the parent list, and put the caret there. If that empties the list,
+      // remove the list too.
+      const list = li.parentElement;
+      if (!list || !list.parentNode) return false;
+      const newBlock = document.createElement('div');
+      newBlock.appendChild(document.createElement('br'));
+      list.parentNode.insertBefore(newBlock, list.nextSibling);
+      li.remove();
+      if (list.children.length === 0) list.remove();
+      const r = document.createRange();
+      r.setStart(newBlock, 0);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    } else {
+      // Non-empty <li>: split at caret. Content before stays in the current
+      // <li>, content after (or a fresh <br> if caret was at the end) becomes
+      // the next <li>.
+      const newLi = document.createElement('li');
+      // Move trailing content (after the caret) into the new <li>.
+      const tail = range.cloneRange();
+      tail.setEndAfter(li);
+      const tailContent = tail.extractContents();
+      // tailContent may include a wrapping <li> (everything after caret within
+      // the current li, plus the original <li>'s closing — depends on spec).
+      // In practice extractContents starting from a position inside <li> and
+      // ending after the same <li> returns the <li> closing tag's content.
+      // Append whatever came out into newLi; if empty, give it a <br> so the
+      // caret has somewhere to land.
+      while (tailContent.firstChild) {
+        const child = tailContent.firstChild;
+        // If the extracted content includes the original <li> wrapper, unwrap it.
+        if (child.nodeType === Node.ELEMENT_NODE && (child as HTMLElement).tagName === 'LI') {
+          while (child.firstChild) newLi.appendChild(child.firstChild);
+          (child as Element).remove();
+        } else {
+          newLi.appendChild(child);
+        }
+      }
+      if (!newLi.firstChild) newLi.appendChild(document.createElement('br'));
+      li.parentNode!.insertBefore(newLi, li.nextSibling);
+      const r = document.createRange();
+      r.setStart(newLi, 0);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    updateActiveFormats();
+    return true;
   };
 
   const getEditorContent = () => {
@@ -126,15 +321,114 @@ export function ChannelMessageComposer({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // When the mention popup is open, intercept navigation/selection keys
+    // before they trigger send or tab-out.
+    if (showMention && mentionRef.current?.hasItems()) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); mentionRef.current.moveDown(); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); mentionRef.current.moveUp(); return; }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+        e.preventDefault();
+        mentionRef.current.selectActive();
+        return;
+      }
+      if (e.key === 'Escape') { e.preventDefault(); setShowMention(false); return; }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+      return;
+    }
+    // Shift+Enter inside a list: continue the list (or exit on empty).
+    // Outside a list: fall through to the browser default which inserts a <br>.
+    if (e.key === 'Enter' && e.shiftKey) {
+      if (tryListAwareSoftBreak()) {
+        e.preventDefault();
+        return;
+      }
     }
     // Keyboard shortcuts for formatting
     if (e.metaKey || e.ctrlKey) {
       if (e.key === 'b') { e.preventDefault(); execFormat('bold'); }
       if (e.key === 'i') { e.preventDefault(); execFormat('italic'); }
       if (e.key === 'u') { e.preventDefault(); execFormat('underline'); }
+    }
+
+    // Markdown shortcuts: typing "1." / "1" / "1)" / "-" / "*" at the start of
+    // a line followed by Space converts the line into a list. Skip when already
+    // inside a list so existing items don't get double-wrapped.
+    //
+    // We bypass document.execCommand entirely here and build the list element
+    // by hand. Chrome's execCommand merges adjacent empty blocks with the
+    // previous one's content (the "line above" gets sucked into the new list
+    // item) and silently no-ops when the caret block is empty — both broke
+    // this shortcut on soft-broken lines (Shift+Enter then "1.").
+    if (e.key === ' ' && editorRef.current) {
+      try {
+        const inOl = document.queryCommandState('insertOrderedList');
+        const inUl = document.queryCommandState('insertUnorderedList');
+        if (inOl || inUl) return;
+      } catch {}
+
+      // First, split soft breaks so the current line is isolated in its own
+      // block. After this the prefix-only line is the entire content of the
+      // caret's block — easy to detect and easy to replace.
+      splitSoftBreaksAtCaret();
+
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
+      const range = sel.getRangeAt(0);
+      if (!editorRef.current.contains(range.startContainer)) return;
+
+      // Find the closest block-level ancestor — that's the "line" we'll replace.
+      let block: HTMLElement | null = null;
+      let nb: Node | null = range.startContainer;
+      while (nb && nb !== editorRef.current) {
+        if (nb.nodeType === Node.ELEMENT_NODE) {
+          const tg = (nb as HTMLElement).tagName;
+          if (tg === 'DIV' || tg === 'P') { block = nb as HTMLElement; break; }
+        }
+        nb = nb.parentNode;
+      }
+
+      const beforeRange = document.createRange();
+      beforeRange.setStart(block || editorRef.current, 0);
+      beforeRange.setEnd(range.startContainer, range.startOffset);
+      const before = beforeRange.toString();
+
+      let listTag: 'ol' | 'ul' | null = null;
+      if (before === '1.' || before === '1' || before === '1)') listTag = 'ol';
+      else if (before === '-' || before === '*') listTag = 'ul';
+      if (!listTag) return;
+
+      e.preventDefault();
+
+      // Build the list element. The empty <li> with a <br> placeholder gives
+      // the caret somewhere to land that contenteditable will accept input
+      // into.
+      const list = document.createElement(listTag);
+      const li = document.createElement('li');
+      li.appendChild(document.createElement('br'));
+      list.appendChild(li);
+
+      if (block) {
+        // Common case after splitSoftBreaksAtCaret: the caret block contains
+        // exactly the typed prefix. Swap the whole block out for the list.
+        block.parentNode?.replaceChild(list, block);
+      } else {
+        // No DIV/P wrapper — the editor itself is the block. Delete the
+        // prefix first, then drop the list at the caret.
+        beforeRange.deleteContents();
+        const r = sel.rangeCount > 0 ? sel.getRangeAt(0) : range;
+        r.insertNode(list);
+      }
+
+      // Place the caret inside the new <li> so the next keystroke types into it.
+      const newRange = document.createRange();
+      newRange.setStart(li, 0);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+      updateActiveFormats();
     }
   };
 
@@ -178,6 +472,14 @@ export function ChannelMessageComposer({
     }
     setAttachments([]);
     setShowToolbar(false);
+
+    // A sent message shouldn't linger as a draft when the user returns.
+    if (channelId) {
+      try {
+        localStorage.removeItem(`composer-draft:${channelId}`);
+        window.dispatchEvent(new Event('composer-draft-change'));
+      } catch {}
+    }
   };
 
   const handleInput = () => {
@@ -203,7 +505,7 @@ export function ChannelMessageComposer({
     }
   };
 
-  const handleMentionSelect = (user: MentionUser | 'all') => {
+  const handleMentionSelect = (target: MentionTarget) => {
     const editor = editorRef.current;
     if (!editor) return;
 
@@ -225,7 +527,11 @@ export function ChannelMessageComposer({
       return;
     }
 
-    const mentionLabel = user === 'all' ? '@all' : '@' + user.name.replace(/\s+/g, '.');
+    // Build label by mention type.
+    let mentionLabel: string;
+    if (target === 'all') mentionLabel = '@all';
+    else if (typeof target === 'object' && 'kind' in target && target.kind === 'team') mentionLabel = '@' + target.team.mentionHandle;
+    else mentionLabel = '@' + (target as MentionUser).name.replace(/\s+/g, '.');
 
     // Split the text node: before @, then chip, then space + rest
     const before = text.substring(0, atIdx);
@@ -236,12 +542,17 @@ export function ChannelMessageComposer({
 
     const beforeNode = document.createTextNode(before);
     const chip = document.createElement('span');
-    chip.className = 'mention-chip text-indigo-600 font-semibold bg-indigo-50 px-1 rounded';
     chip.setAttribute('contenteditable', 'false');
-    if (user !== 'all') {
-        chip.setAttribute('data-user-id', user.id);
-    } else {
+    if (target === 'all') {
+        chip.className = 'mention-chip text-indigo-600 font-semibold bg-indigo-50 px-1 rounded';
         chip.setAttribute('data-mention', 'all');
+    } else if (typeof target === 'object' && 'kind' in target && target.kind === 'team') {
+        chip.className = 'mention-chip text-emerald-700 font-semibold bg-emerald-50 px-1 rounded';
+        chip.setAttribute('data-team-id', target.team.id);
+        chip.setAttribute('data-team-handle', target.team.mentionHandle);
+    } else {
+        chip.className = 'mention-chip text-indigo-600 font-semibold bg-indigo-50 px-1 rounded';
+        chip.setAttribute('data-user-id', (target as MentionUser).id);
     }
     chip.textContent = mentionLabel;
     const spaceNode = document.createTextNode('\u00A0' + after);
@@ -448,7 +759,9 @@ export function ChannelMessageComposer({
         {/* Editor area */}
         <div className="relative">
           <MentionAutocomplete
+            ref={mentionRef}
             users={users}
+            teams={teams}
             query={mentionQuery}
             onSelect={handleMentionSelect}
             visible={showMention}
@@ -538,7 +851,7 @@ export function ChannelMessageComposer({
             type="button"
             onClick={handleSend}
             disabled={(isEditorEmpty() && attachments.length === 0) || uploading || disabled}
-            className="p-1.5 text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
+            className="flex-shrink-0 p-2 sm:p-1.5 text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
             title="Send"
           >
             <Send className="w-4 h-4" />
@@ -550,7 +863,11 @@ export function ChannelMessageComposer({
         <p className="text-xs text-indigo-500 mt-1 font-medium">Uploading...</p>
       )}
 
-      <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      <ImageLightbox
+        src={lightboxUrl}
+        images={attachments.filter((a: any) => a.isImage).map((a: any) => a.url)}
+        onClose={() => setLightboxUrl(null)}
+      />
     </div>
   );
 }

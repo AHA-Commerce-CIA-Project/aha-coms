@@ -51,6 +51,7 @@ export async function POST(
             data: {
                 status: 'in-progress',
                 assigneeId: session.user.id,
+                claimedAt: new Date(),
             },
         });
 

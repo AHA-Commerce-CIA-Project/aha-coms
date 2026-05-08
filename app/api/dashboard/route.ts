@@ -28,10 +28,14 @@ export async function GET(request: NextRequest) {
         });
     }
 
-    // All tasks assigned to the user
+    // All tasks where the user is responsible — either primary assignee OR approved helper.
+    // Counting helper tasks here is intentional: helpers also contribute to completion.
     const tasks = await prisma.task.findMany({
         where: {
-            assigneeId: session.user.id,
+            OR: [
+                { assigneeId: session.user.id },
+                { collaborators: { some: { userId: session.user.id, status: 'approved' } } },
+            ],
             NOT: { status: 'archived' },
         },
         select: {

@@ -3,6 +3,7 @@
 import { Search, Plus, MessageCircle } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { htmlToPlainText } from '@/lib/sanitize';
 
 interface ConversationUser {
     id: string;
@@ -35,6 +36,22 @@ interface ConversationListProps {
     onSelect: (conversation: ConversationItem) => void;
     onNewDM: () => void;
     loading: boolean;
+}
+
+// Build the DM list preview. The stored content is rich HTML (mention chips,
+// formatting tags, optional forward marker) — we strip the HTML so the user
+// sees readable text like "@ca hi" instead of `<span class="mention-chip"...>`.
+function previewLastMessage(raw: string): string {
+    const fwdMatch = raw.match(/<!--forward:(.*?)-->/s);
+    if (fwdMatch) {
+        try {
+            const fwd = JSON.parse(fwdMatch[1]);
+            const userMsg = htmlToPlainText(raw.replace(/<!--forward:.*?-->/s, '').trim());
+            const author = fwd?.author || 'someone';
+            return userMsg ? `${userMsg} — Forwarded from ${author}` : `📤 Forwarded from ${author}`;
+        } catch {}
+    }
+    return htmlToPlainText(raw);
 }
 
 function timeAgo(d: string) {
@@ -179,7 +196,7 @@ export function ConversationList({
                                             conv.unreadCount > 0 ? 'text-slate-700 font-medium' : 'text-slate-500'
                                         )}>
                                             {isOwnMessage && <span className="text-slate-400">You: </span>}
-                                            {lastMsg.content}
+                                            {previewLastMessage(lastMsg.content)}
                                         </p>
                                     ) : (
                                         <p className="text-xs text-slate-400 italic">No messages yet</p>

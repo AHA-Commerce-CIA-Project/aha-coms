@@ -1,9 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageSquare, Smile, Bookmark, BookmarkCheck, Download, Pencil, Trash2, X, Check, Forward } from 'lucide-react';
+import { MessageSquare, Smile, Bookmark, BookmarkCheck, Download, Pencil, Trash2, Check, Forward, UserPlus, UserMinus, Hash } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { ReactionDisplay } from './ReactionDisplay';
+import { MentionTextarea } from './MentionTextarea';
+import { ImageLightbox } from '@/components/ImageLightbox';
+import { DirectAssignCard } from './DirectAssignCard';
+import { TeamMembersPopover } from './TeamMembersPopover';
+import { DeleteMessageModal } from './DeleteMessageModal';
+import { useAppStore } from '@/lib/store';
+import { htmlToPlainText, isHtml } from '@/lib/sanitize';
+
+// Editing happens in a plaintext MentionTextarea, but the channel composer
+// now stores rich HTML (lists, bold, etc.) — show the user readable text
+// instead of raw markup like "<div>...</div><br>...". Plain-text messages
+// pass through unchanged.
+const editableText = (raw: string) => (isHtml(raw) ? htmlToPlainText(raw) : raw);
 import { cn } from '@/lib/utils';
 
 interface Attachment {
@@ -40,13 +53,20 @@ interface ChannelMessageItemProps {
   message: Message;
   currentUserId: string;
   channelId: string;
+  channelName?: string;
   onOpenThread: (message: Message) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onSave: (messageId: string) => void;
   onMessageUpdated: () => void;
   onForward?: (message: Message) => void;
-  allUsers?: { id: string; name: string }[];
+  /** Convert this message into a Direct Assign task. Visible only on the
+      author's own non-card messages. */
+  onDirectAssign?: (message: Message) => void;
+  allUsers?: { id: string; name: string; email?: string; image?: string | null }[];
+  allTeams?: { id: string; name: string; mentionHandle: string }[];
   showAvatar?: boolean;
+  /** Open the task detail modal — forwarded to DirectAssignCard. */
+  onOpenTaskDetail?: (taskId: string) => void;
 }
 
 function formatTime(dateStr: string) {
@@ -64,17 +84,63 @@ function isHtmlContent(content: string): boolean {
   return /<[a-z][\s\S]*>/i.test(content);
 }
 
-function processHtmlContent(html: string): string {
+function processHtmlContent(
+  html: string,
+  allUsers?: { id: string; name: string }[],
+  allTeams?: { id: string; mentionHandle: string }[],
+): string {
   // Linkify URLs that aren't already inside <a> tags
   let result = html.replace(
     /(?<!href=["'])(?<!<a[^>]*>)(https?:\/\/[^\s<]+)/g,
     '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:text-indigo-700 underline break-all">$1</a>'
   );
-  // Style @mentions
+
+  // Extract pre-styled mention chips so the @-regex below doesn't double-wrap them.
+  // While extracting, rewrite the chip's inner text from the LIVE user name if
+  // `data-user-id` is present — keeps mentions in-sync with display-name changes.
+  // Also add cursor-pointer hover styling so chips look clickable (event delegation
+  // attached on the wrapper handles the actual click).
+  const chips: string[] = [];
+  result = result.replace(
+    /<span\b([^>]*class="[^"]*mention-chip[^"]*"[^>]*)>([\s\S]*?)<\/span>/g,
+    (match, attrs: string, innerText) => {
+      const userIdMatch = attrs.match(/data-user-id="([^"]+)"/);
+      const teamIdMatch = attrs.match(/data-team-id="([^"]+)"/);
+      let finalText = innerText;
+      if (userIdMatch && allUsers) {
+        const user = allUsers.find((u) => u.id === userIdMatch[1]);
+        if (user) finalText = '@' + user.name.replace(/\s+/g, '.');
+      }
+      // Inject hover/cursor classes once.
+      const enhancedAttrs = attrs.includes('cursor-pointer')
+        ? attrs
+        : attrs.replace(
+            /class="([^"]*)"/,
+            (_, c) => `class="${c} cursor-pointer hover:brightness-95 transition-colors"`,
+          );
+      const rebuilt = `<span${enhancedAttrs}>${finalText}</span>`;
+      chips.push(rebuilt);
+      return `\u0000CHIP_${chips.length - 1}\u0000`;
+    }
+  );
+
+  // Style remaining plain @mentions — but check whether each handle matches a known team
+  // so team mentions get emerald styling + a clickable data attribute.
   result = result.replace(
     /(@\w[\w.]*)/g,
-    '<span class="text-indigo-600 font-semibold bg-indigo-50 px-1 rounded">$1</span>'
+    (match) => {
+      const handle = match.slice(1).toLowerCase();
+      const team = allTeams?.find((t) => t.mentionHandle.toLowerCase() === handle);
+      if (team) {
+        return `<span class="mention-chip text-emerald-700 font-semibold bg-emerald-50 px-1 rounded cursor-pointer hover:brightness-95 transition-colors" data-team-id="${team.id}" data-team-handle="${team.mentionHandle}">${match}</span>`;
+      }
+      return `<span class="text-indigo-600 font-semibold bg-indigo-50 px-1 rounded">${match}</span>`;
+    },
   );
+
+  // Restore chips
+  result = result.replace(/\u0000CHIP_(\d+)\u0000/g, (_, i) => chips[parseInt(i, 10)]);
+
   return result;
 }
 
@@ -82,22 +148,25 @@ function renderContent(
   content: string,
   allUsers?: { id: string; name: string }[],
   onMentionClick?: (userId: string) => void,
+  allTeams?: { id: string; mentionHandle: string }[],
+  onTeamClick?: (teamId: string) => void,
 ) {
   if (!content) return null;
 
-  // If content contains HTML tags, render as rich text
+  // If content contains HTML tags, render as rich text. Click delegation lives on
+  // the wrapper in the parent component, so chips inside dangerouslySetInnerHTML
+  // become clickable without rebuilding the tree as React nodes.
   if (isHtmlContent(content)) {
     return (
       <span
-        className="[&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
-        dangerouslySetInnerHTML={{ __html: processHtmlContent(content) }}
+        className="text-[15px] leading-relaxed [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
+        dangerouslySetInnerHTML={{ __html: processHtmlContent(content, allUsers, allTeams) }}
       />
     );
   }
 
   // Plain text: split by @mentions and URLs
   const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const mentionRegex = /(@\w[\w.]*)/g;
   const combinedRegex = /(https?:\/\/[^\s]+|@\w[\w.]*)/g;
 
   const parts = content.split(combinedRegex);
@@ -118,27 +187,43 @@ function renderContent(
         </a>
       );
     }
-    // Check if it's a @mention
-    if (part && part.startsWith('@') && allUsers) {
-      mentionRegex.lastIndex = 0;
-      const name = part.slice(1);
-      const user = allUsers.find(
-        (u) => u.name.toLowerCase().replace(/\s+/g, '.') === name.toLowerCase() ||
-               u.name.toLowerCase() === name.toLowerCase()
-      );
-      if (user) {
+    // Check if it's a @mention — try team handles first, then user names.
+    if (part && part.startsWith('@')) {
+      const handle = part.slice(1).toLowerCase();
+      const team = allTeams?.find((t) => t.mentionHandle.toLowerCase() === handle);
+      if (team) {
         return (
           <button
             key={i}
             onClick={(e) => {
               e.stopPropagation();
-              onMentionClick?.(user.id);
+              onTeamClick?.(team.id);
             }}
-            className="text-indigo-600 font-semibold bg-indigo-50 px-1 rounded hover:bg-indigo-100 transition-colors cursor-pointer inline"
+            className="text-emerald-700 font-semibold bg-emerald-50 px-1 rounded hover:bg-emerald-100 transition-colors cursor-pointer inline"
           >
             {part}
           </button>
         );
+      }
+      if (allUsers) {
+        const user = allUsers.find(
+          (u) => u.name.toLowerCase().replace(/\s+/g, '.') === handle ||
+                 u.name.toLowerCase() === handle
+        );
+        if (user) {
+          return (
+            <button
+              key={i}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMentionClick?.(user.id);
+              }}
+              className="text-indigo-600 font-semibold bg-indigo-50 px-1 rounded hover:bg-indigo-100 transition-colors cursor-pointer inline"
+            >
+              {part}
+            </button>
+          );
+        }
       }
     }
     return <span key={i}>{part}</span>;
@@ -149,32 +234,48 @@ export function ChannelMessageItem({
   message,
   currentUserId,
   channelId,
+  channelName,
   onOpenThread,
   onReaction,
   onSave,
   onMessageUpdated,
   onForward,
+  onDirectAssign,
   allUsers,
+  allTeams,
   showAvatar = true,
+  onOpenTaskDetail,
 }: ChannelMessageItemProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // All images on this message — fed to the lightbox so users can paginate
+  // between siblings without closing/reopening for each.
+  const lightboxGallery = (Array.isArray(message.attachments) ? message.attachments : [])
+    .filter((a: any) => a?.isImage)
+    .map((a: any) => a.url as string);
   const [editing, setEditing] = useState(false);
-  const [editContent, setEditContent] = useState(message.content);
+  const [editContent, setEditContent] = useState(editableText(message.content));
   const [saving, setSaving] = useState(false);
-  const [profileUser, setProfileUser] = useState<{ id: string; name: string; email: string; image: string | null; role: string; status: string } | null>(null);
+  const [teamPopoverId, setTeamPopoverId] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const setProfileUser = useAppStore((s) => s.setProfileUser);
   const isOwner = message.senderId === currentUserId;
 
   const handleMentionClick = async (userId: string) => {
+    setProfileLoading(true);
     try {
-      const res = await fetch(`/api/chat/users`);
+      const res = await fetch(`/api/users/${userId}`);
       if (res.ok) {
-        const users = await res.json();
-        const user = users.find((u: any) => u.id === userId);
-        if (user) setProfileUser(user);
+        const user = await res.json();
+        // Single source of truth in the store — overwrites any previously-open
+        // profile so clicking a different person always shows the right panel.
+        setProfileUser(user);
       }
-    } catch {}
+    } catch {} finally {
+      setProfileLoading(false);
+    }
   };
   const isSaved = message.savedBy.length > 0;
 
@@ -194,8 +295,8 @@ export function ChannelMessageItem({
     } catch {} finally { setSaving(false); }
   };
 
-  const handleDelete = async () => {
-    if (!confirm('Delete this message? This cannot be undone.')) return;
+  const handleDelete = () => setDeleteOpen(true);
+  const performDelete = async () => {
     try {
       await fetch(`/api/channels/${channelId}/messages/${message.id}`, { method: 'DELETE' });
       onMessageUpdated();
@@ -204,15 +305,70 @@ export function ChannelMessageItem({
   const attachments = (Array.isArray(message.attachments) ? message.attachments : []) as Attachment[];
   const images = attachments.filter((a) => a.isImage);
   const docs = attachments.filter((a) => !a.isImage);
+  // For direct-assign messages, the same attachments are surfaced inside the
+  // task detail modal — don't render them again next to the card.
+  const isDirectAssignCard = !!message.content?.match(/<!--direct_assign:[^\s>]+?-->/);
+
+  // Slack-style system messages (channel created, member added, member removed).
+  // These bypass the normal avatar/name layout and render as a centered, italic
+  // notice. The marker prefix is stripped before display.
+  const sysMatch = message.content?.match(
+    /^<!--system:(channel_created|member_added|member_removed)-->([\s\S]*)$/,
+  );
+  if (sysMatch) {
+    const kind = sysMatch[1] as 'channel_created' | 'member_added' | 'member_removed';
+    const baked = sysMatch[2].trim();
+    let text = baked;
+    let Icon = Hash;
+    let iconClass = 'text-indigo-500';
+    if (kind === 'channel_created') {
+      const date = new Date(message.createdAt).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+      });
+      text = `${message.sender.name} created this channel on ${date}. This is the very beginning of the #${channelName || 'channel'} channel.`;
+      Icon = Hash;
+      iconClass = 'text-indigo-500';
+    } else if (kind === 'member_added') {
+      Icon = UserPlus;
+      iconClass = 'text-emerald-500';
+    } else if (kind === 'member_removed') {
+      Icon = UserMinus;
+      iconClass = 'text-rose-500';
+    }
+    return (
+      <div className="px-6 py-2 flex items-start gap-2.5">
+        <Icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${iconClass}`} />
+        <p className="text-[13px] text-slate-500 leading-relaxed">
+          {text}
+          <span className="text-slate-300 ml-2 text-[11px]">
+            {formatTime(message.createdAt)}
+          </span>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <>
       <div
-        className="group relative px-6 py-2 hover:bg-slate-50 transition-colors"
+        // Wider mobile padding (px-3) but keep desktop's px-6. The tap handler
+        // here toggles the action toolbar on touch devices — onMouseEnter alone
+        // is unreliable on iOS and useless on Android Chrome, so a deliberate
+        // tap is the only way to surface the toolbar without a hover signal.
+        className="group relative px-3 sm:px-6 py-2 hover:bg-slate-50 transition-colors"
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => {
           setShowActions(false);
           setShowEmojiPicker(false);
+        }}
+        onClick={(e) => {
+          // Don't hijack clicks on real interactive elements (buttons, links,
+          // textareas inside the message). Only toggle when the user taps the
+          // bare message background.
+          const t = e.target as HTMLElement;
+          if (t.closest('button, a, input, textarea, [role="button"]')) return;
+          setShowActions((v) => !v);
         }}
       >
         {/* Saved for later indicator */}
@@ -225,7 +381,12 @@ export function ChannelMessageItem({
         <div className="flex gap-3">
           {/* Avatar */}
           {showAvatar ? (
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-sm font-bold">
+            <button
+              type="button"
+              onClick={() => handleMentionClick(message.senderId)}
+              className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-sm font-bold overflow-hidden hover:ring-2 hover:ring-indigo-300 transition-all cursor-pointer"
+              title="View profile"
+            >
               {message.sender.image ? (
                 <img
                   src={message.sender.image}
@@ -235,7 +396,7 @@ export function ChannelMessageItem({
               ) : (
                 message.sender.name.charAt(0).toUpperCase()
               )}
-            </div>
+            </button>
           ) : (
             <div className="w-9 flex-shrink-0" />
           )}
@@ -244,9 +405,14 @@ export function ChannelMessageItem({
             {/* Name + time */}
             {showAvatar && (
               <div className="flex items-baseline gap-2 mb-0.5">
-                <span className="font-bold text-base text-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleMentionClick(message.senderId)}
+                  className="font-bold text-base text-slate-800 hover:text-indigo-600 hover:underline transition-colors cursor-pointer"
+                  title="View profile"
+                >
                   {message.sender.name}
-                </span>
+                </button>
                 <span className="text-xs text-slate-400">
                   {formatTime(message.createdAt)}
                 </span>
@@ -256,15 +422,21 @@ export function ChannelMessageItem({
             {/* Content */}
             {editing ? (
               <div className="mt-1">
-                <textarea
+                <MentionTextarea
                   value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
+                  onChange={setEditContent}
+                  users={(allUsers || []).map((u) => ({
+                    id: u.id,
+                    name: u.name,
+                    email: u.email || '',
+                    image: u.image ?? null,
+                  }))}
                   className="w-full px-3 py-2 bg-white border border-indigo-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                   rows={2}
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEdit(); }
-                    if (e.key === 'Escape') { setEditing(false); setEditContent(message.content); }
+                    if (e.key === 'Escape') { setEditing(false); setEditContent(editableText(message.content)); }
                   }}
                 />
                 <div className="flex items-center gap-2 mt-1">
@@ -277,7 +449,7 @@ export function ChannelMessageItem({
                     Save
                   </button>
                   <button
-                    onClick={() => { setEditing(false); setEditContent(message.content); }}
+                    onClick={() => { setEditing(false); setEditContent(editableText(message.content)); }}
                     className="flex items-center gap-1 px-2.5 py-1 text-slate-500 hover:text-slate-700 text-xs font-medium transition-colors"
                   >
                     Cancel
@@ -287,6 +459,28 @@ export function ChannelMessageItem({
               </div>
             ) : message.content ? (
               (() => {
+                // Direct Assign card — message carries a <!--direct_assign:TASK_ID--> marker.
+                // Task IDs are UUIDs and contain hyphens, so match any non-whitespace chars up to -->.
+                const directAssignMatch = message.content.match(/<!--direct_assign:([^\s>]+?)-->/);
+                if (directAssignMatch) {
+                  const taskId = directAssignMatch[1].trim();
+                  const rest = message.content.replace(/<!--direct_assign:[^\s>]+?-->/, '').trim();
+                  // First line is the title ("📋 Task Request: ...") — strip the emoji prefix for the card preview.
+                  const lines = rest.split('\n');
+                  const titleLine = (lines[0] || '').replace(/^📋\s*Task Request:\s*/, '').trim();
+                  // Remaining lines (skip "Priority: X" line) form the body preview.
+                  const bodyLines = lines.slice(1).filter(l => !/^Priority:/i.test(l.trim()));
+                  const bodyPreview = bodyLines.join('\n').trim();
+                  return (
+                    <DirectAssignCard
+                      taskId={taskId}
+                      previewTitle={titleLine || '(no title)'}
+                      previewBody={bodyPreview}
+                      currentUserId={currentUserId}
+                      onOpenDetail={onOpenTaskDetail}
+                    />
+                  );
+                }
                 // Check for forwarded message
                 const forwardMatch = message.content.match(/<!--forward:(.*?)-->/s);
                 if (forwardMatch) {
@@ -298,10 +492,22 @@ export function ChannelMessageItem({
                       <div>
                         {userMsg && (
                           <p className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed mb-2">
-                            {renderContent(userMsg, allUsers, handleMentionClick)}
+                            {renderContent(userMsg, allUsers, handleMentionClick, allTeams, (teamId) => setTeamPopoverId(teamId))}
                           </p>
                         )}
-                        {/* Quoted forward card */}
+                        {/* Task forwards render as a live DirectAssignCard so the
+                            receiver gets the same orange "TASK REQUEST" card
+                            they'd see in a normal direct-assign channel — with
+                            claim/complete/status, not a static text quote. */}
+                        {fwd.isTask && fwd.taskId ? (
+                          <DirectAssignCard
+                            taskId={fwd.taskId}
+                            previewTitle={fwd.taskToken ? `Task ${fwd.taskToken}` : 'Task'}
+                            previewBody={htmlToPlainText(fwd.content || '')}
+                            currentUserId={currentUserId}
+                            onOpenDetail={onOpenTaskDetail}
+                          />
+                        ) : (
                         <div className="border-l-4 border-indigo-400 bg-slate-50 rounded-r-xl p-3 mt-1">
                           <div className="flex items-center gap-2 mb-1.5">
                             <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold">
@@ -309,8 +515,9 @@ export function ChannelMessageItem({
                             </div>
                             <span className="text-sm font-bold text-slate-900">{fwd.author}</span>
                           </div>
-                          <p className="text-[14px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed">{fwd.content}</p>
+                          <p className="text-[14px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed">{htmlToPlainText(fwd.content)}</p>
                         </div>
+                        )}
                         {/* Source footer — outside the card, like Slack */}
                         <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 mt-2 text-xs">
                           {fwd.channelName && (
@@ -321,10 +528,12 @@ export function ChannelMessageItem({
                               </a>
                             </>
                           )}
-                          {fwd.isTask && fwd.taskToken && (
+                          {fwd.isTask && (
                             <>
                               <span className="text-slate-400">Forwarded from</span>
-                              <span className="font-semibold text-slate-600">Task {fwd.taskToken}</span>
+                              <span className="font-semibold text-slate-600">
+                                {fwd.taskToken ? `Task ${fwd.taskToken}` : 'a task'}
+                              </span>
                             </>
                           )}
                           {fwd.date && (
@@ -336,8 +545,11 @@ export function ChannelMessageItem({
                               className="text-indigo-500 hover:text-indigo-700 font-semibold hover:underline">
                               View message
                             </a>
-                          ) : fwd.isTask && fwd.taskToken ? (
-                            <a href={`/nexus?highlight_token=${fwd.taskToken}&open=true`}
+                          ) : fwd.isTask && (fwd.taskToken || fwd.taskId) ? (
+                            <a
+                              href={fwd.taskToken
+                                ? `/nexus?highlight_token=${fwd.taskToken}&open=true`
+                                : `/channels?task=${fwd.taskId}`}
                               className="text-indigo-500 hover:text-indigo-700 font-semibold hover:underline">
                               View task
                             </a>
@@ -347,10 +559,23 @@ export function ChannelMessageItem({
                     );
                   } catch {}
                 }
-                // Normal message
+                // Normal message — wrap in a delegating click handler so HTML chips
+                // (rendered via dangerouslySetInnerHTML) become clickable.
+                const handleContentClick = (e: React.MouseEvent<HTMLElement>) => {
+                  const target = (e.target as HTMLElement).closest('[data-user-id], [data-team-id]') as HTMLElement | null;
+                  if (!target) return;
+                  e.stopPropagation();
+                  const userId = target.getAttribute('data-user-id');
+                  const teamId = target.getAttribute('data-team-id');
+                  if (userId) handleMentionClick(userId);
+                  else if (teamId) setTeamPopoverId(teamId);
+                };
                 return (
-                  <p className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
-                    {renderContent(message.content, allUsers, handleMentionClick)}
+                  <p
+                    onClick={handleContentClick}
+                    className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed"
+                  >
+                    {renderContent(message.content, allUsers, handleMentionClick, allTeams, (teamId) => setTeamPopoverId(teamId))}
                     {message.updatedAt && message.createdAt !== message.updatedAt &&
                       new Date(message.updatedAt).getTime() - new Date(message.createdAt).getTime() > 1000 && (
                       <span className="text-xs text-slate-400 ml-1 italic">(edited)</span>
@@ -361,7 +586,7 @@ export function ChannelMessageItem({
             ) : null}
 
             {/* Image attachments */}
-            {images.length > 0 && (
+            {!isDirectAssignCard && images.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {images.map((img, idx) => (
                   <button
@@ -381,7 +606,7 @@ export function ChannelMessageItem({
             )}
 
             {/* Document attachments */}
-            {docs.length > 0 && (
+            {!isDirectAssignCard && docs.length > 0 && (
               <div className="flex flex-col gap-1 mt-2">
                 {docs.map((doc, idx) => (
                   <a
@@ -448,9 +673,11 @@ export function ChannelMessageItem({
           </div>
         </div>
 
-        {/* Hover action bar */}
+        {/* Hover/tap action bar — shifts left on mobile so it doesn't get
+            clipped by the viewport edge and bumps padding so each icon target
+            clears the 44pt touch minimum. */}
         {showActions && (
-          <div className="absolute top-0 right-4 -translate-y-1/2 flex items-center bg-white border border-slate-200 rounded-lg shadow-md">
+          <div className="absolute top-0 right-1 sm:right-4 -translate-y-1/2 flex items-center bg-white border border-slate-200 rounded-lg shadow-md max-w-[calc(100vw-1rem)] overflow-x-auto">
             {/* Quick reaction emojis */}
             {['✅', '👀', '🙌'].map((emoji) => (
               <button
@@ -466,7 +693,7 @@ export function ChannelMessageItem({
             <div className="relative">
               <button
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
+                className="p-2 sm:p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
                 title="Find another reaction"
               >
                 <Smile className="w-4 h-4" />
@@ -474,6 +701,7 @@ export function ChannelMessageItem({
               {showEmojiPicker && (
                 <EmojiPicker
                   open={showEmojiPicker}
+                  position="above"
                   onSelect={(emoji) => {
                     onReaction(message.id, emoji);
                     setShowEmojiPicker(false);
@@ -485,7 +713,7 @@ export function ChannelMessageItem({
             <div className="w-px h-5 bg-slate-200" />
             <button
               onClick={() => onOpenThread(message)}
-              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
+              className="p-2 sm:p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
               title="Reply in thread"
             >
               <MessageSquare className="w-4 h-4" />
@@ -509,25 +737,36 @@ export function ChannelMessageItem({
             {onForward && (
               <button
                 onClick={() => onForward(message)}
-                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
+                className="p-2 sm:p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
                 title="Forward to channel"
               >
                 <Forward className="w-4 h-4" />
+              </button>
+            )}
+            {/* Convert message → task: only the author of a regular (non-card)
+                message can turn their own message into a Direct Assign card. */}
+            {onDirectAssign && isOwner && !isDirectAssignCard && (
+              <button
+                onClick={() => onDirectAssign(message)}
+                className="p-2 sm:p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
+                title="Convert to Direct Assign task"
+              >
+                <UserPlus className="w-4 h-4" />
               </button>
             )}
             {isOwner && (
               <>
                 <div className="w-px h-5 bg-slate-200" />
                 <button
-                  onClick={() => { setEditing(true); setShowActions(false); }}
-                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
+                  onClick={() => { setEditContent(editableText(message.content)); setEditing(true); setShowActions(false); }}
+                  className="p-2 sm:p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
                   title="Edit message"
                 >
                   <Pencil className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-slate-50 rounded-r-lg transition-colors"
+                  className="p-2 sm:p-1.5 text-slate-400 hover:text-rose-500 hover:bg-slate-50 rounded-r-lg transition-colors"
                   title="Delete message"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -538,59 +777,42 @@ export function ChannelMessageItem({
         )}
       </div>
 
-      {/* User Profile Popup */}
-      {profileUser && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center" onClick={() => setProfileUser(null)}>
-          <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xs p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center mx-auto mb-3 text-white text-xl font-bold overflow-hidden">
-              {profileUser.image ? (
-                <img src={profileUser.image} alt={profileUser.name} className="w-16 h-16 rounded-full object-cover" />
-              ) : (
-                profileUser.name.charAt(0).toUpperCase()
-              )}
-            </div>
-            <h3 className="text-lg font-bold text-slate-800">{profileUser.name}</h3>
-            <p className="text-sm text-slate-400 mb-2">{profileUser.email}</p>
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-medium capitalize">
-                {profileUser.role}
-              </span>
-              {profileUser.status && (
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  profileUser.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
-                  profileUser.status === 'away' ? 'bg-amber-100 text-amber-700' :
-                  profileUser.status === 'busy' ? 'bg-rose-100 text-rose-700' :
-                  'bg-slate-100 text-slate-500'
-                }`}>
-                  {profileUser.status}
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => setProfileUser(null)}
-              className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              Close
-            </button>
-          </div>
+      {/* Team Members Popover — opened when a team mention chip is clicked. */}
+      <TeamMembersPopover
+        open={!!teamPopoverId}
+        teamId={teamPopoverId}
+        channelId={channelId}
+        onClose={() => setTeamPopoverId(null)}
+        onMemberClick={(userId) => {
+          setTeamPopoverId(null);
+          handleMentionClick(userId);
+        }}
+      />
+
+      {/* Profile panel itself is mounted once at AppShell level — driven by
+          the store. Here we just show a tiny corner spinner while we fetch. */}
+      {profileLoading && (
+        <div className="fixed top-4 right-4 z-[91] bg-white shadow-lg rounded-full p-2.5">
+          <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
         </div>
       )}
 
-      {/* Lightbox */}
-      {lightboxUrl && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
-          onClick={() => setLightboxUrl(null)}
-          onKeyDown={(e) => e.key === 'Escape' && setLightboxUrl(null)}
-        >
-          <img
-            src={lightboxUrl}
-            alt="Preview"
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
-          />
-        </div>
-      )}
+      {/* Lightbox — closes on ESC (document-level listener) and backdrop click */}
+      <ImageLightbox src={lightboxUrl} images={lightboxGallery} onClose={() => setLightboxUrl(null)} />
+
+      <DeleteMessageModal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={performDelete}
+        kind="message"
+        preview={{
+          senderName: message.sender.name,
+          senderImage: message.sender.image,
+          createdAt: message.createdAt,
+          content: message.content,
+          channelName,
+        }}
+      />
     </>
   );
 }

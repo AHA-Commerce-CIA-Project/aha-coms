@@ -3,13 +3,16 @@ import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
 
 // GET /api/channels - List channels visible to current user
-export async function GET() {
+// Optional ?purpose=discussion|assign_task to scope results.
+export async function GET(request: Request) {
   const session = await requireAuth();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const userId = session.user.id;
+  const { searchParams } = new URL(request.url);
+  const purposeFilter = searchParams.get('purpose');
 
   // Fetch the user's team so we can filter by allowedTeamIds
   const me = await prisma.user.findUnique({
@@ -27,6 +30,7 @@ export async function GET() {
   const channels = await prisma.channel.findMany({
     where: {
       isArchived: false,
+      ...(purposeFilter ? { purpose: purposeFilter } : {}),
       OR: [
         { createdBy: userId },
         { members: { some: { userId } } },
@@ -38,6 +42,7 @@ export async function GET() {
     },
     include: {
       creator: { select: { id: true, name: true, image: true } },
+      team: { select: { id: true, name: true } },
       _count: { select: { messages: true, members: true } },
     },
     orderBy: { updatedAt: 'desc' },
@@ -78,10 +83,26 @@ export async function POST(request: Request) {
     memberIds = [],
     allowedTeamIds = [],
     visibleToAllTeams = false,
+    purpose = 'discussion',
+    teamId = null,
   } = await request.json();
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return NextResponse.json({ error: 'Channel name is required' }, { status: 400 });
+  }
+
+  const normalizedPurpose = purpose === 'assign_task' ? 'assign_task' : 'discussion';
+
+  // Owning team — required when purpose=assign_task because every direct-assigned
+  // task created in this channel inherits this team as task.assignedTeamId. The
+  // Team Inbox query depends on this single source of truth (no more inferring
+  // from allowedTeamIds).
+  const cleanTeamId = typeof teamId === 'string' && teamId.length > 0 ? teamId : null;
+  if (normalizedPurpose === 'assign_task' && !cleanTeamId) {
+    return NextResponse.json(
+      { error: 'Owning team is required for Assign Task channels' },
+      { status: 400 },
+    );
   }
 
   // Dedupe + sanitize team IDs (keep only non-empty strings)
@@ -97,6 +118,8 @@ export async function POST(request: Request) {
       isPrivate,
       allowedTeamIds: visibleToAllTeams ? [] : cleanTeamIds,
       visibleToAllTeams: !isPrivate && !!visibleToAllTeams,
+      purpose: normalizedPurpose,
+      teamId: cleanTeamId,
       ...(isPrivate && memberIds.length > 0
         ? {
             members: {
@@ -107,6 +130,20 @@ export async function POST(request: Request) {
     },
     include: {
       creator: { select: { id: true, name: true, image: true } },
+      team: { select: { id: true, name: true } },
+    },
+  });
+
+  // Post a Slack-style "channel created" system message. The renderer in
+  // ChannelMessageItem looks for the marker and constructs the display text
+  // using the channel's current name (so it stays in sync after renames).
+  await prisma.channelMessage.create({
+    data: {
+      channelId: channel.id,
+      senderId: session.user.id,
+      content: '<!--system:channel_created-->',
+      attachments: [],
+      mentions: [],
     },
   });
 

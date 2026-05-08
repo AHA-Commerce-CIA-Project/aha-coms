@@ -16,8 +16,9 @@ export async function GET(request: Request) {
         select: {
             id: true,
             name: true,
+            mentionHandle: true,
             ...(includeMembers ? {
-                members: {
+                users: {
                     select: { id: true, name: true, email: true, image: true },
                     orderBy: { name: 'asc' as const },
                 },

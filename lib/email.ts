@@ -1,6 +1,11 @@
 import { Resend } from 'resend';
+import { getAppUrl } from '@/lib/appUrl';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 
 // On Resend free tier, can only send to verified email.
 const NOTIFICATION_EMAIL = process.env.RESEND_NOTIFICATION_EMAIL || 'alif.masyhur@ahacommerce.net';
@@ -19,7 +24,7 @@ export async function sendViaAppsScript(to: string[], subject: string, htmlBody:
   try {
     const response = await fetch(APPS_SCRIPT_EMAIL_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({
         secret: APPS_SCRIPT_SECRET,
         to,
@@ -60,7 +65,7 @@ export async function sendRequestNotificationEmail(data: RequestEmailData) {
     return false;
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
+  const appUrl = getAppUrl();
   const trackUrl = `${appUrl}/track?token=${data.taskToken}`;
 
   const requestTypeLabel: Record<string, string> = {
@@ -86,7 +91,7 @@ export async function sendRequestNotificationEmail(data: RequestEmailData) {
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
       <div style="background: linear-gradient(135deg, #0F0E7F 0%, #4F46E5 100%); padding: 24px 32px; border-radius: 12px 12px 0 0;">
         <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">
-          ⚡ FAST - New Request Submitted
+          &#9889; FAST - New Request Submitted
         </h1>
       </div>
 
@@ -162,7 +167,7 @@ export async function sendRequestNotificationEmail(data: RequestEmailData) {
 
   // Fallback to Resend (only sends to verified email)
   try {
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
       to: [NOTIFICATION_EMAIL],
       subject,
@@ -197,14 +202,14 @@ interface TaskClaimedEmailData {
 export async function sendTaskClaimedEmail(data: TaskClaimedEmailData) {
   if (!process.env.RESEND_API_KEY) return false;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
+  const appUrl = getAppUrl();
   const trackUrl = `${appUrl}/track?token=${data.taskToken}`;
 
   const htmlBody = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
       <div style="background: linear-gradient(135deg, #0F0E7F 0%, #4F46E5 100%); padding: 24px 32px; border-radius: 12px 12px 0 0;">
         <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">
-          🔔 FAST - Your Request Has Been Claimed
+          &#128276; FAST - Your Request Has Been Claimed
         </h1>
       </div>
       <div style="padding: 32px; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
@@ -260,7 +265,7 @@ export async function sendTaskClaimedEmail(data: TaskClaimedEmailData) {
   if (sent) return true;
 
   try {
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
       to: recipients,
       subject,
@@ -290,14 +295,14 @@ interface TaskCompletedEmailData {
 export async function sendTaskCompletedEmail(data: TaskCompletedEmailData) {
   if (!process.env.RESEND_API_KEY) return false;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
+  const appUrl = getAppUrl();
   const trackUrl = `${appUrl}/track?token=${data.taskToken}`;
 
   const htmlBody = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
       <div style="background: linear-gradient(135deg, #059669 0%, #10B981 100%); padding: 24px 32px; border-radius: 12px 12px 0 0;">
         <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">
-          ✅ FAST - Your Request Has Been Completed
+          &#9989; FAST - Your Request Has Been Completed
         </h1>
       </div>
       <div style="padding: 32px; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
@@ -309,7 +314,7 @@ export async function sendTaskCompletedEmail(data: TaskCompletedEmailData) {
         </p>
 
         <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-          <p style="color: #16A34A; font-size: 14px; margin: 0; font-weight: 700;">✅ Completed</p>
+          <p style="color: #16A34A; font-size: 14px; margin: 0; font-weight: 700;">&#9989; Completed</p>
           <p style="color: #15803D; font-size: 12px; margin: 4px 0 0;">By: <strong>${data.completedByName}</strong></p>
         </div>
 
@@ -355,7 +360,7 @@ export async function sendTaskCompletedEmail(data: TaskCompletedEmailData) {
   if (sent) return true;
 
   try {
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
       to: recipients,
       subject,
@@ -374,14 +379,14 @@ export async function sendTaskCompletedEmail(data: TaskCompletedEmailData) {
 // ==========================================
 
 export async function sendActivationEmail(email: string, name: string, token: string) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://127.0.0.1:3001';
+  const appUrl = getAppUrl();
   const activateUrl = `${appUrl}/activate?token=${token}`;
 
   const htmlBody = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
       <div style="background: linear-gradient(135deg, #0F0E7F 0%, #4F46E5 100%); padding: 24px 32px; border-radius: 12px 12px 0 0;">
         <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">
-          ⚡ Welcome to AHA FAST
+          &#9889; Welcome to AHA FAST
         </h1>
       </div>
       <div style="padding: 32px; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
@@ -424,7 +429,7 @@ export async function sendActivationEmail(email: string, name: string, token: st
   // Fallback to Resend (only sends to your own email)
   if (!process.env.RESEND_API_KEY) return false;
   try {
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
       to: [NOTIFICATION_EMAIL],
       subject: `[AHA FAST] Activate Account for ${name} (${email}) - Please forward to ${email}`,
@@ -448,7 +453,7 @@ export async function sendPasswordResetEmail(email: string, name: string, code: 
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
       <div style="background: linear-gradient(135deg, #0F0E7F 0%, #4F46E5 100%); padding: 24px 32px; border-radius: 12px 12px 0 0;">
         <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">
-          🔐 AHA COMSS - Password Reset Code
+          &#128274; AHA COMSS - Password Reset Code
         </h1>
       </div>
       <div style="padding: 32px; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
@@ -487,7 +492,7 @@ export async function sendPasswordResetEmail(email: string, name: string, code: 
 
   if (!process.env.RESEND_API_KEY) return false;
   try {
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: 'AHA COMSS <onboarding@resend.dev>',
       to: [NOTIFICATION_EMAIL],
       subject: `[AHA COMSS] Password Reset for ${name} (${email}) - Please forward to ${email}`,
@@ -505,13 +510,13 @@ export async function sendPasswordResetEmail(email: string, name: string, code: 
 // ==========================================
 
 export async function sendAccountApprovedEmail(email: string, name: string) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://127.0.0.1:3001';
+  const appUrl = getAppUrl();
 
   const htmlBody = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
       <div style="background: linear-gradient(135deg, #059669 0%, #10B981 100%); padding: 24px 32px; border-radius: 12px 12px 0 0;">
         <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">
-          ✅ Account Approved!
+          &#9989; Account Approved!
         </h1>
       </div>
       <div style="padding: 32px; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
@@ -541,7 +546,7 @@ export async function sendAccountApprovedEmail(email: string, name: string) {
 
   if (!process.env.RESEND_API_KEY) return false;
   try {
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
       to: [NOTIFICATION_EMAIL],
       subject: `[AHA FAST] Account Approved for ${name} (${email})`,
@@ -583,7 +588,7 @@ export async function sendAccountRejectedEmail(email: string, name: string) {
 
   if (!process.env.RESEND_API_KEY) return false;
   try {
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: 'AHA FAST <onboarding@resend.dev>',
       to: [NOTIFICATION_EMAIL],
       subject: `[AHA FAST] Account Rejected for ${name} (${email})`,

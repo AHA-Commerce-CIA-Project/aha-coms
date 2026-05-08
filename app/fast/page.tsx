@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
 import { CountdownTimer } from '@/components/CountdownTimer';
+import { getPresence } from '@/lib/presence';
 import Link from 'next/link';
 import {
     CheckCircle2, ListTodo, Clock, AlertTriangle, X, Search,
@@ -46,15 +46,6 @@ function formatRelative(dateStr: string) {
 
 export default function FastDashboard() {
     const { profile } = useAuth();
-    const router = useRouter();
-
-    // Only FBI team members, leaders, and admin can access AHA Fast
-    const isFbiTeam = profile?.teamName?.includes('Factual Business Intelligence') || profile?.teamName?.includes('FBI') || profile?.role === 'admin' || profile?.role === 'leader';
-    useEffect(() => {
-        if (profile && !isFbiTeam) {
-            router.push('/');
-        }
-    }, [profile, isFbiTeam, router]);
 
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -64,15 +55,6 @@ export default function FastDashboard() {
         return { year: now.getFullYear(), month: now.getMonth() };
     });
 
-    // Derive online status from lastSeenAt
-    const getPresence = (lastSeenAt: string | null): { label: string; dot: string; color: string } => {
-        if (!lastSeenAt) return { label: 'Offline', dot: 'bg-slate-300', color: 'text-slate-400' };
-        const diffMs = Date.now() - new Date(lastSeenAt).getTime();
-        const diffMin = diffMs / 60000;
-        if (diffMin < 1) return { label: 'Active', dot: 'bg-emerald-400', color: 'text-emerald-500' };
-        if (diffMin < 5) return { label: 'Idle', dot: 'bg-amber-400', color: 'text-amber-500' };
-        return { label: 'Offline', dot: 'bg-slate-300', color: 'text-slate-400' };
-    };
 
     const fetchData = useCallback(async () => {
         try {
@@ -171,7 +153,7 @@ export default function FastDashboard() {
             {/* Main Grid: Calendar + Tasks */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Mini Calendar */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-bold text-slate-800">{monthName}</h3>
                         <div className="flex gap-1">
@@ -222,7 +204,7 @@ export default function FastDashboard() {
                 </div>
 
                 {/* My Tasks */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                             <Zap className="w-4 h-4 text-amber-500" />
@@ -241,7 +223,7 @@ export default function FastDashboard() {
                         <div className="space-y-2">
                             {filteredTasks.map((task: any) => {
                                 const st = statusLabels[task.status] || { label: task.status, color: 'text-slate-500' };
-                                const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'done';
+                                const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'done' && task.status !== 'pending';
                                 return (
                                     <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 border border-slate-100 transition-colors">
                                         <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${urgencyDots[task.urgency] || 'bg-slate-300'}`} />
@@ -272,7 +254,7 @@ export default function FastDashboard() {
             {/* Bottom Row: Recent Activity + Team */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Recent Activity */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                             <Activity className="w-4 h-4 text-indigo-500" />
@@ -304,7 +286,7 @@ export default function FastDashboard() {
                 </div>
 
                 {/* Team Directory */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                             <Users className="w-4 h-4 text-rose-500" />
@@ -351,28 +333,28 @@ export default function FastDashboard() {
                     </h3>
 
                     {/* KPI Cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
                             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Completion Rate</p>
                             <p className="text-2xl font-bold text-emerald-500">{data.insights.completionRate}%</p>
                             <p className="text-[10px] text-slate-400">{data.stats.completed} of {data.stats.total} tasks</p>
                         </div>
-                        <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
                             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Avg Resolution</p>
                             <p className="text-2xl font-bold text-indigo-500">{data.insights.avgResolutionHours}h</p>
                             <p className="text-[10px] text-slate-400">per task</p>
                         </div>
-                        <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
                             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">This Week</p>
                             <p className="text-2xl font-bold text-amber-500">{data.insights.thisWeekCompleted}</p>
                             <p className="text-[10px] text-slate-400">tasks completed</p>
                         </div>
-                        <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
                             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Avg Difficulty</p>
                             <p className="text-2xl font-bold text-purple-500">{data.insights.avgDifficulty ?? '—'}</p>
-                            <p className="text-[10px] text-slate-400">out of 10</p>
+                            <p className="text-[10px] text-slate-400">out of 5</p>
                         </div>
-                        <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
                             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Avg Rating</p>
                             <div className="flex items-center gap-1.5">
                                 <p className="text-2xl font-bold text-amber-500">{data.insights.avgRating ?? '—'}</p>
@@ -380,12 +362,24 @@ export default function FastDashboard() {
                             </div>
                             <p className="text-[10px] text-slate-400">{data.insights.totalReviews || 0} reviews</p>
                         </div>
+                        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Active Today</p>
+                            <p className="text-2xl font-bold text-sky-500">
+                                {(() => {
+                                    const s = data.insights.activeSecondsToday || 0;
+                                    const h = Math.floor(s / 3600);
+                                    const m = Math.floor((s % 3600) / 60);
+                                    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                                })()}
+                            </p>
+                            <p className="text-[10px] text-slate-400">time online</p>
+                        </div>
                     </div>
 
                     {/* Bottom: Urgency Breakdown + Orbit Stats */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Urgency Breakdown */}
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
                             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Tasks by Priority</p>
                             {Object.keys(data.insights.urgencyBreakdown).length === 0 ? (
                                 <p className="text-sm text-slate-400 text-center py-4">No tasks yet</p>
@@ -416,7 +410,7 @@ export default function FastDashboard() {
                         </div>
 
                         {/* Orbit Stats */}
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
                             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Routine Tasks (Orbit)</p>
                             <div className="grid grid-cols-2 gap-4 mb-4">
                                 <div className="text-center p-3 bg-slate-50 rounded-xl">

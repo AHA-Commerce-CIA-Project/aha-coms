@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 import {
     Users, Plus, Pencil, Trash2, X, Shield, User as UserIcon,
@@ -30,9 +31,22 @@ interface TeamRow {
 
 type ModalMode = 'create' | 'edit' | null;
 
+type UcpTab = 'users' | 'teams' | 'roles';
+
 export default function UserManagementPage() {
+    return (
+        <Suspense fallback={<div className="flex items-center justify-center min-h-[60vh]"><div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>}>
+            <UserManagementInner />
+        </Suspense>
+    );
+}
+
+function UserManagementInner() {
     const { isLeader, isMaster, loading: authLoading } = useAuth();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const tabParam = searchParams.get('tab');
+    const activeTab: UcpTab = tabParam === 'teams' || tabParam === 'roles' ? tabParam : 'users';
 
     const [users, setUsers] = useState<UserRow[]>([]);
     const [teams, setTeams] = useState<TeamRow[]>([]);
@@ -313,7 +327,7 @@ export default function UserManagementPage() {
                     <p className="text-slate-500">Manage registered users, roles, and team assignments.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    {isMaster && (
+                    {isMaster && activeTab === 'users' && (
                         <button
                             onClick={handleSyncHR}
                             disabled={syncing}
@@ -323,7 +337,7 @@ export default function UserManagementPage() {
                             {syncing ? 'Syncing...' : 'Sync HR Data'}
                         </button>
                     )}
-                    {isMaster && (
+                    {isMaster && activeTab === 'users' && (
                         <button
                             onClick={openCreateModal}
                             className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full transition-all shadow-sm"
@@ -335,8 +349,29 @@ export default function UserManagementPage() {
                 </div>
             </div>
 
+            {/* Tab Navigation */}
+            <div className="flex items-center gap-1 border-b border-slate-200">
+                {([
+                    { key: 'users', label: 'Users', href: '/users' },
+                    { key: 'teams', label: 'Teams', href: '/users?tab=teams' },
+                    { key: 'roles', label: 'Roles', href: '/users?tab=roles' },
+                ] as const).map(t => (
+                    <Link
+                        key={t.key}
+                        href={t.href}
+                        className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                            activeTab === t.key
+                                ? 'border-indigo-600 text-indigo-600'
+                                : 'border-transparent text-slate-500 hover:text-slate-800'
+                        }`}
+                    >
+                        {t.label}
+                    </Link>
+                ))}
+            </div>
+
             {/* Pending Approval Section */}
-            {pendingUsers.length > 0 && (
+            {activeTab === 'users' && pendingUsers.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
                     <div className="flex items-center gap-2 mb-3">
                         <AlertCircle className="w-5 h-5 text-amber-600" />
@@ -373,8 +408,8 @@ export default function UserManagementPage() {
                 </div>
             )}
 
-            {/* Search Bar */}
-            <div className="relative max-w-md">
+            {/* Search Bar — users tab only */}
+            {activeTab === 'users' && <div className="relative max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
                     type="text"
@@ -383,10 +418,10 @@ export default function UserManagementPage() {
                     placeholder="Search by name or email..."
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                 />
-            </div>
+            </div>}
 
             {/* Users Table */}
-            {loading ? (
+            {activeTab === 'users' && (loading ? (
                 <div className="text-center py-16">
                     <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                     <p className="text-slate-500">Loading users...</p>
@@ -501,6 +536,82 @@ export default function UserManagementPage() {
                     <div className="px-6 py-3 border-t border-slate-200 text-xs text-slate-500">
                         {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} total
                     </div>
+                </div>
+            ))}
+
+            {/* Teams Tab */}
+            {activeTab === 'teams' && (
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-slate-200">
+                                    <th className="text-left px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Team</th>
+                                    <th className="text-left px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Members</th>
+                                    <th className="text-left px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Leaders</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {teams.map(team => {
+                                    const teamUsers = users.filter(u => u.team_id === team.id);
+                                    const leaders = teamUsers.filter(u => u.role === 'leader' || u.role === 'admin');
+                                    return (
+                                        <tr key={team.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                            <td className="px-6 py-4 text-sm font-medium text-slate-900">{team.name}</td>
+                                            <td className="px-6 py-4 text-sm text-slate-600">{teamUsers.length}</td>
+                                            <td className="px-6 py-4 text-sm text-slate-600">
+                                                {leaders.length === 0 ? <span className="text-slate-400">—</span> : leaders.map(l => l.name).join(', ')}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {teams.length === 0 && (
+                                    <tr><td colSpan={3} className="px-6 py-8 text-center text-sm text-slate-400">No teams yet</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="px-6 py-3 border-t border-slate-200 text-xs text-slate-500">
+                        {teams.length} team{teams.length !== 1 ? 's' : ''} total
+                    </div>
+                </div>
+            )}
+
+            {/* Roles Tab */}
+            {activeTab === 'roles' && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {(['admin', 'leader', 'member'] as const).map(role => {
+                        const roleUsers = users.filter(u => u.role === role);
+                        const roleLabel = role === 'admin' ? 'Master' : role === 'leader' ? 'Leader' : 'Member';
+                        const headerClass = role === 'admin'
+                            ? 'bg-purple-50'
+                            : role === 'leader' ? 'bg-amber-50' : 'bg-slate-50';
+                        const iconClass = role === 'admin'
+                            ? 'text-purple-600'
+                            : role === 'leader' ? 'text-amber-600' : 'text-slate-600';
+                        return (
+                            <div key={role} className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                                <div className={`px-5 py-3 border-b border-slate-200 flex items-center justify-between ${headerClass}`}>
+                                    <div className="flex items-center gap-2">
+                                        <Shield className={`w-4 h-4 ${iconClass}`} />
+                                        <h3 className="text-sm font-bold text-slate-800">{roleLabel}</h3>
+                                    </div>
+                                    <span className="text-xs font-semibold text-slate-500">{roleUsers.length}</span>
+                                </div>
+                                <div className="max-h-96 overflow-y-auto">
+                                    {roleUsers.length === 0 ? (
+                                        <p className="px-5 py-6 text-center text-xs text-slate-400">None</p>
+                                    ) : roleUsers.map(u => (
+                                        <div key={u.id} className="px-5 py-3 border-b border-slate-100 last:border-0">
+                                            <p className="text-sm font-medium text-slate-800">{u.name}</p>
+                                            <p className="text-xs text-slate-500">{u.email}</p>
+                                            <p className="text-xs text-slate-400 mt-0.5">{u.teams?.name || 'No team'}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 

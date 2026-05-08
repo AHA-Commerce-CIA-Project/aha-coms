@@ -17,12 +17,15 @@ export const requestSchema = z.object({
     urgency: urgencyEnum.optional().default('P3'),
     description: z.string().min(1, 'Description is required').max(5000),
     dueDate: z.string().optional(),
+    dueDateTime: z.string().optional(),
     imageUrl: z.string().optional().nullable(),
     requesterEmail: z.string().email().optional().or(z.literal('')).transform(v => v || undefined),
     isDirectRequest: z.boolean().optional().default(false),
     directAssigneeId: z.string().optional().nullable(),
     fileUrls: z.array(z.string()).optional().default([]),
     referenceUrls: z.array(z.string()).optional().default([]),
+    // Routing — which team should handle this request. Drives Task Queue scoping.
+    assignedTeamId: z.string().optional().nullable(),
 });
 
 // ─── Direct Request Action ───────────────────────────────────────────────────

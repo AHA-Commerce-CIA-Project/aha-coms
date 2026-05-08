@@ -30,9 +30,13 @@ interface ChannelMessageFeedProps {
   onSave: (messageId: string) => void;
   onMessageUpdated: () => void;
   onForward?: (message: Message) => void;
+  onDirectAssign?: (message: Message) => void;
   allUsers?: { id: string; name: string }[];
+  allTeams?: { id: string; name: string; mentionHandle: string }[];
   highlightedMessageId?: string | null;
   scrollTrigger?: number;
+  /** Open the Team Inbox detail modal for a direct-assign task. Forwarded to ChannelMessageItem → DirectAssignCard. */
+  onOpenTaskDetail?: (taskId: string) => void;
 }
 
 function formatDateDivider(dateStr: string) {
@@ -63,23 +67,72 @@ export function ChannelMessageFeed({
   onSave,
   onMessageUpdated,
   onForward,
+  onDirectAssign,
   allUsers,
+  allTeams,
   highlightedMessageId,
   scrollTrigger,
+  onOpenTaskDetail,
 }: ChannelMessageFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevLengthRef = useRef(0);
+  // While true, content-height growth (images/GIFs finishing load) re-pins the
+  // viewport to the bottom. We disable pinning when the user scrolls away or
+  // after a short window — long enough for media to settle, short enough that
+  // a late image load mid-read doesn't yank them.
+  const pinToBottomRef = useRef(false);
 
-  // Auto-scroll to bottom on new messages
+  // Switching channels or first paint: reset pinning, reset tracker.
+  // pinToBottomRef stays true until the user actively scrolls away (see
+  // handleScroll below). The ResizeObserver re-pins on every content-height
+  // change so slow-loading images can't displace the bottom anchor — the
+  // root cause of "I opened the channel but landed in the middle".
   useEffect(() => {
-    if (messages.length > prevLengthRef.current && prevLengthRef.current > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    } else if (prevLengthRef.current === 0 && messages.length > 0) {
-      bottomRef.current?.scrollIntoView();
+    pinToBottomRef.current = true;
+    prevLengthRef.current = 0;
+    return () => {};
+  }, [channelId]);
+
+  // Auto-scroll on new messages.
+  //
+  // Initial load for a channel: jump to the bottom (latest message) — this is
+  // the standard chat behavior users expect. Image-loading reflows are
+  // handled by the ResizeObserver re-pinning while pinToBottomRef is true,
+  // so the user stays at the bottom until they themselves scroll up.
+  //
+  // Subsequent message arrivals: stay sticky at the bottom only if the user
+  // is already near the bottom — never yank them away from older content
+  // they're actively reading.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const grew = messages.length > prevLengthRef.current;
+    const wasInitial = prevLengthRef.current === 0 && messages.length > 0;
+    if (wasInitial) {
+      container.scrollTop = container.scrollHeight;
+    } else if (grew) {
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (distanceFromBottom < 150) {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
     }
     prevLengthRef.current = messages.length;
   }, [messages.length]);
+
+  // Pin to bottom while content height grows (images/GIFs loading after initial render)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      if (pinToBottomRef.current) {
+        container.scrollTop = container.scrollHeight;
+      }
+    });
+    ro.observe(container);
+    Array.from(container.children).forEach((child) => ro.observe(child));
+    return () => ro.disconnect();
+  }, [channelId]);
 
   // Scroll to bottom when triggered externally (e.g., typing indicator appears)
   useEffect(() => {
@@ -88,10 +141,21 @@ export function ChannelMessageFeed({
     }
   }, [scrollTrigger]);
 
-  // Load more on scroll to top
+  // Load more on scroll to top; manage bottom-pinning based on user position.
+  // - Scrolled away (>200px from bottom): disable pin so the user can read
+  //   older content without being yanked back when an image finishes loading.
+  // - Scrolled back to bottom (<80px): re-enable pin so subsequent image
+  //   loads or new messages keep them at the bottom.
   const handleScroll = () => {
     const container = containerRef.current;
-    if (!container || !hasMore || loading) return;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom > 200) {
+      pinToBottomRef.current = false;
+    } else if (distanceFromBottom < 80) {
+      pinToBottomRef.current = true;
+    }
+    if (!hasMore || loading) return;
     if (container.scrollTop < 100) {
       onLoadMore();
     }
@@ -176,13 +240,17 @@ export function ChannelMessageFeed({
               message={item.message!}
               currentUserId={currentUserId}
               channelId={channelId}
+              channelName={channelName}
               onOpenThread={onOpenThread}
               onReaction={onReaction}
               onSave={onSave}
               onMessageUpdated={onMessageUpdated}
               onForward={onForward}
+              onDirectAssign={onDirectAssign}
               allUsers={allUsers}
+              allTeams={allTeams}
               showAvatar={item.showAvatar}
+              onOpenTaskDetail={onOpenTaskDetail}
             />
           </div>
         );

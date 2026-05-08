@@ -19,6 +19,7 @@ export async function GET() {
             email: true,
             image: true,
             role: true,
+            lastSeenAt: true,
             team: { select: { name: true } },
         },
         orderBy: { name: 'asc' },
@@ -30,6 +31,7 @@ export async function GET() {
         email: u.email,
         image: u.image,
         role: u.role,
+        lastSeenAt: u.lastSeenAt ? u.lastSeenAt.toISOString() : null,
         teamName: u.team?.name || null,
     }));
 

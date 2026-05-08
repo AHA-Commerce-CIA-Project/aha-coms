@@ -49,7 +49,7 @@ export async function PATCH(
 
   const channel = await prisma.channel.findUnique({
     where: { id: channelId },
-    select: { createdBy: true },
+    select: { createdBy: true, purpose: true },
   });
 
   if (!channel) {
@@ -64,7 +64,7 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { name, description, isPrivate, allowedTeamIds, visibleToAllTeams } = body;
+  const { name, description, isPrivate, allowedTeamIds, visibleToAllTeams, teamId } = body;
 
   const data: {
     name?: string;
@@ -72,6 +72,7 @@ export async function PATCH(
     isPrivate?: boolean;
     allowedTeamIds?: string[];
     visibleToAllTeams?: boolean;
+    teamId?: string | null;
   } = {};
 
   if (typeof name === 'string') {
@@ -107,11 +108,24 @@ export async function PATCH(
     }
   }
 
+  // Owning team. Required for assign_task channels — null is rejected.
+  if (typeof teamId === 'string' || teamId === null) {
+    const cleanTeamId = typeof teamId === 'string' && teamId.length > 0 ? teamId : null;
+    if (channel.purpose === 'assign_task' && !cleanTeamId) {
+      return NextResponse.json(
+        { error: 'Owning team is required for Assign Task channels' },
+        { status: 400 },
+      );
+    }
+    data.teamId = cleanTeamId;
+  }
+
   const updated = await prisma.channel.update({
     where: { id: channelId },
     data,
     include: {
       creator: { select: { id: true, name: true, image: true } },
+      team: { select: { id: true, name: true } },
       _count: { select: { messages: true, members: true } },
     },
   });

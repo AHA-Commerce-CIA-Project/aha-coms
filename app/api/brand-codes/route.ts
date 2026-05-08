@@ -59,7 +59,7 @@ export async function GET() {
 
         const res = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Daftar Brand!B2:B',
+            range: 'Daftar Brand!B3:B',
         });
 
         const rows = res.data.values || [];
@@ -81,7 +81,8 @@ export async function GET() {
             const csvRes = await fetch(csvUrl);
             if (csvRes.ok) {
                 const text = await csvRes.text();
-                const lines = text.split('\n').slice(1);
+                // Skip 2 header rows: row 1 "Daftar Brand Dalam Portfolio..." and row 2 "Nama Brand | Kode"
+                const lines = text.split('\n').slice(2);
                 const codes = lines
                     .map(line => {
                         const cols = line.match(/("([^"]*)")|([^,]+)/g);

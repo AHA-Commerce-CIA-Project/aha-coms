@@ -1,18 +1,28 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { PageTabs } from '@/components/PageTabs';
 import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/lib/auth-context';
+import { useCommentDraftTaskIds } from '@/lib/use-comment-drafts';
 import { RichEditor } from '@/components/RichEditor';
 import { DueCountdown } from '@/components/DueCountdown';
+import { ForwardTimer } from '@/components/ForwardTimer';
+import { SaveTaskButton } from '@/components/SaveTaskButton';
+import { ImageLightbox } from '@/components/ImageLightbox';
+import { sanitizeMeetingDescription } from '@/lib/sanitize';
+import { linkifyHtml } from '@/lib/linkify';
+import { TaskCommentsSection } from '@/components/TaskCommentsSection';
+import { ShareNoteModal } from '@/components/ShareNoteModal';
+import { TaskHelpPanel } from '@/components/TaskHelpPanel';
 
 import {
     CheckCircle2, Clock, AlertCircle, Inbox, FileText,
-    X, UserPlus, Eye, Star, Calendar as CalendarIcon, Plus,
+    X, UserPlus, Star, Calendar as CalendarIcon, Plus,
     ChevronLeft, ChevronRight, Trash2, Pencil, Users, Bell, UserMinus,
-    StickyNote, Pin, PinOff, Palette, ExternalLink, MessageSquare, Send as SendIcon
+    StickyNote, Pin, PinOff, Palette, ExternalLink, MessageSquare, Send as SendIcon,
+    Loader2, Check, Share2, Archive, ArchiveRestore, PauseCircle
 } from 'lucide-react';
 
 interface ClaimedTask {
@@ -23,9 +33,12 @@ interface ClaimedTask {
     urgency: string | null;
     task_token: string | null;
     requester_name: string | null;
+    requester_email?: string | null;
     requester_division: string | null;
     assignee_id: string | null;
     created_at: string;
+    claimed_at: string | null;
+    completed_at: string | null;
     due_date: string | null;
     request_type: string | null;
     source?: string | null;
@@ -35,12 +48,35 @@ interface ClaimedTask {
     attachment_link?: string | null;
     custom_fields?: { fileUrls?: string[]; referenceUrls?: string[] };
     reviews?: { id: string; reviewer_type: string; rating: number; comment: string | null; reviewer_name: string | null; created_at: string }[];
+    needs_help?: boolean;
+    help_requested_at?: string | null;
+    helper_count?: number;
+    helpers?: { id: string; name: string; image: string | null }[];
+    is_helper?: boolean;
+    archived_for_me?: boolean;
+    pending_reason?: string | null;
+    pending_tag?: string | null;
+    pended_at?: string | null;
+    pended_from_status?: string | null;
 }
+
+const PENDING_TAGS: { value: string; label: string }[] = [
+    { value: 'waiting_on_brand', label: 'Waiting on brand' },
+    { value: 'waiting_on_partner', label: 'Waiting on partner' },
+    { value: 'waiting_on_internal', label: 'Waiting on internal team' },
+    { value: 'waiting_on_user', label: 'Waiting on requester' },
+    { value: 'other', label: 'Other' },
+];
+const PENDING_TAG_LABEL: Record<string, string> = Object.fromEntries(
+    PENDING_TAGS.map(t => [t.value, t.label]),
+);
+
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
     'todo': { label: 'New', color: 'text-sky-400', bg: 'bg-sky-500/20 border-sky-500/30' },
     'in-progress': { label: 'In Progress', color: 'text-indigo-400', bg: 'bg-indigo-500/20 border-indigo-500/30' },
     'review': { label: 'In Review', color: 'text-amber-400', bg: 'bg-amber-500/20 border-amber-500/30' },
+    'pending': { label: 'On Hold', color: 'text-amber-700', bg: 'bg-amber-500/20 border-amber-500/30' },
     'done': { label: 'Completed', color: 'text-emerald-400', bg: 'bg-emerald-500/20 border-emerald-500/30' },
     'archived': { label: 'Archived', color: 'text-slate-500', bg: 'bg-slate-500/20 border-slate-500/30' },
 };
@@ -54,7 +90,9 @@ const urgencyConfig: Record<string, { label: string; bg: string; style?: React.C
 };
 
 function MyTasksContent() {
-    const { user, profile } = useAuth();
+    const { user, profile, isLeader } = useAuth();
+    const draftTaskIds = useCommentDraftTaskIds();
+    const searchParams = useSearchParams();
     const {
         tasks,
         projects,
@@ -75,14 +113,22 @@ function MyTasksContent() {
     const [actionLoading, setActionLoading] = useState(false);
     const [showReassign, setShowReassign] = useState(false);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
+    // Pending modal state — captures structured tag + free-text reason so the
+    // requester gets a meaningful "your task is paused because X" toast.
+    const [pendingModalTask, setPendingModalTask] = useState<ClaimedTask | null>(null);
+    const [pendingModalReason, setPendingModalReason] = useState('');
+    const [pendingModalTag, setPendingModalTag] = useState<string>('waiting_on_brand');
+    const [pendingModalSubmitting, setPendingModalSubmitting] = useState(false);
+    const [pendingActionTaskId, setPendingActionTaskId] = useState<string | null>(null);
     const [claimTab, setClaimTab] = useState<'direct' | 'queue'>('queue');
+    const [claimedFilter, setClaimedFilter] = useState<'all' | 'inProgress' | 'pending' | 'done' | 'overdue' | 'archive'>('all');
     const [notes, setNotes] = useState<any[]>([]);
-    const [showNoteForm, setShowNoteForm] = useState(false);
-    const [noteTitle, setNoteTitle] = useState('');
-    const [noteContent, setNoteContent] = useState('');
-    const [noteColor, setNoteColor] = useState('default');
     const [editingNote, setEditingNote] = useState<any | null>(null);
     const [showAllNotes, setShowAllNotes] = useState(false);
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+    const [shareNoteOpen, setShareNoteOpen] = useState(false);
+    const [creatingNote, setCreatingNote] = useState(false);
+    const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
     const NOTES_PREVIEW_COUNT = 2;
     const [showCompleteForm, setShowCompleteForm] = useState(false);
     const [completeForm, setCompleteForm] = useState({
@@ -101,32 +147,93 @@ function MyTasksContent() {
         }
     }, [user]);
 
+    // Auto-refresh My Tasks / Direct Requests so incoming tasks show up without a manual reload.
+    // Poll every 15s while the tab is visible; refetch immediately when the tab regains focus.
+    useEffect(() => {
+        if (!user) return;
+        let intervalId: ReturnType<typeof setInterval> | null = null;
+        const start = () => {
+            if (intervalId) return;
+            intervalId = setInterval(() => fetchClaimedTasks({ silent: true }), 15000);
+        };
+        const stop = () => { if (intervalId) { clearInterval(intervalId); intervalId = null; } };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                fetchClaimedTasks({ silent: true });
+                start();
+            } else {
+                stop();
+            }
+        };
+        if (document.visibilityState === 'visible') start();
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            stop();
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [user]);
+
+    // Deep-link from /later or comment notifications — open view modal for ?task=<id>
+    // Extra params: ?focus=comments scrolls the modal to the Comments section,
+    // ?comment=<id> additionally flash-highlights that specific comment.
+    useEffect(() => {
+        const taskParam = searchParams.get('task');
+        if (!taskParam || claimedTasks.length === 0) return;
+        const found = claimedTasks.find(t => t.id === taskParam);
+        if (found) {
+            const focus = searchParams.get('focus');
+            const commentId = searchParams.get('comment');
+            setClaimTab(found.source === 'direct_request' ? 'direct' : 'queue');
+            setViewTask(found);
+            setTaskComments([]);
+            setCommentText('');
+            setHighlightCommentId(commentId);
+            if (focus === 'comments') {
+                setTimeout(() => {
+                    const el = document.getElementById('task-comments-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 350);
+            }
+            window.history.replaceState({}, '', '/tasks');
+        }
+    }, [searchParams, claimedTasks]);
+
     const getAuthHeaders = async () => {
         return {} as Record<string, string>;
     };
 
-    const fetchClaimedTasks = async () => {
-        setLoadingClaimed(true);
+    const fetchClaimedTasks = async (opts?: { silent?: boolean }) => {
+        if (!opts?.silent) setLoadingClaimed(true);
         try {
-            const [nexusRes, directRes] = await Promise.all([
+            // 3 sources: primary-assignee queue tasks, direct-request tasks, and tasks where
+            // I'm an approved helper. Concat then dedupe by id (a user could appear in multiple
+            // lists if the state ever crosses over).
+            const [nexusRes, directRes, helpingRes] = await Promise.all([
                 fetch('/api/nexus'),
                 fetch('/api/tasks/my-direct-requests'),
+                fetch('/api/tasks/helping'),
             ]);
-            let allMine: any[] = [];
+            const map = new Map<string, any>();
             if (nexusRes.ok) {
                 const all = await nexusRes.json();
-                const queueMine = all.filter((t: any) => t.assignee_id === user?.id);
-                allMine = [...allMine, ...queueMine];
+                for (const t of all.filter((t: any) => t.assignee_id === user?.id)) map.set(t.id, t);
             }
             if (directRes.ok) {
                 const directTasks = await directRes.json();
-                allMine = [...allMine, ...directTasks];
+                for (const t of directTasks) map.set(t.id, t);
             }
-            setClaimedTasks(allMine);
+            if (helpingRes.ok) {
+                const helperTasks = await helpingRes.json();
+                for (const t of helperTasks) {
+                    // Only add if not already in the list (I'd be both owner and helper — shouldn't happen but guard anyway)
+                    if (!map.has(t.id)) map.set(t.id, t);
+                }
+            }
+            setClaimedTasks(Array.from(map.values()));
         } catch (err) {
             console.error('Error fetching claimed tasks:', err);
         }
-        setLoadingClaimed(false);
+        if (!opts?.silent) setLoadingClaimed(false);
     };
 
     const fetchTaskComments = async (taskId: string) => {
@@ -181,6 +288,68 @@ function MyTasksContent() {
         setShowCompleteForm(true);
     };
 
+    const submitPendingTask = async () => {
+        if (!pendingModalTask || !pendingModalReason.trim() || pendingModalSubmitting) return;
+        setPendingModalSubmitting(true);
+        try {
+            const res = await fetch(`/api/tasks/${pendingModalTask.id}/pending`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reason: pendingModalReason.trim(),
+                    tag: pendingModalTag,
+                }),
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                alert(body?.error || 'Failed to mark task pending');
+                return;
+            }
+            setPendingModalTask(null);
+            setPendingModalReason('');
+            await fetchClaimedTasks({ silent: true });
+            // Reflect in the open detail modal so the user sees the new pending state instantly.
+            setViewTask((prev) => prev && prev.id === pendingModalTask.id ? {
+                ...prev,
+                status: 'pending',
+                pending_reason: pendingModalReason.trim(),
+                pending_tag: pendingModalTag,
+                pended_at: new Date().toISOString(),
+                pended_from_status: prev.status,
+            } : prev);
+        } catch (err: any) {
+            alert(err?.message || 'Failed to mark task pending');
+        } finally {
+            setPendingModalSubmitting(false);
+        }
+    };
+
+    const handleResumeTask = async (task: ClaimedTask) => {
+        if (pendingActionTaskId) return;
+        setPendingActionTaskId(task.id);
+        try {
+            const res = await fetch(`/api/tasks/${task.id}/pending`, { method: 'DELETE' });
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                alert(body?.error || 'Failed to resume task');
+                return;
+            }
+            await fetchClaimedTasks({ silent: true });
+            setViewTask((prev) => prev && prev.id === task.id ? {
+                ...prev,
+                status: prev.pended_from_status || 'in-progress',
+                pending_reason: null,
+                pending_tag: null,
+                pended_at: null,
+                pended_from_status: null,
+            } : prev);
+        } catch (err: any) {
+            alert(err?.message || 'Failed to resume task');
+        } finally {
+            setPendingActionTaskId(null);
+        }
+    };
+
     // Submit completion form
     const handleCompleteSubmit = async () => {
         if (!viewTask) return;
@@ -223,9 +392,13 @@ function MyTasksContent() {
                 setReassignTo('');
                 const memberName = teamMembers.find(m => m.id === reassignTo)?.name || 'member';
                 showSuccess(`Task reassigned to ${memberName}!`);
+            } else {
+                const data = await res.json().catch(() => ({}));
+                alert(data?.error || `Reassignment failed (HTTP ${res.status}).`);
             }
         } catch (err) {
             console.error('Error reassigning task:', err);
+            alert('Network error while reassigning. Please try again.');
         }
         setActionLoading(false);
     };
@@ -254,24 +427,27 @@ function MyTasksContent() {
         }
     };
 
-    const handleCreateNote = async () => {
-        if (!noteTitle.trim() && !noteContent.trim()) return;
+    // Clicking "Add new note" immediately creates a blank note server-side
+    // and opens it in the edit modal — which auto-saves as the user types.
+    // Empty notes (no title + no content) are deleted on modal close.
+    const handleAddNewNote = async () => {
+        if (creatingNote) return;
+        setCreatingNote(true);
         try {
             const res = await fetch('/api/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: noteTitle, content: noteContent, color: noteColor }),
+                body: JSON.stringify({ title: '', content: '', color: 'default' }),
             });
             if (res.ok) {
+                const note = await res.json();
                 await fetchNotes();
-                setNoteTitle('');
-                setNoteContent('');
-                setNoteColor('default');
-                setShowNoteForm(false);
+                setEditingNote(note);
             }
         } catch (err) {
             console.error('Error creating note:', err);
         }
+        setCreatingNote(false);
     };
 
     const handleUpdateNote = async (note: any) => {
@@ -289,6 +465,92 @@ function MyTasksContent() {
             console.error('Error updating note:', err);
         }
     };
+
+    // ─── Auto-save for the edit-note modal ───────────────────────────
+    const [noteSaveStatus, setNoteSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const noteSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastSavedNoteSnapshotRef = useRef<string>('');
+
+    const noteSnapshot = (n: any) => JSON.stringify({
+        title: n?.title || '',
+        content: n?.content || '',
+        color: n?.color || 'default',
+        pinned: !!n?.pinned,
+    });
+
+    const persistNote = useCallback(async (note: any) => {
+        if (!note?.id) return;
+        setNoteSaveStatus('saving');
+        try {
+            const res = await fetch('/api/notes', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: note.id, title: note.title, content: note.content, color: note.color, pinned: note.pinned }),
+            });
+            if (res.ok) {
+                lastSavedNoteSnapshotRef.current = noteSnapshot(note);
+                setNoteSaveStatus('saved');
+            } else {
+                setNoteSaveStatus('error');
+            }
+        } catch {
+            setNoteSaveStatus('error');
+        }
+    }, []);
+
+    // Snapshot the note when the modal opens (or switches to another note)
+    useEffect(() => {
+        if (editingNote?.id) {
+            lastSavedNoteSnapshotRef.current = noteSnapshot(editingNote);
+            setNoteSaveStatus('saved');
+        }
+        return () => {
+            if (noteSaveTimerRef.current) {
+                clearTimeout(noteSaveTimerRef.current);
+                noteSaveTimerRef.current = null;
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editingNote?.id]);
+
+    // Debounced save when the note is edited
+    useEffect(() => {
+        if (!editingNote?.id) return;
+        const current = noteSnapshot(editingNote);
+        if (current === lastSavedNoteSnapshotRef.current) return;
+        setNoteSaveStatus('saving');
+        if (noteSaveTimerRef.current) clearTimeout(noteSaveTimerRef.current);
+        noteSaveTimerRef.current = setTimeout(() => {
+            persistNote(editingNote);
+        }, 800);
+        return () => {
+            if (noteSaveTimerRef.current) clearTimeout(noteSaveTimerRef.current);
+        };
+    }, [editingNote?.title, editingNote?.content, editingNote?.color, editingNote?.pinned, editingNote?.id, persistNote]);
+
+    // Flush any pending save and close the modal.
+    // If the note is still completely blank (no title + no content after stripping tags),
+    // delete it so the list doesn't accumulate empty entries.
+    const closeEditingNote = useCallback(async () => {
+        const note = editingNote;
+        if (noteSaveTimerRef.current) {
+            clearTimeout(noteSaveTimerRef.current);
+            noteSaveTimerRef.current = null;
+        }
+        const plainContent = (note?.content || '').replace(/<[^>]*>/g, '').trim();
+        const isBlank = !(note?.title || '').trim() && !plainContent;
+        if (note?.id && isBlank) {
+            await fetch('/api/notes', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: note.id }),
+            }).catch(() => {});
+        } else if (note && noteSnapshot(note) !== lastSavedNoteSnapshotRef.current) {
+            await persistNote(note);
+        }
+        await fetchNotes();
+        setEditingNote(null);
+    }, [editingNote, persistNote]);
 
     const handleDeleteNote = async (id: string) => {
         try {
@@ -335,13 +597,39 @@ function MyTasksContent() {
         });
     }, [notes]);
 
-    // Claimed tasks stats (exclude archived)
-    const activeClaimed = claimedTasks.filter(t => t.status !== 'archived');
+    // Claimed tasks stats (exclude both global-archived and personal-archived from active)
+    const activeClaimed = claimedTasks.filter(t => t.status !== 'archived' && !t.archived_for_me);
+    const personalArchived = claimedTasks.filter(t => t.archived_for_me);
+    // Pending tasks are paused — exclude them from Overdue and from In Progress
+    // so the assignee isn't double-counted (and isn't penalized for blockers
+    // outside their control).
     const claimedStats = {
         total: activeClaimed.length,
         inProgress: activeClaimed.filter(t => t.status === 'in-progress').length,
+        pending: activeClaimed.filter(t => t.status === 'pending').length,
         done: activeClaimed.filter(t => t.status === 'done').length,
-        overdue: activeClaimed.filter(t => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'done' && t.status !== 'archived').length,
+        overdue: activeClaimed.filter(t => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'done' && t.status !== 'archived' && t.status !== 'pending').length,
+        archive: personalArchived.length,
+    };
+
+    const claimedTasksMatchingFilter = (() => {
+        if (claimedFilter === 'archive') return personalArchived;
+        if (claimedFilter === 'inProgress') return activeClaimed.filter(t => t.status === 'in-progress');
+        if (claimedFilter === 'pending') return activeClaimed.filter(t => t.status === 'pending');
+        if (claimedFilter === 'done') return activeClaimed.filter(t => t.status === 'done');
+        if (claimedFilter === 'overdue') return activeClaimed.filter(t => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'done' && t.status !== 'archived' && t.status !== 'pending');
+        return activeClaimed;
+    })();
+
+    const handlePersonalArchive = async (taskId: string, archive: boolean) => {
+        try {
+            const res = await fetch(`/api/tasks/${taskId}/personal-archive`, {
+                method: archive ? 'POST' : 'DELETE',
+            });
+            if (res.ok) await fetchClaimedTasks({ silent: true });
+        } catch (err) {
+            console.error('archive error', err);
+        }
     };
 
     // For local store tasks
@@ -363,10 +651,12 @@ function MyTasksContent() {
 
     const activeProjectId = selectedProjectId || myProjects[0]?.id;
     const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    // 24h "HH:MM" — matches Indonesian business convention.
+    const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // Split claimed tasks by source
-    const directRequestTasks = claimedTasks.filter(t => t.source === 'direct_request');
-    const queueTasks = claimedTasks.filter(t => t.source !== 'direct_request');
+    // Split claimed tasks by source — using the filtered set so KPI selection cascades through.
+    const directRequestTasks = claimedTasksMatchingFilter.filter(t => t.source === 'direct_request');
+    const queueTasks = claimedTasksMatchingFilter.filter(t => t.source !== 'direct_request');
 
     return (
         <div className="space-y-6">
@@ -381,38 +671,35 @@ function MyTasksContent() {
             <PageTabs tabs={[
                 { href: '/tasks', label: 'My Tasks' },
                 { href: '/nexus', label: 'Task Queue' },
+                { href: '/team-inbox', label: 'Cards Inbox' },
+                { href: '/orbit', label: 'AHA Orbit' },
             ]} />
 
-            {/* Claimed Tasks Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-4 bg-white shadow-sm border-slate-200 border border-slate-200 rounded-xl">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Inbox className="w-4 h-4 text-sky-400" />
-                        <span className="text-xs text-slate-500">Total Claimed</span>
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">{claimedStats.total}</p>
-                </div>
-                <div className="p-4 bg-white shadow-sm border-slate-200 border border-slate-200 rounded-xl">
-                    <div className="flex items-center gap-2 mb-2">
-                        <AlertCircle className="w-4 h-4 text-indigo-400" />
-                        <span className="text-xs text-slate-500">In Progress</span>
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">{claimedStats.inProgress}</p>
-                </div>
-                <div className="p-4 bg-white shadow-sm border-slate-200 border border-slate-200 rounded-xl">
-                    <div className="flex items-center gap-2 mb-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span className="text-xs text-slate-500">Completed</span>
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">{claimedStats.done}</p>
-                </div>
-                <div className="p-4 bg-white shadow-sm border-slate-200 border border-slate-200 rounded-xl">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Clock className="w-4 h-4 text-rose-400" />
-                        <span className="text-xs text-slate-500">Overdue</span>
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">{claimedStats.overdue}</p>
-                </div>
+            {/* Claimed Tasks Stats — clickable filters (toggle-style, like Task Queue). */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {[
+                    { key: 'all' as const, label: 'Total Claimed', count: claimedStats.total, icon: Inbox, color: 'text-sky-400', ring: 'ring-sky-500/30' },
+                    { key: 'inProgress' as const, label: 'In Progress', count: claimedStats.inProgress, icon: AlertCircle, color: 'text-indigo-400', ring: 'ring-indigo-500/30' },
+                    { key: 'pending' as const, label: 'Pending', count: claimedStats.pending, icon: PauseCircle, color: 'text-amber-500', ring: 'ring-amber-500/30' },
+                    { key: 'done' as const, label: 'Completed', count: claimedStats.done, icon: CheckCircle2, color: 'text-emerald-400', ring: 'ring-emerald-500/30' },
+                    { key: 'overdue' as const, label: 'Overdue', count: claimedStats.overdue, icon: Clock, color: 'text-rose-400', ring: 'ring-rose-500/30' },
+                    { key: 'archive' as const, label: 'Archive', count: claimedStats.archive, icon: Archive, color: 'text-slate-500', ring: 'ring-slate-500/30' },
+                ].map(kpi => (
+                    <button
+                        key={kpi.key}
+                        type="button"
+                        onClick={() => setClaimedFilter(claimedFilter === kpi.key ? 'all' : kpi.key)}
+                        className={`p-4 bg-white shadow-sm border rounded-xl text-left transition-all hover:bg-slate-50 ${
+                            claimedFilter === kpi.key ? `border-indigo-500/50 ring-2 ${kpi.ring}` : 'border-slate-200'
+                        }`}
+                    >
+                        <div className="flex items-center gap-2 mb-2">
+                            <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
+                            <span className="text-xs text-slate-500">{kpi.label}</span>
+                        </div>
+                        <p className="text-2xl font-bold text-slate-900">{kpi.count}</p>
+                    </button>
+                ))}
             </div>
 
             {/* Claimed Tasks Tables */}
@@ -447,7 +734,7 @@ function MyTasksContent() {
                                 className={`px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${claimTab === 'queue' ? 'bg-white shadow-md text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
                             >
                                 <FileText className="w-4 h-4" />
-                                FAST Queue
+                                Open Queue
                                 {queueTasks.length > 0 && (
                                     <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-bold">{queueTasks.length}</span>
                                 )}
@@ -462,18 +749,84 @@ function MyTasksContent() {
                                 <p className="text-slate-400 text-sm">No tasks from direct requests</p>
                             </div>
                         ) : (
-                            <div className="bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
+                            <>
+                            {/* Mobile (below md) — stacked cards. Same data, same click handler. */}
+                            <ul className="md:hidden space-y-2.5">
+                                {directRequestTasks.map(task => {
+                                    const urgency = urgencyConfig[task.urgency || 'P3'];
+                                    const status = statusConfig[task.status] || statusConfig['in-progress'];
+                                    return (
+                                        <li key={task.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); setTaskComments([]); setCommentText(''); fetchTaskComments(task.id); }}
+                                                className="w-full text-left bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm active:bg-slate-50 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                                    <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${urgency?.bg || 'bg-slate-200'} ${urgency?.style ? '' : 'text-slate-900'}`} style={urgency?.style}>{urgency?.label || '—'}</span>
+                                                    <span className={`inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold border ${status.bg} ${status.color}`}>{status.label}</span>
+                                                    <span className="ml-auto font-mono text-[11px] text-indigo-500">{task.task_token || '—'}</span>
+                                                </div>
+                                                <p className="font-semibold text-slate-900 text-sm leading-snug mb-2 break-words flex items-start gap-1.5 flex-wrap">
+                                                    {task.needs_help && <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 border border-amber-300 text-amber-700 rounded-full">🙋</span>}
+                                                    {task.is_helper && <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 border border-emerald-300 text-emerald-700 rounded-full">Helping</span>}
+                                                    {draftTaskIds.has(task.id) && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full">✏️ Draft</span>}
+                                                    <span className="break-words">{task.title}</span>
+                                                </p>
+                                                <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                                                    <div>
+                                                        <dt className="text-slate-400">Requester</dt>
+                                                        <dd className="text-slate-700 font-medium truncate">{task.requester_name || '—'}</dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt className="text-slate-400">Deadline</dt>
+                                                        <dd className="text-slate-700">
+                                                            {task.due_date && task.status !== 'done' ? <DueCountdown dueDate={task.due_date} />
+                                                                : task.due_date ? <span className="text-emerald-500 font-medium">✓ Done</span>
+                                                                : <span className="text-slate-400">—</span>}
+                                                        </dd>
+                                                    </div>
+                                                </dl>
+                                                {(task.archived_for_me || (task.status === 'done' && task.assignee_id === user?.id)) && (
+                                                    <div className="mt-2 pt-2 border-t border-slate-100 flex justify-end">
+                                                        {task.archived_for_me ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); handlePersonalArchive(task.id, false); }}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+                                                            >
+                                                                <ArchiveRestore className="w-3.5 h-3.5" /> Restore
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); handlePersonalArchive(task.id, true); }}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors"
+                                                            >
+                                                                <Archive className="w-3.5 h-3.5" /> Archive
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+
+                            {/* Desktop / tablet — keep the dense 7-column table. */}
+                            <div className="hidden md:block bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
                                 <div className="overflow-x-auto">
                                     <table className="w-full table-fixed">
                                         <thead>
                                             <tr className="border-b border-slate-200">
                                                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[10%]">Token</th>
                                                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[8%]">Priority</th>
-                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[25%]">Title</th>
-                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[18%]">Requester</th>
-                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[15%]">Deadline</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[23%]">Title</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[16%]">Requester</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[14%]">Deadline</th>
                                                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[12%]">Status</th>
-                                                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[10%]">Actions</th>
+                                                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[8%]"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-800/50">
@@ -482,7 +835,11 @@ function MyTasksContent() {
                                                 const status = statusConfig[task.status] || statusConfig['in-progress'];
                                                 const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
                                                 return (
-                                                    <tr key={task.id} className="hover:bg-slate-100/30 transition-colors">
+                                                    <tr
+                                                        key={task.id}
+                                                        onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); setTaskComments([]); setCommentText(''); fetchTaskComments(task.id); }}
+                                                        className="cursor-pointer hover:bg-slate-100/30 transition-colors"
+                                                    >
                                                         <td className="px-4 py-3">
                                                             <span className="font-mono text-sm text-indigo-400">{task.task_token || '\u2014'}</span>
                                                         </td>
@@ -495,7 +852,24 @@ function MyTasksContent() {
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-3">
-                                                            <p className="text-sm text-slate-900 font-medium truncate max-w-[250px]">{task.title}</p>
+                                                            <p className="text-sm text-slate-900 font-medium truncate max-w-[250px] flex items-center gap-1.5">
+                                                                {task.needs_help && (
+                                                                    <span title="Help requested" className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 border border-amber-300 text-amber-700 rounded-full shrink-0">
+                                                                        🙋
+                                                                    </span>
+                                                                )}
+                                                                {task.is_helper && (
+                                                                    <span title="You are helping on this task" className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 border border-emerald-300 text-emerald-700 rounded-full shrink-0">
+                                                                        Helping
+                                                                    </span>
+                                                                )}
+                                                                {draftTaskIds.has(task.id) && (
+                                                                    <span title="You have an unsent comment draft" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full shrink-0">
+                                                                        ✏️ Draft
+                                                                    </span>
+                                                                )}
+                                                                <span className="truncate">{task.title}</span>
+                                                            </p>
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <p className="text-sm text-slate-600">{task.requester_name || '\u2014'}</p>
@@ -515,12 +889,25 @@ function MyTasksContent() {
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-3 text-right">
-                                                            <button
-                                                                onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); setTaskComments([]); setCommentText(''); fetchTaskComments(task.id); }}
-                                                                className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-1"
-                                                            >
-                                                                <Eye className="w-3.5 h-3.5" /> View
-                                                            </button>
+                                                            {task.archived_for_me ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); handlePersonalArchive(task.id, false); }}
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+                                                                    title="Restore from Archive"
+                                                                >
+                                                                    <ArchiveRestore className="w-3.5 h-3.5" /> Restore
+                                                                </button>
+                                                            ) : task.status === 'done' && task.assignee_id === user?.id ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); handlePersonalArchive(task.id, true); }}
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors"
+                                                                    title="Archive (move to your personal Archive)"
+                                                                >
+                                                                    <Archive className="w-3.5 h-3.5" /> Archive
+                                                                </button>
+                                                            ) : null}
                                                         </td>
                                                     </tr>
                                                 );
@@ -529,25 +916,92 @@ function MyTasksContent() {
                                     </table>
                                 </div>
                             </div>
+                            </>
                         )
                     ) : (
                         queueTasks.length === 0 ? (
                             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
-                                <p className="text-slate-400 text-sm">No tasks from the FAST queue</p>
+                                <p className="text-slate-400 text-sm">No tasks from the Open queue</p>
                             </div>
                         ) : (
-                            <div className="bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
+                            <>
+                            {/* Mobile (below md) — stacked cards. */}
+                            <ul className="md:hidden space-y-2.5">
+                                {queueTasks.map(task => {
+                                    const urgency = urgencyConfig[task.urgency || 'P3'];
+                                    const status = statusConfig[task.status] || statusConfig['in-progress'];
+                                    return (
+                                        <li key={task.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); setTaskComments([]); setCommentText(''); fetchTaskComments(task.id); }}
+                                                className="w-full text-left bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm active:bg-slate-50 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                                    <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${urgency?.bg || 'bg-slate-200'} ${urgency?.style ? '' : 'text-slate-900'}`} style={urgency?.style}>{urgency?.label || '—'}</span>
+                                                    <span className={`inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold border ${status.bg} ${status.color}`}>{status.label}</span>
+                                                    <span className="ml-auto font-mono text-[11px] text-indigo-500">{task.task_token || '—'}</span>
+                                                </div>
+                                                <p className="font-semibold text-slate-900 text-sm leading-snug mb-2 break-words flex items-start gap-1.5 flex-wrap">
+                                                    {task.needs_help && <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 border border-amber-300 text-amber-700 rounded-full">🙋</span>}
+                                                    {task.is_helper && <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 border border-emerald-300 text-emerald-700 rounded-full">Helping</span>}
+                                                    {draftTaskIds.has(task.id) && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full">✏️ Draft</span>}
+                                                    <span className="break-words">{task.title}</span>
+                                                </p>
+                                                <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                                                    <div>
+                                                        <dt className="text-slate-400">Requester</dt>
+                                                        <dd className="text-slate-700 font-medium truncate">{task.requester_name || '—'}</dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt className="text-slate-400">Deadline</dt>
+                                                        <dd className="text-slate-700">
+                                                            {task.due_date && task.status !== 'done' ? <DueCountdown dueDate={task.due_date} />
+                                                                : task.due_date ? <span className="text-emerald-500 font-medium">✓ Done</span>
+                                                                : <span className="text-slate-400">—</span>}
+                                                        </dd>
+                                                    </div>
+                                                </dl>
+                                                {(task.archived_for_me || (task.status === 'done' && task.assignee_id === user?.id)) && (
+                                                    <div className="mt-2 pt-2 border-t border-slate-100 flex justify-end">
+                                                        {task.archived_for_me ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); handlePersonalArchive(task.id, false); }}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+                                                            >
+                                                                <ArchiveRestore className="w-3.5 h-3.5" /> Restore
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); handlePersonalArchive(task.id, true); }}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors"
+                                                            >
+                                                                <Archive className="w-3.5 h-3.5" /> Archive
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+
+                            {/* Desktop / tablet — keep the dense 7-column table. */}
+                            <div className="hidden md:block bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
                                 <div className="overflow-x-auto">
                                     <table className="w-full table-fixed">
                                         <thead>
                                             <tr className="border-b border-slate-200">
                                                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[10%]">Token</th>
                                                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[8%]">Priority</th>
-                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[25%]">Title</th>
-                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[18%]">Requester</th>
-                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[15%]">Deadline</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[23%]">Title</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[16%]">Requester</th>
+                                                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[14%]">Deadline</th>
                                                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[12%]">Status</th>
-                                                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[10%]">Actions</th>
+                                                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase w-[8%]"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-800/50">
@@ -556,7 +1010,11 @@ function MyTasksContent() {
                                                 const status = statusConfig[task.status] || statusConfig['in-progress'];
                                                 const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
                                                 return (
-                                                    <tr key={task.id} className="hover:bg-slate-100/30 transition-colors">
+                                                    <tr
+                                                        key={task.id}
+                                                        onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); setTaskComments([]); setCommentText(''); fetchTaskComments(task.id); }}
+                                                        className="cursor-pointer hover:bg-slate-100/30 transition-colors"
+                                                    >
                                                         <td className="px-4 py-3">
                                                             <span className="font-mono text-sm text-indigo-400">{task.task_token || '\u2014'}</span>
                                                         </td>
@@ -569,7 +1027,24 @@ function MyTasksContent() {
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-3">
-                                                            <p className="text-sm text-slate-900 font-medium truncate max-w-[250px]">{task.title}</p>
+                                                            <p className="text-sm text-slate-900 font-medium truncate max-w-[250px] flex items-center gap-1.5">
+                                                                {task.needs_help && (
+                                                                    <span title="Help requested" className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 border border-amber-300 text-amber-700 rounded-full shrink-0">
+                                                                        🙋
+                                                                    </span>
+                                                                )}
+                                                                {task.is_helper && (
+                                                                    <span title="You are helping on this task" className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 border border-emerald-300 text-emerald-700 rounded-full shrink-0">
+                                                                        Helping
+                                                                    </span>
+                                                                )}
+                                                                {draftTaskIds.has(task.id) && (
+                                                                    <span title="You have an unsent comment draft" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full shrink-0">
+                                                                        ✏️ Draft
+                                                                    </span>
+                                                                )}
+                                                                <span className="truncate">{task.title}</span>
+                                                            </p>
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <p className="text-sm text-slate-600">{task.requester_name || '\u2014'}</p>
@@ -589,12 +1064,25 @@ function MyTasksContent() {
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-3 text-right">
-                                                            <button
-                                                                onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); setTaskComments([]); setCommentText(''); fetchTaskComments(task.id); }}
-                                                                className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-1"
-                                                            >
-                                                                <Eye className="w-3.5 h-3.5" /> View
-                                                            </button>
+                                                            {task.archived_for_me ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); handlePersonalArchive(task.id, false); }}
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+                                                                    title="Restore from Archive"
+                                                                >
+                                                                    <ArchiveRestore className="w-3.5 h-3.5" /> Restore
+                                                                </button>
+                                                            ) : task.status === 'done' && task.assignee_id === user?.id ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); handlePersonalArchive(task.id, true); }}
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors"
+                                                                    title="Archive (move to your personal Archive)"
+                                                                >
+                                                                    <Archive className="w-3.5 h-3.5" /> Archive
+                                                                </button>
+                                                            ) : null}
                                                         </td>
                                                     </tr>
                                                 );
@@ -603,6 +1091,7 @@ function MyTasksContent() {
                                     </table>
                                 </div>
                             </div>
+                            </>
                         )
                     )}
                 </div>
@@ -611,19 +1100,29 @@ function MyTasksContent() {
             {/* View Task Detail Modal */}
             {viewTask && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-                    onClick={() => { if (!showCompleteForm) { setViewTask(null); } }}
+                    className="fixed inset-0 z-50 flex items-stretch sm:items-center sm:justify-center bg-black/60 backdrop-blur-sm"
+                    onClick={() => { if (!showCompleteForm) { setViewTask(null); setHighlightCommentId(null); } }}
                 >
-                    <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                    <div className="w-full max-w-2xl bg-white border-0 sm:border border-slate-200 rounded-none sm:rounded-2xl shadow-2xl h-full max-h-screen sm:h-auto sm:max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         {/* Header */}
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white">
                             <div>
                                 <span className="font-mono text-base text-indigo-400">{viewTask.task_token}</span>
                                 <h2 className="text-xl font-bold text-slate-900 mt-1">{viewTask.title}</h2>
                             </div>
-                            <button onClick={() => setViewTask(null)} className="p-1 text-slate-500 hover:text-slate-900">
-                                <X className="w-5 h-5" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {viewTask.claimed_at && (
+                                    <ForwardTimer
+                                        startAt={viewTask.claimed_at}
+                                        stopAt={viewTask.completed_at}
+                                        label={viewTask.completed_at ? 'Total' : 'Since claim'}
+                                    />
+                                )}
+                                <SaveTaskButton taskId={viewTask.id} />
+                                <button onClick={() => { setViewTask(null); setHighlightCommentId(null); }} className="p-1 text-slate-500 hover:text-slate-900">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Detail Content */}
@@ -638,8 +1137,16 @@ function MyTasksContent() {
                                         {(statusConfig[viewTask.status] || statusConfig['in-progress']).label}
                                     </span>
                                 </div>
-                                <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Assigned To</p><p className="text-base text-slate-900 font-medium">{viewTask.assignee?.name || 'Unassigned'}</p></div>
-                                <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Submitted</p><p className="text-base text-slate-900 font-medium">{formatDate(viewTask.created_at)}</p></div>
+                                <div>
+                                    <p className="text-sm font-medium text-indigo-600 mb-0.5">Assigned To</p>
+                                    <p className="text-base text-slate-900 font-medium">
+                                        {viewTask.assignee?.name || 'Unassigned'}
+                                        {(viewTask.helpers?.length ?? 0) > 0 && (
+                                            <span className="text-slate-600">, {viewTask.helpers!.map(h => h.name).join(', ')}</span>
+                                        )}
+                                    </p>
+                                </div>
+                                <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Submitted</p><p className="text-base text-slate-900 font-medium">{formatDate(viewTask.created_at)}, {formatTime(viewTask.created_at)}</p></div>
                                 {viewTask.due_date && <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Deadline</p><p className="text-base text-slate-900 font-medium">{formatDate(viewTask.due_date)}</p></div>}
                                 {viewTask.request_type && <div><p className="text-sm font-medium text-indigo-600 mb-0.5">Type</p><p className="text-base text-slate-900 font-medium capitalize">{viewTask.request_type.replace('_', ' ')}</p></div>}
                             </div>
@@ -658,13 +1165,17 @@ function MyTasksContent() {
                             {(viewTask.image_url || viewTask.attachment_link) && (
                                 <div>
                                     <p className="text-sm font-medium text-indigo-600 mb-1.5">Attached Image</p>
-                                    <a href={viewTask.image_url || viewTask.attachment_link || ''} target="_blank" rel="noopener noreferrer">
+                                    <button
+                                        type="button"
+                                        onClick={() => setLightboxUrl(viewTask.image_url || viewTask.attachment_link || null)}
+                                        className="block w-full"
+                                    >
                                         <img
                                             src={viewTask.image_url || viewTask.attachment_link || ''}
                                             alt="Attachment"
-                                            className="w-full max-h-64 object-contain rounded-xl border border-slate-300 bg-slate-50 hover:opacity-90 transition-opacity cursor-pointer"
+                                            className="w-full max-h-64 object-contain rounded-xl border border-slate-300 bg-slate-50 hover:opacity-90 transition-opacity cursor-zoom-in"
                                         />
-                                    </a>
+                                    </button>
                                 </div>
                             )}
 
@@ -731,54 +1242,99 @@ function MyTasksContent() {
                                 </div>
                             )}
 
+                            {/* Collaboration — Request to Help (with owner approval) */}
+                            <TaskHelpPanel
+                                taskId={viewTask.id}
+                                assigneeId={viewTask.assignee_id}
+                                currentUserId={user?.id}
+                                needsHelp={!!viewTask.needs_help}
+                                onTaskUpdated={async () => {
+                                    // Refetch the task from the server and reconcile the modal's copy
+                                    // so the needs_help flag + helper chips reflect the latest state.
+                                    try {
+                                        const res = await fetch('/api/nexus');
+                                        if (res.ok) {
+                                            const list: ClaimedTask[] = await res.json();
+                                            const fresh = list.find(t => t.id === viewTask.id);
+                                            if (fresh) setViewTask(fresh);
+                                        }
+                                    } catch {}
+                                    fetchClaimedTasks();
+                                }}
+                                hidden={viewTask.status === 'done'}
+                            />
+
                             {/* Comments */}
-                            <div>
-                                <p className="text-slate-500 mb-2 font-semibold flex items-center gap-1.5">
-                                    <MessageSquare className="w-4 h-4 text-indigo-500" /> Comments
-                                    {taskComments.length > 0 && <span className="text-xs text-slate-400">({taskComments.length})</span>}
-                                </p>
-                                {taskComments.length > 0 && (
-                                    <div className="space-y-2 mb-3 max-h-60 overflow-y-auto">
-                                        {taskComments.map(c => (
-                                            <div key={c.id} className={`flex gap-2 ${c.is_team ? 'flex-row-reverse' : ''}`}>
-                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
-                                                    c.is_team ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'
-                                                }`}>{c.author_name?.charAt(0)?.toUpperCase() || '?'}</div>
-                                                <div className={`max-w-[75%] ${c.is_team ? 'text-right' : ''}`}>
-                                                    <div className={`inline-block rounded-2xl px-3 py-2 text-xs ${
-                                                        c.is_team ? 'bg-indigo-50 border border-indigo-200 rounded-tr-sm' : 'bg-slate-50 border border-slate-200 rounded-tl-sm'
-                                                    }`}>{c.message}</div>
-                                                    <p className="text-[10px] text-slate-400 mt-0.5 px-1">
-                                                        {c.is_team ? '🔹 ' + c.author_name : c.author_name} · {new Date(c.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={commentText}
-                                        onChange={e => setCommentText(e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSendTaskComment(); } }}
-                                        placeholder="Write a comment..."
-                                        disabled={commentSending}
-                                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                    />
-                                    <button
-                                        onClick={handleSendTaskComment}
-                                        disabled={!commentText.trim() || commentSending}
-                                        className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
-                                    >
-                                        <SendIcon className="w-3.5 h-3.5" />
-                                    </button>
-                                </div>
+                            <div id="task-comments-section" className="scroll-mt-4">
+                                <TaskCommentsSection
+                                    key={viewTask.id}
+                                    taskId={viewTask.id}
+                                    currentUserId={user?.id}
+                                    size="compact"
+                                    highlightCommentId={highlightCommentId}
+                                />
                             </div>
+
+                            {/* Pending state callout — visible whenever the open task is paused.
+                                Shown above the action buttons so the assignee sees WHY the task
+                                is on hold before deciding to resume it. */}
+                            {viewTask.status === 'pending' && (viewTask.pending_reason || viewTask.pending_tag) && (
+                                <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+                                    <p className="text-xs font-bold text-amber-900 inline-flex items-center gap-1.5">
+                                        <PauseCircle className="w-3.5 h-3.5" />
+                                        On hold
+                                        {viewTask.pending_tag && PENDING_TAG_LABEL[viewTask.pending_tag]
+                                            ? ` — ${PENDING_TAG_LABEL[viewTask.pending_tag]}`
+                                            : ''}
+                                    </p>
+                                    {viewTask.pending_reason && (
+                                        <p className="text-xs text-amber-800 mt-1 leading-relaxed whitespace-pre-wrap">
+                                            {viewTask.pending_reason}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Action Buttons */}
                             {viewTask.status !== 'done' && (
                                 <div className="space-y-3 pt-2">
+                                    {/* Mark as Pending / Resume — gated by current status AND
+                                        by whether the viewer has authority to manage the pause.
+                                        Mirrors the server-side canManagePending check so we
+                                        don't render a button that would 403 on click. */}
+                                    {(() => {
+                                        const myEmail = profile?.email?.toLowerCase();
+                                        const requesterEmail = viewTask.requester_email?.toLowerCase();
+                                        const canManagePending =
+                                            isLeader ||
+                                            viewTask.assignee_id === user?.id ||
+                                            (!!myEmail && !!requesterEmail && myEmail === requesterEmail);
+                                        if (!canManagePending) return null;
+                                        if (viewTask.status !== 'pending') {
+                                            return (
+                                                <button
+                                                    onClick={() => {
+                                                        setPendingModalTask(viewTask);
+                                                        setPendingModalReason('');
+                                                        setPendingModalTag('waiting_on_brand');
+                                                    }}
+                                                    className="w-full py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold rounded-xl border border-amber-300 transition-all flex items-center justify-center gap-2 text-sm"
+                                                >
+                                                    <PauseCircle className="w-4 h-4" /> Mark as Pending
+                                                </button>
+                                            );
+                                        }
+                                        return (
+                                            <button
+                                                onClick={() => handleResumeTask(viewTask)}
+                                                disabled={pendingActionTaskId === viewTask.id}
+                                                className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold rounded-xl border border-emerald-300 transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                                            >
+                                                <CheckCircle2 className="w-4 h-4" /> Resume Task
+                                            </button>
+                                        );
+                                    })()}
+
                                     {/* Complete Button — opens form */}
                                     {!showCompleteForm ? (
                                         <button
@@ -888,8 +1444,11 @@ function MyTasksContent() {
                                         </div>
                                     )}
 
-                                    {/* Reassign Button / Form */}
-                                    {!showReassign ? (
+                                    {/* Reassign Button / Form
+                                        Leaders & admins: can reassign any task.
+                                        Members: can reassign any task they are the current assignee of — helpers cannot.
+                                        (API enforces the same rules.) */}
+                                    {!(isLeader || viewTask.assignee_id === user?.id) ? null : !showReassign ? (
                                         <button
                                             onClick={() => setShowReassign(true)}
                                             className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-300"
@@ -959,36 +1518,22 @@ function MyTasksContent() {
                     <span className="text-xs text-slate-400">{sortedNotes.length} note{sortedNotes.length !== 1 ? 's' : ''}</span>
                 </div>
 
-                {/* ── Create Note Form (always visible) ── */}
-                <div className="bg-white rounded-2xl shadow-sm border-2 border-indigo-100 overflow-hidden">
-                    <div className="p-4 space-y-2">
-                        <input
-                            type="text"
-                            placeholder="Title"
-                            value={noteTitle}
-                            onChange={e => setNoteTitle(e.target.value)}
-                            className="w-full text-lg font-bold text-indigo-600 placeholder-indigo-300 border-none outline-none bg-transparent"
-                        />
-                        <RichEditor value={noteContent} onChange={setNoteContent} minHeight="80px" />
-                    </div>
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
-                        <div className="flex items-center gap-1">
-                            {Object.entries(noteColors).map(([key, val]) => (
-                                <button
-                                    key={key}
-                                    onClick={() => setNoteColor(key)}
-                                    className={`w-9 h-9 rounded-full border-2 transition-all ${val.bg} ${val.border} ${noteColor === key ? 'ring-2 ring-offset-2 ring-indigo-400 scale-110' : 'hover:scale-105'}`}
-                                    title={key}
-                                />
-                            ))}
-                        </div>
-                        <button onClick={handleCreateNote}
-                            disabled={!noteTitle.trim() && !noteContent.trim()}
-                            className="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-30">
-                            Save
-                        </button>
-                    </div>
-                </div>
+                {/* ── Add New Note button — opens the auto-saving edit modal with a blank note ── */}
+                <button
+                    onClick={handleAddNewNote}
+                    disabled={creatingNote}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-white border-2 border-dashed border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/40 text-indigo-600 font-semibold rounded-2xl transition-all disabled:opacity-50"
+                >
+                    {creatingNote ? (
+                        <>
+                            <Loader2 className="w-4 h-4 animate-spin" /> Creating…
+                        </>
+                    ) : (
+                        <>
+                            <Plus className="w-4 h-4" /> Add new note
+                        </>
+                    )}
+                </button>
 
                 {/* ── Notes List (limited to 4, expandable) ── */}
                 {sortedNotes.length > 0 ? (
@@ -1000,7 +1545,7 @@ function MyTasksContent() {
                                     className={`${colors.bg} border-2 ${colors.border} rounded-2xl p-4 cursor-pointer group relative transition-all hover:shadow-lg hover:-translate-y-0.5`}>
                                     {note.pinned && <Pin className="w-3.5 h-3.5 text-slate-400 absolute top-3 right-3 rotate-45" />}
                                     {note.title && <h3 className="text-lg font-bold text-slate-900 mb-2 pr-6 line-clamp-2">{note.title}</h3>}
-                                    {note.content && <div className="text-base text-slate-600 line-clamp-8 leading-relaxed [&_b]:font-bold [&_i]:italic [&_u]:underline [&_strike]:line-through [&_a]:text-indigo-600 [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-1 [&_li]:mb-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: note.content }} />}
+                                    {note.content && <div className="text-base text-slate-600 line-clamp-8 leading-relaxed [&_b]:font-bold [&_i]:italic [&_u]:underline [&_strike]:line-through [&_a]:text-indigo-600 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-1 [&_li]:mb-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: linkifyHtml(note.content) }} />}
                                     {!note.title && !note.content && <p className="text-xs text-slate-300 italic">Empty note</p>}
                                     <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-200/40 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={e => { e.stopPropagation(); handlePinNote(note); }}
@@ -1037,7 +1582,7 @@ function MyTasksContent() {
 
             {/* Edit Note Modal */}
             {editingNote && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setEditingNote(null)}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => { closeEditingNote(); }}>
                     <div onClick={e => e.stopPropagation()}
                         className={`w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col ${noteColors[editingNote.color]?.bg || 'bg-white'} border-2 ${noteColors[editingNote.color]?.border || 'border-slate-200'} rounded-2xl shadow-2xl transition-colors`}>
                         <div className="p-6 space-y-3 flex-1 overflow-y-auto">
@@ -1075,15 +1620,26 @@ function MyTasksContent() {
                                     className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete">
                                     <Trash2 className="w-4 h-4" />
                                 </button>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => setEditingNote(null)}
-                                    className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
-                                    Close
+                                <button onClick={() => setShareNoteOpen(true)}
+                                    className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Share">
+                                    <Share2 className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleUpdateNote(editingNote)}
-                                    className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
-                                    Save
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="inline-flex items-center gap-1.5 text-xs text-slate-400">
+                                    {noteSaveStatus === 'saving' && (
+                                        <><Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" /> Saving…</>
+                                    )}
+                                    {noteSaveStatus === 'saved' && (
+                                        <><Check className="w-3.5 h-3.5 text-emerald-500" /> Saved</>
+                                    )}
+                                    {noteSaveStatus === 'error' && (
+                                        <><AlertCircle className="w-3.5 h-3.5 text-rose-500" /> Failed — retrying on close</>
+                                    )}
+                                </span>
+                                <button onClick={() => closeEditingNote()}
+                                    className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
+                                    Done
                                 </button>
                             </div>
                         </div>
@@ -1113,7 +1669,7 @@ function MyTasksContent() {
                                         className={`${colors.bg} border-2 ${colors.border} rounded-2xl p-4 cursor-pointer group relative transition-all hover:shadow-lg hover:-translate-y-0.5`}>
                                         {note.pinned && <Pin className="w-3.5 h-3.5 text-slate-400 absolute top-3 right-3 rotate-45" />}
                                         {note.title && <h3 className="text-lg font-bold text-slate-900 mb-2 pr-6">{note.title}</h3>}
-                                        {note.content && <div className="text-base text-slate-600 leading-relaxed [&_b]:font-bold [&_i]:italic [&_u]:underline [&_strike]:line-through [&_a]:text-indigo-600 [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-1 [&_li]:mb-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: note.content }} />}
+                                        {note.content && <div className="text-base text-slate-600 leading-relaxed [&_b]:font-bold [&_i]:italic [&_u]:underline [&_strike]:line-through [&_a]:text-indigo-600 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-1 [&_li]:mb-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: linkifyHtml(note.content) }} />}
                                         {!note.title && !note.content && <p className="text-xs text-slate-300 italic">Empty note</p>}
                                         <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-200/40 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button onClick={e => { e.stopPropagation(); handlePinNote(note); }}
@@ -1134,12 +1690,104 @@ function MyTasksContent() {
                 </div>
             )}
 
-            {/* Calendar Meeting Section — takes 3 columns */}
-            <div className="lg:col-span-7">
+            {/* Calendar Meeting Section — takes 3 columns. min-w-0 lets the grid
+                child shrink below its content width on mobile so the calendar
+                doesn't push past the viewport edge. */}
+            <div className="lg:col-span-7 min-w-0">
                 <CalendarMeetingSection />
             </div>
 
             </div>{/* end grid */}
+
+            <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+
+            <ShareNoteModal
+                open={shareNoteOpen}
+                onClose={() => setShareNoteOpen(false)}
+                note={editingNote ? { id: editingNote.id, title: editingNote.title, content: editingNote.content } : null}
+            />
+
+            {/* Mark-as-Pending modal — My Tasks. Layered above the View Task
+                modal (z-[80]) so it stays visible while the underlying detail
+                stays open behind it. Same shape as Cards Inbox / Task Queue
+                so reporting can group blockers the same way. */}
+            {pendingModalTask && (
+                <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+                    onClick={() => !pendingModalSubmitting && setPendingModalTask(null)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+                            <div className="flex items-center gap-2">
+                                <PauseCircle className="w-5 h-5 text-amber-500" />
+                                <div>
+                                    <h3 className="text-base font-bold text-slate-900">Mark task as Pending</h3>
+                                    <p className="text-[11px] text-slate-500 line-clamp-1">{pendingModalTask.title}</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => !pendingModalSubmitting && setPendingModalTask(null)}
+                                disabled={pendingModalSubmitting}
+                                className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-50"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-3">
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                                Pause the overdue clock while you wait on something external.
+                                The requester will get a notification with your reason so they
+                                can chase the blocker on their side.
+                            </p>
+                            <div>
+                                <label className="text-xs font-semibold text-slate-700 block mb-1">Blocker</label>
+                                <select
+                                    value={pendingModalTag}
+                                    onChange={(e) => setPendingModalTag(e.target.value)}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500"
+                                >
+                                    {PENDING_TAGS.map(opt => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-semibold text-slate-700 block mb-1">Reason <span className="text-rose-500">*</span></label>
+                                <textarea
+                                    value={pendingModalReason}
+                                    onChange={(e) => setPendingModalReason(e.target.value)}
+                                    rows={3}
+                                    placeholder="e.g. Waiting on brand to confirm the new price for SKU-203."
+                                    autoFocus
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 resize-none"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 px-5 py-4 bg-slate-50 border-t border-slate-100">
+                            <button
+                                type="button"
+                                onClick={() => setPendingModalTask(null)}
+                                disabled={pendingModalSubmitting}
+                                className="px-4 py-2 text-sm text-slate-600 rounded-full hover:bg-white"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={submitPendingTask}
+                                disabled={!pendingModalReason.trim() || pendingModalSubmitting}
+                                className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-full disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                {pendingModalSubmitting ? 'Pausing…' : (<><PauseCircle className="w-3.5 h-3.5" /> Pause task</>)}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -1167,6 +1815,9 @@ interface Meeting {
     creator?: { name: string } | null;
     assignee?: { name: string } | null;
     guests: MeetingGuest[];
+    meeting_link?: string | null;
+    organizer_name?: string | null;
+    organizer_email?: string | null;
 }
 
 function CalendarMeetingSection() {
@@ -1800,9 +2451,12 @@ function CalendarMeetingSection() {
                     </button>
                 </div>
 
-                <div className="flex gap-4">
-                    {/* Calendar Grid - conditionally render based on viewMode */}
-                    <div className="flex-1 bg-white shadow-sm border border-slate-200 rounded-2xl p-4">
+                <div className="flex gap-4 min-w-0">
+                    {/* Calendar Grid - conditionally render based on viewMode.
+                        min-w-0 + overflow-hidden contain the grid below md so
+                        long meeting titles can't push 7 columns wider than the
+                        viewport. p-2 on mobile gives more room for cells. */}
+                    <div className="flex-1 min-w-0 bg-white shadow-sm border border-slate-200 rounded-2xl p-2 sm:p-4 overflow-hidden">
 
                         {/* ===== MONTH VIEW ===== */}
                         {viewMode === 'month' && (
@@ -1833,7 +2487,7 @@ function CalendarMeetingSection() {
                                             <button
                                                 key={day}
                                                 onClick={() => setSelectedDate(dateStr === selectedDate ? null : dateStr)}
-                                                className={`min-h-[100px] p-1.5 border-b border-r border-slate-100 text-left transition-all flex flex-col rounded-sm ${
+                                                className={`min-w-0 min-h-[64px] sm:min-h-[100px] p-1 sm:p-1.5 border-b border-r border-slate-100 text-left transition-all flex flex-col rounded-sm overflow-hidden ${
                                                     isSelected
                                                         ? 'bg-indigo-50/80'
                                                         : 'hover:bg-slate-50'
@@ -2362,11 +3016,40 @@ function CalendarMeetingSection() {
                                 </div>
                             </div>
 
+                            {/* Meeting Link — from Google Calendar hangoutLink or detected in description */}
+                            {(() => {
+                                const link = detailMeeting.meeting_link
+                                    || detailMeeting.description?.match(/https:\/\/meet\.google\.com\/[a-z0-9-]+/i)?.[0]
+                                    || detailMeeting.description?.match(/https:\/\/calendly\.com\/events\/[^\s]+\/google_meet/i)?.[0]
+                                    || null;
+                                if (!link) return null;
+                                const displayUrl = link.replace(/^https?:\/\//, '').replace(/^www\./, '');
+                                return (
+                                    <div className="flex items-center gap-3">
+                                        <ExternalLink className="w-5 h-5 text-slate-500 flex-shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                            <a
+                                                href={link}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                                            >
+                                                Join with Google Meet
+                                            </a>
+                                            <p className="text-xs text-slate-500 mt-1 truncate">{displayUrl}</p>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             {/* Description */}
                             {detailMeeting.description && (
                                 <div className="flex items-start gap-3">
                                     <FileText className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
-                                    <p className="text-sm text-slate-600 whitespace-pre-wrap">{detailMeeting.description}</p>
+                                    <div
+                                        className="text-sm text-slate-600 whitespace-pre-wrap break-words meeting-description"
+                                        dangerouslySetInnerHTML={{ __html: sanitizeMeetingDescription(detailMeeting.description) }}
+                                    />
                                 </div>
                             )}
 
@@ -2376,10 +3059,14 @@ function CalendarMeetingSection() {
                                 <div>
                                     <p className="text-xs text-slate-500">Organizer</p>
                                     <p className="text-sm text-slate-900">
-                                        {detailMeeting.source === 'partner_relations' 
-                                            ? (detailMeeting.description?.match(/Requester:\s*([^\n]+)/)?.[1] || 'Unknown Partner')
-                                            : (detailMeeting.creator?.name || 'Unknown')}
+                                        {detailMeeting.organizer_name
+                                            || (detailMeeting.source === 'partner_relations'
+                                                ? (detailMeeting.description?.match(/Requester:\s*([^\n]+)/)?.[1] || 'Unknown Partner')
+                                                : (detailMeeting.creator?.name || 'Unknown'))}
                                     </p>
+                                    {detailMeeting.organizer_email && detailMeeting.organizer_email !== detailMeeting.organizer_name && (
+                                        <p className="text-xs text-slate-400">{detailMeeting.organizer_email}</p>
+                                    )}
                                 </div>
                             </div>
 

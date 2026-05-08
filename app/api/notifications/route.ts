@@ -30,7 +30,11 @@ export async function GET() {
     return NextResponse.json(data);
 }
 
-// PUT — Mark notifications as read
+// PUT — Mark notifications as read.
+// Body shape:
+//   { markAllRead: true, type?: string }  — bulk mark; optional type narrows scope
+//                                            (e.g. 'dm_message' to clear just DMs).
+//   { id }                                — mark a single notification.
 export async function PUT(request: NextRequest) {
     const session = await requireAuth();
     if (!session) {
@@ -41,7 +45,11 @@ export async function PUT(request: NextRequest) {
 
     if (body.markAllRead) {
         await prisma.notification.updateMany({
-            where: { userId: session.user.id, read: false },
+            where: {
+                userId: session.user.id,
+                read: false,
+                ...(typeof body.type === 'string' && body.type ? { type: body.type } : {}),
+            },
             data: { read: true },
         });
     } else if (body.id) {
@@ -54,15 +62,22 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true });
 }
 
-// DELETE — Clear all notifications
-export async function DELETE() {
+// DELETE — Clear notifications. Optional ?type=<...> narrows the wipe to a
+// single notification type so a user can clear DM noise without nuking task
+// notifications.
+export async function DELETE(request: NextRequest) {
     const session = await requireAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const type = request.nextUrl.searchParams.get('type');
+
     await prisma.notification.deleteMany({
-        where: { userId: session.user.id },
+        where: {
+            userId: session.user.id,
+            ...(type ? { type } : {}),
+        },
     });
 
     return NextResponse.json({ success: true });

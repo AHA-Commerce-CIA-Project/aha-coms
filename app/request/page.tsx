@@ -76,6 +76,7 @@ export default function RequestPage() {
         fetch('/api/brand-codes').then(r => r.ok ? r.json() : []).then(setBrandCodes).catch(() => {});
     }, []);
 
+
     // FBI members state for direct request
     const [fbiMembers, setFbiMembers] = useState<{ id: string; name: string; role: string; team: string }[]>([]);
     const [loadingFbi, setLoadingFbi] = useState(false);
@@ -480,7 +481,7 @@ export default function RequestPage() {
                                 setFormData({
                                     requesterName: '', requesterDivision: '', requesterEmail: '',
                                     requestType: 'fix_request', title: '', urgency: 'P3',
-                                    description: '', dueDate: '',
+                                    description: '', dueDate: '', dueDateTime: '',
                                     isDirectRequest: false, directAssigneeId: '', brandCode: '', fileUrls: [], referenceUrls: [],
                                 });
                                 removeImage();
@@ -627,6 +628,7 @@ export default function RequestPage() {
                                         {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
                                     </select>
                                 </div>
+
 
                                 {/* Full Name (autocomplete) */}
                                 <div className="space-y-1.5">
@@ -1225,15 +1227,8 @@ export default function RequestPage() {
                                         value={formData.dueDate}
                                         onChange={(e) => {
                                             const val = e.target.value;
-                                            if (val) {
-                                                const now = new Date();
-                                                const hh = String(now.getHours()).padStart(2, '0');
-                                                const mm = String(now.getMinutes()).padStart(2, '0');
-                                                const ss = String(now.getSeconds()).padStart(2, '0');
-                                                setFormData(f => ({ ...f, dueDate: val, dueDateTime: `${hh}:${mm}:${ss}` }));
-                                            } else {
-                                                setFormData(f => ({ ...f, dueDate: '', dueDateTime: '' }));
-                                            }
+                                            // Always default to end-of-day WIB; don't capture the click-time.
+                                            setFormData(f => ({ ...f, dueDate: val, dueDateTime: val ? '23:59:59' : '' }));
                                         }}
                                         min={(() => {
                                             const d = new Date();

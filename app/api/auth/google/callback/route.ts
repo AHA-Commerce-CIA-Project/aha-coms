@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.BETTER_AUTH_URL || 'https://aha-fast-app-908739514002.asia-southeast2.run.app';
 
     if (!code || !userId) {
-        return NextResponse.redirect(`${appUrl}/chat?gcal=error&reason=missing_params`);
+        return NextResponse.redirect(`${appUrl}/tasks?gcal=error&reason=missing_params`);
     }
 
     try {
@@ -20,9 +20,9 @@ export async function GET(request: NextRequest) {
             expiry_date: tokens.expiry_date,
         });
 
-        return NextResponse.redirect(`${appUrl}/chat?gcal=connected`);
+        return NextResponse.redirect(`${appUrl}/tasks?gcal=connected`);
     } catch (err: any) {
         console.error('Google OAuth callback error:', err.message);
-        return NextResponse.redirect(`${appUrl}/chat?gcal=error&reason=token_exchange`);
+        return NextResponse.redirect(`${appUrl}/tasks?gcal=error&reason=token_exchange`);
     }
 }

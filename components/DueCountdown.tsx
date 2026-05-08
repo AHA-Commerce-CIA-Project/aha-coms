@@ -28,12 +28,13 @@ export function DueCountdown({ dueDate }: DueCountdownProps) {
     let colorClass: string;
 
     if (isOverdue) {
+        const pad = (n: number) => String(n).padStart(2, '0');
         if (days > 0) {
-            display = `${days}d ${hours}h`;
+            display = `−${days}d ${hours}h`;
         } else if (hours > 0) {
-            display = `${hours}h ${mins}m`;
+            display = `−${hours}h ${mins}m`;
         } else {
-            display = `${mins}m ${secs}s`;
+            display = `−${pad(mins)}:${pad(secs)}`;
         }
         colorClass = 'text-rose-600 bg-rose-50 border-rose-200';
     } else if (days > 1) {

@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, ArrowLeft, Clock, CheckCircle2, Loader2, Star, MessageSquare, Send, FileText, ExternalLink } from 'lucide-react';
+import { Search, ArrowLeft, Clock, CheckCircle2, Loader2, Star, MessageSquare, Send, FileText, ExternalLink, X } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { TaskCommentsSection } from '@/components/TaskCommentsSection';
+import { ImageLightbox } from '@/components/ImageLightbox';
+import { sanitizeRichText } from '@/lib/sanitize';
 
 interface ReviewData {
     rating: number;
@@ -35,6 +38,9 @@ interface TaskData {
     custom_fields?: { fileUrls?: string[]; referenceUrls?: string[] };
     requester_review: ReviewData | null;
     completer_review: ReviewData | null;
+    pending_reason?: string | null;
+    pending_tag?: string | null;
+    pended_at?: string | null;
 }
 
 const STEPS = ['Submitted', 'Acknowledged', 'In Progress', 'Completed'];
@@ -43,6 +49,9 @@ function getStepIndex(status: string): number {
     if (status === 'done') return 3;
     if (status === 'in-progress') return 2;
     if (status === 'review') return 2;
+    // Paused tasks visually sit at the In Progress step — they aren't going
+    // backwards, just waiting on something external.
+    if (status === 'pending') return 2;
     if (status === 'todo') return 0;
     return 1;
 }
@@ -53,6 +62,7 @@ const urgencyLabels: Record<string, string> = {
 
 const statusLabels: Record<string, string> = {
     'todo': 'New', 'in-progress': 'In Progress', 'review': 'In Review', 'done': 'Completed',
+    'pending': 'On Hold',
     'pending_completion_details': 'Pending',
 };
 
@@ -61,7 +71,16 @@ const statusColors: Record<string, string> = {
     'in-progress': 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
     'review': 'bg-amber-500/20 text-amber-400 border-amber-500/30',
     'done': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    'pending': 'bg-amber-500/20 text-amber-700 border-amber-500/30',
     'pending_completion_details': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+};
+
+const PENDING_TAG_LABEL: Record<string, string> = {
+    waiting_on_brand: 'Waiting on brand',
+    waiting_on_partner: 'Waiting on partner',
+    waiting_on_internal: 'Waiting on internal team',
+    waiting_on_user: 'Waiting on requester',
+    other: 'Other',
 };
 
 function StarRating({ rating, onRate, readonly = false }: {
@@ -135,10 +154,19 @@ function TrackContent() {
     const [reviewError, setReviewError] = useState<string | null>(null);
     const [reviewSuccess, setReviewSuccess] = useState(false);
 
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
     // Comments state
     const [comments, setComments] = useState<any[]>([]);
     const [commentText, setCommentText] = useState('');
     const [commentSubmitting, setCommentSubmitting] = useState(false);
+
+    // Dispute pause flow — requester can resume a paused task themselves and
+    // leave an optional note explaining why they think the pause is unjustified.
+    const [disputeOpen, setDisputeOpen] = useState(false);
+    const [disputeComment, setDisputeComment] = useState('');
+    const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+    const [disputeError, setDisputeError] = useState<string | null>(null);
 
     const fetchComments = async (taskId: string, taskToken: string) => {
         try {
@@ -188,6 +216,13 @@ function TrackContent() {
     const lookupTask = async (t?: string) => {
         const searchToken = (t || token).trim();
         if (!searchToken) return;
+
+        // Easter egg: typing "WEREWOLF" sends the user to the WEREWOLF web app.
+        if (searchToken.toUpperCase() === 'WEREWOLF') {
+            window.location.href = 'https://werewolf-web-908739514002.asia-southeast2.run.app/';
+            return;
+        }
+
         setLoading(true);
         setError(null);
         setTask(null);
@@ -213,6 +248,44 @@ function TrackContent() {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         lookupTask();
+    };
+
+    const handleDispute = async () => {
+        if (!task || disputeSubmitting) return;
+        setDisputeSubmitting(true);
+        setDisputeError(null);
+        try {
+            const res = await fetch('/api/request/dispute-pause', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    token: task.task_token,
+                    comment: disputeComment.trim(),
+                }),
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                throw new Error(data?.error || data?.message || 'Failed to dispute pause');
+            }
+            // Optimistic local state — the badge clears + the dispute modal closes.
+            setTask(prev => prev ? {
+                ...prev,
+                status: data?.data?.status || 'in-progress',
+                pending_reason: null,
+                pending_tag: null,
+                pended_at: null,
+            } : prev);
+            setDisputeOpen(false);
+            setDisputeComment('');
+            // Refresh comments so the system note appears.
+            if (task.id && task.task_token) {
+                fetchComments(task.id, task.task_token);
+            }
+        } catch (err: any) {
+            setDisputeError(err?.message || 'Failed to dispute pause');
+        } finally {
+            setDisputeSubmitting(false);
+        }
     };
 
     const handleReviewSubmit = async (e: React.FormEvent) => {
@@ -331,25 +404,109 @@ function TrackContent() {
                                 </span>
                             </div>
                             <h2 className="text-xl font-bold text-slate-900 mb-4">{task.title}</h2>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                            {/* Top-level metadata grid — mirrors the internal Task Details modal so
+                                requesters see the same context (requester, division, type, status,
+                                priority, assignee, submitted timestamp) that the FAST team sees. */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 text-sm">
+                                <div>
+                                    <p className="text-slate-500 text-xs">Requester</p>
+                                    <p className="text-slate-900 font-medium truncate">{task.requester_name || '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-slate-500 text-xs">Division</p>
+                                    <p className="text-slate-900 font-medium truncate">{task.requester_division || '—'}</p>
+                                </div>
                                 <div>
                                     <p className="text-slate-500 text-xs">Priority</p>
                                     <p className="text-slate-900 font-medium">{urgencyLabels[task.urgency || 'P3'] || task.urgency}</p>
                                 </div>
                                 <div>
-                                    <p className="text-slate-500 text-xs">Date Submitted</p>
-                                    <p className="text-slate-900 font-medium">{new Date(task.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                                </div>
-                                <div>
-                                    <p className="text-slate-500 text-xs">Days Open</p>
-                                    <p className="text-indigo-400 font-medium">{getDaysOpen(task.created_at)}</p>
+                                    <p className="text-slate-500 text-xs">Status</p>
+                                    <p className="text-slate-900 font-medium">{statusLabels[task.status] || task.status}</p>
                                 </div>
                                 <div>
                                     <p className="text-slate-500 text-xs">Assigned To</p>
-                                    <p className="text-slate-900 font-medium">{task.assignee_name || 'Pending'}</p>
+                                    <p className="text-slate-900 font-medium truncate">{task.assignee_name || 'Pending'}</p>
                                 </div>
+                                <div>
+                                    <p className="text-slate-500 text-xs">Submitted</p>
+                                    <p className="text-slate-900 font-medium">
+                                        {new Date(task.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                </div>
+                                {task.due_date && (
+                                    <div>
+                                        <p className="text-slate-500 text-xs">Due</p>
+                                        <p className="text-slate-900 font-medium">
+                                            {new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
+
+                        {/* Pending callout — visible to the requester when their task is
+                            paused. Surfaces the structured tag + assignee's free-text
+                            reason so they can chase the blocker on their side instead
+                            of assuming the request was forgotten.
+
+                            Includes a Dispute & Resume affordance: if the requester thinks
+                            the pause is unjustified, they can resume the task themselves
+                            and leave a comment explaining why. The action posts a system
+                            comment + notifies the assignee. */}
+                        {task.status === 'pending' && (task.pending_reason || task.pending_tag) && (
+                            <div className="p-6 border-b border-slate-200">
+                                <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 flex items-start gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                                        <Clock className="w-4 h-4 text-amber-700" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-bold text-amber-900">
+                                            On hold
+                                            {task.pending_tag && PENDING_TAG_LABEL[task.pending_tag]
+                                                ? ` — ${PENDING_TAG_LABEL[task.pending_tag]}`
+                                                : ''}
+                                        </p>
+                                        {task.pending_reason && (
+                                            <p className="text-sm text-amber-800 mt-1 leading-relaxed whitespace-pre-wrap">
+                                                {task.pending_reason}
+                                            </p>
+                                        )}
+                                        {task.pended_at && (
+                                            <p className="text-[11px] text-amber-700 mt-2">
+                                                Paused {new Date(task.pended_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                            </p>
+                                        )}
+                                        <div className="mt-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setDisputeOpen(true)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-full transition-colors"
+                                            >
+                                                Dispute &amp; Resume
+                                            </button>
+                                            <span className="ml-2 text-[11px] text-amber-700">
+                                                Disagree with this pause? You can resume the task and leave a note.
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Description — same prose styling and HTML sanitisation as the
+                            internal modal so requesters see the request body they wrote. */}
+                        {task.description && (
+                            <div className="p-6 border-b border-slate-200">
+                                <h3 className="text-sm font-semibold text-slate-900 mb-2">Description</h3>
+                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                    <div
+                                        className="prose prose-sm max-w-none text-sm text-slate-800 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_code]:bg-slate-100 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline"
+                                        dangerouslySetInnerHTML={{ __html: sanitizeRichText(task.description) }}
+                                    />
+                                </div>
+                            </div>
+                        )}
 
                         {/* Progress Stepper */}
                         <div className="p-6 border-b border-slate-200">
@@ -382,13 +539,17 @@ function TrackContent() {
                         {task.image_url && (
                             <div className="p-6 border-b border-slate-200">
                                 <h3 className="text-sm font-semibold text-slate-900 mb-2">Attached Image</h3>
-                                <a href={task.image_url} target="_blank" rel="noopener noreferrer">
+                                <button
+                                    type="button"
+                                    onClick={() => setLightboxUrl(task.image_url)}
+                                    className="block w-full"
+                                >
                                     <img
                                         src={task.image_url}
                                         alt="Request attachment"
-                                        className="w-full max-h-72 object-contain rounded-xl border border-slate-300 bg-slate-50 border-slate-200 hover:opacity-90 transition-opacity cursor-pointer"
+                                        className="w-full max-h-72 object-contain rounded-xl border border-slate-300 bg-slate-50 border-slate-200 hover:opacity-90 transition-opacity cursor-zoom-in"
                                     />
-                                </a>
+                                </button>
                             </div>
                         )}
 
@@ -554,60 +715,17 @@ function TrackContent() {
 
                         {/* Comments Section */}
                         <div className="p-6 border-b border-slate-200">
-                            <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                                <MessageSquare className="w-4 h-4 text-indigo-500" />
-                                Comments {comments.length > 0 && <span className="text-xs text-slate-400">({comments.length})</span>}
-                            </h3>
-
-                            {/* Comment list */}
-                            {comments.length > 0 && (
-                                <div className="space-y-3 mb-4 max-h-80 overflow-y-auto">
-                                    {comments.map(c => (
-                                        <div key={c.id} className={`flex gap-3 ${c.is_team ? 'flex-row-reverse' : ''}`}>
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
-                                                c.is_team ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-700'
-                                            }`}>
-                                                {c.is_team ? (c.author_name?.charAt(0)?.toUpperCase() || 'T') : getInitials(task?.requester_name || c.author_name)}
-                                            </div>
-                                            <div className={`flex-1 max-w-[80%] ${c.is_team ? 'text-right' : ''}`}>
-                                                <div className={`inline-block rounded-2xl px-4 py-2.5 text-sm ${
-                                                    c.is_team
-                                                        ? 'bg-indigo-50 border border-indigo-200 text-slate-800 rounded-tr-sm'
-                                                        : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-sm'
-                                                }`}>
-                                                    <p>{c.message}</p>
-                                                </div>
-                                                <p className="text-[10px] text-slate-400 mt-1 px-1">
-                                                    {c.is_team ? `🔹 ${c.author_name}` : (task?.requester_name || 'Requester')} · {new Date(c.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Comment input */}
-                            <p className="text-xs text-slate-400 mb-1.5">
+                            <p className="text-xs text-slate-400 mb-2">
                                 Commenting as <strong className="text-slate-600">{task?.requester_name || 'Requester'}</strong>
                             </p>
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={commentText}
-                                    onChange={e => setCommentText(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
-                                    placeholder="Write a comment..."
-                                    disabled={commentSubmitting}
-                                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-                                />
-                                <button
-                                    onClick={handleSendComment}
-                                    disabled={!commentText.trim() || commentSubmitting}
-                                    className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
-                                >
-                                    <Send className="w-4 h-4" />
-                                </button>
-                            </div>
+                            <TaskCommentsSection
+                                key={task?.id}
+                                taskId={task!.id}
+                                token={task?.task_token}
+                                requesterName={task?.requester_name || undefined}
+                                requesterEmail={task?.requester_email || undefined}
+                                size="regular"
+                            />
                         </div>
 
                         {/* Footer */}
@@ -623,6 +741,67 @@ function TrackContent() {
                     </div>
                 )}
             </div>
+
+            {/* Image lightbox — closes on ESC (document-level listener) and backdrop click */}
+            <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+
+            {/* Dispute pause modal — requester resumes the task and leaves an
+                optional note. The note is appended as a system comment so the
+                assignee + audit trail capture WHY the pause was disputed. */}
+            {disputeOpen && (
+                <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+                    onClick={() => !disputeSubmitting && setDisputeOpen(false)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-5 py-4 border-b border-slate-200">
+                            <h3 className="text-base font-bold text-slate-900">Dispute pause &amp; resume</h3>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                                The task will go back to active and the assignee will be notified.
+                            </p>
+                        </div>
+                        <div className="p-5 space-y-3">
+                            <div>
+                                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                                    Why are you disputing this pause? <span className="text-slate-400 font-normal">(optional)</span>
+                                </label>
+                                <textarea
+                                    value={disputeComment}
+                                    onChange={(e) => setDisputeComment(e.target.value)}
+                                    rows={3}
+                                    placeholder="e.g. The brand already confirmed the price last week — this shouldn't be on hold."
+                                    autoFocus
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 resize-none"
+                                />
+                            </div>
+                            {disputeError && (
+                                <p className="text-xs text-rose-600">{disputeError}</p>
+                            )}
+                        </div>
+                        <div className="flex items-center justify-end gap-2 px-5 py-4 bg-slate-50 border-t border-slate-100">
+                            <button
+                                type="button"
+                                onClick={() => setDisputeOpen(false)}
+                                disabled={disputeSubmitting}
+                                className="px-4 py-2 text-sm text-slate-600 rounded-full hover:bg-white"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDispute}
+                                disabled={disputeSubmitting}
+                                className="px-5 py-2 text-sm font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-full disabled:opacity-40"
+                            >
+                                {disputeSubmitting ? 'Resuming…' : 'Dispute & Resume'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

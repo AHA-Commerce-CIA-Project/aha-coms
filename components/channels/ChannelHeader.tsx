@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Hash, Search, X, Lock, Users, Crown, MoreVertical, Trash2, Pencil } from 'lucide-react';
+import { Hash, Search, X, Lock, Users, Crown, MoreVertical, Trash2, Pencil, UserPlus, UserMinus, ClipboardList, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AddChannelMembersModal } from './AddChannelMembersModal';
 
 interface Member {
   id: string;
@@ -19,20 +20,26 @@ interface ChannelHeaderProps {
   isPrivate?: boolean;
   memberCount?: number;
   channelId?: string;
+  /** 'discussion' | 'assign_task' — controls whether the Direct Assign button appears. */
+  purpose?: string;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   searching: boolean;
   isCreator?: boolean;
   onDelete?: () => void;
   onEdit?: () => void;
+  onDirectAssign?: () => void;
+  /** Mobile-only: back to the channel list. Renders an arrow button when set. */
+  onBack?: () => void;
 }
 
-export function ChannelHeader({ name, description, isPrivate, memberCount, channelId, searchQuery, onSearchChange, searching, isCreator, onDelete, onEdit }: ChannelHeaderProps) {
+export function ChannelHeader({ name, description, isPrivate, memberCount, channelId, purpose, searchQuery, onSearchChange, searching, isCreator, onDelete, onEdit, onDirectAssign, onBack }: ChannelHeaderProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [addMembersOpen, setAddMembersOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const membersRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -93,9 +100,36 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
     onSearchChange('');
   };
 
+  const handleRemoveMember = async (memberId: string, memberName: string) => {
+    if (!channelId) return;
+    if (!confirm(`Remove ${memberName} from this channel?`)) return;
+    try {
+      const res = await fetch(`/api/channels/${channelId}/members`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: memberId }),
+      });
+      if (res.ok) {
+        setMembers((prev) => prev.filter((m) => m.id !== memberId));
+      }
+    } catch {}
+  };
+
   return (
-    <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-white gap-3">
+    <div className="flex items-center justify-between px-3 sm:px-6 py-3 border-b border-slate-200 bg-white gap-2 sm:gap-3">
       <div className="flex items-center gap-2 min-w-0">
+        {/* Mobile-only back arrow — returns to the channel list. Hidden on
+            desktop where the channel rail is always visible. */}
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="md:hidden p-2 -ml-1 text-slate-500 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label="Back to channels"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        )}
         {isPrivate ? (
           <Lock className="w-4 h-4 text-indigo-600 flex-shrink-0" />
         ) : (
@@ -137,6 +171,18 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
         </div>
       ) : (
         <div className="flex items-center gap-1">
+          {/* Direct Assign button — only on assign_task channels. */}
+          {purpose === 'assign_task' && onDirectAssign && (
+            <button
+              type="button"
+              onClick={onDirectAssign}
+              className="flex items-center gap-1.5 px-3 py-1.5 mr-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-sm"
+              title="Post a task into this channel"
+            >
+              <ClipboardList className="w-4 h-4" />
+              <span>Direct Assign</span>
+            </button>
+          )}
           {/* Member count button */}
           {memberCount !== undefined && (
             <div className="relative" ref={membersRef}>
@@ -154,15 +200,28 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
                 <span className="text-xs font-medium">{memberCount}</span>
               </button>
 
-              {/* Members dropdown */}
+              {/* Members dropdown — Slack-style polish */}
               {showMembers && (
-                <div className="absolute right-0 top-full mt-2 w-[280px] bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50">
-                  <div className="px-4 py-3 border-b border-slate-100">
-                    <h3 className="text-sm font-bold text-slate-700">
-                      Members ({members.length})
-                    </h3>
+                <div className="absolute right-0 top-full mt-2 w-[320px] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50">
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 bg-slate-50/50">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-slate-800">Members</h3>
+                      <span className="text-xs font-semibold text-slate-400">{members.length}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMembers(false);
+                        setAddMembersOpen(true);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                      title="Add people from any team"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      Add
+                    </button>
                   </div>
-                  <div className="max-h-[300px] overflow-y-auto">
+                  <div className="max-h-[340px] overflow-y-auto py-1">
                     {loadingMembers ? (
                       <div className="flex items-center justify-center py-6">
                         <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
@@ -171,14 +230,14 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
                       members.map((member) => (
                         <div
                           key={member.id}
-                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors"
+                          className="group/row flex items-center gap-3 px-3 mx-1 py-2 rounded-lg hover:bg-slate-100 transition-colors"
                         >
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
+                          <div className="w-9 h-9 rounded-md bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-sm font-bold overflow-hidden">
                             {member.image ? (
                               <img
                                 src={member.image}
                                 alt={member.name}
-                                className="w-8 h-8 rounded-full object-cover"
+                                className="w-9 h-9 rounded-md object-cover"
                               />
                             ) : (
                               member.name.charAt(0).toUpperCase()
@@ -186,7 +245,7 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-medium text-slate-700 truncate">
+                              <span className="text-sm font-semibold text-slate-800 truncate">
                                 {member.name}
                               </span>
                               {member.isCreator && (
@@ -200,6 +259,19 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
                             </div>
                             <p className="text-xs text-slate-400 truncate">{member.email}</p>
                           </div>
+                          {!member.isCreator && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveMember(member.id, member.name);
+                              }}
+                              className="opacity-0 group-hover/row:opacity-100 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all flex-shrink-0"
+                              title={`Remove ${member.name} from channel`}
+                            >
+                              <UserMinus className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       ))
                     )}
@@ -264,6 +336,22 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
           )}
         </div>
       )}
+
+      <AddChannelMembersModal
+        open={addMembersOpen}
+        channelId={channelId || null}
+        channelName={name}
+        existingMemberIds={members.map((m) => m.id)}
+        onClose={() => setAddMembersOpen(false)}
+        onAdded={() => {
+          // Refresh member list after adding so the new people show up.
+          if (channelId) {
+            fetch(`/api/channels/${channelId}/members`)
+              .then((r) => (r.ok ? r.json() : null))
+              .then((data) => { if (data) setMembers(data); });
+          }
+        }}
+      />
     </div>
   );
 }

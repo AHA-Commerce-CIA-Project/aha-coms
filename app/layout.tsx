@@ -29,6 +29,10 @@ export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  // viewportFit: 'cover' lets full-screen mobile modals extend into the iOS
+  // safe-area regions (notch, home indicator). Components honour the inset via
+  // env(safe-area-inset-bottom), so content stays visible.
+  viewportFit: "cover" as const,
 };
 
 export default function RootLayout({

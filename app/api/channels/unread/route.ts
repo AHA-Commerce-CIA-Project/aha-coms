@@ -33,6 +33,7 @@ export async function GET() {
     },
     select: {
       id: true,
+      purpose: true,
       readStatuses: {
         where: { userId },
         select: { lastReadAt: true },
@@ -42,6 +43,7 @@ export async function GET() {
 
   let totalUnread = 0;
   const perChannel: Record<string, number> = {};
+  const perPurpose: Record<string, number> = { discussion: 0, assign_task: 0 };
 
   for (const channel of channels) {
     const lastReadAt = channel.readStatuses[0]?.lastReadAt;
@@ -56,7 +58,11 @@ export async function GET() {
 
     perChannel[channel.id] = unreadCount;
     totalUnread += unreadCount;
+    if (unreadCount > 0) {
+      const key = channel.purpose === 'assign_task' ? 'assign_task' : 'discussion';
+      perPurpose[key] += unreadCount;
+    }
   }
 
-  return NextResponse.json({ unreadCount: totalUnread, perChannel });
+  return NextResponse.json({ unreadCount: totalUnread, perChannel, perPurpose });
 }

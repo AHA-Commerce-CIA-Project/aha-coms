@@ -10,6 +10,7 @@ import {
   Check, X, Send, Calendar, AlertCircle, Upload, Image,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PageTabs } from '@/components/PageTabs';
 
 interface Template {
   id: string;
@@ -289,8 +290,15 @@ export default function OrbitPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
+      {/* Tabs — keep AHA Orbit reachable alongside My Tasks / Task Queue. */}
+      <PageTabs tabs={[
+        { href: '/tasks', label: 'My Tasks' },
+        { href: '/nexus', label: 'Task Queue' },
+        { href: '/team-inbox', label: 'Cards Inbox' },
+        { href: '/orbit', label: 'AHA Orbit' },
+      ]} />
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 mt-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
             <RotateCcw className="w-5 h-5 text-indigo-600" />

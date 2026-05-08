@@ -58,6 +58,8 @@ model User {
   threadReplies        ThreadReply[]      @relation("ThreadReplySender")
   messageReactions     MessageReaction[]
   savedMessages        SavedMessage[]
+  savedTasks           SavedTask[]
+  helperFor            TaskCollaborator[] @relation("TaskHelpers")
   channelReadStatuses  ChannelReadStatus[]
 
   // AHA ORBIT Relations
@@ -75,6 +77,17 @@ model User {
   directAssigneeTasks   Task[]                 @relation("DirectAssigneeTasks")
   taskDelegationsFrom   TaskDelegation[]       @relation("TaskDelegationFrom")
   taskDelegationsTo     TaskDelegation[]       @relation("TaskDelegationTo")
+
+  // Milestones
+  milestonesCreated     Milestone[]            @relation("MilestonesCreated")
+  milestonesClaimed     Milestone[]            @relation("MilestonesClaimed")
+
+  // Daily activity snapshots (for week/month active hours analytics)
+  activityDailies       UserActivityDaily[]    @relation("UserActivityDailies")
+
+  // Personal task archives — per-user "hide from My Tasks" without changing
+  // the task's global status (Leaders still see it as Completed in Task Queue).
+  archivedTasks         UserArchivedTask[]     @relation("UserArchivedTasks")
 
   @@map("user")
 }
@@ -128,12 +141,16 @@ model Verification {
 // ==========================================
 
 model Team {
-  id        String    @id @default(uuid())
-  name      String    @db.VarChar(255)
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  users     User[]
-  projects  Project[]
+  id            String    @id @default(uuid())
+  name          String    @db.VarChar(255)
+  // Short handle for @team mentions in channels (e.g. 'tfbi', 'tpr'). Unique when set.
+  mentionHandle String?   @unique @map("mention_handle") @db.VarChar(20)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  users         User[]
+  projects      Project[]
   routineTemplates RoutineTaskTemplate[] @relation("TeamRoutineTemplates")
+  assignedTasks Task[]    @relation("TeamAssignedTasks")
+  ownedChannels Channel[] @relation("TeamOwnedChannels")
 
   @@map("teams")
 }
@@ -158,7 +175,7 @@ model Task {
   id                    String    @id @default(uuid())
   title                 String    @db.VarChar(255)
   description           String?
-  status                String    @default("todo") // 'todo', 'in-progress', 'review', 'done', 'pending_completion_details'
+  status                String    @default("todo") // 'todo', 'in-progress', 'pending', 'review', 'done', 'pending_completion_details'
   priority              String    @default("medium") // 'low', 'medium', 'high'
   
   // Ticketing System Fields
@@ -199,20 +216,54 @@ model Task {
   isRecurring           Boolean   @default(false) @map("is_recurring")
   recurrenceType        String?   @map("recurrence_type") @db.VarChar(20)
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  claimedAt             DateTime? @map("claimed_at") @db.Timestamptz(6)
   completedAt           DateTime? @map("completed_at") @db.Timestamptz(6)
+  // Set when the assignee dismisses the Team Inbox "Overdue" bucket for this
+  // task (e.g. by dragging it back to In Progress). The card still has a
+  // past dueDate; this just stops it from showing in the Overdue column.
+  // Reset implicitly when dueDate is extended past now.
+  overdueAcknowledgedAt DateTime? @map("overdue_acknowledged_at") @db.Timestamptz(6)
 
   // Conversation link (for DM-created tasks)
   conversationId        String?   @map("conversation_id")
 
   // Direct Request Fields
-  source                String    @default("queue") @db.VarChar(30) // 'queue' or 'direct_request' or 'dm' or 'leader_created'
+  source                String    @default("queue") @db.VarChar(30) // 'queue' | 'direct_request' | 'dm' | 'leader_created' | 'direct_assign'
   directAssigneeId      String?   @map("direct_assignee_id")
   directAssignee        User?     @relation("DirectAssigneeTasks", fields: [directAssigneeId], references: [id], onDelete: SetNull)
   responseDeadline      DateTime? @map("response_deadline") @db.Timestamptz(6)
 
+  // Direct Assign Fields — tasks posted into a team channel for any member to claim
+  targetChannelId       String?   @map("target_channel_id")
+  targetChannel         Channel?  @relation("DirectAssignChannel", fields: [targetChannelId], references: [id], onDelete: SetNull)
+  channelMessageId      String?   @map("channel_message_id")
+  channelMessage        ChannelMessage? @relation("DirectAssignMessage", fields: [channelMessageId], references: [id], onDelete: SetNull)
+  // Which team this task is assigned to. Drives the per-team Inbox view.
+  // Derived from the target channel's allowed-team rules at submission time.
+  assignedTeamId        String?   @map("assigned_team_id")
+  assignedTeam          Team?     @relation("TeamAssignedTasks", fields: [assignedTeamId], references: [id], onDelete: SetNull)
+
+  // Collaboration — "Request to Help" feature
+  needsHelp             Boolean   @default(false) @map("needs_help")
+  helpRequestedAt       DateTime? @map("help_requested_at") @db.Timestamptz(6)
+
+  // Pending state — task is paused waiting on something external (a brand
+  // price update, partner confirmation, internal approval, etc.). Tasks in
+  // this state are excluded from the Overdue bucket so the assignee isn't
+  // penalized for blockers outside their control. status moves to 'pending'
+  // and is restored from `pendedFromStatus` when resumed.
+  pendingReason         String?   @map("pending_reason")
+  pendingTag            String?   @map("pending_tag") @db.VarChar(40) // 'waiting_on_brand' | 'waiting_on_partner' | 'waiting_on_internal' | 'waiting_on_user' | 'other'
+  pendedAt              DateTime? @map("pended_at") @db.Timestamptz(6)
+  pendedBy              String?   @map("pended_by")
+  pendedFromStatus      String?   @map("pended_from_status") @db.VarChar(40)
+
   reviews               TaskReview[]
   comments              TaskComment[]
   delegations           TaskDelegation[]
+  savedBy               SavedTask[]
+  collaborators         TaskCollaborator[]
+  personalArchives      UserArchivedTask[]     @relation("TaskUserArchives")
 
   @@map("tasks")
 }
@@ -305,7 +356,9 @@ model TaskComment {
   authorName   String   @map("author_name") @db.VarChar(255)
   authorEmail  String?  @map("author_email") @db.VarChar(255)
   message      String
+  attachments  Json     @default("[]")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([taskId, createdAt])
   @@map("task_comments")
@@ -404,12 +457,20 @@ model Channel {
   isArchived      Boolean  @default(false) @map("is_archived")
   allowedTeamIds  String[] @default([]) @map("allowed_team_ids")
   visibleToAllTeams Boolean @default(false) @map("visible_to_all_teams")
+  // Owning team for assign_task channels — every direct-assigned task posted in
+  // this channel inherits this team as task.assignedTeamId. Required at the API
+  // layer when purpose === 'assign_task'; optional for discussion channels.
+  teamId          String?  @map("team_id")
+  team            Team?    @relation("TeamOwnedChannels", fields: [teamId], references: [id], onDelete: SetNull)
+  // 'discussion' for team forums, 'assign_task' for channels used by Direct Assign.
+  purpose         String   @default("discussion") @db.VarChar(20) @map("purpose")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   messages     ChannelMessage[]
   readStatuses ChannelReadStatus[]
   members      ChannelMember[]
+  directAssignTasks Task[] @relation("DirectAssignChannel")
 
   @@map("channels")
 }
@@ -442,6 +503,7 @@ model ChannelMessage {
   replies     ThreadReply[]
   reactions   MessageReaction[] @relation("MessageReactions")
   savedBy     SavedMessage[]
+  directAssignTasks Task[] @relation("DirectAssignMessage")
 
   @@index([channelId, createdAt])
   @@map("channel_messages")
@@ -494,6 +556,38 @@ model SavedMessage {
 
   @@unique([userId, messageId, replyId])
   @@map("saved_messages")
+}
+
+model SavedTask {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId    String   @map("task_id")
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, taskId])
+  @@index([userId, createdAt])
+  @@map("saved_tasks")
+}
+
+// Option 1 "Request to Help" — junction between a task and users helping with it.
+// The original assignee remains on Task.assigneeId; helpers are additional collaborators.
+model TaskCollaborator {
+  id         String    @id @default(uuid())
+  taskId     String    @map("task_id")
+  task       Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId     String    @map("user_id")
+  user       User      @relation("TaskHelpers", fields: [userId], references: [id], onDelete: Cascade)
+  role       String    @default("helper") @db.VarChar(20)   // 'helper' (owner stays on Task.assigneeId)
+  status     String    @default("pending") @db.VarChar(20)  // 'pending' → 'approved' (deny = delete row)
+  requestedAt DateTime @default(now()) @map("requested_at") @db.Timestamptz(6)
+  joinedAt   DateTime? @map("joined_at") @db.Timestamptz(6)  // set when status flips to 'approved'
+
+  @@unique([taskId, userId])
+  @@index([taskId])
+  @@index([userId, requestedAt])
+  @@map("task_collaborators")
 }
 
 model ChannelReadStatus {
@@ -648,4 +742,60 @@ model ChangelogEntry {
 
   @@index([publishedAt])
   @@map("changelog_entries")
+}
+
+
+model Milestone {
+  id             String    @id @default(uuid())
+  type           String    @db.VarChar(20) // 'recurring' | 'first'
+  threshold      Int
+  rewardLabel    String    @map("reward_label") @db.VarChar(255)
+  description    String?   @db.Text
+  emoji          String?   @db.VarChar(10)
+  active         Boolean   @default(true)
+  createdById    String    @map("created_by_id")
+  createdBy      User      @relation("MilestonesCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // First-to-reach: locked to the first claimer
+  claimedById    String?   @map("claimed_by_id")
+  claimedByUser  User?     @relation("MilestonesClaimed", fields: [claimedById], references: [id], onDelete: SetNull)
+  claimedAt      DateTime? @map("claimed_at") @db.Timestamptz(6)
+
+  @@map("milestones")
+}
+
+
+// Per-day active-seconds snapshots — populated by /api/heartbeat. Lets us
+// compute "This Week" / "This Month" totals without losing data on the daily
+// reset of User.activeSecondsToday.
+model UserActivityDaily {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  user          User     @relation("UserActivityDailies", fields: [userId], references: [id], onDelete: Cascade)
+  date          DateTime @db.Date
+  activeSeconds Int      @default(0) @map("active_seconds")
+
+  @@unique([userId, date])
+  @@index([date])
+  @@map("user_activity_daily")
+}
+
+
+// Per-user "personal archive" of completed tasks. Allows a member to clear a
+// completed task from their My Tasks view without flipping the task's global
+// status. The Task Queue (Leader view) continues to show the task as Completed
+// until a Leader explicitly archives it through PUT /api/tasks/[id]/archive.
+model UserArchivedTask {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation("UserArchivedTasks", fields: [userId], references: [id], onDelete: Cascade)
+  taskId     String   @map("task_id")
+  task       Task     @relation("TaskUserArchives", fields: [taskId], references: [id], onDelete: Cascade)
+  archivedAt DateTime @default(now()) @map("archived_at") @db.Timestamptz(6)
+
+  @@unique([userId, taskId])
+  @@index([userId])
+  @@map("user_archived_tasks")
 }

@@ -6,6 +6,11 @@ import { cn } from '@/lib/utils';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { ReactionDisplay } from './ReactionDisplay';
 import { ChannelMessageComposer } from './ChannelMessageComposer';
+import { MentionTextarea } from './MentionTextarea';
+import { ImageLightbox } from '@/components/ImageLightbox';
+import { linkifyHtml, linkifyText } from '@/lib/linkify';
+import { DeleteMessageModal } from './DeleteMessageModal';
+import { DirectAssignCard } from './DirectAssignCard';
 
 interface Attachment {
   url: string;
@@ -57,6 +62,8 @@ interface ThreadPanelProps {
   onClose: () => void;
   users: MentionUser[];
   onReplyCountChange: (messageId: string, count: number) => void;
+  /** Open the task detail modal — forwarded to DirectAssignCard in the parent. */
+  onOpenTaskDetail?: (taskId: string) => void;
 }
 
 function formatTime(dateStr: string) {
@@ -76,6 +83,7 @@ export function ThreadPanel({
   onClose,
   users,
   onReplyCountChange,
+  onOpenTaskDetail,
 }: ThreadPanelProps) {
   const [replies, setReplies] = useState<Reply[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,11 +172,45 @@ export function ThreadPanel({
               <span className="font-bold text-sm text-slate-800">{message.sender.name}</span>
               <span className="text-[11px] text-slate-400">{formatTime(message.createdAt)}</span>
             </div>
-            {/<[a-z][\s\S]*>/i.test(message.content) ? (
-              <div className="text-sm text-slate-700 break-words [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: message.content }} />
-            ) : (
-              <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{message.content}</p>
-            )}
+            {(() => {
+              // Direct-assign card — same swap-in logic as the channel feed so
+              // the thread parent renders the task card instead of the raw
+              // marker + summary text.
+              const directAssignMatch = message.content.match(/<!--direct_assign:([^\s>]+?)-->/);
+              if (directAssignMatch) {
+                const taskId = directAssignMatch[1].trim();
+                const rest = message.content.replace(/<!--direct_assign:[^\s>]+?-->/, '').trim();
+                const lines = rest.split('\n');
+                const titleLine = (lines[0] || '').replace(/^📋\s*Task Request:\s*/, '').trim();
+                const bodyLines = lines.slice(1).filter((l) => !/^Priority:/i.test(l.trim()));
+                const bodyPreview = bodyLines.join('\n').trim();
+                return (
+                  <DirectAssignCard
+                    taskId={taskId}
+                    previewTitle={titleLine || '(no title)'}
+                    previewBody={bodyPreview}
+                    currentUserId={currentUserId}
+                    onOpenDetail={onOpenTaskDetail}
+                  />
+                );
+              }
+              // Strip any other system-marker comments before rendering normal text.
+              const cleaned = message.content.replace(/<!--[\s\S]*?-->/g, '').replace(/^\s+|\s+$/g, '');
+              if (/<[a-z][\s\S]*>/i.test(cleaned)) {
+                return (
+                  <div
+                    className="text-sm text-slate-700 break-words [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
+                    dangerouslySetInnerHTML={{ __html: linkifyHtml(cleaned) }}
+                  />
+                );
+              }
+              return (
+                <p
+                  className="text-sm text-slate-700 whitespace-pre-wrap break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
+                  dangerouslySetInnerHTML={{ __html: linkifyText(cleaned) }}
+                />
+              );
+            })()}
           </div>
         </div>
         <div className="mt-2 text-xs text-slate-400">
@@ -194,6 +236,7 @@ export function ThreadPanel({
               channelId={channelId}
               messageId={message.id}
               currentUserId={currentUserId}
+              users={users}
               onReaction={(emoji) => handleReaction(reply.id, emoji)}
               onReplyUpdated={fetchReplies}
             />
@@ -218,6 +261,7 @@ function ThreadReplyItem({
   channelId,
   messageId,
   currentUserId,
+  users,
   onReaction,
   onReplyUpdated,
 }: {
@@ -225,6 +269,7 @@ function ThreadReplyItem({
   channelId: string;
   messageId: string;
   currentUserId: string;
+  users: MentionUser[];
   onReaction: (emoji: string) => void;
   onReplyUpdated: () => void;
 }) {
@@ -233,6 +278,8 @@ function ThreadReplyItem({
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(reply.content);
   const [saving, setSaving] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const isOwner = reply.senderId === currentUserId;
   const attachments = (Array.isArray(reply.attachments) ? reply.attachments : []) as Attachment[];
   const images = attachments.filter((a) => a.isImage);
@@ -268,8 +315,8 @@ function ThreadReplyItem({
     } catch {} finally { setSaving(false); }
   };
 
-  const handleDelete = async () => {
-    if (!confirm('Delete this reply? This cannot be undone.')) return;
+  const handleDelete = () => setDeleteOpen(true);
+  const performDelete = async () => {
     try {
       await fetch(`/api/channels/${channelId}/${messageId}/replies/${reply.id}`, { method: 'DELETE' });
       onReplyUpdated();
@@ -277,6 +324,7 @@ function ThreadReplyItem({
   };
 
   return (
+    <>
     <div className="group relative px-4 py-2.5 hover:bg-slate-50 transition-colors">
       <div className="flex gap-3">
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
@@ -293,9 +341,10 @@ function ThreadReplyItem({
           </div>
           {editing ? (
             <div className="mt-1">
-              <textarea
+              <MentionTextarea
                 value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
+                onChange={setEditContent}
+                users={users}
                 className="w-full px-3 py-2 bg-white border border-indigo-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                 rows={2}
                 autoFocus
@@ -322,16 +371,16 @@ function ThreadReplyItem({
               </div>
             </div>
           ) : /<[a-z][\s\S]*>/i.test(reply.content) ? (
-              <div className="text-sm text-slate-700 break-words [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">
-                <span dangerouslySetInnerHTML={{ __html: reply.content }} />
+              <div className="text-sm text-slate-700 break-words [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700">
+                <span dangerouslySetInnerHTML={{ __html: linkifyHtml(reply.content) }} />
                 {reply.updatedAt && reply.createdAt !== reply.updatedAt &&
                   new Date(reply.updatedAt).getTime() - new Date(reply.createdAt).getTime() > 1000 && (
                   <span className="text-[11px] text-slate-400 ml-1 italic">(edited)</span>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
-                {reply.content}
+              <p className="text-sm text-slate-700 whitespace-pre-wrap break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700">
+                <span dangerouslySetInnerHTML={{ __html: linkifyText(reply.content) }} />
                 {reply.updatedAt && reply.createdAt !== reply.updatedAt &&
                   new Date(reply.updatedAt).getTime() - new Date(reply.createdAt).getTime() > 1000 && (
                   <span className="text-[11px] text-slate-400 ml-1 italic">(edited)</span>
@@ -342,16 +391,24 @@ function ThreadReplyItem({
           {images.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
               {images.map((img, idx) => (
-                <img
+                <button
                   key={idx}
-                  src={img.url}
-                  alt={img.name}
-                  className="max-w-[200px] max-h-[150px] rounded-lg border border-slate-200 object-cover"
-                  loading="lazy"
-                />
+                  type="button"
+                  onClick={() => setLightboxUrl(img.url)}
+                  className="relative rounded-lg overflow-hidden border border-slate-200 hover:border-indigo-300 transition-colors"
+                >
+                  <img
+                    src={img.url}
+                    alt={img.name}
+                    className="max-w-[200px] max-h-[150px] rounded-lg object-cover cursor-zoom-in"
+                    loading="lazy"
+                  />
+                </button>
               ))}
             </div>
           )}
+
+          <ImageLightbox src={lightboxUrl} images={images.map((i) => i.url)} onClose={() => setLightboxUrl(null)} />
 
           {docs.length > 0 && (
             <div className="flex flex-col gap-1 mt-2">
@@ -450,5 +507,19 @@ function ThreadReplyItem({
         )}
       </div>
     </div>
+    <DeleteMessageModal
+      open={deleteOpen}
+      onClose={() => setDeleteOpen(false)}
+      onConfirm={performDelete}
+      kind="reply"
+      preview={{
+        senderName: reply.sender.name,
+        senderImage: reply.sender.image,
+        createdAt: reply.createdAt,
+        content: reply.content,
+        contextLabel: 'Thread reply',
+      }}
+    />
+    </>
   );
 }

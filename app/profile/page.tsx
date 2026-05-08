@@ -159,8 +159,8 @@ export default function ProfilePage() {
       setProfileError('Only PNG, JPEG, WebP, and GIF images are allowed');
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      setProfileError('Image must be under 2MB');
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileError('Image must be under 5MB');
       return;
     }
 
@@ -168,33 +168,11 @@ export default function ProfilePage() {
     setProfileError('');
 
     try {
-      // Resize and convert to base64
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const maxSize = 256;
-            let w = img.width, h = img.height;
-            if (w > h) { h = (h / w) * maxSize; w = maxSize; }
-            else { w = (w / h) * maxSize; h = maxSize; }
-            canvas.width = w;
-            canvas.height = h;
-            canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL('image/jpeg', 0.85));
-          };
-          img.onerror = reject;
-          img.src = e.target?.result as string;
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const res = await fetch('/api/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: dataUrl }),
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/profile/avatar', {
+        method: 'POST',
+        body: formData,
       });
 
       if (res.ok) {
@@ -202,7 +180,8 @@ export default function ProfilePage() {
         setProfileSuccess('Profile picture updated');
         setTimeout(() => setProfileSuccess(''), 3000);
       } else {
-        throw new Error('Failed to save profile picture');
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to save profile picture');
       }
     } catch (err: any) {
       setProfileError(err.message || 'Failed to upload image');

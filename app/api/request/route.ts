@@ -6,6 +6,7 @@ import { logActivity } from '@/lib/activity-log';
 import crypto from 'crypto';
 import { successResponse, errorResponse, withErrorHandler } from '@/lib/api-response';
 import { requestSchema, validate } from '@/lib/validations';
+import { sanitizeRichText } from '@/lib/sanitize';
 
 // POST — Submit a new request (public, no auth required)
 export const POST = withErrorHandler(async (request: NextRequest) => {
@@ -15,15 +16,34 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
 
     const {
         requesterName, requesterDivision,
-        requestType, title, urgency, description, dueDate, imageUrl,
+        requestType, title, urgency, description, dueDate, dueDateTime, imageUrl,
         requesterEmail, isDirectRequest, directAssigneeId,
         fileUrls, referenceUrls,
+        assignedTeamId,
     } = parsed.data;
 
     const taskToken = crypto.randomBytes(4).toString('hex').toUpperCase();
 
     // Determine source and status based on direct request flag
     const isDirectReq = isDirectRequest && directAssigneeId;
+
+    // The FAST request form is for FBI specifically. If the submitter didn't
+    // specify a target team (current default), route to FBI by mention handle
+    // first, then by name match. Falls back to null if FBI isn't found.
+    let resolvedTeamId: string | null = assignedTeamId ?? null;
+    if (!isDirectReq && !resolvedTeamId) {
+        const fbi = await prisma.team.findFirst({
+            where: {
+                OR: [
+                    { mentionHandle: 'tfbi' },
+                    { mentionHandle: 'fbi' },
+                    { name: { contains: 'Factual Business Intelligence', mode: 'insensitive' } },
+                ],
+            },
+            select: { id: true },
+        });
+        if (fbi) resolvedTeamId = fbi.id;
+    }
     const taskSource = isDirectReq ? 'direct_request' : 'queue';
     const taskStatus = isDirectReq ? 'pending_approval' : 'todo';
 
@@ -44,7 +64,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     const task = await prisma.task.create({
         data: {
             title,
-            description,
+            description: sanitizeRichText(description),
             requesterName,
             requesterDivision: requesterDivision || null,
             requestType: requestType || 'fix_request',
@@ -52,31 +72,43 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
             status: taskStatus,
             source: taskSource,
             dueDate: dueDate ? (() => {
-                // Calculate deadline: same time as now but on the selected date
-                // e.g., submitted at 5PM, deadline Apr 16 = Apr 16 5PM
-                const now = new Date();
+                // Deadline = selected date at the time picked by user (WIB).
+                // When the form does not include a time (dueDateTime missing), default to
+                // end-of-day 23:59:59 WIB so "today" doesn't register as overdue immediately.
+                const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
                 const selectedDate = new Date(dueDate);
-                const deadlineDate = new Date(
-                    selectedDate.getFullYear(),
-                    selectedDate.getMonth(),
-                    selectedDate.getDate(),
-                    now.getHours(),
-                    now.getMinutes(),
-                    now.getSeconds(),
+                let hh: number, mm: number, ss: number;
+                const timeMatch = dueDateTime && /^(\d{1,2}):(\d{2}):(\d{2})$/.exec(dueDateTime);
+                if (timeMatch) {
+                    hh = parseInt(timeMatch[1], 10);
+                    mm = parseInt(timeMatch[2], 10);
+                    ss = parseInt(timeMatch[3], 10);
+                } else {
+                    hh = 23; mm = 59; ss = 59;
+                }
+                const deadlineWIB = Date.UTC(
+                    selectedDate.getUTCFullYear(),
+                    selectedDate.getUTCMonth(),
+                    selectedDate.getUTCDate(),
+                    hh, mm, ss,
                 );
-                return deadlineDate;
+                return new Date(deadlineWIB - WIB_OFFSET_MS);
             })() : null,
             attachmentLink: imageUrl || null,
             taskToken,
             customFields: { fileUrls, referenceUrls },
             ...(requesterEmail ? { requesterEmail } : {}),
             ...(isDirectReq ? { directAssigneeId, responseDeadline } : {}),
+            // Route the queue task to the team that should fulfil it. Defaults
+            // to FBI (resolved above). Direct requests bypass the queue entirely
+            // — they're personal asks, so team routing doesn't apply.
+            ...(!isDirectReq && resolvedTeamId ? { assignedTeamId: resolvedTeamId } : {}),
         },
         select: { taskToken: true, id: true },
     });
 
-    // If direct request, notify the direct assignee
     if (isDirectReq) {
+        // Direct request: notify ONLY the targeted assignee (not everyone)
         await prisma.notification.create({
             data: {
                 userId: directAssigneeId!,
@@ -86,15 +118,15 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
                 data: { task_id: task.id, task_token: task.taskToken },
             },
         });
+    } else {
+        // Queue request: notify everyone so any member can claim
+        await notifyAllUsers(
+            'task_updated',
+            'New Request Submitted',
+            `${requesterName} submitted a new request: "${title}"`,
+            { task_id: task.id, task_token: task.taskToken }
+        );
     }
-
-    // Notify leaders about new request (in-app)
-    await notifyAllUsers(
-        'task_updated',
-        'New Request Submitted',
-        `${requesterName} submitted a new request: "${title}"`,
-        { task_id: task.id, task_token: task.taskToken }
-    );
 
     // Log activity (use a system user ID or the task ID)
     logActivity(task.id, 'request_submitted', `${requesterName} submitted a new request: "${title}" (${urgency || 'P3'})`, 'task', task.id);
@@ -143,6 +175,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
             difficultyScore: true,
             attachmentLink: true,
             customFields: true,
+            pendingReason: true,
+            pendingTag: true,
+            pendedAt: true,
             reviews: {
                 select: {
                     id: true,
@@ -195,6 +230,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         image_url: task.attachmentLink,
         custom_fields: task.customFields,
         assignee_name: assigneeName,
+        pending_reason: task.pendingReason,
+        pending_tag: task.pendingTag,
+        pended_at: task.pendedAt?.toISOString() || null,
         requester_review: requesterReview ? {
             rating: requesterReview.rating,
             comment: requesterReview.comment,

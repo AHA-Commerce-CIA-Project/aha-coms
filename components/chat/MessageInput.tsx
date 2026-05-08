@@ -263,7 +263,11 @@ export function MessageInput({ otherUserName, onSend, disabled }: MessageInputPr
                 </span>
             </div>
 
-            <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+            <ImageLightbox
+                src={lightboxUrl}
+                images={attachments.filter((a) => a.isImage).map((a) => a.url)}
+                onClose={() => setLightboxUrl(null)}
+            />
         </div>
     );
 }

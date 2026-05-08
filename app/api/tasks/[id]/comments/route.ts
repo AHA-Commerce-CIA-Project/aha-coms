@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
+import { sanitizeRichText, isHtml, htmlToPlainText } from '@/lib/sanitize';
 
 // GET — Fetch comments for a task
 // Public access with token, or authenticated
@@ -44,7 +45,10 @@ export async function GET(
         author_image: c.authorUser?.image || null,
         is_team: !!c.authorUserId,
         message: c.message,
+        attachments: c.attachments ?? [],
         created_at: c.createdAt.toISOString(),
+        updated_at: c.updatedAt.toISOString(),
+        edited: c.updatedAt.getTime() - c.createdAt.getTime() > 1000,
     })));
 }
 
@@ -56,16 +60,29 @@ export async function POST(
 ) {
     const { id } = await params;
     const body = await request.json();
-    const { message, token, authorName, authorEmail } = body;
+    const { message, token, authorName, authorEmail, attachments } = body;
 
-    if (!message?.trim()) {
-        return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    const safeAttachments = Array.isArray(attachments) ? attachments : [];
+    // Comment composer now sends rich HTML when the user uses the formatting
+    // toolbar or markdown shortcuts. Sanitize so we never persist scripts,
+    // styles, or unknown attributes. Plain-text comments stay untouched
+    // (sanitizeRichText is a no-op on tag-free input).
+    const rawMessage = (message || '').trim();
+    const cleanMessage = isHtml(rawMessage) ? sanitizeRichText(rawMessage) : rawMessage;
+    // Reject HTML payloads that strip down to nothing visible (e.g. "<div><br></div>")
+    // so empty comments don't leak through.
+    const visibleText = isHtml(cleanMessage) ? htmlToPlainText(cleanMessage).trim() : cleanMessage;
+    if (!visibleText && safeAttachments.length === 0) {
+        return NextResponse.json({ error: 'Message or attachment is required' }, { status: 400 });
     }
 
     let commentData: any = {
         taskId: id,
-        message: message.trim(),
+        message: cleanMessage,
+        attachments: safeAttachments,
     };
+
+    let notifyAssigneeTask: { assigneeId: string; title: string; taskToken: string | null } | null = null;
 
     if (token) {
         // Public requester comment — verify token
@@ -80,17 +97,9 @@ export async function POST(
         commentData.authorName = authorName || 'Requester';
         commentData.authorEmail = authorEmail || null;
 
-        // Notify the assigned team member
+        // Defer notification until after the comment is created so we can attach comment_id
         if (task.assigneeId) {
-            await prisma.notification.create({
-                data: {
-                    userId: task.assigneeId,
-                    type: 'task_comment',
-                    title: 'New Comment on Task',
-                    message: `${commentData.authorName} commented on "${task.title}": "${message.trim().substring(0, 80)}${message.trim().length > 80 ? '...' : ''}"`,
-                    data: { task_id: id, task_token: task.taskToken },
-                },
-            });
+            notifyAssigneeTask = { assigneeId: task.assigneeId, title: task.title, taskToken: task.taskToken };
         }
     } else {
         // Authenticated team member comment
@@ -117,14 +126,15 @@ export async function POST(
         if (task?.requesterEmail) {
             // Fire-and-forget email
             const { sendViaAppsScript } = await import('@/lib/email');
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
+            const { getAppUrl } = await import('@/lib/appUrl');
+            const appUrl = getAppUrl();
             const trackUrl = `${appUrl}/track?token=${task.taskToken}`;
             sendViaAppsScript(
                 [task.requesterEmail],
                 `[FAST] New reply on your request: ${task.title}`,
                 `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                     <div style="background: linear-gradient(135deg, #0F0E7F 0%, #4F46E5 100%); padding: 20px 28px; border-radius: 12px 12px 0 0;">
-                        <h2 style="color: #fff; margin: 0; font-size: 18px;">💬 New Reply on Your Request</h2>
+                        <h2 style="color: #fff; margin: 0; font-size: 18px;">&#128172; New Reply on Your Request</h2>
                     </div>
                     <div style="padding: 24px; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
                         <p style="color: #475569; font-size: 14px;">Hi ${task.requesterName || 'there'},</p>
@@ -146,6 +156,18 @@ export async function POST(
         data: commentData,
     });
 
+    if (notifyAssigneeTask) {
+        await prisma.notification.create({
+            data: {
+                userId: notifyAssigneeTask.assigneeId,
+                type: 'task_comment',
+                title: 'New Comment on Task',
+                message: `${commentData.authorName} commented on "${notifyAssigneeTask.title}": "${visibleText.substring(0, 80)}${visibleText.length > 80 ? '...' : ''}"`,
+                data: { task_id: id, task_token: notifyAssigneeTask.taskToken, comment_id: comment.id },
+            },
+        });
+    }
+
     return NextResponse.json({
         id: comment.id,
         author_name: comment.authorName,
@@ -153,6 +175,9 @@ export async function POST(
         author_user_id: comment.authorUserId,
         is_team: !!comment.authorUserId,
         message: comment.message,
+        attachments: comment.attachments ?? [],
         created_at: comment.createdAt.toISOString(),
+        updated_at: comment.updatedAt.toISOString(),
+        edited: false,
     }, { status: 201 });
 }

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useAuth } from '@/lib/auth-context';
-import { BarChart3, Clock, CheckCircle2, TrendingUp, Star, Users, PieChart, Calendar, Filter, ShieldAlert, RotateCcw } from 'lucide-react';
+import { BarChart3, Clock, CheckCircle2, TrendingUp, Star, Users, PieChart, Calendar, Filter, ShieldAlert, RotateCcw, Flame, Trophy, Award } from 'lucide-react';
 
 interface AnalyticsData {
     totalTickets: number;
@@ -18,7 +18,333 @@ interface AnalyticsData {
     periodLabel: string;
     topPerformers: { name: string; count: number }[];
     statusCounts: Record<string, number>;
-    teamRatings?: { name: string; avgRating: number; reviewCount: number }[];
+    teamRatings?: { id: string; name: string; image: string | null; role: string; avgRating: number; reviewCount: number }[];
+    topActiveMembers?: { id: string; name: string; image: string | null; role: string; activeSeconds: number }[];
+    allTimeActiveMembers?: { id: string; name: string; image: string | null; role: string; activeSeconds: number }[];
+    topRequesters?: {
+        name: string;
+        division: string;
+        total: number;
+        completed: number;
+        completionRate: number;
+        priorities: Record<string, number>;
+        avgResolutionHours: number | null;
+        avgRating: number | null;
+        ratingCount: number;
+    }[];
+    topRequestersByPeriod?: {
+        thisWeek: AnalyticsData['topRequesters'];
+        l30d: AnalyticsData['topRequesters'];
+        allTime: AnalyticsData['topRequesters'];
+    };
+    topPending?: {
+        thisWeek: { id: string; name: string; image: string | null; count: number }[];
+        l30d: { id: string; name: string; image: string | null; count: number }[];
+    };
+    topDone?: {
+        today: { id: string; name: string; image: string | null; count: number }[];
+        thisWeek: { id: string; name: string; image: string | null; count: number }[];
+        l30d: { id: string; name: string; image: string | null; count: number }[];
+        allTime: { id: string; name: string; image: string | null; count: number }[];
+    };
+    activeByPeriod?: {
+        today: AnalyticsData['topActiveMembers'];
+        thisWeek: AnalyticsData['topActiveMembers'];
+        thisMonth: AnalyticsData['topActiveMembers'];
+    };
+}
+
+type ActiveMember = NonNullable<AnalyticsData['topActiveMembers']>[number];
+type LeaderUser = { id: string; name: string; image: string | null; count: number };
+type TopRequester = NonNullable<AnalyticsData['topRequesters']>[number];
+type TeamRating = NonNullable<AnalyticsData['teamRatings']>[number];
+
+const PendingPeriods = [
+    { key: 'thisWeek' as const, label: 'This Week' },
+    { key: 'l30d' as const, label: 'L30D' },
+];
+const DonePeriods = [
+    { key: 'today' as const, label: 'Today' },
+    { key: 'thisWeek' as const, label: 'This Week' },
+    { key: 'l30d' as const, label: 'L30D' },
+    { key: 'allTime' as const, label: 'All Time' },
+];
+const ActivePeriods = [
+    { key: 'today' as const, label: 'Today' },
+    { key: 'thisWeek' as const, label: 'This Week' },
+    { key: 'thisMonth' as const, label: 'This Month' },
+];
+const RequesterPeriods = [
+    { key: 'thisWeek' as const, label: 'This Week' },
+    { key: 'l30d' as const, label: 'L30D' },
+    { key: 'allTime' as const, label: 'All Time' },
+];
+
+function formatActive(s: number) {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function FilterPills<K extends string>({
+    options, value, onChange,
+}: {
+    options: { key: K; label: string }[];
+    value: K;
+    onChange: (k: K) => void;
+}) {
+    return (
+        <div className="inline-flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-lg ml-auto">
+            {options.map((o) => (
+                <button
+                    key={o.key}
+                    type="button"
+                    onClick={() => onChange(o.key)}
+                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+                        value === o.key
+                            ? 'bg-white text-indigo-700 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                >
+                    {o.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+function ActiveTable({ rows, valueColor }: { rows: ActiveMember[]; valueColor: string }) {
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full">
+                <thead>
+                    <tr className="border-b border-slate-200">
+                        <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase w-10">#</th>
+                        <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Member</th>
+                        <th className="text-right px-3 py-2 text-xs font-medium text-slate-500 uppercase">Active Time</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {rows.map((m, i) => (
+                        <tr key={m.id} className="hover:bg-slate-50">
+                            <td className="px-3 py-2.5">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                    i === 0 ? 'bg-amber-100 text-amber-600'
+                                        : i === 1 ? 'bg-slate-200 text-slate-700'
+                                        : i === 2 ? 'bg-orange-100 text-orange-600'
+                                        : 'bg-slate-100 text-slate-500'
+                                }`}>{i + 1}</span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-[10px] font-bold overflow-hidden">
+                                        {m.image ? <img src={m.image} alt={m.name} className="w-7 h-7 rounded-full object-cover" /> : m.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <span className="text-sm font-medium text-slate-800 truncate block">{m.name}</span>
+                                        <span className={`text-[10px] font-semibold ${m.role === 'admin' ? 'text-purple-600' : m.role === 'leader' ? 'text-indigo-600' : 'text-slate-400'}`}>
+                                            {m.role === 'admin' ? 'Master' : m.role === 'leader' ? 'Leader' : 'Member'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-right">
+                                <span className={`font-mono text-sm font-semibold ${valueColor}`}>{formatActive(m.activeSeconds)}</span>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+function RequestersTable({ rows }: { rows: TopRequester[] }) {
+    const priorityColors: Record<string, string> = {
+        P1: 'bg-rose-500', P2: 'bg-orange-500', P3: 'bg-amber-400', P4: 'bg-emerald-500', '5-minute': 'bg-sky-400', Unset: 'bg-slate-300',
+    };
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full">
+                <thead>
+                    <tr className="border-b border-slate-200">
+                        <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase w-10">#</th>
+                        <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Requester</th>
+                        <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Division</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-slate-500 uppercase">Total</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-slate-500 uppercase">Priority Mix</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-slate-500 uppercase">Completion</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-slate-500 uppercase">Avg Resolution</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-slate-500 uppercase">Avg Rating</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {rows.map((r, i) => (
+                        <tr key={r.name} className="hover:bg-slate-50">
+                            <td className="px-3 py-3">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                    i === 0 ? 'bg-amber-100 text-amber-600'
+                                        : i === 1 ? 'bg-slate-200 text-slate-700'
+                                        : i === 2 ? 'bg-orange-100 text-orange-600'
+                                        : 'bg-slate-100 text-slate-500'
+                                }`}>{i + 1}</span>
+                            </td>
+                            <td className="px-3 py-3"><span className="text-sm font-medium text-slate-800">{r.name}</span></td>
+                            <td className="px-3 py-3"><span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{r.division}</span></td>
+                            <td className="px-3 py-3 text-center"><span className="text-sm font-bold text-violet-600">{r.total}</span></td>
+                            <td className="px-3 py-3">
+                                <div className="flex items-center justify-center gap-0.5">
+                                    {Object.entries(r.priorities).sort(([a], [b]) => a.localeCompare(b)).map(([p, count]) => (
+                                        <div
+                                            key={p}
+                                            title={`${p}: ${count}`}
+                                            className={`h-5 rounded-sm ${priorityColors[p] || 'bg-slate-300'}`}
+                                            style={{ width: `${Math.max(12, (count / r.total) * 80)}px` }}
+                                        />
+                                    ))}
+                                </div>
+                                <div className="flex justify-center gap-1 mt-1">
+                                    {Object.entries(r.priorities).sort(([a], [b]) => a.localeCompare(b)).map(([p, count]) => (
+                                        <span key={p} className="text-[9px] text-slate-400">{p}:{count}</span>
+                                    ))}
+                                </div>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                                <span className={`text-sm font-semibold ${r.completionRate >= 80 ? 'text-emerald-600' : r.completionRate >= 50 ? 'text-amber-600' : 'text-rose-500'}`}>{r.completionRate}%</span>
+                                <p className="text-[9px] text-slate-400">{r.completed}/{r.total}</p>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                                <span className="text-sm font-medium text-slate-700">{r.avgResolutionHours !== null ? `${r.avgResolutionHours}h` : '—'}</span>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                                {r.avgRating !== null ? (
+                                    <div>
+                                        <span className="text-sm font-semibold text-amber-500">{r.avgRating}★</span>
+                                        <p className="text-[9px] text-slate-400">{r.ratingCount} review{r.ratingCount !== 1 ? 's' : ''}</p>
+                                    </div>
+                                ) : (<span className="text-sm text-slate-400">—</span>)}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+function ViewAllModal({
+    title, subtitle, onClose, children,
+}: {
+    title: string;
+    subtitle?: string;
+    onClose: () => void;
+    children: React.ReactNode;
+}) {
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose]);
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={onClose}
+        >
+            <div
+                className="w-full max-w-4xl max-h-[85vh] overflow-y-auto bg-white border border-slate-200 rounded-2xl shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="sticky top-0 bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between rounded-t-2xl">
+                    <div className="min-w-0">
+                        <h2 className="text-lg font-semibold text-slate-900 truncate">{title}</h2>
+                        {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+                    </div>
+                    <button onClick={onClose} className="p-1 text-slate-500 hover:text-slate-900 flex-shrink-0" title="Close (Esc)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div className="p-6">{children}</div>
+            </div>
+        </div>
+    );
+}
+
+function TeamRatingsRow({ member, index }: { member: TeamRating; index: number }) {
+    return (
+        <div className="flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-b-0">
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                index === 0 ? 'bg-amber-100 text-amber-600'
+                    : index === 1 ? 'bg-slate-200 text-slate-700'
+                    : index === 2 ? 'bg-orange-100 text-orange-600'
+                    : 'bg-slate-100 text-slate-500'
+            }`}>{index + 1}</span>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-[11px] font-bold overflow-hidden">
+                {member.image
+                    ? <img src={member.image} alt={member.name} className="w-8 h-8 rounded-full object-cover" />
+                    : member.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 truncate">{member.name}</p>
+                <span className={`text-[10px] font-semibold ${member.role === 'admin' ? 'text-purple-600' : member.role === 'leader' ? 'text-indigo-600' : 'text-slate-400'}`}>
+                    {member.role === 'admin' ? 'Master' : member.role === 'leader' ? 'Leader' : 'Member'}
+                </span>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+                {[1, 2, 3, 4, 5].map(s => (
+                    <span key={s} className={`text-sm ${s <= Math.round(member.avgRating) ? 'text-amber-400' : 'text-slate-200'}`}>★</span>
+                ))}
+                <span className="text-xs font-semibold text-slate-700 ml-1">{member.avgRating}</span>
+                <span className="text-xs text-slate-400">({member.reviewCount})</span>
+            </div>
+        </div>
+    );
+}
+
+function TeamRatingsGrid({ rows }: { rows: TeamRating[] }) {
+    return (
+        <div>
+            {rows.map((m, i) => (<TeamRatingsRow key={m.id} member={m} index={i} />))}
+        </div>
+    );
+}
+
+function LeaderList({
+    rows, countColor, badgeRanker, emptyText,
+}: {
+    rows: LeaderUser[];
+    countColor: string;
+    badgeRanker: 'warm' | 'cool';
+    emptyText: string;
+}) {
+    if (rows.length === 0) return <p className="text-sm text-slate-500">{emptyText}</p>;
+    const rankBg = (i: number) => {
+        if (badgeRanker === 'warm') {
+            return i === 0 ? 'bg-rose-100 text-rose-600'
+                : i === 1 ? 'bg-orange-100 text-orange-600'
+                : i === 2 ? 'bg-amber-100 text-amber-600'
+                : 'bg-slate-100 text-slate-500';
+        }
+        return i === 0 ? 'bg-amber-100 text-amber-600'
+            : i === 1 ? 'bg-slate-200 text-slate-700'
+            : i === 2 ? 'bg-orange-100 text-orange-600'
+            : 'bg-slate-100 text-slate-500';
+    };
+    return (
+        <div className="space-y-2.5">
+            {rows.map((u, i) => (
+                <div key={u.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${rankBg(i)}`}>{i + 1}</span>
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-[10px] font-bold overflow-hidden">
+                            {u.image ? <img src={u.image} alt="" className="w-7 h-7 rounded-full object-cover" /> : u.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-sm text-slate-800 truncate">{u.name}</span>
+                    </div>
+                    <span className={`text-sm font-semibold flex-shrink-0 ${countColor}`}>{u.count}</span>
+                </div>
+            ))}
+        </div>
+    );
 }
 
 type FilterMode = 'preset' | 'date' | 'month' | 'year';
@@ -116,6 +442,20 @@ export default function AnalyticsPage() {
     const [customMonth, setCustomMonth] = useState('');
     const [customYear, setCustomYear] = useState('');
 
+    // Per-widget period selectors
+    const [pendingPeriod, setPendingPeriod] = useState<'thisWeek' | 'l30d'>('thisWeek');
+    const [donePeriod, setDonePeriod] = useState<'today' | 'thisWeek' | 'l30d' | 'allTime'>('thisWeek');
+    const [activeTodayPeriod, setActiveTodayPeriod] = useState<'today' | 'thisWeek' | 'thisMonth'>('today');
+    const [requesterPeriod, setRequesterPeriod] = useState<'thisWeek' | 'l30d' | 'allTime'>('thisWeek');
+
+    // "View all" modal state
+    const [viewAll, setViewAll] = useState<null | {
+        title: string;
+        subtitle?: string;
+        kind: 'active' | 'requesters' | 'team-ratings';
+        rows: ActiveMember[] | TopRequester[] | TeamRating[];
+    }>(null);
+
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
@@ -182,7 +522,8 @@ export default function AnalyticsPage() {
     const {
         totalTickets, completedTickets, completionRate, avgCompletionHours,
         avgDifficulty, urgencyCounts, divisionCounts, completedInPeriod,
-        periodLabel, topPerformers, statusCounts, teamRatings
+        periodLabel, statusCounts, teamRatings, allTimeActiveMembers, topRequesters,
+        topPending, topDone, activeByPeriod, topRequestersByPeriod
     } = data;
 
     return (
@@ -482,69 +823,196 @@ export default function AnalyticsPage() {
                     </div>
                 </div>
 
-                {/* Top Performers */}
+                {/* Team Ratings (compact) */}
                 <div className="bg-white shadow-sm border-slate-200 border border-slate-200 rounded-2xl p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                        <Users className="w-5 h-5 text-emerald-400" />
-                        <h3 className="text-lg font-semibold text-slate-900">Top Performers</h3>
-                    </div>
-                    <div className="space-y-3">
-                        {topPerformers.length > 0 ? (
-                            topPerformers.map((performer, i) => (
-                                <div key={performer.name} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                                            i === 0 ? 'bg-amber-100 text-amber-600'
-                                                : i === 1 ? 'bg-slate-200 text-slate-700'
-                                                    : i === 2 ? 'bg-orange-100 text-orange-600'
-                                                        : 'bg-slate-700 text-slate-500'
-                                        }`}>
-                                            {i + 1}
-                                        </span>
-                                        <span className="text-sm text-slate-800">{performer.name}</span>
-                                    </div>
-                                    <span className="text-sm font-medium text-emerald-400">{performer.count} tasks</span>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-sm text-slate-500">No completed tasks yet</p>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Team Ratings */}
-            {teamRatings && teamRatings.length > 0 && (
-                <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
                     <div className="flex items-center gap-3 mb-4">
                         <Star className="w-5 h-5 text-amber-400" />
                         <h3 className="text-lg font-semibold text-slate-900">Team Ratings</h3>
-                        <span className="text-xs text-slate-400 ml-auto">Based on requester reviews</span>
+                        <span className="text-xs text-slate-400 ml-auto">Requester reviews</span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {teamRatings.map((member, i) => (
-                            <div key={member.name} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                                    member.avgRating >= 4.5 ? 'bg-amber-100 text-amber-600' :
-                                    member.avgRating >= 3.5 ? 'bg-emerald-100 text-emerald-600' :
-                                    'bg-slate-200 text-slate-600'
-                                }`}>
-                                    {member.name.charAt(0).toUpperCase()}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-slate-800 truncate">{member.name}</p>
-                                    <div className="flex items-center gap-1 mt-0.5">
-                                        {[1, 2, 3, 4, 5].map(s => (
-                                            <span key={s} className={`text-sm ${s <= Math.round(member.avgRating) ? 'text-amber-400' : 'text-slate-200'}`}>★</span>
-                                        ))}
-                                        <span className="text-xs font-semibold text-slate-700 ml-1">{member.avgRating}</span>
-                                        <span className="text-xs text-slate-400">({member.reviewCount})</span>
-                                    </div>
-                                </div>
+                    {!teamRatings || teamRatings.length === 0 ? (
+                        <p className="text-sm text-slate-500">No ratings yet.</p>
+                    ) : (
+                        <div>
+                            {teamRatings.slice(0, 5).map((m, i) => (
+                                <TeamRatingsRow key={m.id} member={m} index={i} />
+                            ))}
+                        </div>
+                    )}
+                    {teamRatings && teamRatings.length > 5 && (
+                        <button
+                            onClick={() => setViewAll({
+                                title: 'Team Ratings',
+                                subtitle: 'Based on requester reviews',
+                                kind: 'team-ratings',
+                                rows: teamRatings,
+                            })}
+                            className="mt-3 w-full py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        >
+                            View all {teamRatings.length} →
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Active Hours — Filtered (Today/Week/Month) + All-Time side by side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Filtered window */}
+                {(() => {
+                    const rows = (activeByPeriod?.[activeTodayPeriod] || []) as ActiveMember[];
+                    const visible = rows.slice(0, 7);
+                    const periodLabel = activeTodayPeriod === 'today' ? 'Today (WIB)'
+                        : activeTodayPeriod === 'thisWeek' ? 'This Week (WIB)'
+                        : 'This Month (WIB)';
+                    return (
+                        <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
+                            <div className="flex items-center gap-3 mb-4 flex-wrap">
+                                <Clock className="w-5 h-5 text-sky-500" />
+                                <h3 className="text-lg font-semibold text-slate-900">Top Member Active Hours</h3>
+                                <FilterPills options={ActivePeriods} value={activeTodayPeriod} onChange={setActiveTodayPeriod} />
                             </div>
-                        ))}
+                            <p className="text-xs text-slate-400 mb-3">{periodLabel}</p>
+                            {visible.length === 0 ? (
+                                <p className="text-sm text-slate-500 py-4">
+                                    {activeTodayPeriod === 'today' ? 'No active members yet.' : 'No active hours recorded for this window yet.'}
+                                </p>
+                            ) : (
+                                <ActiveTable rows={visible} valueColor="text-sky-600" />
+                            )}
+                            {rows.length > 7 && (
+                                <button
+                                    onClick={() => setViewAll({
+                                        title: 'Top Member Active Hours',
+                                        subtitle: periodLabel,
+                                        kind: 'active',
+                                        rows,
+                                    })}
+                                    className="mt-3 w-full py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                >
+                                    View all {rows.length} members →
+                                </button>
+                            )}
+                        </div>
+                    );
+                })()}
+
+                {/* All-Time */}
+                {allTimeActiveMembers && (() => {
+                    const visible = allTimeActiveMembers.slice(0, 7);
+                    return (
+                        <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <TrendingUp className="w-5 h-5 text-emerald-500" />
+                                <h3 className="text-lg font-semibold text-slate-900">All-Time Active Hours</h3>
+                                <span className="text-xs text-slate-400 ml-auto">Cumulative</span>
+                            </div>
+                            {visible.length === 0 ? (
+                                <p className="text-sm text-slate-500 py-4">No activity recorded yet.</p>
+                            ) : (
+                                <ActiveTable rows={visible} valueColor="text-emerald-600" />
+                            )}
+                            {allTimeActiveMembers.length > 7 && (
+                                <button
+                                    onClick={() => setViewAll({
+                                        title: 'All-Time Active Hours',
+                                        subtitle: 'Cumulative across all members',
+                                        kind: 'active',
+                                        rows: allTimeActiveMembers,
+                                    })}
+                                    className="mt-3 w-full py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                >
+                                    View all {allTimeActiveMembers.length} members →
+                                </button>
+                            )}
+                        </div>
+                    );
+                })()}
+            </div>
+
+            {/* Leader Insights — Most Overwhelmed + Top Achievers (single, filterable) */}
+            {(topPending || topDone) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Most Overwhelmed */}
+                    <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Flame className="w-5 h-5 text-rose-500" />
+                            <h3 className="text-lg font-semibold text-slate-900">Most Overwhelmed</h3>
+                            <FilterPills options={PendingPeriods} value={pendingPeriod} onChange={setPendingPeriod} />
+                        </div>
+                        <LeaderList
+                            rows={(topPending?.[pendingPeriod] || []).slice(0, 10)}
+                            countColor="text-rose-600"
+                            badgeRanker="warm"
+                            emptyText={pendingPeriod === 'thisWeek' ? 'No pending tasks this week.' : 'No pending tasks in the last 30 days.'}
+                        />
+                    </div>
+
+                    {/* Top Achievers (merged) */}
+                    <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Trophy className="w-5 h-5 text-emerald-500" />
+                            <h3 className="text-lg font-semibold text-slate-900">Top Achievers</h3>
+                            <FilterPills options={DonePeriods} value={donePeriod} onChange={setDonePeriod} />
+                        </div>
+                        <LeaderList
+                            rows={(topDone?.[donePeriod] || []).slice(0, 10)}
+                            countColor="text-emerald-600"
+                            badgeRanker="cool"
+                            emptyText="No completed tasks in this window."
+                        />
                     </div>
                 </div>
+            )}
+
+            {/* Top Requesters */}
+            {topRequestersByPeriod && (() => {
+                const rows = (topRequestersByPeriod[requesterPeriod] || []) as TopRequester[];
+                const visible = rows.slice(0, 5);
+                if (rows.length === 0 && topRequesters && topRequesters.length === 0) return null;
+                return (
+                    <div className="bg-white shadow-sm border border-slate-200 rounded-2xl p-6">
+                        <div className="flex items-center gap-3 mb-4 flex-wrap">
+                            <Users className="w-5 h-5 text-violet-500" />
+                            <h3 className="text-lg font-semibold text-slate-900">Top Requesters</h3>
+                            <FilterPills options={RequesterPeriods} value={requesterPeriod} onChange={setRequesterPeriod} />
+                        </div>
+                        {visible.length === 0 ? (
+                            <p className="text-sm text-slate-500 py-4">No submissions in this window yet.</p>
+                        ) : (
+                            <RequestersTable rows={visible} />
+                        )}
+                        {rows.length > 5 && (
+                            <button
+                                onClick={() => setViewAll({
+                                    title: 'Top Requesters',
+                                    subtitle: RequesterPeriods.find(p => p.key === requesterPeriod)?.label || '',
+                                    kind: 'requesters',
+                                    rows,
+                                })}
+                                className="mt-3 w-full py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            >
+                                View all {rows.length} requesters →
+                            </button>
+                        )}
+                    </div>
+                );
+            })()}
+
+            {/* View All modal */}
+            {viewAll && (
+                <ViewAllModal
+                    title={viewAll.title}
+                    subtitle={viewAll.subtitle}
+                    onClose={() => setViewAll(null)}
+                >
+                    {viewAll.kind === 'active' ? (
+                        <ActiveTable rows={viewAll.rows as ActiveMember[]} valueColor="text-sky-600" />
+                    ) : viewAll.kind === 'requesters' ? (
+                        <RequestersTable rows={viewAll.rows as TopRequester[]} />
+                    ) : (
+                        <TeamRatingsGrid rows={viewAll.rows as TeamRating[]} />
+                    )}
+                </ViewAllModal>
             )}
 
         </div>

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Task, Project, User, ProjectTemplate, TaskStatus, TaskPriority } from './types';
 import { mockUsers, mockProjects, mockTasks, mockTemplates } from './mock-data';
+import type { UserProfile } from './user-profile-types';
 
 interface AppState {
     // Data
@@ -13,13 +14,49 @@ interface AppState {
     selectedProjectId: string | null;
     selectedTaskId: string | null;
     sidebarOpen: boolean;
+    sidebarHovered: boolean;
     viewMode: 'kanban' | 'table';
+    directAssignOpen: boolean;
+    // Optional channel to pre-select when opening the Direct Assign modal — set
+    // from the channel header so the user doesn't have to pick it again.
+    directAssignChannelId: string | null;
+    // "Convert message → task" mode: when set, the modal pre-fills its
+    // description/attachments from a channel message and submits to the
+    // /direct-assign-from-message endpoint, which transforms the original
+    // message in place into a card.
+    directAssignSourceMessageId: string | null;
+    directAssignDefaultDescription: string;
+    directAssignDefaultImages: { url: string; preview: string }[];
+    directAssignDefaultFileUrls: string[];
+    // Counter that bumps every time a Direct Assign submit succeeds. Channels
+    // page subscribes so it can refetch the feed and show the in-place card.
+    directAssignSubmittedTick: number;
+    // The single source of truth for the right-side profile panel. When non-null
+    // the panel is mounted in AppShell and the page reflows to leave room for it.
+    profileUser: UserProfile | null;
+    // When true, the profile panel shows the "Add people to this conversation"
+    // CTA. Set this from the DM page where promoting a 1:1 to a group makes sense.
+    profileShowAddToConversation: boolean;
+    // When true, hide the "Send Direct Message" CTA — set when the panel is
+    // opened for the same person the viewer is currently chatting with, since
+    // the button would just navigate them to the conversation they're already in.
+    profileHideSendDm: boolean;
 
     // Actions
     setSelectedProject: (id: string | null) => void;
     setSelectedTask: (id: string | null) => void;
     toggleSidebar: () => void;
+    setSidebarHovered: (hovered: boolean) => void;
     setViewMode: (mode: 'kanban' | 'table') => void;
+    setDirectAssignOpen: (open: boolean, opts?: {
+        channelId?: string | null;
+        sourceMessageId?: string | null;
+        defaultDescription?: string;
+        defaultImages?: { url: string; preview: string }[];
+        defaultFileUrls?: string[];
+    }) => void;
+    notifyDirectAssignSubmitted: () => void;
+    setProfileUser: (user: UserProfile | null, opts?: { showAddToConversation?: boolean; hideSendDm?: boolean }) => void;
 
     // Task Actions
     addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
@@ -54,14 +91,41 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Initial UI State
     selectedProjectId: null,
     selectedTaskId: null,
-    sidebarOpen: true,
+    // Collapsed by default — sidebar auto-expands on hover; the toggle pins it open.
+    sidebarOpen: false,
+    sidebarHovered: false,
     viewMode: 'kanban',
+    directAssignOpen: false,
+    directAssignChannelId: null,
+    directAssignSourceMessageId: null,
+    directAssignDefaultDescription: '',
+    directAssignDefaultImages: [],
+    directAssignDefaultFileUrls: [],
+    directAssignSubmittedTick: 0,
+    profileUser: null,
+    profileShowAddToConversation: false,
+    profileHideSendDm: false,
 
     // UI Actions
     setSelectedProject: (id) => set({ selectedProjectId: id }),
     setSelectedTask: (id) => set({ selectedTaskId: id }),
     toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+    setSidebarHovered: (hovered) => set({ sidebarHovered: hovered }),
     setViewMode: (mode) => set({ viewMode: mode }),
+    setDirectAssignOpen: (open, opts) => set({
+        directAssignOpen: open,
+        directAssignChannelId: open ? (opts?.channelId ?? null) : null,
+        directAssignSourceMessageId: open ? (opts?.sourceMessageId ?? null) : null,
+        directAssignDefaultDescription: open ? (opts?.defaultDescription ?? '') : '',
+        directAssignDefaultImages: open ? (opts?.defaultImages ?? []) : [],
+        directAssignDefaultFileUrls: open ? (opts?.defaultFileUrls ?? []) : [],
+    }),
+    notifyDirectAssignSubmitted: () => set((s) => ({ directAssignSubmittedTick: s.directAssignSubmittedTick + 1 })),
+    setProfileUser: (user, opts) => set({
+        profileUser: user,
+        profileShowAddToConversation: user ? !!opts?.showAddToConversation : false,
+        profileHideSendDm: user ? !!opts?.hideSendDm : false,
+    }),
 
     // Task Actions
     addTask: (taskData) => set((state) => ({

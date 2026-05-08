@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
+import { prisma } from '@/lib/db';
+import { Storage } from '@google-cloud/storage';
 
 const ALLOWED_TYPES: Record<string, string[]> = {
     image: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
@@ -19,12 +19,45 @@ const ALLOWED_TYPES: Record<string, string[]> = {
 };
 
 const ALL_ALLOWED = [...ALLOWED_TYPES.image, ...ALLOWED_TYPES.document];
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+async function uploadToGCS(buffer: Buffer, filename: string, contentType: string): Promise<string | null> {
+    try {
+        const bucketName = process.env.GCS_BUCKET_NAME;
+        if (!bucketName) return null;
+
+        const storage = new Storage();
+        const bucket = storage.bucket(bucketName);
+        const blob = bucket.file(`uploads/${filename}`);
+
+        await blob.save(buffer, {
+            contentType,
+            metadata: { cacheControl: 'public, max-age=31536000' },
+        });
+
+        return `https://storage.googleapis.com/${bucketName}/uploads/${filename}`;
+    } catch (err: any) {
+        console.error('GCS upload error:', err.message);
+        return null;
+    }
+}
 
 export async function POST(request: NextRequest) {
+    // Auth: either a valid session OR a (taskToken, taskId) pair matching a task.
     const session = await requireAuth();
     if (!session) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const token = request.nextUrl.searchParams.get('token');
+        const taskId = request.nextUrl.searchParams.get('taskId');
+        if (!token || !taskId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const task = await prisma.task.findFirst({
+            where: { id: taskId, taskToken: token.toUpperCase() },
+            select: { id: true },
+        });
+        if (!task) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
     }
 
     try {
@@ -46,19 +79,15 @@ export async function POST(request: NextRequest) {
         }
 
         const isImage = ALLOWED_TYPES.image.includes(file.type);
-        const category = isImage ? 'images' : 'documents';
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}-${safeName}`;
 
-        // Save to public/uploads directory
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads', category);
-        await mkdir(uploadDir, { recursive: true });
-
-        const filePath = path.join(uploadDir, filename);
         const arrayBuffer = await file.arrayBuffer();
-        await writeFile(filePath, Buffer.from(arrayBuffer));
+        const buffer = Buffer.from(arrayBuffer);
 
-        const url = `/uploads/${category}/${filename}`;
+        const gcsUrl = await uploadToGCS(buffer, filename, file.type);
+
+        const url = gcsUrl ?? `data:${file.type};base64,${buffer.toString('base64')}`;
 
         return NextResponse.json({
             url,
