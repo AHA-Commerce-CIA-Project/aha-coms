@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     points: result.points.map((p) => ({
       ...p,
       createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
-      category: { code: p.categoryId },
+      category: { code: (p as typeof p & { categoryCode?: string }).categoryCode ?? '' },
       user: { name: (p as typeof p & { userName?: string }).userName ?? '' },
     })),
     meta: { ...result.meta, page },
