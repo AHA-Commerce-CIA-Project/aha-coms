@@ -192,7 +192,14 @@ export function ChannelPane() {
   const flippedPurposeForChannelRef = useRef<string | null>(null);
   useEffect(() => {
     const channelParam = searchParamsObj.get('channel');
-    if (!channelParam) return;
+    if (!channelParam) {
+      // URL no longer points at any channel (user switched to DM mode or
+      // landed on the empty workspace). Clear the active channel so its
+      // SSE subscription tears down — otherwise we'd keep streaming a
+      // channel the user isn't viewing.
+      if (selectedChannel) setSelectedChannel(null);
+      return;
+    }
     // Already on this channel — nothing to do. (Pre-bug-fix this returned
     // whenever ANY channel was selected, which prevented switching channels
     // from the unified MessagesIndex.)

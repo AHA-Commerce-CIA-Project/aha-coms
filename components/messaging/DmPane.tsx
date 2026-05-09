@@ -339,6 +339,17 @@ export function DmPane() {
     // Auto-open conversation from URL param
     useEffect(() => {
         const withUser = searchParams.get('with');
+        const convParam = searchParams.get('conv');
+        // No DM target in the URL — clear the active conversation so the
+        // SSE for the previous DM tears down. (Without this, a stale SSE
+        // would keep streaming a thread the user has navigated away from.)
+        if (!withUser && !convParam && !searchParams.get('new')) {
+            if (selected) {
+                setSelected(null);
+                setMessages([]);
+            }
+            return;
+        }
         if (withUser && conversations.length > 0) {
             const existing = conversations.find(c => c.otherUser?.id === withUser);
             if (existing) {
@@ -405,7 +416,13 @@ export function DmPane() {
     }, [messages, selected]);
 
     const handleSelectConvo = (convo: ConversationItem) => {
+        // Skip the round-trip if the user clicked the conversation that's
+        // already active — prevents an unnecessary SSE teardown + spinner flash.
+        if (selected && selected.id === convo.id) return;
         setSelected(convo);
+        // Clear immediately so the previous DM's thread doesn't briefly
+        // show under the new DM's header during fetch.
+        setMessages([]);
         setMobileShowThread(true);
         fetchMessages(convo.id);
     };

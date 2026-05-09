@@ -684,7 +684,10 @@ export function ChannelMessageComposer({
   );
 
   return (
-    <div className="border-t border-slate-200 bg-white px-4 py-3">
+    // flex-shrink-0 protects the composer from being pushed below the
+    // viewport when the message feed contains long content. Without this,
+    // an unbounded feed in a tight flex column can clip the composer.
+    <div className="border-t border-slate-200 bg-white px-4 py-3 flex-shrink-0">
       {/* Attachment preview */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">

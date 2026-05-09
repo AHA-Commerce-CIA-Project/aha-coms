@@ -256,18 +256,27 @@ function MessagesWorkspace() {
                         </div>
                     )}
 
-                    {isChannelMode ? (
+                    {/* ChannelPane and DmPane stay MOUNTED across mode switches so
+                        switching from a channel to a DM (or vice-versa) doesn't
+                        unmount → tear down SSE → remount → reconnect. We toggle
+                        visibility via CSS, and each pane's own SSE/effect logic
+                        only does work when its URL params actually point at it
+                        (selectedChannel / selected DM). LaterPane and the empty
+                        state are still mounted on demand — they're cheap and
+                        rarely toggled. */}
+                    <div className={cn('flex-1 min-h-0', isChannelMode ? 'flex' : 'hidden')}>
                         <ChannelPane />
-                    ) : isDmMode ? (
+                    </div>
+                    <div className={cn('flex-1 min-h-0', isDmMode ? 'flex' : 'hidden')}>
                         <DmPane />
-                    ) : isLaterMode && laterTab ? (
+                    </div>
+                    {isLaterMode && laterTab && (
                         <LaterPane
                             tabOverride={laterTab}
                             onTabChange={(t) => router.replace(`/messages?later=${t}`)}
                         />
-                    ) : (
-                        <EmptyState />
                     )}
+                    {!isChannelMode && !isDmMode && !isLaterMode && <EmptyState />}
                 </div>
 
                 <CreateChannelModal
