@@ -17,6 +17,7 @@ import { useAuth } from '@/lib/auth-context';
 import { MessagesIndex, IndexChannel, IndexDm } from '@/components/messaging/MessagesIndex';
 import { ChannelPane } from '@/components/messaging/ChannelPane';
 import { DmPane } from '@/components/messaging/DmPane';
+import { LaterPane } from '@/components/messaging/LaterPane';
 import { CreateChannelModal } from '@/components/channels/CreateChannelModal';
 
 interface ChannelRow {
@@ -50,8 +51,14 @@ function MessagesWorkspace() {
     const convId = params.get('conv');
     const withUserId = params.get('with');
     const newDm = params.get('new') === '1';
+    // ?later=messages|tasks|posted-cards renders the Later experience inline.
+    const laterTabParam = params.get('later');
+    const laterTab = (laterTabParam === 'tasks' || laterTabParam === 'posted-cards' || laterTabParam === 'messages')
+        ? laterTabParam
+        : null;
     const isChannelMode = !!channelId;
     const isDmMode = !!convId || !!withUserId || newDm;
+    const isLaterMode = !!laterTab;
 
     const [channels, setChannels] = useState<ChannelRow[]>([]);
     const [perChannelUnread, setPerChannelUnread] = useState<Record<string, number>>({});
@@ -154,9 +161,15 @@ function MessagesWorkspace() {
         router.push('/messages?new=1');
     }, [router]);
 
+    // Later sub-items render LaterPane inline in the right pane via ?later=<tab>
+    // — the user stays in the unified workspace instead of navigating to /later.
+    const goLater = useCallback((tab: 'messages' | 'tasks' | 'posted-cards') => {
+        router.push(`/messages?later=${tab}`);
+    }, [router]);
+
     // On mobile the index pane and the active conversation share the screen —
     // when a conversation is selected, hide the index. Back arrow restores it.
-    const showIndexOnMobile = !isChannelMode && !isDmMode;
+    const showIndexOnMobile = !isChannelMode && !isDmMode && !isLaterMode;
 
     return (
         <div className="flex bg-white rounded-none sm:rounded-2xl border-0 sm:border border-slate-200 shadow-sm overflow-hidden -mx-3 sm:mx-0 h-[calc(100vh-150px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-120px)]">
@@ -166,9 +179,11 @@ function MessagesWorkspace() {
                     dms={indexDms}
                     activeChannelId={channelId}
                     activeDmId={activeDmId}
+                    activeLaterTab={laterTab}
                     loading={loading}
                     onSelectChannel={goChannel}
                     onSelectDm={goDm}
+                    onSelectLater={goLater}
                     onCreateChannel={() => setShowCreateChannel(true)}
                     onNewDm={startNewDm}
                     canCreateChannel={isLeader}
@@ -176,8 +191,8 @@ function MessagesWorkspace() {
             </div>
 
             <div className={`${showIndexOnMobile ? 'hidden md:flex' : 'flex'} flex-1 min-w-0 flex-col`}>
-                {/* Mobile back-button row — visible only when a conversation is active. */}
-                {(isChannelMode || isDmMode) && (
+                {/* Mobile back-button row — visible only when a conversation/Later view is active. */}
+                {(isChannelMode || isDmMode || isLaterMode) && (
                     <div className="md:hidden flex items-center px-3 py-2 border-b border-slate-100">
                         <button
                             onClick={() => router.push('/messages')}
@@ -192,6 +207,11 @@ function MessagesWorkspace() {
                     <ChannelPane />
                 ) : isDmMode ? (
                     <DmPane />
+                ) : isLaterMode && laterTab ? (
+                    <LaterPane
+                        tabOverride={laterTab}
+                        onTabChange={(t) => router.replace(`/messages?later=${t}`)}
+                    />
                 ) : (
                     <EmptyState />
                 )}
