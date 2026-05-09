@@ -22,9 +22,6 @@ interface LaterIndexProps {
 export function LaterIndex({ activeTab, onSelect }: LaterIndexProps) {
     return (
         <div className="flex flex-col h-full bg-white border-r border-slate-200">
-            <div className="px-4 pt-4 pb-3 border-b border-slate-100">
-                <h2 className="text-sm font-bold text-slate-800">Later</h2>
-            </div>
             <div className="flex-1 overflow-y-auto py-2">
                 <div className="space-y-0.5">
                     {ITEMS.map((it) => {

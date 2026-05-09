@@ -493,10 +493,10 @@ export function ChannelPane() {
 
   return (
     <div>
-    <div className="flex bg-white h-full overflow-hidden">
+    <div className="flex bg-white flex-1 min-h-0 overflow-hidden">
       {/* The unified /messages workspace renders MessagesIndex on the left,
           so this pane is the right-side feed only. */}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="flex flex-1 flex-col min-w-0 min-h-0">
         {selectedChannel ? (
           <>
             <ChannelHeader

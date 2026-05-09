@@ -115,12 +115,32 @@ function MessagesWorkspace() {
     useEffect(() => {
         if (!user) return;
         Promise.all([fetchChannels(), fetchConvos(), fetchUnread()]).finally(() => setLoading(false));
-        const i = setInterval(() => {
+        // Real-time updates via SSE — far less network chatter than the old
+        // 15s polling loop. /api/channels/stream emits an 'unread' event
+        // whenever a new channel message lands; we use it as a signal to
+        // refetch the per-channel unread map so the index badges stay live.
+        // /api/chat/stream does the same for DMs — we refetch the convo list
+        // (which carries unreadCount per row) on every message tick.
+        const channelSse = new EventSource('/api/channels/stream');
+        channelSse.addEventListener('unread', () => {
+            fetchUnread();
+        });
+        const dmSse = new EventSource('/api/chat/stream');
+        dmSse.addEventListener('messages', () => {
+            fetchConvos();
+        });
+        // Lightweight 60s safety net catches anything the SSE missed (network
+        // hiccup, tab backgrounded, etc.) — not the primary refresh path.
+        const safety = setInterval(() => {
             fetchChannels();
             fetchConvos();
             fetchUnread();
-        }, 15000);
-        return () => clearInterval(i);
+        }, 60000);
+        return () => {
+            channelSse.close();
+            dmSse.close();
+            clearInterval(safety);
+        };
     }, [user, fetchChannels, fetchConvos, fetchUnread]);
 
     // Build the index lists from the fetched data. Channel unread badges come
@@ -181,11 +201,11 @@ function MessagesWorkspace() {
     const showIndexOnMobile = !isChannelMode && !isDmMode && !isLaterMode;
 
     return (
-        <div className="flex flex-col -mx-3 sm:mx-0 h-[calc(100vh-150px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-120px)]">
-            {/* Top tab toggle — Messages | Later. Lives ABOVE the workspace
-                so the user can swap between the conversation surface and the
-                Later (saved/posted) surface without leaving /messages. */}
-            <div className="flex items-center gap-1 px-3 sm:px-0 mb-2 sm:mb-3">
+        <div className="flex flex-col -mx-3 sm:mx-0 h-[calc(100vh-150px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-120px)] bg-white rounded-none sm:rounded-2xl border-0 sm:border border-slate-200 shadow-sm overflow-hidden">
+            {/* Workspace tab toggle — Messages | Later. Sits at the top of the
+                card itself so it acts as the workspace's primary header (no
+                duplicate "Messages" title beneath). */}
+            <div className="flex items-center gap-1 px-4 pt-3 pb-2 border-b border-slate-100 flex-shrink-0">
                 <TopTabButton
                     active={!isLaterMode}
                     icon={MessageCircle}
@@ -200,7 +220,7 @@ function MessagesWorkspace() {
                 />
             </div>
 
-            <div className="flex bg-white rounded-none sm:rounded-2xl border-0 sm:border border-slate-200 shadow-sm overflow-hidden flex-1 min-h-0">
+            <div className="flex flex-1 min-h-0 overflow-hidden">
                 <div className={`${showIndexOnMobile ? 'flex' : 'hidden md:flex'} w-full md:w-[280px] flex-shrink-0 flex-col min-h-0`}>
                     {isLaterMode && laterTab ? (
                         <LaterIndex
@@ -223,7 +243,7 @@ function MessagesWorkspace() {
                     )}
                 </div>
 
-                <div className={`${showIndexOnMobile ? 'hidden md:flex' : 'flex'} flex-1 min-w-0 flex-col`}>
+                <div className={`${showIndexOnMobile ? 'hidden md:flex' : 'flex'} flex-1 min-w-0 min-h-0 flex-col`}>
                     {/* Mobile back-button row — visible only when a conversation/Later sub-view is active. */}
                     {(isChannelMode || isDmMode || isLaterMode) && (
                         <div className="md:hidden flex items-center px-3 py-2 border-b border-slate-100">

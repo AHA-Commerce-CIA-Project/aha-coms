@@ -101,9 +101,9 @@ export function MessagesIndex({
 
     return (
         <div className="flex flex-col h-full bg-white border-r border-slate-200">
-            {/* Header — workspace label + global search */}
-            <div className="px-4 pt-4 pb-3 border-b border-slate-100">
-                <h2 className="text-sm font-bold text-slate-800 mb-2">Messages</h2>
+            {/* Search header — the workspace title is now the [Messages] [Later]
+                pill toggle in the parent, so we don't duplicate it here. */}
+            <div className="px-4 pt-3 pb-3 border-b border-slate-100">
                 <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                     <input
@@ -257,9 +257,9 @@ function ChannelItem({ channel, active, onClick }: { channel: IndexChannel; acti
                 <Hash className={cn('w-3.5 h-3.5 flex-shrink-0', active ? 'text-white' : 'text-slate-400')} />
             )}
             <span className="flex-1 truncate text-left">{channel.name}</span>
-            {channel.unreadCount && channel.unreadCount > 0 && !active && (
+            {(channel.unreadCount ?? 0) > 0 && !active && (
                 <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold text-white bg-rose-500 rounded-full">
-                    {channel.unreadCount > 99 ? '99+' : channel.unreadCount}
+                    {(channel.unreadCount ?? 0) > 99 ? '99+' : channel.unreadCount}
                 </span>
             )}
         </button>
@@ -291,9 +291,9 @@ function DmItem({ dm, active, onClick }: { dm: IndexDm; active: boolean; onClick
                 <PresenceDot lastSeenAt={dm.otherLastSeenAt || null} size="sm" />
             </div>
             <span className="flex-1 truncate text-left">{dm.otherName}</span>
-            {dm.unreadCount && dm.unreadCount > 0 && !active && (
+            {(dm.unreadCount ?? 0) > 0 && !active && (
                 <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold text-white bg-rose-500 rounded-full">
-                    {dm.unreadCount > 99 ? '99+' : dm.unreadCount}
+                    {(dm.unreadCount ?? 0) > 99 ? '99+' : dm.unreadCount}
                 </span>
             )}
         </button>

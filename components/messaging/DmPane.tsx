@@ -534,11 +534,11 @@ export function DmPane() {
     });
 
     return (
-        <div className="flex bg-white h-full overflow-hidden">
+        <div className="flex bg-white flex-1 min-h-0 overflow-hidden">
             {/* DM thread — the unified /messages workspace renders the
                  conversation list (MessagesIndex) on the left, so this pane
                  is just the active thread + composer. */}
-            <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex-1 min-w-0 min-h-0 flex flex-col">
                 {selected ? (
                     <>
                         {/* Header */}
