@@ -499,8 +499,8 @@ export function ChannelPane() {
   if (!session) return null;
 
   return (
-    <div>
-    <div className="flex bg-white flex-1 min-h-0 overflow-hidden">
+    // Single root: an outer wrapper here breaks the flex chain and lets long channels overflow the workspace.
+    <div className="flex bg-white flex-1 min-h-0 overflow-hidden w-full">
       {/* The unified /messages workspace renders MessagesIndex on the left,
           so this pane is the right-side feed only. */}
       <div className="flex flex-1 flex-col min-w-0 min-h-0">
@@ -847,7 +847,6 @@ export function ChannelPane() {
         taskToken={forwardMessage?.taskToken}
         taskId={forwardMessage?.taskId}
       />
-    </div>
     </div>
   );
 }
