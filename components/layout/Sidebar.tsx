@@ -72,7 +72,8 @@ const sectionConfigs: Record<string, NavSection> = {
             { href: '/messages', icon: MessageCircle, label: 'Messages', hasBadge: true, badgeKey: 'messages' },
             { href: '/analytics', icon: BarChart3, label: 'Analytics', requireLeader: true },
             { href: '/activity-log', icon: Activity, label: 'Activity Log', requireLeader: true },
-            { href: '/later', icon: Bookmark, label: 'Later' },
+            // Later moved into the Messages workspace as a top-level tab
+            // alongside "Messages" — see app/messages/page.tsx.
         ],
     },
     orbit: {

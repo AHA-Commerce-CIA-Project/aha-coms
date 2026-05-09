@@ -79,7 +79,6 @@ export function BottomNav() {
     const isActive = (paths: string[]) => paths.some(p => pathname === p || pathname.startsWith(p + '/'));
 
     const moreItems: MoreItem[] = [
-        { href: '/later', icon: Bookmark, label: 'Later' },
         { href: '/request', icon: FileText, label: 'Submit Request' },
         { href: '/analytics', icon: BarChart3, label: 'Analytics', requireLeader: true },
         { href: '/activity-log', icon: Activity, label: 'Activity Log', requireLeader: true },

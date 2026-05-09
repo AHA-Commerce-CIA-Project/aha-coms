@@ -6,7 +6,7 @@
 // callbacks; this component is purely presentational + collapse state.
 
 import { useState, useEffect } from 'react';
-import { Hash, Lock, ChevronDown, ChevronRight, Plus, MessageCircle, Search, Bookmark, ListTodo, Send } from 'lucide-react';
+import { Hash, Lock, ChevronDown, ChevronRight, Plus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PresenceDot } from '@/components/PresenceDot';
 
@@ -28,15 +28,7 @@ export interface IndexDm {
     snippet?: string;
 }
 
-type SectionKey = 'channels' | 'assign_task' | 'dms' | 'later';
-
-// Later sub-items live inline in the index so users can jump straight to
-// Saved messages / tasks / posted cards without leaving the workspace.
-const LATER_ITEMS: { tab: 'messages' | 'tasks' | 'posted-cards'; label: string; icon: React.ComponentType<any> }[] = [
-    { tab: 'messages', label: 'Saved messages', icon: Bookmark },
-    { tab: 'tasks', label: 'Saved tasks', icon: ListTodo },
-    { tab: 'posted-cards', label: 'Posted cards', icon: Send },
-];
+type SectionKey = 'channels' | 'assign_task' | 'dms';
 
 const COLLAPSE_KEY = 'messages-index-collapsed';
 
@@ -63,12 +55,9 @@ interface MessagesIndexProps {
     dms: IndexDm[];
     activeChannelId: string | null;
     activeDmId: string | null;
-    /** Tab key when the user is viewing /later, e.g. 'messages' | 'tasks' | 'posted-cards'. Null when not on /later. */
-    activeLaterTab: string | null;
     loading: boolean;
     onSelectChannel: (channel: IndexChannel) => void;
     onSelectDm: (dm: IndexDm) => void;
-    onSelectLater: (tab: 'messages' | 'tasks' | 'posted-cards') => void;
     onCreateChannel: () => void;
     onNewDm: () => void;
     canCreateChannel: boolean;
@@ -79,11 +68,9 @@ export function MessagesIndex({
     dms,
     activeChannelId,
     activeDmId,
-    activeLaterTab,
     loading,
     onSelectChannel,
     onSelectDm,
-    onSelectLater,
     onCreateChannel,
     onNewDm,
     canCreateChannel,
@@ -203,42 +190,8 @@ export function MessagesIndex({
                     )}
                 </SectionGroup>
 
-                <SectionGroup
-                    label="Later"
-                    sectionKey="later"
-                    collapsed={collapsed.has('later')}
-                    onToggle={toggle}
-                >
-                    {LATER_ITEMS.map((item) => (
-                        <LaterItem
-                            key={item.tab}
-                            label={item.label}
-                            Icon={item.icon}
-                            active={activeLaterTab === item.tab}
-                            onClick={() => onSelectLater(item.tab)}
-                        />
-                    ))}
-                </SectionGroup>
             </div>
         </div>
-    );
-}
-
-function LaterItem({ label, Icon, active, onClick }: { label: string; Icon: React.ComponentType<any>; active: boolean; onClick: () => void }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={cn(
-                'flex items-center gap-2 w-full px-4 py-1.5 text-sm transition-colors',
-                active
-                    ? 'bg-indigo-600 text-white font-semibold'
-                    : 'text-slate-700 hover:bg-slate-100'
-            )}
-        >
-            <Icon className={cn('w-3.5 h-3.5 flex-shrink-0', active ? 'text-white' : 'text-slate-400')} />
-            <span className="flex-1 truncate text-left">{label}</span>
-        </button>
     );
 }
 

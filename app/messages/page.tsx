@@ -12,13 +12,15 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Hash, MessageCircle, ChevronLeft } from 'lucide-react';
+import { Hash, MessageCircle, ChevronLeft, Bookmark } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { MessagesIndex, IndexChannel, IndexDm } from '@/components/messaging/MessagesIndex';
+import { LaterIndex } from '@/components/messaging/LaterIndex';
 import { ChannelPane } from '@/components/messaging/ChannelPane';
 import { DmPane } from '@/components/messaging/DmPane';
 import { LaterPane } from '@/components/messaging/LaterPane';
 import { CreateChannelModal } from '@/components/channels/CreateChannelModal';
+import { cn } from '@/lib/utils';
 
 interface ChannelRow {
     id: string;
@@ -152,7 +154,14 @@ function MessagesWorkspace() {
     }, [router]);
 
     const goDm = useCallback((d: IndexDm) => {
-        router.push(`/messages?conv=${encodeURIComponent(d.id)}`);
+        // DmPane already handles ?with=<userId>: it finds the existing convo
+        // (or starts a new one) and selects it. ?conv= isn't currently wired
+        // into DmPane, so use ?with= which is the well-tested path.
+        if (d.otherUserId) {
+            router.push(`/messages?with=${encodeURIComponent(d.otherUserId)}`);
+        } else {
+            router.push(`/messages?conv=${encodeURIComponent(d.id)}`);
+        }
     }, [router]);
 
     const startNewDm = useCallback(() => {
@@ -172,61 +181,104 @@ function MessagesWorkspace() {
     const showIndexOnMobile = !isChannelMode && !isDmMode && !isLaterMode;
 
     return (
-        <div className="flex bg-white rounded-none sm:rounded-2xl border-0 sm:border border-slate-200 shadow-sm overflow-hidden -mx-3 sm:mx-0 h-[calc(100vh-150px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-120px)]">
-            <div className={`${showIndexOnMobile ? 'flex' : 'hidden md:flex'} w-full md:w-[280px] flex-shrink-0 flex-col min-h-0`}>
-                <MessagesIndex
-                    channels={indexChannels}
-                    dms={indexDms}
-                    activeChannelId={channelId}
-                    activeDmId={activeDmId}
-                    activeLaterTab={laterTab}
-                    loading={loading}
-                    onSelectChannel={goChannel}
-                    onSelectDm={goDm}
-                    onSelectLater={goLater}
-                    onCreateChannel={() => setShowCreateChannel(true)}
-                    onNewDm={startNewDm}
-                    canCreateChannel={isLeader}
+        <div className="flex flex-col -mx-3 sm:mx-0 h-[calc(100vh-150px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-120px)]">
+            {/* Top tab toggle — Messages | Later. Lives ABOVE the workspace
+                so the user can swap between the conversation surface and the
+                Later (saved/posted) surface without leaving /messages. */}
+            <div className="flex items-center gap-1 px-3 sm:px-0 mb-2 sm:mb-3">
+                <TopTabButton
+                    active={!isLaterMode}
+                    icon={MessageCircle}
+                    label="Messages"
+                    onClick={() => router.push('/messages')}
+                />
+                <TopTabButton
+                    active={isLaterMode}
+                    icon={Bookmark}
+                    label="Later"
+                    onClick={() => router.push('/messages?later=messages')}
                 />
             </div>
 
-            <div className={`${showIndexOnMobile ? 'hidden md:flex' : 'flex'} flex-1 min-w-0 flex-col`}>
-                {/* Mobile back-button row — visible only when a conversation/Later view is active. */}
-                {(isChannelMode || isDmMode || isLaterMode) && (
-                    <div className="md:hidden flex items-center px-3 py-2 border-b border-slate-100">
-                        <button
-                            onClick={() => router.push('/messages')}
-                            className="flex items-center gap-1 text-sm text-indigo-600 font-medium"
-                        >
-                            <ChevronLeft className="w-4 h-4" /> Back
-                        </button>
-                    </div>
-                )}
+            <div className="flex bg-white rounded-none sm:rounded-2xl border-0 sm:border border-slate-200 shadow-sm overflow-hidden flex-1 min-h-0">
+                <div className={`${showIndexOnMobile ? 'flex' : 'hidden md:flex'} w-full md:w-[280px] flex-shrink-0 flex-col min-h-0`}>
+                    {isLaterMode && laterTab ? (
+                        <LaterIndex
+                            activeTab={laterTab}
+                            onSelect={goLater}
+                        />
+                    ) : (
+                        <MessagesIndex
+                            channels={indexChannels}
+                            dms={indexDms}
+                            activeChannelId={channelId}
+                            activeDmId={activeDmId}
+                            loading={loading}
+                            onSelectChannel={goChannel}
+                            onSelectDm={goDm}
+                            onCreateChannel={() => setShowCreateChannel(true)}
+                            onNewDm={startNewDm}
+                            canCreateChannel={isLeader}
+                        />
+                    )}
+                </div>
 
-                {isChannelMode ? (
-                    <ChannelPane />
-                ) : isDmMode ? (
-                    <DmPane />
-                ) : isLaterMode && laterTab ? (
-                    <LaterPane
-                        tabOverride={laterTab}
-                        onTabChange={(t) => router.replace(`/messages?later=${t}`)}
-                    />
-                ) : (
-                    <EmptyState />
-                )}
+                <div className={`${showIndexOnMobile ? 'hidden md:flex' : 'flex'} flex-1 min-w-0 flex-col`}>
+                    {/* Mobile back-button row — visible only when a conversation/Later sub-view is active. */}
+                    {(isChannelMode || isDmMode || isLaterMode) && (
+                        <div className="md:hidden flex items-center px-3 py-2 border-b border-slate-100">
+                            <button
+                                onClick={() => router.push(isLaterMode ? '/messages?later=messages' : '/messages')}
+                                className="flex items-center gap-1 text-sm text-indigo-600 font-medium"
+                            >
+                                <ChevronLeft className="w-4 h-4" /> Back
+                            </button>
+                        </div>
+                    )}
+
+                    {isChannelMode ? (
+                        <ChannelPane />
+                    ) : isDmMode ? (
+                        <DmPane />
+                    ) : isLaterMode && laterTab ? (
+                        <LaterPane
+                            tabOverride={laterTab}
+                            onTabChange={(t) => router.replace(`/messages?later=${t}`)}
+                        />
+                    ) : (
+                        <EmptyState />
+                    )}
+                </div>
+
+                <CreateChannelModal
+                    open={showCreateChannel}
+                    onClose={() => setShowCreateChannel(false)}
+                    onCreated={() => {
+                        fetchChannels();
+                        setShowCreateChannel(false);
+                    }}
+                    purpose="discussion"
+                />
             </div>
-
-            <CreateChannelModal
-                open={showCreateChannel}
-                onClose={() => setShowCreateChannel(false)}
-                onCreated={() => {
-                    fetchChannels();
-                    setShowCreateChannel(false);
-                }}
-                purpose="discussion"
-            />
         </div>
+    );
+}
+
+function TopTabButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={cn(
+                'inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full transition-colors',
+                active
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
+            )}
+        >
+            <Icon className="w-4 h-4" />
+            <span>{label}</span>
+        </button>
     );
 }
 

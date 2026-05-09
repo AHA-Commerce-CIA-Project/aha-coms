@@ -192,7 +192,11 @@ export function ChannelPane() {
   const flippedPurposeForChannelRef = useRef<string | null>(null);
   useEffect(() => {
     const channelParam = searchParamsObj.get('channel');
-    if (!channelParam || selectedChannel) return;
+    if (!channelParam) return;
+    // Already on this channel — nothing to do. (Pre-bug-fix this returned
+    // whenever ANY channel was selected, which prevented switching channels
+    // from the unified MessagesIndex.)
+    if (selectedChannel && selectedChannel.id === channelParam) return;
     if (channels.length === 0) return;
     const ch = channels.find((c) => c.id === channelParam);
     if (ch) {
