@@ -216,7 +216,7 @@ export function UserProfilePanel({ user, currentUserId, onClose, showAddToConver
             )}
             {showAddToConversation && (
               <a
-                href={`/channels?createWith=${user.id}`}
+                href={`/messages?createWith=${user.id}`}
                 className="flex items-center justify-center gap-2 w-full py-2.5 border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 font-semibold rounded-lg transition-colors"
               >
                 <UserPlus className="w-4 h-4" /> Add people to this conversation

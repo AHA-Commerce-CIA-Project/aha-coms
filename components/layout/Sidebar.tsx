@@ -67,9 +67,9 @@ const sectionConfigs: Record<string, NavSection> = {
                 { href: '/team-inbox', label: 'Cards Inbox' },
                 { href: '/orbit', label: 'AHA Orbit' },
             ] },
-            // Messages = 1-on-1 DMs. Channels = team forums + Direct Assign.
-            { href: '/messages', icon: MessageCircle, label: 'Messages', hasBadge: true, badgeKey: 'dm' },
-            { href: '/channels', icon: Hash, label: 'Channels', hasBadge: true, badgeKey: 'channels' },
+            // Unified Messages workspace — DMs and Channels live in a single
+            // Slack-style left pane on /messages. Badge sums both DM and channel unread.
+            { href: '/messages', icon: MessageCircle, label: 'Messages', hasBadge: true, badgeKey: 'messages' },
             { href: '/analytics', icon: BarChart3, label: 'Analytics', requireLeader: true },
             { href: '/activity-log', icon: Activity, label: 'Activity Log', requireLeader: true },
             { href: '/later', icon: Bookmark, label: 'Later' },
@@ -237,8 +237,7 @@ export function Sidebar() {
                                 const [itemPath, itemQuery] = item.href.split('?');
                                 const itemTab = itemQuery ? new URLSearchParams(itemQuery).get('tab') : null;
                                 const isActive = (pathname === itemPath && (itemTab ? currentTab === itemTab : !currentTab))
-                                    || (item.href === '/channels' && pathname.startsWith('/channels'))
-                                    || (item.href === '/messages' && pathname.startsWith('/messages'))
+                                    || (item.href === '/messages' && (pathname.startsWith('/messages') || pathname.startsWith('/channels')))
                                     || (item.href === '/tasks' && (pathname === '/tasks' || pathname === '/nexus' || pathname === '/orbit'))
                                     || (item.href === '/orbit' && pathname === '/orbit')
                                     || (item.href === '/orbit/manage' && pathname.startsWith('/orbit/manage'));
@@ -247,13 +246,11 @@ export function Sidebar() {
                                     ? orbitUnclaimedCount
                                     : badgeKey === 'changelog'
                                         ? changelogUnseenCount
-                                        : badgeKey === 'channels'
-                                            ? unreadCount
-                                            : badgeKey === 'dm'
-                                                ? dmUnreadCount
-                                                : badgeKey === 'tasks'
-                                                    ? 0 // tasks badge reserved for future use
-                                                    : unreadCount;
+                                        : badgeKey === 'messages'
+                                            ? unreadCount + dmUnreadCount
+                                            : badgeKey === 'tasks'
+                                                ? 0 // tasks badge reserved for future use
+                                                : unreadCount;
                                 const showBadge = item.hasBadge && badgeCount > 0;
 
                                 if (item.disabled) {

@@ -523,7 +523,7 @@ export function ChannelMessageItem({
                           {fwd.channelName && (
                             <>
                               <span className="text-slate-400">Posted in</span>
-                              <a href={`/channels?channel=${fwd.channelId}`} className="font-semibold text-slate-600 hover:text-indigo-600 hover:underline">
+                              <a href={`/messages?channel=${fwd.channelId}`} className="font-semibold text-slate-600 hover:text-indigo-600 hover:underline">
                                 # {fwd.channelName}
                               </a>
                             </>
@@ -541,7 +541,7 @@ export function ChannelMessageItem({
                           )}
                           <span className="text-slate-300">|</span>
                           {fwd.channelId && fwd.messageId ? (
-                            <a href={`/channels?channel=${fwd.channelId}&highlight=${fwd.messageId}`}
+                            <a href={`/messages?channel=${fwd.channelId}&highlight=${fwd.messageId}`}
                               className="text-indigo-500 hover:text-indigo-700 font-semibold hover:underline">
                               View message
                             </a>
@@ -549,7 +549,7 @@ export function ChannelMessageItem({
                             <a
                               href={fwd.taskToken
                                 ? `/nexus?highlight_token=${fwd.taskToken}&open=true`
-                                : `/channels?task=${fwd.taskId}`}
+                                : `/messages?task=${fwd.taskId}`}
                               className="text-indigo-500 hover:text-indigo-700 font-semibold hover:underline">
                               View task
                             </a>

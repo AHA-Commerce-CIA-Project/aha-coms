@@ -168,8 +168,8 @@ export default function LaterPage() {
 
   const handleNavigateMessage = (channelId: string, messageId?: string) => {
     const url = messageId
-      ? `/channels?channel=${channelId}&highlight=${messageId}`
-      : `/channels?channel=${channelId}`;
+      ? `/messages?channel=${channelId}&highlight=${messageId}`
+      : `/messages?channel=${channelId}`;
     router.push(url);
   };
 
@@ -187,7 +187,7 @@ export default function LaterPage() {
       const params = new URLSearchParams({ task: t.id, purpose: 'assign_task' });
       if (t.target_channel_id) params.set('channel', t.target_channel_id);
       if (t.channel_message_id) params.set('highlight', t.channel_message_id);
-      router.push(`/channels?${params.toString()}`);
+      router.push(`/messages?{params.toString()}`);
       return;
     }
     router.push(`/nexus?highlight=${t.id}&open=true`);
@@ -548,7 +548,7 @@ export default function LaterPage() {
                     if (!card.target_channel_id) return;
                     const params = new URLSearchParams({ task: card.id, purpose: 'assign_task', channel: card.target_channel_id });
                     if (card.channel_message_id) params.set('highlight', card.channel_message_id);
-                    router.push(`/channels?${params.toString()}`);
+                    router.push(`/messages?{params.toString()}`);
                   };
                   return (
                     <li

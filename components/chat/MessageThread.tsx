@@ -355,7 +355,7 @@ export function MessageThread({
                                                         <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 mt-2 text-xs">
                                                             <span className="text-slate-400">Forwarded from</span>
                                                             {fwd.channelName ? (
-                                                                <a href={`/channels?channel=${fwd.channelId || ''}`} className="font-semibold text-slate-700 hover:text-indigo-600 hover:underline">
+                                                                <a href={`/messages?channel=${fwd.channelId || ''}`} className="font-semibold text-slate-700 hover:text-indigo-600 hover:underline">
                                                                     #{fwd.channelName}
                                                                 </a>
                                                             ) : fwd.isTask ? (
@@ -376,7 +376,7 @@ export function MessageThread({
                                                                     <span className="text-slate-300">·</span>
                                                                     {fwd.channelId && fwd.messageId ? (
                                                                         <a
-                                                                            href={`/channels?channel=${fwd.channelId}&highlight=${fwd.messageId}`}
+                                                                            href={`/messages?channel=${fwd.channelId}&highlight=${fwd.messageId}`}
                                                                             className="text-indigo-600 hover:text-indigo-700 font-semibold hover:underline"
                                                                         >
                                                                             View message
@@ -385,7 +385,7 @@ export function MessageThread({
                                                                         <a
                                                                             href={fwd.taskToken
                                                                                 ? `/nexus?highlight_token=${fwd.taskToken}&open=true`
-                                                                                : `/channels?task=${fwd.taskId}`}
+                                                                                : `/messages?task=${fwd.taskId}`}
                                                                             className="text-indigo-600 hover:text-indigo-700 font-semibold hover:underline"
                                                                         >
                                                                             View task

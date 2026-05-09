@@ -201,7 +201,7 @@ export function TeamInboxTaskModal({ task, currentUserId, onClose, onChange }: P
                                         <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Channel</div>
                                         <button
                                             type="button"
-                                            onClick={() => router.push(`/channels?channel=${task.targetChannel?.id}`)}
+                                            onClick={() => router.push(`/messages?channel=${task.targetChannel?.id}`)}
                                             className="font-semibold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1"
                                         >
                                             {task.targetChannel.name}

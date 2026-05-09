@@ -14,7 +14,7 @@ interface TabDef {
     href: string;
     icon: any;
     label: string;
-    badgeKey?: 'tasks' | 'channels' | 'dm' | 'changelog';
+    badgeKey?: 'tasks' | 'messages' | 'changelog';
     /** A path is "active" when pathname startsWith any of these. */
     activePaths: string[];
 }
@@ -22,8 +22,8 @@ interface TabDef {
 const PRIMARY_TABS: TabDef[] = [
     { href: '/fast', icon: LayoutDashboard, label: 'Home', activePaths: ['/fast'] },
     { href: '/tasks', icon: CheckSquare, label: 'Tasks', badgeKey: 'tasks', activePaths: ['/tasks', '/nexus', '/team-inbox'] },
-    { href: '/channels', icon: Hash, label: 'Channels', badgeKey: 'channels', activePaths: ['/channels'] },
-    { href: '/messages', icon: MessageCircle, label: 'DMs', badgeKey: 'dm', activePaths: ['/messages'] },
+    // Unified Messages workspace — DMs and channels share one tab now.
+    { href: '/messages', icon: MessageCircle, label: 'Messages', badgeKey: 'messages', activePaths: ['/messages', '/channels'] },
 ];
 
 interface MoreItem {
@@ -44,7 +44,8 @@ export function BottomNav() {
 
     const [moreOpen, setMoreOpen] = useState(false);
 
-    const [badges, setBadges] = useState({ tasks: 0, channels: 0, dm: 0, changelog: 0 });
+    // The Messages tab badge sums channel + DM unread, since they're now one nav entry.
+    const [badges, setBadges] = useState({ tasks: 0, messages: 0, changelog: 0 });
 
     // Reuse the same endpoints the Sidebar polls so badge state stays in sync
     // even though the two nav surfaces fetch independently. Cheap — endpoints
@@ -59,8 +60,9 @@ export function BottomNav() {
                     fetch('/api/changelog'),
                 ]);
                 const next = { ...badges };
-                if (channelRes.ok) next.channels = (await channelRes.json()).unreadCount || 0;
-                if (dmRes.ok) next.dm = (await dmRes.json()).unreadCount || 0;
+                const channelUnread = channelRes.ok ? ((await channelRes.json()).unreadCount || 0) : 0;
+                const dmUnread = dmRes.ok ? ((await dmRes.json()).unreadCount || 0) : 0;
+                next.messages = channelUnread + dmUnread;
                 if (changelogRes.ok) next.changelog = (await changelogRes.json()).unseenCount || 0;
                 setBadges(next);
             } catch {}

@@ -296,9 +296,9 @@ export function TopNav() {
             // round-trip through the Team Inbox.
             router.push(`/tasks?task=${n.data.task_id}`);
         } else if (n.data?.channel_id && n.data?.message_id) {
-            router.push(`/channels?channel=${n.data.channel_id}&highlight=${n.data.message_id}`);
+            router.push(`/messages?channel=${n.data.channel_id}&highlight=${n.data.message_id}`);
         } else if (n.data?.channel_id) {
-            router.push(`/channels?channel=${n.data.channel_id}`);
+            router.push(`/messages?channel=${n.data.channel_id}`);
         } else if (n.type === 'task_comment' && n.data?.task_id) {
             const commentQS = n.data.comment_id ? `&comment=${n.data.comment_id}` : '';
             router.push(`/tasks?task=${n.data.task_id}&focus=comments${commentQS}`);

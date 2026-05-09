@@ -83,7 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     if (directAssignSourceMessageId) return;
                     // Otherwise jump to the channel so the poster can see their card.
                     if (channelId) {
-                        router.push(`/channels?channelId=${encodeURIComponent(channelId)}`);
+                        router.push(`/messages?channel=${encodeURIComponent(channelId)}`);
                     }
                 }}
             />

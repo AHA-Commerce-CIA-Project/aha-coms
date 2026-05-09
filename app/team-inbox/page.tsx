@@ -173,7 +173,7 @@ export default function TeamInboxPage() {
         // never auto-opens from this navigation. Direct-assign channels live on
         // the "Assign Task" purpose tab — pass it so the page lands on the
         // right tab instead of defaulting to "Channels".
-        const base = '/channels?purpose=assign_task';
+        const base = '/messages?purpose=assign_task';
         if (t.targetChannel?.id && t.channelMessageId) {
             router.push(`${base}&channel=${t.targetChannel.id}&highlight=${t.channelMessageId}`);
         } else if (t.targetChannel?.id) {
