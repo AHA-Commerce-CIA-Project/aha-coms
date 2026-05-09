@@ -636,7 +636,7 @@ export function DmPane() {
                         )}
 
                         {/* Messages — Slack-style left-aligned */}
-                        <div className="flex-1 overflow-y-auto pt-6">
+                        <div className="flex-1 min-h-0 overflow-y-auto pt-6">
                             {loadingMessages ? (
                                 <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
                             ) : messages.length === 0 ? (

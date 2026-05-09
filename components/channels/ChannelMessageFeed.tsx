@@ -194,7 +194,11 @@ export function ChannelMessageFeed({
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto"
+      // min-h-0 is required for `flex-1 + overflow-y-auto` to actually clip
+      // and scroll inside a flex column. Without it, the feed's intrinsic
+      // content height wins over flex-1 and the column overflows downward,
+      // pushing the composer off the bottom of the viewport.
+      className="flex-1 min-h-0 overflow-y-auto"
       onScroll={handleScroll}
     >
       {/* Load more indicator */}
