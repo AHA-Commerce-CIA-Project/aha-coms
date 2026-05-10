@@ -892,19 +892,27 @@ export default function TeamInboxPage() {
                                                                             onClick={(e) => e.stopPropagation()}
                                                                             className="absolute z-30 right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg py-1"
                                                                         >
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    setAssignPickerForId(t.id);
-                                                                                    setPickerSearch('');
-                                                                                    ensurePickerMembers();
-                                                                                }}
-                                                                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
-                                                                            >
-                                                                                <UserPlus className="w-3.5 h-3.5 text-indigo-500" />
-                                                                                Assign to Other Member
-                                                                            </button>
+                                                                            {/* Reassign — only visible while a task is actively
+                                                                                in-progress AND the viewer is the current claimer.
+                                                                                Hand-offs only make sense mid-flight, and only the
+                                                                                claimer should be able to reassign their own task.
+                                                                                Hidden (not disabled) so the menu doesn't suggest
+                                                                                an action the viewer can't take. */}
+                                                                            {t.status === 'in-progress' && t.assignee?.id === myId && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setAssignPickerForId(t.id);
+                                                                                        setPickerSearch('');
+                                                                                        ensurePickerMembers();
+                                                                                    }}
+                                                                                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                                                                                >
+                                                                                    <UserPlus className="w-3.5 h-3.5 text-indigo-500" />
+                                                                                    Assign to Other Member
+                                                                                </button>
+                                                                            )}
                                                                             <button
                                                                                 type="button"
                                                                                 onClick={(e) => { e.stopPropagation(); handleToggleSave(t); }}
