@@ -61,6 +61,9 @@ export async function GET(request: NextRequest) {
                 select: { archivedAt: true },
                 take: 1,
             },
+            // Just the boolean — used to compute total/completed counts for the
+            // card progress indicator without sending the full item payload.
+            checklistItems: { select: { isCompleted: true } },
         },
         orderBy: { createdAt: 'desc' },
     });
@@ -95,6 +98,11 @@ export async function GET(request: NextRequest) {
         pendingTag: t.pendingTag,
         pendedAt: t.pendedAt,
         pendedFromStatus: t.pendedFromStatus,
+        needsHelp: t.needsHelp,
+        checklist: {
+            total: t.checklistItems.length,
+            completed: t.checklistItems.filter(i => i.isCompleted).length,
+        },
     }));
 
     return NextResponse.json({ tasks: data, teamId: targetTeamId });

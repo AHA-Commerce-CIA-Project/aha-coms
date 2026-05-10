@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X } from 'lucide-react';
+import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { htmlToPlainText } from '@/lib/sanitize';
 import { PageTabs } from '@/components/PageTabs';
@@ -41,6 +41,8 @@ interface InboxTask {
     pendingTag?: string | null;
     pendedAt?: string | null;
     pendedFromStatus?: string | null;
+    needsHelp?: boolean;
+    checklist?: { total: number; completed: number };
 }
 
 const PENDING_TAGS: { value: string; label: string }[] = [
@@ -416,6 +418,34 @@ export default function TeamInboxPage() {
             setActionError(data.action === 'saved' ? 'Saved for later.' : 'Removed from Saved.');
         } catch (err: any) {
             setActionError(err?.message || 'Failed to save');
+        } finally {
+            setPendingId(null);
+            setMenuOpenId(null);
+        }
+    };
+
+    // Request Help / Cancel — toggles task.needsHelp via the existing
+    // /api/tasks/:id/request-help endpoint (POST to flag, DELETE to clear).
+    // Optimistic update so the "Help wanted" badge swaps instantly; we
+    // revert if the server rejects (e.g. only the assignee is allowed).
+    const handleToggleHelp = async (task: InboxTask) => {
+        if (pendingId) return;
+        const next = !task.needsHelp;
+        const snapshot = tasks;
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, needsHelp: next } : t)));
+        setPendingId(task.id);
+        setActionError(null);
+        try {
+            const res = await fetch(`/api/tasks/${task.id}/request-help`, {
+                method: next ? 'POST' : 'DELETE',
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                throw new Error(body?.error || 'Failed to update help request');
+            }
+        } catch (err: any) {
+            setTasks(snapshot);
+            setActionError(err?.message || 'Failed to update help request');
         } finally {
             setPendingId(null);
             setMenuOpenId(null);
@@ -891,6 +921,19 @@ export default function TeamInboxPage() {
                                                                                 <Forward className="w-3.5 h-3.5 text-sky-500" />
                                                                                 Forward
                                                                             </button>
+                                                                            {/* Request Help — only the assignee can flip needsHelp.
+                                                                                Server already enforces this (403 otherwise), but
+                                                                                we hide the menu item to avoid a misleading row. */}
+                                                                            {t.assignee?.id === myId && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={(e) => { e.stopPropagation(); handleToggleHelp(t); }}
+                                                                                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                                                                                >
+                                                                                    <Hand className={`w-3.5 h-3.5 ${t.needsHelp ? 'text-emerald-500' : 'text-rose-500'}`} />
+                                                                                    {t.needsHelp ? 'Cancel Help Request' : 'Request Help'}
+                                                                                </button>
+                                                                            )}
                                                                             {/* Pending actions — same authorization gate as the
                                                                                 server's canManagePending check. Only assignee,
                                                                                 requester, or leader/admin sees these items;
@@ -1042,7 +1085,36 @@ export default function TeamInboxPage() {
                                                                     <Paperclip className="w-3 h-3" /> {attachmentCount}
                                                                 </span>
                                                             )}
+                                                            {t.needsHelp && (
+                                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200 inline-flex items-center gap-0.5">
+                                                                    <Hand className="w-3 h-3" /> Help wanted
+                                                                </span>
+                                                            )}
                                                         </div>
+
+                                                        {/* Checklist progress — Trello-style icon + count + bar.
+                                                            Hidden when there are no items so empty cards stay clean. */}
+                                                        {t.checklist && t.checklist.total > 0 && (() => {
+                                                            const { total, completed } = t.checklist;
+                                                            const pct = Math.round((completed / total) * 100);
+                                                            const done = completed === total;
+                                                            return (
+                                                                <div className="mb-2">
+                                                                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mb-1">
+                                                                        <ListChecks className={`w-3.5 h-3.5 ${done ? 'text-emerald-500' : 'text-slate-400'}`} />
+                                                                        <span className={done ? 'text-emerald-600' : ''}>
+                                                                            {completed}/{total} ({pct}%)
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                                                                        <div
+                                                                            className={`h-full rounded-full transition-all ${done ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                                                                            style={{ width: `${pct}%` }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })()}
 
                                                         {/* Pending reason — visible callout on paused cards so the
                                                             assignee and anyone reviewing the kanban can see why this

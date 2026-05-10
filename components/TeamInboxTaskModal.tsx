@@ -19,6 +19,7 @@ import { sanitizeRichText } from '@/lib/sanitize';
 import { ImageLightbox } from './ImageLightbox';
 import { TaskCommentsSection } from './TaskCommentsSection';
 import { SaveTaskButton } from './SaveTaskButton';
+import { TaskChecklistSection } from './TaskChecklistSection';
 
 interface Attachment {
     url: string;
@@ -278,6 +279,11 @@ export function TeamInboxTaskModal({ task, currentUserId, onClose, onChange }: P
                                 </div>
                             </div>
                         )}
+
+                        {/* Checklist — Trello-style sub-tasks with progress + per-item toggle. */}
+                        <div className="pt-2 border-t border-slate-100">
+                            <TaskChecklistSection taskId={task.id} onChange={onChange} />
+                        </div>
 
                         {/* Comments thread — requester + claimer can chat with files/images/emoji/mentions */}
                         <div className="pt-2 border-t border-slate-100">

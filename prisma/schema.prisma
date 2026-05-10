@@ -267,8 +267,25 @@ model Task {
   savedBy          SavedTask[]
   collaborators    TaskCollaborator[]
   personalArchives UserArchivedTask[] @relation("TaskUserArchives")
+  checklistItems   ChecklistItem[]
 
   @@map("tasks")
+}
+
+// Trello-style sub-tasks attached to a Task. position keeps a stable
+// user-defined order; isCompleted drives the inbox card's progress bar
+// + percentage. Cascade-deleted with the parent task.
+model ChecklistItem {
+  id          String   @id @default(uuid())
+  taskId      String   @map("task_id")
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  title       String
+  isCompleted Boolean  @default(false) @map("is_completed")
+  position    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([taskId])
+  @@map("checklist_item")
 }
 
 model Notification {
