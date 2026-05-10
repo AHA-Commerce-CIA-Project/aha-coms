@@ -240,7 +240,10 @@ model Task {
   targetChannelId  String?         @map("target_channel_id")
   targetChannel    Channel?        @relation("DirectAssignChannel", fields: [targetChannelId], references: [id], onDelete: SetNull)
   channelMessageId String?         @map("channel_message_id")
-  channelMessage   ChannelMessage? @relation("DirectAssignMessage", fields: [channelMessageId], references: [id], onDelete: SetNull)
+  // Cascade: when the source channel message is deleted (requester deletes
+  // their own post, channel cleanup, etc.) the orphaned Task is removed too.
+  // Previously SetNull, which left dead-end cards in the team inbox.
+  channelMessage   ChannelMessage? @relation("DirectAssignMessage", fields: [channelMessageId], references: [id], onDelete: Cascade)
   // Which team this task is assigned to. Drives the per-team Inbox view.
   // Derived from the target channel's allowed-team rules at submission time.
   assignedTeamId   String?         @map("assigned_team_id")

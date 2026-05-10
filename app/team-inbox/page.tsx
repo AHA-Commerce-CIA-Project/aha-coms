@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks } from 'lucide-react';
+import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks, Eye, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { htmlToPlainText } from '@/lib/sanitize';
 import { PageTabs } from '@/components/PageTabs';
 import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';
+import { TeamInboxTaskModal, type TeamInboxTask } from '@/components/TeamInboxTaskModal';
 
 interface Attachment {
     url: string;
@@ -151,6 +152,9 @@ export default function TeamInboxPage() {
     // 3-dot kebab menu state — id of the card whose menu is open, plus the
     // submenu (assign-picker) state. Only one menu is open at a time.
     const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+    // Local task-detail modal — opened from the "View Details" button so the
+    // user can inspect/edit a task without leaving the inbox.
+    const [detailTask, setDetailTask] = useState<TeamInboxTask | null>(null);
     const [assignPickerForId, setAssignPickerForId] = useState<string | null>(null);
     const [pickerMembers, setPickerMembers] = useState<PickerMember[]>([]);
     const [pickerLoading, setPickerLoading] = useState(false);
@@ -167,6 +171,14 @@ export default function TeamInboxPage() {
     const [pendingModalTag, setPendingModalTag] = useState<string>('waiting_on_brand');
     const [pendingModalSubmitting, setPendingModalSubmitting] = useState(false);
     const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+    // Open the local task-detail modal — keeps the user on /team-inbox so they
+    // can inspect details + run the checklist without losing their place. The
+    // modal accepts a TeamInboxTask which is structurally a subset of InboxTask;
+    // we cast through unknown to satisfy TS without duplicating the type.
+    const openDetail = (t: InboxTask) => {
+        setDetailTask(t as unknown as TeamInboxTask);
+    };
 
     const openTaskInChannel = (t: InboxTask) => {
         // Behave like clicking a saved item in /later: jump to the channel and
@@ -828,15 +840,18 @@ export default function TeamInboxPage() {
                                                 const isDone = t.status === 'done';
                                                 // Determine which quick-action button to show.
                                                 let actionBtn: { label: string; icon: typeof Hand; onClick: () => void; tone: string } | null = null;
+                                                // In-progress cards owned by the viewer get a two-button row
+                                                // (View Details + Go to Channel) instead of a Mark Complete
+                                                // primary — completion is handled by drag-and-drop into the
+                                                // Done column. Computed below in `showQuickInspect`.
                                                 if (isPaused && (isMine || profile?.role === 'leader' || profile?.role === 'admin')) {
                                                     actionBtn = { label: 'Resume', icon: PlayCircle, onClick: () => handleResume(t), tone: 'bg-amber-600 hover:bg-amber-700 text-white' };
                                                 } else if (isUnclaimed) {
                                                     actionBtn = { label: 'Claim', icon: Hand, onClick: () => handleClaim(t), tone: 'bg-sky-600 hover:bg-sky-700 text-white' };
-                                                } else if (isInProgress && isMine) {
-                                                    actionBtn = { label: 'Mark Complete', icon: Check, onClick: () => handleComplete(t), tone: 'bg-emerald-600 hover:bg-emerald-700 text-white' };
                                                 } else if (isDone && isMine) {
                                                     actionBtn = { label: 'Reopen', icon: RotateCcw, onClick: () => handleReopen(t), tone: 'bg-slate-600 hover:bg-slate-700 text-white' };
                                                 }
+                                                const showQuickInspect = isInProgress && isMine;
                                                 const draggable = canDrag(t) && !isPending;
                                                 const isMenuOpen = menuOpenId === t.id;
                                                 const isPickerOpen = assignPickerForId === t.id;
@@ -981,25 +996,38 @@ export default function TeamInboxPage() {
                                                                                 }
                                                                                 return null;
                                                                             })()}
-                                                                            {isDone && (
-                                                                                <>
-                                                                                    <div className="my-1 border-t border-slate-100" />
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation();
-                                                                                            archived ? handleUnarchive(t) : handleArchive(t);
-                                                                                        }}
-                                                                                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
-                                                                                    >
-                                                                                        {archived ? (
-                                                                                            <><ArchiveRestore className="w-3.5 h-3.5 text-emerald-500" /> Restore</>
-                                                                                        ) : (
-                                                                                            <><Archive className="w-3.5 h-3.5 text-slate-500" /> Archive</>
-                                                                                        )}
-                                                                                    </button>
-                                                                                </>
-                                                                            )}
+                                                                            {isDone && (() => {
+                                                                                // Archive / Restore — only the assignee, the
+                                                                                // requester, or an Admin should be able to file
+                                                                                // a completed task away. Hide the row for everyone
+                                                                                // else so the menu doesn't suggest a no-op.
+                                                                                const myEmail = profile?.email?.toLowerCase();
+                                                                                const requesterEmail = t.requesterEmail?.toLowerCase();
+                                                                                const canArchive =
+                                                                                    profile?.role === 'admin' ||
+                                                                                    (t.assignee?.id && t.assignee.id === myId) ||
+                                                                                    (!!myEmail && !!requesterEmail && myEmail === requesterEmail);
+                                                                                if (!canArchive) return null;
+                                                                                return (
+                                                                                    <>
+                                                                                        <div className="my-1 border-t border-slate-100" />
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                archived ? handleUnarchive(t) : handleArchive(t);
+                                                                                            }}
+                                                                                            className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                                                                                        >
+                                                                                            {archived ? (
+                                                                                                <><ArchiveRestore className="w-3.5 h-3.5 text-emerald-500" /> Restore</>
+                                                                                            ) : (
+                                                                                                <><Archive className="w-3.5 h-3.5 text-slate-500" /> Archive</>
+                                                                                            )}
+                                                                                        </button>
+                                                                                    </>
+                                                                                );
+                                                                            })()}
                                                                         </div>
                                                                     )}
                                                                     {isMenuOpen && isPickerOpen && (
@@ -1152,8 +1180,9 @@ export default function TeamInboxPage() {
                                                             </div>
                                                         )}
 
-                                                        {/* Quick action — Claim / Mark Complete / Reopen.
-                                                            Stops propagation so the click doesn't also navigate to the channel. */}
+                                                        {/* Quick action — Claim / Resume / Reopen for non-in-progress states.
+                                                            Mark Complete is intentionally gone: drag-and-drop into the Done
+                                                            column handles completion, so the giant button was redundant. */}
                                                         {actionBtn && (
                                                             <button
                                                                 type="button"
@@ -1164,6 +1193,30 @@ export default function TeamInboxPage() {
                                                                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <actionBtn.icon className="w-3.5 h-3.5" />}
                                                                 {actionBtn.label}
                                                             </button>
+                                                        )}
+
+                                                        {/* In-progress + mine — two secondary actions in place of Mark Complete:
+                                                            View Details opens the modal locally (no navigation), Go to Channel
+                                                            jumps to the channel and scroll-targets the source message. */}
+                                                        {showQuickInspect && (
+                                                            <div className="flex items-center gap-1.5 mb-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); openDetail(t); }}
+                                                                    className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
+                                                                >
+                                                                    <Eye className="w-3.5 h-3.5" />
+                                                                    View Details
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); openTaskInChannel(t); }}
+                                                                    className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
+                                                                >
+                                                                    <ExternalLink className="w-3.5 h-3.5" />
+                                                                    Go to Channel
+                                                                </button>
+                                                            </div>
                                                         )}
 
                                                         {/* Footer — channel + assignee */}
@@ -1209,6 +1262,18 @@ export default function TeamInboxPage() {
                 taskToken={forwardData?.taskToken}
                 taskId={forwardData?.taskId}
             />
+
+            {/* Task-detail modal — opened by the View Details button on
+                in-progress cards. onChange refetches the inbox so checklist
+                progress / status changes from the modal show up in the cards. */}
+            {detailTask && (
+                <TeamInboxTaskModal
+                    task={detailTask}
+                    currentUserId={myId || undefined}
+                    onClose={() => setDetailTask(null)}
+                    onChange={() => fetchInbox(selectedTeamId)}
+                />
+            )}
 
             {/* Mark-as-Pending modal — captures a structured tag + free-text
                 reason so the requester sees a meaningful "your task is paused

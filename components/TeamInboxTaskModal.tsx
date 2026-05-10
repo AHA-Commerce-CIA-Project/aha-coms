@@ -280,9 +280,14 @@ export function TeamInboxTaskModal({ task, currentUserId, onClose, onChange }: P
                             </div>
                         )}
 
-                        {/* Checklist — Trello-style sub-tasks with progress + per-item toggle. */}
+                        {/* Checklist — Trello-style sub-tasks with progress + per-item toggle.
+                            Editable only by the assignee; everyone else gets a read-only view. */}
                         <div className="pt-2 border-t border-slate-100">
-                            <TaskChecklistSection taskId={task.id} onChange={onChange} />
+                            <TaskChecklistSection
+                                taskId={task.id}
+                                canEdit={!!currentUserId && !!task.assignee && task.assignee.id === currentUserId}
+                                onChange={onChange}
+                            />
                         </div>
 
                         {/* Comments thread — requester + claimer can chat with files/images/emoji/mentions */}
