@@ -709,6 +709,20 @@ export function ChannelPane() {
                   users={users}
                   teams={teams}
                   onTypingUsersChange={handleTypingUsersChange}
+                  onTaskCommand={(description, atts) => {
+                    const images = atts
+                      .filter((a) => a.isImage || (a.type || '').startsWith('image/'))
+                      .map((a) => ({ url: a.url, preview: a.url }));
+                    const fileUrls = atts
+                      .filter((a) => !(a.isImage || (a.type || '').startsWith('image/')))
+                      .map((a) => a.url);
+                    setDirectAssignOpen(true, {
+                      channelId: selectedChannel.id,
+                      defaultDescription: description,
+                      defaultImages: images,
+                      defaultFileUrls: fileUrls,
+                    });
+                  }}
                 />
               </>
             )}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Paperclip, Image as ImageIcon, Send, X, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Code } from 'lucide-react';
+import { Paperclip, Image as ImageIcon, Send, X, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Code, ClipboardList } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { MentionAutocomplete, type MentionAutocompleteHandle, type MentionTeam, type MentionTarget } from './MentionAutocomplete';
 import { Smile } from 'lucide-react';
@@ -36,6 +36,11 @@ interface ChannelMessageComposerProps {
   users: MentionUser[];
   teams?: MentionTeam[];
   onTypingUsersChange?: (users: TypingUser[]) => void;
+  // Slash-command hook. When provided, typing `/req` then Tab enters
+  // "Task Request" draft mode; the next Enter calls this with the text +
+  // attachments instead of sending a chat message. Parents that don't pass
+  // this (e.g. DM pane) keep plain chat behavior.
+  onTaskCommand?: (description: string, attachments: Attachment[]) => void;
 }
 
 export function ChannelMessageComposer({
@@ -47,6 +52,7 @@ export function ChannelMessageComposer({
   users,
   teams = [],
   onTypingUsersChange,
+  onTaskCommand,
 }: ChannelMessageComposerProps) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -56,6 +62,8 @@ export function ChannelMessageComposer({
   const [showMention, setShowMention] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
   const [activeFormats, setActiveFormats] = useState<Record<string, boolean>>({});
+  const [isTaskDraftMode, setIsTaskDraftMode] = useState(false);
+  const [showTaskHint, setShowTaskHint] = useState(false);
   const lastTypingSent = useRef(0);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -112,6 +120,8 @@ export function ChannelMessageComposer({
     }
     editor.innerHTML = draft;
     setShowToolbar(false);
+    setIsTaskDraftMode(false);
+    setShowTaskHint(false);
 
     return () => {
       if (!channelId) return;
@@ -320,6 +330,24 @@ export function ChannelMessageComposer({
     return text === '' || text === '\n';
   };
 
+  const enterTaskMode = useCallback(() => {
+    if (editorRef.current) editorRef.current.innerHTML = '';
+    setShowTaskHint(false);
+    setIsTaskDraftMode(true);
+    requestAnimationFrame(() => editorRef.current?.focus());
+  }, []);
+
+  const submitTaskCommand = () => {
+    if (!onTaskCommand) return;
+    const text = getEditorText();
+    if (!text.trim() && attachments.length === 0) return;
+    onTaskCommand(text, attachments);
+    if (editorRef.current) editorRef.current.innerHTML = '';
+    setAttachments([]);
+    setIsTaskDraftMode(false);
+    setShowTaskHint(false);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // When the mention popup is open, intercept navigation/selection keys
     // before they trigger send or tab-out.
@@ -332,6 +360,27 @@ export function ChannelMessageComposer({
         return;
       }
       if (e.key === 'Escape') { e.preventDefault(); setShowMention(false); return; }
+    }
+    // Slash-command: text exactly `/req` + Tab → enter Task Request draft mode.
+    if (e.key === 'Tab' && !isTaskDraftMode && onTaskCommand) {
+      if (getEditorText().trim() === '/req') {
+        e.preventDefault();
+        enterTaskMode();
+        return;
+      }
+    }
+    // Backspace on an empty editor cancels task draft mode.
+    if (e.key === 'Backspace' && isTaskDraftMode && isEditorEmpty() && attachments.length === 0) {
+      e.preventDefault();
+      setIsTaskDraftMode(false);
+      return;
+    }
+    // Enter while in task mode opens the Direct Assign modal with the typed
+    // description instead of sending a chat message.
+    if (e.key === 'Enter' && !e.shiftKey && isTaskDraftMode) {
+      e.preventDefault();
+      submitTaskCommand();
+      return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -485,6 +534,10 @@ export function ChannelMessageComposer({
   const handleInput = () => {
     const text = getEditorText();
     if (text.trim()) emitTyping();
+
+    // Slash-command hint: show a clickable Tab pill while the editor reads `/req`.
+    const shouldShowTaskHint = !isTaskDraftMode && text.trim() === '/req' && !!onTaskCommand;
+    if (shouldShowTaskHint !== showTaskHint) setShowTaskHint(shouldShowTaskHint);
 
     // Detect @ mention
     const sel = window.getSelection();
@@ -759,8 +812,42 @@ export function ChannelMessageComposer({
           </div>
         )}
 
+        {/* Task draft mode badge — replaces the chat-message intent. */}
+        {isTaskDraftMode && (
+          <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
+            <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-1 bg-indigo-100 text-indigo-700 rounded-md text-xs font-semibold">
+              <ClipboardList className="w-3 h-3" />
+              Task Request
+              <button
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); setIsTaskDraftMode(false); }}
+                className="ml-0.5 p-0.5 rounded hover:bg-indigo-200 hover:text-indigo-900"
+                title="Cancel (or press Backspace on an empty input)"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+            <span className="text-[11px] text-slate-400">Press Enter ↵ to open the task form</span>
+          </div>
+        )}
+
         {/* Editor area */}
         <div className="relative">
+          {/* Slash-command hint — appears when editor reads exactly `/req`. */}
+          {showTaskHint && !isTaskDraftMode && onTaskCommand && (
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); enterTaskMode(); }}
+              className="absolute bottom-full left-3 mb-2 z-10 inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-md hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
+            >
+              <ClipboardList className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+              <span className="flex flex-col items-start text-left">
+                <span className="text-xs font-semibold text-slate-700 leading-tight">Task Request</span>
+                <span className="text-[10px] text-slate-400 leading-tight">Open the Direct Assign form</span>
+              </span>
+              <span className="ml-1 text-[10px] font-mono px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">Tab ↹</span>
+            </button>
+          )}
           <MentionAutocomplete
             ref={mentionRef}
             users={users}
@@ -776,7 +863,7 @@ export function ChannelMessageComposer({
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             onFocus={() => setShowToolbar(true)}
-            data-placeholder={placeholder || `Message #${channelName}`}
+            data-placeholder={isTaskDraftMode ? 'Describe the task you need done…' : (placeholder || `Message #${channelName}`)}
             className="min-h-[40px] max-h-[160px] overflow-y-auto px-4 py-2.5 text-sm text-slate-800 outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none [&_b]:font-bold [&_i]:italic [&_u]:underline [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono"
           />
         </div>
@@ -852,12 +939,12 @@ export function ChannelMessageComposer({
 
           <button
             type="button"
-            onClick={handleSend}
+            onClick={() => (isTaskDraftMode ? submitTaskCommand() : handleSend())}
             disabled={(isEditorEmpty() && attachments.length === 0) || uploading || disabled}
             className="flex-shrink-0 p-2 sm:p-1.5 text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
-            title="Send"
+            title={isTaskDraftMode ? 'Open the task form' : 'Send'}
           >
-            <Send className="w-4 h-4" />
+            {isTaskDraftMode ? <ClipboardList className="w-4 h-4" /> : <Send className="w-4 h-4" />}
           </button>
         </div>
       </div>
