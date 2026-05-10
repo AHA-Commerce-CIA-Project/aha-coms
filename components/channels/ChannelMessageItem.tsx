@@ -8,6 +8,8 @@ import { MentionTextarea } from './MentionTextarea';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { DirectAssignCard } from './DirectAssignCard';
 import { TeamMembersPopover } from './TeamMembersPopover';
+import { useCustomEmojiMap } from '@/lib/customEmojis';
+import { renderShortcodes } from '@/lib/renderShortcodes';
 import { DeleteMessageModal } from './DeleteMessageModal';
 import { useAppStore } from '@/lib/store';
 import { htmlToPlainText, isHtml } from '@/lib/sanitize';
@@ -88,6 +90,7 @@ function processHtmlContent(
   html: string,
   allUsers?: { id: string; name: string }[],
   allTeams?: { id: string; mentionHandle: string }[],
+  customEmojiMap?: Record<string, { imageUrl: string }>,
 ): string {
   // Linkify URLs that aren't already inside <a> tags
   let result = html.replace(
@@ -138,6 +141,14 @@ function processHtmlContent(
     },
   );
 
+  // Custom emoji shortcodes — `:name:` becomes inline <img/>. We do this BEFORE
+  // chip restoration so the shortcode pass only sees text content, never our
+  // null-byte chip placeholders. The render helper short-circuits when the
+  // workspace has no custom emojis.
+  if (customEmojiMap) {
+    result = renderShortcodes(result, customEmojiMap);
+  }
+
   // Restore chips
   result = result.replace(/\u0000CHIP_(\d+)\u0000/g, (_, i) => chips[parseInt(i, 10)]);
 
@@ -150,6 +161,7 @@ function renderContent(
   onMentionClick?: (userId: string) => void,
   allTeams?: { id: string; mentionHandle: string }[],
   onTeamClick?: (teamId: string) => void,
+  customEmojiMap?: Record<string, { imageUrl: string }>,
 ) {
   if (!content) return null;
 
@@ -160,7 +172,7 @@ function renderContent(
     return (
       <span
         className="text-[15px] leading-relaxed [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
-        dangerouslySetInnerHTML={{ __html: processHtmlContent(content, allUsers, allTeams) }}
+        dangerouslySetInnerHTML={{ __html: processHtmlContent(content, allUsers, allTeams, customEmojiMap) }}
       />
     );
   }
@@ -262,6 +274,7 @@ export function ChannelMessageItem({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const setProfileUser = useAppStore((s) => s.setProfileUser);
   const isOwner = message.senderId === currentUserId;
+  const customEmojiMap = useCustomEmojiMap();
 
   const handleMentionClick = async (userId: string) => {
     setProfileLoading(true);
@@ -492,7 +505,7 @@ export function ChannelMessageItem({
                       <div>
                         {userMsg && (
                           <p className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed mb-2">
-                            {renderContent(userMsg, allUsers, handleMentionClick, allTeams, (teamId) => setTeamPopoverId(teamId))}
+                            {renderContent(userMsg, allUsers, handleMentionClick, allTeams, (teamId) => setTeamPopoverId(teamId), customEmojiMap)}
                           </p>
                         )}
                         {/* Task forwards render as a live DirectAssignCard so the
@@ -575,7 +588,7 @@ export function ChannelMessageItem({
                     onClick={handleContentClick}
                     className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed"
                   >
-                    {renderContent(message.content, allUsers, handleMentionClick, allTeams, (teamId) => setTeamPopoverId(teamId))}
+                    {renderContent(message.content, allUsers, handleMentionClick, allTeams, (teamId) => setTeamPopoverId(teamId), customEmojiMap)}
                     {message.updatedAt && message.createdAt !== message.updatedAt &&
                       new Date(message.updatedAt).getTime() - new Date(message.createdAt).getTime() > 1000 && (
                       <span className="text-xs text-slate-400 ml-1 italic">(edited)</span>

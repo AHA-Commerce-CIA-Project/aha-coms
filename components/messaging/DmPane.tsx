@@ -12,6 +12,8 @@ import { linkifyHtml } from '@/lib/linkify';
 import { htmlToPlainText } from '@/lib/sanitize';
 import { useDrafts } from '@/lib/useDrafts';
 import { useAppStore } from '@/lib/store';
+import { useCustomEmojiMap } from '@/lib/customEmojis';
+import { renderShortcodes } from '@/lib/renderShortcodes';
 
 interface OtherUser {
     id: string;
@@ -61,6 +63,7 @@ function DmMessageItem({ msg, isOwn, isEdited, images, docs, reactionGroups, onR
     const [showActions, setShowActions] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
     const [editing, setEditing] = useState(false);
+    const customEmojiMap = useCustomEmojiMap();
     // DM composer now stores rich HTML — convert to plaintext for the edit
     // textarea so the user sees readable text, not raw <div>/<br> markup.
     const [editContent, setEditContent] = useState(htmlToPlainText(msg.content));
@@ -149,12 +152,12 @@ function DmMessageItem({ msg, isOwn, isEdited, images, docs, reactionGroups, onR
                                 /<[a-z][\s\S]*>/i.test(msg.content) ? (
                                     <div
                                         className="text-[15px] text-slate-800 leading-relaxed [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
-                                        dangerouslySetInnerHTML={{ __html: linkifyHtml(msg.content) }}
+                                        dangerouslySetInnerHTML={{ __html: renderShortcodes(linkifyHtml(msg.content), customEmojiMap) }}
                                     />
                                 ) : (
                                     <p
                                         className="text-[15px] text-slate-800 whitespace-pre-wrap leading-relaxed [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
-                                        dangerouslySetInnerHTML={{ __html: linkifyHtml(msg.content) }}
+                                        dangerouslySetInnerHTML={{ __html: renderShortcodes(linkifyHtml(msg.content), customEmojiMap) }}
                                     />
                                 )
                             )}

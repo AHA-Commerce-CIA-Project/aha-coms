@@ -2,8 +2,10 @@
 
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Smile, X, Search, Clock } from 'lucide-react';
+import { Smile, X, Search, Clock, Plus, Sparkles } from 'lucide-react';
 import { bumpEmojiFrequent, getEmojiFrequents, subscribeEmojiFrequents } from '@/lib/emojiFrequents';
+import { useCustomEmojis, type CustomEmoji } from '@/lib/customEmojis';
+import { AddCustomEmojiModal } from '@/components/AddCustomEmojiModal';
 
 interface EmojiPickerProps {
     onSelect: (emoji: string) => void;
@@ -176,10 +178,16 @@ const EMOJI_CATEGORIES = [
 ];
 
 export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: EmojiPickerProps) {
-    const [activeCategory, setActiveCategory] = useState(0);
+    // activeCategory is 'custom' for the workspace custom emoji tab, otherwise
+    // an index into EMOJI_CATEGORIES.
+    const [activeCategory, setActiveCategory] = useState<number | 'custom'>(0);
     const [searchQuery, setSearchQuery] = useState('');
     const [frequents, setFrequents] = useState<string[]>([]);
+    const [showAddModal, setShowAddModal] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
+    const customEmojis = useCustomEmojis();
+    const customByName: Record<string, CustomEmoji> = {};
+    for (const e of customEmojis) customByName[e.name] = e;
     // Inline marker element that stays in the original parent location so we
     // can read the trigger's bounding rect even though the picker UI is
     // portalled to document.body (to escape ancestor `transform` containment).
@@ -199,7 +207,10 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
     }, [open]);
 
     useEffect(() => {
-        if (!open) return;
+        // Skip the outside-click handler while the Add Emoji modal is open —
+        // otherwise clicking the modal backdrop would close the picker too,
+        // even though the modal sits visually on top.
+        if (!open || showAddModal) return;
         const handleClickOutside = (e: MouseEvent) => {
             if (ref.current && !ref.current.contains(e.target as Node)) {
                 onClose();
@@ -207,7 +218,7 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [open, onClose]);
+    }, [open, showAddModal, onClose]);
 
     // Position the picker as fixed relative to the viewport. The anchor marker
     // is rendered inline next to the trigger button so we can read its rect;
@@ -226,8 +237,8 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
             const anchorEl = marker.parentElement || marker;
             const r = anchorEl.getBoundingClientRect();
             const PICKER_W = 340;
-            // Approximate height: header (~84) + tabs (~36) + grid (240) + padding
-            const PICKER_H = 400;
+            // Approximate height: header (~84) + tabs (~36) + grid (240) + footer (~40) + padding
+            const PICKER_H = 440;
             const M = 8;
             const vw = window.innerWidth;
             const vh = window.innerHeight;
@@ -264,14 +275,40 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
         onClose();
     };
 
-    const allEmojis = EMOJI_CATEGORIES.flatMap((c) => c.emojis);
-    const filteredEmojis = searchQuery
-        ? [...new Set(allEmojis)].filter(e => {
-            const q = searchQuery.toLowerCase();
+    // Build the list of tokens to render. A "token" is either a unicode
+    // character ("🎉") or a shortcode (":party-parrot:"). Frequents, custom
+    // emojis, and unicode all share the same token type so the grid is uniform.
+    let visibleTokens: string[];
+    if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const allEmojis = EMOJI_CATEGORIES.flatMap((c) => c.emojis);
+        const matchingUnicode = [...new Set(allEmojis)].filter((e) => {
             const keywords = EMOJI_KEYWORDS[e];
-            return keywords ? keywords.some(k => k.includes(q)) : false;
-          })
-        : EMOJI_CATEGORIES[activeCategory].emojis;
+            return keywords ? keywords.some((k) => k.includes(q)) : false;
+        });
+        const matchingCustom = customEmojis
+            .filter((c) => c.name.includes(q))
+            .map((c) => `:${c.name}:`);
+        // Custom matches first — they're more memorable when present.
+        visibleTokens = [...matchingCustom, ...matchingUnicode];
+    } else if (activeCategory === 'custom') {
+        visibleTokens = customEmojis.map((c) => `:${c.name}:`);
+    } else {
+        visibleTokens = EMOJI_CATEGORIES[activeCategory].emojis;
+    }
+
+    // Renders a single token as either an image (custom shortcode) or text (unicode).
+    const renderToken = (token: string) => {
+        if (token.startsWith(':') && token.endsWith(':') && token.length > 2) {
+            const name = token.slice(1, -1);
+            const ce = customByName[name];
+            if (ce) {
+                // eslint-disable-next-line @next/next/no-img-element
+                return <img src={ce.imageUrl} alt={token} className="w-6 h-6 object-contain" />;
+            }
+        }
+        return <span>{token}</span>;
+    };
 
     const pickerUi = (
         <div
@@ -307,6 +344,17 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
             {/* Category tabs */}
             {!searchQuery && (
                 <div className="flex items-center gap-0.5 px-3 pb-2 border-b border-slate-100">
+                    {/* Custom tab — always visible so the user can browse their workspace
+                        emojis (or see the empty state with the Add Emoji prompt). */}
+                    <button
+                        onClick={() => setActiveCategory('custom')}
+                        title="Custom"
+                        className={`p-1.5 rounded-lg transition-colors ${
+                            activeCategory === 'custom' ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                        }`}
+                    >
+                        <Sparkles className="w-4 h-4 text-indigo-500" />
+                    </button>
                     {EMOJI_CATEGORIES.map((cat, idx) => (
                         <button
                             key={cat.name}
@@ -347,24 +395,43 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
                 )}
                 {!searchQuery && (
                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                        {EMOJI_CATEGORIES[activeCategory].name}
+                        {activeCategory === 'custom' ? 'Custom' : EMOJI_CATEGORIES[activeCategory].name}
                     </p>
                 )}
-                {filteredEmojis.length === 0 && searchQuery ? (
+                {visibleTokens.length === 0 && searchQuery ? (
                     <p className="text-center text-sm text-slate-400 py-6">No emojis found for &quot;{searchQuery}&quot;</p>
+                ) : visibleTokens.length === 0 && activeCategory === 'custom' ? (
+                    <div className="text-center px-4 py-6">
+                        <Sparkles className="w-6 h-6 text-indigo-300 mx-auto mb-2" />
+                        <p className="text-sm text-slate-500 font-medium">No custom emojis yet</p>
+                        <p className="text-xs text-slate-400 mt-1">Click <span className="font-semibold">Add Emoji</span> below to upload your first one.</p>
+                    </div>
                 ) : (
                     <div className="grid grid-cols-8 gap-0.5">
-                        {filteredEmojis.map((emoji, idx) => (
+                        {visibleTokens.map((token, idx) => (
                             <button
-                                key={`${emoji}-${idx}`}
-                                onClick={() => pickEmoji(emoji)}
+                                key={`${token}-${idx}`}
+                                onClick={() => pickEmoji(token)}
+                                title={token}
                                 className="w-9 h-9 flex items-center justify-center text-xl rounded-lg hover:bg-indigo-50 transition-colors"
                             >
-                                {emoji}
+                                {renderToken(token)}
                             </button>
                         ))}
                     </div>
                 )}
+            </div>
+
+            {/* Footer — Add Emoji opens the upload modal. */}
+            <div className="border-t border-slate-100 px-3 py-2">
+                <button
+                    type="button"
+                    onClick={() => setShowAddModal(true)}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Emoji
+                </button>
             </div>
         </div>
     );
@@ -373,6 +440,18 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
         <>
             <span ref={anchorMarkerRef} aria-hidden style={{ display: 'inline-block', width: 0, height: 0 }} />
             {mounted ? createPortal(pickerUi, document.body) : null}
+            {mounted ? createPortal(
+                <AddCustomEmojiModal
+                    open={showAddModal}
+                    onClose={() => setShowAddModal(false)}
+                    onCreated={(e) => {
+                        // Drop the user on the Custom tab so they immediately see their new emoji.
+                        setActiveCategory('custom');
+                        setShowAddModal(false);
+                    }}
+                />,
+                document.body,
+            ) : null}
         </>
     );
 }

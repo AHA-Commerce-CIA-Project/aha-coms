@@ -7,6 +7,8 @@ import { linkifyText, linkifyHtml } from '@/lib/linkify';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { COMMENT_DRAFT_EVENT } from '@/lib/use-comment-drafts';
 import { isHtml, sanitizeRichText } from '@/lib/sanitize';
+import { useCustomEmojiMap } from '@/lib/customEmojis';
+import { renderShortcodes } from '@/lib/renderShortcodes';
 
 interface CommentAttachment {
     url: string;
@@ -91,6 +93,7 @@ export function TaskCommentsSection({
     const [comments, setComments] = useState<Comment[]>([]);
     const [loading, setLoading] = useState(true);
     const [draft, setDraft] = useState('');
+    const customEmojiMap = useCustomEmojiMap();
     const [draftAttachments, setDraftAttachments] = useState<CommentAttachment[]>([]);
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -881,7 +884,7 @@ export function TaskCommentsSection({
                                                 isHtml(c.message) ? (
                                                     <div
                                                         className={`${bodyTextClass} text-slate-800 leading-relaxed break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-100 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono`}
-                                                        dangerouslySetInnerHTML={{ __html: linkifyHtml(sanitizeRichText(c.message)) }}
+                                                        dangerouslySetInnerHTML={{ __html: renderShortcodes(linkifyHtml(sanitizeRichText(c.message)), customEmojiMap) }}
                                                     />
                                                 ) : (
                                                     <div className={`${bodyTextClass} text-slate-800 leading-relaxed whitespace-pre-wrap break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700`}>

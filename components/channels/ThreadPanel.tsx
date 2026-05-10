@@ -11,6 +11,8 @@ import { ImageLightbox } from '@/components/ImageLightbox';
 import { linkifyHtml, linkifyText } from '@/lib/linkify';
 import { DeleteMessageModal } from './DeleteMessageModal';
 import { DirectAssignCard } from './DirectAssignCard';
+import { useCustomEmojiMap } from '@/lib/customEmojis';
+import { renderShortcodes } from '@/lib/renderShortcodes';
 
 interface Attachment {
   url: string;
@@ -87,6 +89,7 @@ export function ThreadPanel({
 }: ThreadPanelProps) {
   const [replies, setReplies] = useState<Reply[]>([]);
   const [loading, setLoading] = useState(true);
+  const customEmojiMap = useCustomEmojiMap();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const fetchReplies = useCallback(async () => {
@@ -200,14 +203,14 @@ export function ThreadPanel({
                 return (
                   <div
                     className="text-sm text-slate-700 break-words [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
-                    dangerouslySetInnerHTML={{ __html: linkifyHtml(cleaned) }}
+                    dangerouslySetInnerHTML={{ __html: renderShortcodes(linkifyHtml(cleaned), customEmojiMap) }}
                   />
                 );
               }
               return (
                 <p
                   className="text-sm text-slate-700 whitespace-pre-wrap break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
-                  dangerouslySetInnerHTML={{ __html: linkifyText(cleaned) }}
+                  dangerouslySetInnerHTML={{ __html: renderShortcodes(linkifyText(cleaned), customEmojiMap) }}
                 />
               );
             })()}
@@ -281,6 +284,7 @@ function ThreadReplyItem({
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const isOwner = reply.senderId === currentUserId;
+  const customEmojiMap = useCustomEmojiMap();
   const attachments = (Array.isArray(reply.attachments) ? reply.attachments : []) as Attachment[];
   const images = attachments.filter((a) => a.isImage);
   const docs = attachments.filter((a) => !a.isImage);
@@ -372,7 +376,7 @@ function ThreadReplyItem({
             </div>
           ) : /<[a-z][\s\S]*>/i.test(reply.content) ? (
               <div className="text-sm text-slate-700 break-words [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_strike]:line-through [&_s]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700">
-                <span dangerouslySetInnerHTML={{ __html: linkifyHtml(reply.content) }} />
+                <span dangerouslySetInnerHTML={{ __html: renderShortcodes(linkifyHtml(reply.content), customEmojiMap) }} />
                 {reply.updatedAt && reply.createdAt !== reply.updatedAt &&
                   new Date(reply.updatedAt).getTime() - new Date(reply.createdAt).getTime() > 1000 && (
                   <span className="text-[11px] text-slate-400 ml-1 italic">(edited)</span>
@@ -380,7 +384,7 @@ function ThreadReplyItem({
               </div>
             ) : (
               <p className="text-sm text-slate-700 whitespace-pre-wrap break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700">
-                <span dangerouslySetInnerHTML={{ __html: linkifyText(reply.content) }} />
+                <span dangerouslySetInnerHTML={{ __html: renderShortcodes(linkifyText(reply.content), customEmojiMap) }} />
                 {reply.updatedAt && reply.createdAt !== reply.updatedAt &&
                   new Date(reply.updatedAt).getTime() - new Date(reply.createdAt).getTime() > 1000 && (
                   <span className="text-[11px] text-slate-400 ml-1 italic">(edited)</span>
