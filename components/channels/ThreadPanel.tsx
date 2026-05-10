@@ -98,12 +98,17 @@ export function ThreadPanel({
       if (res.ok) {
         const data = await res.json();
         setReplies(data);
+        // Sync the parent message's replyCount with whatever the API actually
+        // returned so the channel card + thread header never lag behind the
+        // rendered reply list. Without this the count drifts whenever a reply
+        // arrives via the 3s poll (i.e. anything not sent by us).
+        onReplyCountChange(message.id, Array.isArray(data) ? data.length : 0);
       }
     } catch {
     } finally {
       setLoading(false);
     }
-  }, [channelId, message.id]);
+  }, [channelId, message.id, onReplyCountChange]);
 
   useEffect(() => {
     fetchReplies();
@@ -126,8 +131,14 @@ export function ThreadPanel({
       });
       if (res.ok) {
         const reply = await res.json();
-        setReplies((prev) => [...prev, reply]);
-        onReplyCountChange(message.id, replies.length + 1);
+        // Compute the new count from the freshly-set array, not the closure's
+        // `replies` (which can be a tick stale if a poll just landed). The
+        // setter callback hands us the authoritative previous value.
+        setReplies((prev) => {
+          const next = [...prev, reply];
+          onReplyCountChange(message.id, next.length);
+          return next;
+        });
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       }
     } catch {}
@@ -217,7 +228,14 @@ export function ThreadPanel({
           </div>
         </div>
         <div className="mt-2 text-xs text-slate-400">
-          {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
+          {/* Source of truth is the loaded replies array — `message.replyCount`
+              is a snapshot from when the thread opened and goes stale as soon
+              as a poll lands. While replies are still loading we fall back to
+              the prop so the header doesn't flash "0 replies". */}
+          {(() => {
+            const count = !loading || replies.length > 0 ? replies.length : message.replyCount;
+            return `${count} ${count === 1 ? 'reply' : 'replies'}`;
+          })()}
         </div>
       </div>
 
