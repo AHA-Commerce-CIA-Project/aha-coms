@@ -217,7 +217,10 @@ function SectionGroup({ label, sectionKey, collapsed, onToggle, onAdd, addTitle,
                 >
                     {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                     <span>{label}</span>
-                    {count && count > 0 ? (
+                    {/* Section badge surfaces the rolled-up unread count only when the
+                        section is collapsed. When expanded, the per-row badges below
+                        carry the same information without duplication. */}
+                    {collapsed && count && count > 0 ? (
                         <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold text-white bg-rose-500 rounded-full">
                             {count > 99 ? '99+' : count}
                         </span>
@@ -240,6 +243,7 @@ function SectionGroup({ label, sectionKey, collapsed, onToggle, onAdd, addTitle,
 }
 
 function ChannelItem({ channel, active, onClick }: { channel: IndexChannel; active: boolean; onClick: () => void }) {
+    const hasUnread = (channel.unreadCount ?? 0) > 0;
     return (
         <button
             type="button"
@@ -248,16 +252,24 @@ function ChannelItem({ channel, active, onClick }: { channel: IndexChannel; acti
                 'flex items-center gap-2 w-full px-4 py-1.5 text-sm transition-colors',
                 active
                     ? 'bg-indigo-600 text-white font-semibold'
-                    : 'text-slate-700 hover:bg-slate-100'
+                    : hasUnread
+                        ? 'text-slate-900 font-bold hover:bg-slate-100'
+                        : 'text-slate-700 hover:bg-slate-100'
             )}
         >
             {channel.isPrivate ? (
-                <Lock className={cn('w-3.5 h-3.5 flex-shrink-0', active ? 'text-white' : 'text-slate-400')} />
+                <Lock className={cn(
+                    'w-3.5 h-3.5 flex-shrink-0',
+                    active ? 'text-white' : hasUnread ? 'text-slate-700' : 'text-slate-400',
+                )} />
             ) : (
-                <Hash className={cn('w-3.5 h-3.5 flex-shrink-0', active ? 'text-white' : 'text-slate-400')} />
+                <Hash className={cn(
+                    'w-3.5 h-3.5 flex-shrink-0',
+                    active ? 'text-white' : hasUnread ? 'text-slate-700' : 'text-slate-400',
+                )} />
             )}
             <span className="flex-1 truncate text-left">{channel.name}</span>
-            {(channel.unreadCount ?? 0) > 0 && !active && (
+            {hasUnread && !active && (
                 <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold text-white bg-rose-500 rounded-full">
                     {(channel.unreadCount ?? 0) > 99 ? '99+' : channel.unreadCount}
                 </span>
@@ -267,13 +279,18 @@ function ChannelItem({ channel, active, onClick }: { channel: IndexChannel; acti
 }
 
 function DmItem({ dm, active, onClick }: { dm: IndexDm; active: boolean; onClick: () => void }) {
+    const hasUnread = (dm.unreadCount ?? 0) > 0;
     return (
         <button
             type="button"
             onClick={onClick}
             className={cn(
                 'flex items-center gap-2 w-full px-4 py-1.5 text-sm transition-colors',
-                active ? 'bg-indigo-600 text-white font-semibold' : 'text-slate-700 hover:bg-slate-100'
+                active
+                    ? 'bg-indigo-600 text-white font-semibold'
+                    : hasUnread
+                        ? 'text-slate-900 font-bold hover:bg-slate-100'
+                        : 'text-slate-700 hover:bg-slate-100'
             )}
         >
             <div className="relative flex-shrink-0">
@@ -291,7 +308,7 @@ function DmItem({ dm, active, onClick }: { dm: IndexDm; active: boolean; onClick
                 <PresenceDot lastSeenAt={dm.otherLastSeenAt || null} size="sm" />
             </div>
             <span className="flex-1 truncate text-left">{dm.otherName}</span>
-            {(dm.unreadCount ?? 0) > 0 && !active && (
+            {hasUnread && !active && (
                 <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold text-white bg-rose-500 rounded-full">
                     {(dm.unreadCount ?? 0) > 99 ? '99+' : dm.unreadCount}
                 </span>
