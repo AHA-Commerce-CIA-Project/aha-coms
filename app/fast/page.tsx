@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { CountdownTimer } from '@/components/CountdownTimer';
@@ -278,9 +278,13 @@ export default function FastDashboard() {
             {/* Full-width calendar + meetings — moved here from /tasks. The
                 old mini calendar + "My Active Tasks" widgets were redundant
                 with this view (calendar covers the schedule, /tasks owns the
-                board), so they're gone. */}
+                board), so they're gone. CalendarMeetingSection uses
+                useSearchParams internally for ?meetingId / ?date deep-links,
+                which Next.js requires to live under a Suspense boundary. */}
             <div className="w-full">
-                <CalendarMeetingSection />
+                <Suspense fallback={<div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 text-center text-sm text-slate-400">Loading calendar…</div>}>
+                    <CalendarMeetingSection />
+                </Suspense>
             </div>
 
             {/* Bottom Row: Recent Activity + Team */}

@@ -6,6 +6,7 @@
 // the freed-up space back to the Notes grid.
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { sanitizeMeetingDescription } from '@/lib/sanitize';
 import { RichEditor } from '@/components/RichEditor';
