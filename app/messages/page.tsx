@@ -27,6 +27,7 @@ interface ChannelRow {
     name: string;
     isPrivate?: boolean;
     purpose?: 'discussion' | 'assign_task';
+    updatedAt?: string;
 }
 
 interface ConvoRow {
@@ -152,6 +153,10 @@ function MessagesWorkspace() {
             isPrivate: c.isPrivate,
             purpose: c.purpose,
             unreadCount: perChannelUnread[c.id] || 0,
+            // Channel.updatedAt is bumped on every new message (see
+            // /api/channels/[channelId]/messages/route.ts), so it's a faithful
+            // proxy for "last activity" without a join.
+            lastMessageAt: c.updatedAt || null,
         })),
         [channels, perChannelUnread],
     );
@@ -165,6 +170,7 @@ function MessagesWorkspace() {
                 otherImage: c.otherUser?.image || null,
                 otherLastSeenAt: c.otherUser?.lastSeenAt || null,
                 unreadCount: c.unreadCount || 0,
+                lastMessageAt: c.updatedAt || null,
             })),
         [convos],
     );
