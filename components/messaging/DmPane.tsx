@@ -73,7 +73,12 @@ function DmMessageItem({ msg, isOwn, isEdited, images, docs, reactionGroups, onR
             id={`dm-msg-${msg.id}`}
             className="group relative px-6 py-2 hover:bg-slate-50 transition-colors"
             onMouseEnter={() => setShowActions(true)}
-            onMouseLeave={() => { setShowActions(false); setShowEmoji(false); }}
+            onMouseLeave={() => {
+                // Don't close the picker — it's portalled to body and the cursor
+                // crosses out of this row to interact with it. Picker has its own
+                // outside-click handler.
+                if (!showEmoji) setShowActions(false);
+            }}
         >
             {/* Hover action bar */}
             {showActions && !editing && (
@@ -88,7 +93,19 @@ function DmMessageItem({ msg, isOwn, isEdited, images, docs, reactionGroups, onR
                         <button onClick={() => setShowEmoji(v => !v)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50" title="Add reaction">
                             <Smile className="w-4 h-4" />
                         </button>
-                        <EmojiPicker open={showEmoji} position="below" onSelect={emoji => { onReaction(msg.id, emoji); setShowEmoji(false); }} onClose={() => setShowEmoji(false)} />
+                        <EmojiPicker
+                            open={showEmoji}
+                            position="below"
+                            onSelect={(emoji) => {
+                                onReaction(msg.id, emoji);
+                                setShowEmoji(false);
+                                setShowActions(false);
+                            }}
+                            onClose={() => {
+                                setShowEmoji(false);
+                                setShowActions(false);
+                            }}
+                        />
                     </div>
                     {isOwn && (
                         <>

@@ -372,8 +372,11 @@ export function ChannelMessageItem({
         className="group relative px-3 sm:px-6 py-2 hover:bg-slate-50 transition-colors"
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => {
-          setShowActions(false);
-          setShowEmojiPicker(false);
+          // Don't close the emoji picker here — it's portalled to body and the
+          // cursor naturally crosses out of this row to interact with it.
+          // Tearing it down on mouseleave is the root cause of the picker
+          // closing instantly. Picker has its own outside-click handler.
+          if (!showEmojiPicker) setShowActions(false);
         }}
         onClick={(e) => {
           // Don't hijack clicks on real interactive elements (buttons, links,
@@ -718,8 +721,15 @@ export function ChannelMessageItem({
                   onSelect={(emoji) => {
                     onReaction(message.id, emoji);
                     setShowEmojiPicker(false);
+                    setShowActions(false);
                   }}
-                  onClose={() => setShowEmojiPicker(false)}
+                  onClose={() => {
+                    setShowEmojiPicker(false);
+                    // Picker closing is the user's signal that they're done with
+                    // this row — collapse the hover toolbar too so the row
+                    // returns to its idle state.
+                    setShowActions(false);
+                  }}
                 />
               )}
             </div>

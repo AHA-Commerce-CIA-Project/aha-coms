@@ -237,18 +237,31 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
             const anchorEl = marker.parentElement || marker;
             const r = anchorEl.getBoundingClientRect();
             const PICKER_W = 340;
-            // Approximate height: header (~84) + tabs (~36) + grid (240) + footer (~40) + padding
-            const PICKER_H = 440;
+            const PICKER_H_MAX = 440;
             const M = 8;
             const vw = window.innerWidth;
             const vh = window.innerHeight;
+            // Picker shrinks to fit the viewport via max-h on the container, so
+            // collision math uses the smaller of design max + available height.
+            const PICKER_H = Math.min(PICKER_H_MAX, vh - 2 * M);
 
-            // Vertical: prefer requested side, flip if it doesn't fit.
-            let top = position === 'above' ? r.top - PICKER_H - M : r.bottom + M;
-            if (position === 'above' && top < M) top = r.bottom + M;
-            if (position === 'below' && top + PICKER_H > vh - M) top = Math.max(M, r.top - PICKER_H - M);
-            if (top < M) top = M;
-            if (top + PICKER_H > vh - M) top = Math.max(M, vh - PICKER_H - M);
+            // Smart flip: pick the side with enough room. Caller's `position`
+            // hint is honored when it fits; otherwise we go where the picker
+            // actually fits, falling back to the side with more room.
+            const spaceAbove = r.top - M;
+            const spaceBelow = vh - r.bottom - M;
+            let placeAbove: boolean;
+            if (position === 'above') {
+                placeAbove = spaceAbove >= PICKER_H || spaceAbove >= spaceBelow;
+            } else {
+                placeAbove = spaceBelow < PICKER_H && spaceAbove > spaceBelow;
+            }
+
+            let top = placeAbove ? r.top - PICKER_H - M : r.bottom + M;
+            // Final clamp keeps the picker fully on-screen even when neither
+            // side strictly fits (small viewports). The internal scroll
+            // container handles overflow.
+            top = Math.max(M, Math.min(top, vh - PICKER_H - M));
 
             // Horizontal: right-align to anchor by default, then clamp.
             let left = r.right - PICKER_W;
@@ -313,67 +326,83 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
     const pickerUi = (
         <div
             ref={ref}
-            style={coords ? { top: coords.top, left: coords.left, visibility: 'visible' } : { visibility: 'hidden' }}
-            className="fixed w-[340px] bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-[120]"
+            style={coords
+                ? { top: coords.top, left: coords.left, visibility: 'visible', maxHeight: 'min(440px, calc(100vh - 16px))' }
+                : { visibility: 'hidden', maxHeight: 'min(440px, calc(100vh - 16px))' }}
+            // Slack-style structure: flex column with sticky header (search + tabs)
+            // and footer (Add Emoji), only the body scrolls. max-h binds the
+            // overall height to the viewport so the picker can never overflow.
+            className="fixed w-[340px] bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-[120] flex flex-col"
+            // Stop mousedown from bubbling to document so neither our own
+            // outside-click handler NOR any other popover's outside-click
+            // handler tears the picker (or its parent) down on internal clicks.
+            onMouseDown={(e) => {
+                e.stopPropagation();
+                e.nativeEvent.stopImmediatePropagation();
+            }}
         >
-            {/* Header */}
-            <div className="flex items-center justify-between px-3 pt-3 pb-2">
-                <span className="text-sm font-bold text-slate-700">Emojis</span>
-                <button
-                    onClick={onClose}
-                    className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
-                >
-                    <X className="w-4 h-4" />
-                </button>
-            </div>
-
-            {/* Search */}
-            <div className="px-3 pb-2">
-                <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search emojis..."
-                        className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 transition-all"
-                    />
-                </div>
-            </div>
-
-            {/* Category tabs */}
-            {!searchQuery && (
-                <div className="flex items-center gap-0.5 px-3 pb-2 border-b border-slate-100">
-                    {/* Custom tab — always visible so the user can browse their workspace
-                        emojis (or see the empty state with the Add Emoji prompt). */}
+            {/* Sticky header — close button + search + category tabs */}
+            <div className="flex-shrink-0">
+                <div className="flex items-center justify-between px-3 pt-3 pb-2">
+                    <span className="text-sm font-bold text-slate-700">Emojis</span>
                     <button
-                        onClick={() => setActiveCategory('custom')}
-                        title="Custom"
-                        className={`p-1.5 rounded-lg transition-colors ${
-                            activeCategory === 'custom' ? 'bg-indigo-50' : 'hover:bg-slate-50'
-                        }`}
+                        onClick={onClose}
+                        className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
                     >
-                        <Sparkles className="w-4 h-4 text-indigo-500" />
+                        <X className="w-4 h-4" />
                     </button>
-                    {EMOJI_CATEGORIES.map((cat, idx) => (
+                </div>
+
+                {/* Search */}
+                <div className="px-3 pb-2">
+                    <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search emojis..."
+                            className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 transition-all"
+                        />
+                    </div>
+                </div>
+
+                {/* Category tabs */}
+                {!searchQuery && (
+                    <div className="flex items-center gap-0.5 px-3 pb-2 border-b border-slate-100">
+                        {/* Custom tab — always visible so the user can browse their workspace
+                            emojis (or see the empty state with the Add Emoji prompt). */}
                         <button
-                            key={cat.name}
-                            onClick={() => setActiveCategory(idx)}
-                            title={cat.name}
-                            className={`p-1.5 text-base rounded-lg transition-colors ${
-                                activeCategory === idx
-                                    ? 'bg-indigo-50'
-                                    : 'hover:bg-slate-50'
+                            onClick={() => setActiveCategory('custom')}
+                            title="Custom"
+                            className={`p-1.5 rounded-lg transition-colors ${
+                                activeCategory === 'custom' ? 'bg-indigo-50' : 'hover:bg-slate-50'
                             }`}
                         >
-                            {cat.icon}
+                            <Sparkles className="w-4 h-4 text-indigo-500" />
                         </button>
-                    ))}
-                </div>
-            )}
+                        {EMOJI_CATEGORIES.map((cat, idx) => (
+                            <button
+                                key={cat.name}
+                                onClick={() => setActiveCategory(idx)}
+                                title={cat.name}
+                                className={`p-1.5 text-base rounded-lg transition-colors ${
+                                    activeCategory === idx
+                                        ? 'bg-indigo-50'
+                                        : 'hover:bg-slate-50'
+                                }`}
+                            >
+                                {cat.icon}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
 
-            {/* Emoji grid */}
-            <div className="h-[240px] overflow-y-auto px-3 py-2">
+            {/* Scrollable body — the only region that scrolls. min-h-0 lets the
+                flex column shrink below content height so overflow-y-auto
+                actually clips. */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
                 {/* Frequently Used — only when not searching and we actually have history. */}
                 {!searchQuery && frequents.length > 0 && (
                     <>
@@ -422,8 +451,8 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
                 )}
             </div>
 
-            {/* Footer — Add Emoji opens the upload modal. */}
-            <div className="border-t border-slate-100 px-3 py-2">
+            {/* Sticky footer — Add Emoji opens the upload modal. */}
+            <div className="flex-shrink-0 border-t border-slate-100 px-3 py-2">
                 <button
                     type="button"
                     onClick={() => setShowAddModal(true)}
