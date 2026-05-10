@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Smile, X, Search } from 'lucide-react';
+import { Smile, X, Search, Clock } from 'lucide-react';
+import { bumpEmojiFrequent, getEmojiFrequents, subscribeEmojiFrequents } from '@/lib/emojiFrequents';
 
 interface EmojiPickerProps {
     onSelect: (emoji: string) => void;
@@ -177,6 +178,7 @@ const EMOJI_CATEGORIES = [
 export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: EmojiPickerProps) {
     const [activeCategory, setActiveCategory] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
+    const [frequents, setFrequents] = useState<string[]>([]);
     const ref = useRef<HTMLDivElement>(null);
     // Inline marker element that stays in the original parent location so we
     // can read the trigger's bounding rect even though the picker UI is
@@ -186,6 +188,15 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
+
+    // Refresh the frequents row whenever the picker opens (and stay subscribed
+    // so a sibling picker bumping a token also updates ours).
+    useEffect(() => {
+        if (!open) return;
+        setFrequents(getEmojiFrequents(15));
+        const unsub = subscribeEmojiFrequents(() => setFrequents(getEmojiFrequents(15)));
+        return unsub;
+    }, [open]);
 
     useEffect(() => {
         if (!open) return;
@@ -215,8 +226,8 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
             const anchorEl = marker.parentElement || marker;
             const r = anchorEl.getBoundingClientRect();
             const PICKER_W = 340;
-            // Approximate height: header (~84) + tabs (~36) + grid (200) + padding
-            const PICKER_H = 360;
+            // Approximate height: header (~84) + tabs (~36) + grid (240) + padding
+            const PICKER_H = 400;
             const M = 8;
             const vw = window.innerWidth;
             const vh = window.innerHeight;
@@ -246,6 +257,12 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
     }, [open, position]);
 
     if (!open) return null;
+
+    const pickEmoji = (token: string) => {
+        bumpEmojiFrequent(token);
+        onSelect(token);
+        onClose();
+    };
 
     const allEmojis = EMOJI_CATEGORIES.flatMap((c) => c.emojis);
     const filteredEmojis = searchQuery
@@ -308,7 +325,26 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
             )}
 
             {/* Emoji grid */}
-            <div className="h-[200px] overflow-y-auto px-3 py-2">
+            <div className="h-[240px] overflow-y-auto px-3 py-2">
+                {/* Frequently Used — only when not searching and we actually have history. */}
+                {!searchQuery && frequents.length > 0 && (
+                    <>
+                        <p className="flex items-center gap-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                            <Clock className="w-3 h-3" /> Frequently Used
+                        </p>
+                        <div className="grid grid-cols-8 gap-0.5 mb-2">
+                            {frequents.map((emoji, idx) => (
+                                <button
+                                    key={`freq-${emoji}-${idx}`}
+                                    onClick={() => pickEmoji(emoji)}
+                                    className="w-9 h-9 flex items-center justify-center text-xl rounded-lg hover:bg-indigo-50 transition-colors"
+                                >
+                                    {emoji}
+                                </button>
+                            ))}
+                        </div>
+                    </>
+                )}
                 {!searchQuery && (
                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
                         {EMOJI_CATEGORIES[activeCategory].name}
@@ -321,10 +357,7 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
                         {filteredEmojis.map((emoji, idx) => (
                             <button
                                 key={`${emoji}-${idx}`}
-                                onClick={() => {
-                                    onSelect(emoji);
-                                    onClose();
-                                }}
+                                onClick={() => pickEmoji(emoji)}
                                 className="w-9 h-9 flex items-center justify-center text-xl rounded-lg hover:bg-indigo-50 transition-colors"
                             >
                                 {emoji}

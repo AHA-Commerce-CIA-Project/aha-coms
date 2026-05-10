@@ -89,6 +89,9 @@ model User {
   // the task's global status (Leaders still see it as Completed in Task Queue).
   archivedTasks UserArchivedTask[] @relation("UserArchivedTasks")
 
+  // Workspace custom emojis the user has created.
+  customEmojis CustomEmoji[] @relation("CustomEmojiCreator")
+
   @@map("user")
 }
 
@@ -816,4 +819,21 @@ model UserArchivedTask {
   @@unique([userId, taskId])
   @@index([userId])
   @@map("user_archived_tasks")
+}
+
+// Workspace-wide custom emojis. Slack-style: one image + one shortcode name,
+// rendered inline in messages where `:name:` appears, and selectable from the
+// emoji picker's "Custom" tab. Names are lowercase, alphanumeric with `-`/`_`,
+// and globally unique within the workspace. Image bytes live wherever the
+// existing /api/upload route stores them — we just hold the URL.
+model CustomEmoji {
+  id        String   @id @default(uuid())
+  name      String   @unique // shortcode without surrounding colons, e.g. "party-parrot"
+  imageUrl  String   @map("image_url")
+  creatorId String   @map("creator_id")
+  creator   User     @relation("CustomEmojiCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([creatorId])
+  @@map("custom_emoji")
 }
