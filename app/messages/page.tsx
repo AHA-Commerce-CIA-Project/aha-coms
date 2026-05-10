@@ -201,12 +201,10 @@ function MessagesWorkspace() {
     const showIndexOnMobile = !isChannelMode && !isDmMode && !isLaterMode;
 
     return (
-        // Subtract: TopNav (h-16, 64px) + Breadcrumb (~32px) + main pt-3 (12px)
-        // + main pb-6 (24px) on desktop = ~132px. We use 140px desktop / 160px
-        // mobile (BottomNav + safe-area) to leave a few px of breathing room so
-        // the workspace card never bleeds past the viewport, which would push
-        // the composer off-screen.
-        <div className="flex flex-col -mx-3 sm:mx-0 h-[calc(100vh-160px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-140px)] bg-white rounded-none sm:rounded-2xl border-0 sm:border border-slate-200 shadow-sm overflow-hidden">
+        // Slack-style full-bleed workspace on desktop: negate AppShell's px-6 + pb-6 so
+        // the white pane runs flush to the viewport edges. Mobile keeps the BottomNav
+        // reservation so the composer doesn't slide under the nav.
+        <div className="flex flex-col -mx-3 sm:-mx-6 md:-mb-6 h-[calc(100vh-160px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-112px)] bg-white overflow-hidden">
             {/* Workspace tab toggle — Messages | Later. Sits at the top of the
                 card itself so it acts as the workspace's primary header (no
                 duplicate "Messages" title beneath). */}
