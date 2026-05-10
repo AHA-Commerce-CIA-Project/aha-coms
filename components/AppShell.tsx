@@ -18,6 +18,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         directAssignOpen, directAssignChannelId,
         directAssignSourceMessageId, directAssignDefaultDescription,
         directAssignDefaultImages, directAssignDefaultFileUrls,
+        directAssignStartAtReview, directAssignOnCancel,
         setDirectAssignOpen, notifyDirectAssignSubmitted,
         profileUser, setProfileUser, profileShowAddToConversation, profileHideSendDm,
     } = useAppStore();
@@ -74,6 +75,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 defaultDescription={directAssignDefaultDescription}
                 defaultImages={directAssignDefaultImages}
                 defaultFileUrls={directAssignDefaultFileUrls}
+                startAtReview={directAssignStartAtReview}
+                onCancel={directAssignOnCancel ?? undefined}
                 onSubmitted={({ channelId }) => {
                     // Always bump the tick so subscribers (channels page) can refetch
                     // the feed and surface the freshly created/transformed card.

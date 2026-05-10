@@ -34,6 +34,13 @@ interface DirectAssignModalProps {
     defaultDescription?: string;
     defaultImages?: { url: string; preview: string }[];
     defaultFileUrls?: string[];
+
+    // Slash-command (/req) flow: jump straight to the Review step (skipping
+    // request-details + priority pages, like sourceMessageId does) and call
+    // onCancel with the current description when the user closes the modal
+    // without submitting, so the parent can restore the draft.
+    startAtReview?: boolean;
+    onCancel?: (description: string) => void;
 }
 
 const REQUEST_TYPES = [
@@ -72,6 +79,7 @@ function htmlToPlainText(html: string): string {
 export function DirectAssignModal({
     open, onClose, onSubmitted, defaultChannelId,
     sourceMessageId, defaultDescription, defaultImages, defaultFileUrls,
+    startAtReview, onCancel,
 }: DirectAssignModalProps) {
     const isFromMessage = !!sourceMessageId;
     const { profile } = useAuth();
@@ -120,12 +128,11 @@ export function DirectAssignModal({
     // Reset & fetch when modal opens
     useEffect(() => {
         if (!open) return;
-        // "Convert message → task" jumps straight to the review step. The
-        // description is already pre-filled from the message and the toggle
-        // is OFF by default, so the user can usually just hit submit. Step
-        // navigation still works (Edit buttons + Back), so anyone who wants
-        // request details / priority can step backwards.
-        const startStep = sourceMessageId ? 3 : 1;
+        // Both "Convert message → task" and the /req slash-command jump straight
+        // to the review step. Description is pre-filled and the user can usually
+        // just hit submit; the Edit buttons + Back still let them step backwards
+        // for priority/request-details if needed.
+        const startStep = (sourceMessageId || startAtReview) ? 3 : 1;
         setCurrentStep(startStep);
         setHighestStepReached(startStep);
         setStepErrors([]);
@@ -165,15 +172,24 @@ export function DirectAssignModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, defaultChannelId]);
 
+    // User-initiated close: backdrop click, X button, ESC. Hands the current
+    // description back to the parent (the /req composer uses it to restore the
+    // draft) before closing. The successful-submit path calls onClose() directly.
+    const closeWithCancel = useCallback(() => {
+        if (submitting) return;
+        if (onCancel) onCancel(formData.description || '');
+        onClose();
+    }, [submitting, onCancel, formData.description, onClose]);
+
     // ESC closes
     useEffect(() => {
         if (!open) return;
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && !submitting) onClose();
+            if (e.key === 'Escape' && !submitting) closeWithCancel();
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [open, submitting, onClose]);
+    }, [open, submitting, closeWithCancel]);
 
     // Image upload handlers (paste/drop/select). Each call appends to the images list.
     const uploadImage = useCallback(async (file: File) => {
@@ -377,7 +393,7 @@ export function DirectAssignModal({
     return (
         <div
             className="fixed inset-0 z-[95] flex items-stretch sm:items-center sm:justify-center bg-black/50 backdrop-blur-sm sm:p-4"
-            onClick={() => !submitting && onClose()}
+            onClick={() => !submitting && closeWithCancel()}
         >
             <div
                 className="w-full max-w-3xl bg-white border-0 sm:border border-slate-200 rounded-none sm:rounded-3xl shadow-2xl flex flex-col h-full max-h-screen sm:h-auto sm:max-h-[92vh]"
@@ -395,7 +411,7 @@ export function DirectAssignModal({
                     </div>
                     <button
                         type="button"
-                        onClick={() => !submitting && onClose()}
+                        onClick={() => !submitting && closeWithCancel()}
                         className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
                         aria-label="Close"
                     >

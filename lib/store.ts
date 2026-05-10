@@ -28,6 +28,11 @@ interface AppState {
     directAssignDefaultDescription: string;
     directAssignDefaultImages: { url: string; preview: string }[];
     directAssignDefaultFileUrls: string[];
+    // /req slash-command flow: start the modal at the Review step (skipping
+    // request-details + priority wizard pages) and hand the description back
+    // to the composer when the user dismisses without submitting.
+    directAssignStartAtReview: boolean;
+    directAssignOnCancel: ((description: string) => void) | null;
     // Counter that bumps every time a Direct Assign submit succeeds. Channels
     // page subscribes so it can refetch the feed and show the in-place card.
     directAssignSubmittedTick: number;
@@ -54,6 +59,8 @@ interface AppState {
         defaultDescription?: string;
         defaultImages?: { url: string; preview: string }[];
         defaultFileUrls?: string[];
+        startAtReview?: boolean;
+        onCancel?: (description: string) => void;
     }) => void;
     notifyDirectAssignSubmitted: () => void;
     setProfileUser: (user: UserProfile | null, opts?: { showAddToConversation?: boolean; hideSendDm?: boolean }) => void;
@@ -101,6 +108,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     directAssignDefaultDescription: '',
     directAssignDefaultImages: [],
     directAssignDefaultFileUrls: [],
+    directAssignStartAtReview: false,
+    directAssignOnCancel: null,
     directAssignSubmittedTick: 0,
     profileUser: null,
     profileShowAddToConversation: false,
@@ -119,6 +128,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         directAssignDefaultDescription: open ? (opts?.defaultDescription ?? '') : '',
         directAssignDefaultImages: open ? (opts?.defaultImages ?? []) : [],
         directAssignDefaultFileUrls: open ? (opts?.defaultFileUrls ?? []) : [],
+        directAssignStartAtReview: open ? !!opts?.startAtReview : false,
+        directAssignOnCancel: open ? (opts?.onCancel ?? null) : null,
     }),
     notifyDirectAssignSubmitted: () => set((s) => ({ directAssignSubmittedTick: s.directAssignSubmittedTick + 1 })),
     setProfileUser: (user, opts) => set({

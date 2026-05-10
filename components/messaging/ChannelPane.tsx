@@ -14,7 +14,7 @@ import { useSession } from '@/lib/auth-client';
 import { useAuth } from '@/lib/auth-context';
 import { ChannelHeader } from '@/components/channels/ChannelHeader';
 import { ChannelMessageFeed } from '@/components/channels/ChannelMessageFeed';
-import { ChannelMessageComposer } from '@/components/channels/ChannelMessageComposer';
+import { ChannelMessageComposer, type ChannelMessageComposerHandle } from '@/components/channels/ChannelMessageComposer';
 import { ThreadPanel } from '@/components/channels/ThreadPanel';
 import { CreateChannelModal } from '@/components/channels/CreateChannelModal';
 import { EditChannelModal } from '@/components/channels/EditChannelModal';
@@ -116,6 +116,9 @@ export function ChannelPane() {
   }, []);
 
   const messageIdsRef = useRef<Set<string>>(new Set());
+  // Composer handle — used to restore the /req draft if the Direct Assign
+  // modal is dismissed without submitting.
+  const composerRef = useRef<ChannelMessageComposerHandle | null>(null);
 
   // Scroll feed to bottom when typing indicator appears
   useEffect(() => {
@@ -703,6 +706,7 @@ export function ChannelPane() {
                   </div>
                 )}
                 <ChannelMessageComposer
+                  ref={composerRef}
                   channelId={selectedChannel.id}
                   channelName={selectedChannel.name}
                   onSend={handleSendMessage}
@@ -721,6 +725,15 @@ export function ChannelPane() {
                       defaultDescription: description,
                       defaultImages: images,
                       defaultFileUrls: fileUrls,
+                      // Skip the wizard: jump straight to Review & Submit. The
+                      // user already wrote the description in the composer, so
+                      // they should land on the page that lets them ship it.
+                      startAtReview: true,
+                      // If they cancel/close without submitting, push the draft
+                      // back into the composer and re-enter task mode.
+                      onCancel: (draftDescription) => {
+                        composerRef.current?.restoreTaskDraft(draftDescription);
+                      },
                     });
                   }}
                 />

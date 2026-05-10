@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Paperclip, Image as ImageIcon, Send, X, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Code, ClipboardList } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { MentionAutocomplete, type MentionAutocompleteHandle, type MentionTeam, type MentionTarget } from './MentionAutocomplete';
@@ -27,6 +27,13 @@ interface TypingUser {
   name: string;
 }
 
+export interface ChannelMessageComposerHandle {
+  // Re-enter Task Request draft mode and restore the given HTML/text into the
+  // editor. Used when the Direct Assign modal is dismissed without submitting,
+  // so the user doesn't have to retype their description.
+  restoreTaskDraft: (html: string) => void;
+}
+
 interface ChannelMessageComposerProps {
   channelId?: string;
   channelName: string;
@@ -43,7 +50,7 @@ interface ChannelMessageComposerProps {
   onTaskCommand?: (description: string, attachments: Attachment[]) => void;
 }
 
-export function ChannelMessageComposer({
+export const ChannelMessageComposer = forwardRef<ChannelMessageComposerHandle, ChannelMessageComposerProps>(function ChannelMessageComposer({
   channelId,
   channelName,
   onSend,
@@ -53,7 +60,7 @@ export function ChannelMessageComposer({
   teams = [],
   onTypingUsersChange,
   onTaskCommand,
-}: ChannelMessageComposerProps) {
+}, ref) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -336,6 +343,15 @@ export function ChannelMessageComposer({
     setIsTaskDraftMode(true);
     requestAnimationFrame(() => editorRef.current?.focus());
   }, []);
+
+  useImperativeHandle(ref, () => ({
+    restoreTaskDraft: (html: string) => {
+      if (editorRef.current) editorRef.current.innerHTML = html || '';
+      setShowTaskHint(false);
+      setIsTaskDraftMode(true);
+      requestAnimationFrame(() => editorRef.current?.focus());
+    },
+  }), []);
 
   const submitTaskCommand = () => {
     if (!onTaskCommand) return;
@@ -960,4 +976,4 @@ export function ChannelMessageComposer({
       />
     </div>
   );
-}
+});
