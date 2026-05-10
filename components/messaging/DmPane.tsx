@@ -51,6 +51,7 @@ interface UserOption {
     image: string | null;
     email: string;
     role: string;
+    lastSeenAt: string | null;
 }
 
 function DmMessageItem({ msg, isOwn, isEdited, images, docs, reactionGroups, onReaction, onEdit, onDelete, onImageClick, onAvatarClick }: {
@@ -233,6 +234,22 @@ function formatRelative(dateStr: string) {
     const diffDays = Math.floor(diffHr / 24);
     if (diffDays === 1) return 'Yesterday';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Presence label for the New Message picker. Within 5 minutes of the last
+// heartbeat we treat the user as active; beyond that we show a relative
+// "last seen N ago" string. Returns plain values so the caller can style.
+function presenceLabel(lastSeenAt: string | null): { text: string; active: boolean } {
+    if (!lastSeenAt) return { text: 'Offline', active: false };
+    const diffMs = Date.now() - new Date(lastSeenAt).getTime();
+    const diffMin = diffMs / 60000;
+    if (diffMin < 5) return { text: 'Active now', active: true };
+    if (diffMin < 60) return { text: `Last seen ${Math.floor(diffMin)}m ago`, active: false };
+    const diffHr = diffMin / 60;
+    if (diffHr < 24) return { text: `Last seen ${Math.floor(diffHr)}h ago`, active: false };
+    const diffDays = diffHr / 24;
+    if (diffDays < 7) return { text: `Last seen ${Math.floor(diffDays)}d ago`, active: false };
+    return { text: `Last seen ${Math.floor(diffDays / 7)}w ago`, active: false };
 }
 
 function formatTime(dateStr: string) {
@@ -836,9 +853,15 @@ export function DmPane() {
                                         <p className="text-sm font-medium text-slate-800 truncate">{u.name}</p>
                                         <p className="text-xs text-slate-400 truncate">{u.email || ''}</p>
                                     </div>
-                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : u.role === 'leader' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
-                                        {u.role === 'admin' ? 'Master' : u.role === 'leader' ? 'Leader' : 'Member'}
-                                    </span>
+                                    {(() => {
+                                        const p = presenceLabel(u.lastSeenAt);
+                                        return (
+                                            <span className={`text-[11px] inline-flex items-center gap-1.5 flex-shrink-0 ${p.active ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                                                {p.active && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
+                                                {p.text}
+                                            </span>
+                                        );
+                                    })()}
                                 </button>
                             ))}
                         </div>
