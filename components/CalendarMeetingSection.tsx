@@ -393,29 +393,43 @@ export function CalendarMeetingSection() {
         return `${hour % 12 || 12}:${m} ${ampm}`;
     };
 
-    // Color palette for followed users (assigned in order)
-    const userColorPalette = [
-        { bg: 'bg-indigo-500/15', text: 'text-indigo-700', dot: 'bg-indigo-500', name: 'indigo' },
-        { bg: 'bg-purple-500/15', text: 'text-purple-700', dot: 'bg-purple-500', name: 'purple' },
-        { bg: 'bg-teal-500/15', text: 'text-teal-700', dot: 'bg-teal-500', name: 'teal' },
-        { bg: 'bg-pink-500/15', text: 'text-pink-700', dot: 'bg-pink-500', name: 'pink' },
-        { bg: 'bg-rose-500/15', text: 'text-rose-700', dot: 'bg-rose-500', name: 'rose' },
-        { bg: 'bg-emerald-500/15', text: 'text-emerald-700', dot: 'bg-emerald-500', name: 'emerald' },
-        { bg: 'bg-cyan-500/15', text: 'text-cyan-700', dot: 'bg-cyan-500', name: 'cyan' },
-        { bg: 'bg-orange-500/15', text: 'text-orange-700', dot: 'bg-orange-500', name: 'orange' },
-        { bg: 'bg-fuchsia-500/15', text: 'text-fuchsia-700', dot: 'bg-fuchsia-500', name: 'fuchsia' },
-        { bg: 'bg-blue-500/15', text: 'text-blue-700', dot: 'bg-blue-500', name: 'blue' },
+    // High-contrast palette so "you" stands out from teammates and teammates
+    // are visually distinct from each other. The current user gets the dark
+    // brand color; teammates rotate through saturated accent colors.
+    //
+    // Pending uses yellow (not amber) so it never collides with a teammate
+    // whose rotation slot lands on amber.
+    const SELF_COLOR = { bg: 'bg-slate-900/15', text: 'text-slate-900', dot: 'bg-slate-900', name: 'self' };
+    const PENDING_COLOR = { bg: 'bg-yellow-400/15', text: 'text-yellow-700', dot: 'bg-yellow-400', name: 'pending' };
+
+    const teammateColorPalette = [
+        { bg: 'bg-emerald-500/20', text: 'text-emerald-700', dot: 'bg-emerald-500', name: 'emerald' },
+        { bg: 'bg-amber-500/20', text: 'text-amber-700', dot: 'bg-amber-500', name: 'amber' },
+        { bg: 'bg-rose-500/20', text: 'text-rose-700', dot: 'bg-rose-500', name: 'rose' },
+        { bg: 'bg-cyan-500/20', text: 'text-cyan-700', dot: 'bg-cyan-500', name: 'cyan' },
+        { bg: 'bg-violet-500/20', text: 'text-violet-700', dot: 'bg-violet-500', name: 'violet' },
+        { bg: 'bg-fuchsia-500/20', text: 'text-fuchsia-700', dot: 'bg-fuchsia-500', name: 'fuchsia' },
+        { bg: 'bg-orange-500/20', text: 'text-orange-700', dot: 'bg-orange-500', name: 'orange' },
+        { bg: 'bg-teal-500/20', text: 'text-teal-700', dot: 'bg-teal-500', name: 'teal' },
     ];
 
-    // All users displayed in calendar = current user + followed teammates
+    // All users displayed in calendar = current user + followed teammates.
+    // Self always maps to SELF_COLOR; teammates rotate through the palette
+    // independently of the user's slot.
     const calendarUserIds = user ? [user.id, ...subscribedUsers] : subscribedUsers;
-    const userColorMap: Record<string, typeof userColorPalette[number]> = {};
-    calendarUserIds.forEach((uid, i) => {
-        userColorMap[uid] = userColorPalette[i % userColorPalette.length];
+    const userColorMap: Record<string, { bg: string; text: string; dot: string; name: string }> = {};
+    let teammateIdx = 0;
+    calendarUserIds.forEach(uid => {
+        if (user && uid === user.id) {
+            userColorMap[uid] = SELF_COLOR;
+        } else {
+            userColorMap[uid] = teammateColorPalette[teammateIdx % teammateColorPalette.length];
+            teammateIdx += 1;
+        }
     });
 
     const getMeetingTheme = (m: any) => {
-        if (m.status === 'pending') return { bg: 'bg-amber-500/15', text: 'text-amber-700', dot: 'bg-amber-400', name: 'amber' };
+        if (m.status === 'pending') return PENDING_COLOR;
 
         // Color by the meeting owner (creator or assignee), prefer one in followed list
         const ownerId = (calendarUserIds.includes(m.assigned_to) ? m.assigned_to : null)
@@ -436,21 +450,22 @@ export function CalendarMeetingSection() {
         }),
     ];
 
-    // Helper: get pastel version of theme color for week/day blocks
+    // Helper: get pastel/filled version of theme color for week/day blocks.
+    // The "self" entry is intentionally a solid dark block with white text so
+    // your own events read as primary against the lighter teammate blocks.
     const getPastelStyle = (m: any): { bg: string; border: string; text: string } => {
         const theme = getMeetingTheme(m);
         const pastelMap: Record<string, { bg: string; border: string; text: string }> = {
-            indigo: { bg: 'bg-indigo-100', border: 'border-indigo-300', text: 'text-indigo-800' },
-            purple: { bg: 'bg-purple-100', border: 'border-purple-300', text: 'text-purple-800' },
-            teal: { bg: 'bg-teal-100', border: 'border-teal-300', text: 'text-teal-800' },
-            pink: { bg: 'bg-pink-100', border: 'border-pink-300', text: 'text-pink-800' },
-            rose: { bg: 'bg-rose-100', border: 'border-rose-300', text: 'text-rose-800' },
-            emerald: { bg: 'bg-emerald-100', border: 'border-emerald-300', text: 'text-emerald-800' },
-            cyan: { bg: 'bg-cyan-100', border: 'border-cyan-300', text: 'text-cyan-800' },
-            orange: { bg: 'bg-orange-100', border: 'border-orange-300', text: 'text-orange-800' },
-            fuchsia: { bg: 'bg-fuchsia-100', border: 'border-fuchsia-300', text: 'text-fuchsia-800' },
-            blue: { bg: 'bg-blue-100', border: 'border-blue-300', text: 'text-blue-800' },
-            amber: { bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-800' },
+            self: { bg: 'bg-slate-900', border: 'border-slate-900', text: 'text-white' },
+            emerald: { bg: 'bg-emerald-100', border: 'border-emerald-400', text: 'text-emerald-900' },
+            amber: { bg: 'bg-amber-100', border: 'border-amber-400', text: 'text-amber-900' },
+            rose: { bg: 'bg-rose-100', border: 'border-rose-400', text: 'text-rose-900' },
+            cyan: { bg: 'bg-cyan-100', border: 'border-cyan-400', text: 'text-cyan-900' },
+            violet: { bg: 'bg-violet-100', border: 'border-violet-400', text: 'text-violet-900' },
+            fuchsia: { bg: 'bg-fuchsia-100', border: 'border-fuchsia-400', text: 'text-fuchsia-900' },
+            orange: { bg: 'bg-orange-100', border: 'border-orange-400', text: 'text-orange-900' },
+            teal: { bg: 'bg-teal-100', border: 'border-teal-400', text: 'text-teal-900' },
+            pending: { bg: 'bg-yellow-100', border: 'border-yellow-400 border-dashed', text: 'text-yellow-900' },
             slate: { bg: 'bg-slate-100', border: 'border-slate-300', text: 'text-slate-700' },
         };
         return pastelMap[theme.name] || pastelMap.slate;
@@ -906,19 +921,22 @@ export function CalendarMeetingSection() {
                             </div>
                         )}
 
-                        {/* Legend - Followed users (shown in all views) */}
+                        {/* Legend - Followed users (shown in all views).
+                            Self gets a slightly larger filled dot so "you"
+                            reads as the primary entry vs. teammates. */}
                         <div className="flex flex-wrap items-center gap-4 mt-4 pt-3 border-t border-slate-200">
                             {legendUsers.map(lu => {
                                 const color = userColorMap[lu.id];
                                 return (
                                     <div key={lu.id} className="flex items-center gap-1.5 text-xs text-slate-500">
-                                        <span className={`w-2 h-2 rounded-full ${color?.dot || 'bg-slate-400'}`} />
-                                        {lu.name} {lu.isCurrent && <span className="text-slate-400">(you)</span>}
+                                        <span className={`${lu.isCurrent ? 'w-2.5 h-2.5 ring-2 ring-slate-200' : 'w-2 h-2'} rounded-full ${color?.dot || 'bg-slate-400'}`} />
+                                        <span className={lu.isCurrent ? 'font-semibold text-slate-700' : ''}>{lu.name}</span>
+                                        {lu.isCurrent && <span className="text-slate-400">(you)</span>}
                                     </div>
                                 );
                             })}
                             <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                                <span className="w-2 h-2 rounded-full bg-amber-400" /> Pending
+                                <span className="w-2 h-2 rounded-full bg-yellow-400" /> Pending
                             </div>
                         </div>
 
@@ -1025,7 +1043,7 @@ export function CalendarMeetingSection() {
                                                 <button
                                                     key={m.id || `meeting-${idx}`}
                                                     onClick={() => openDetail(m)}
-                                                    className={`w-full text-left p-3 rounded-xl border transition-colors hover:bg-slate-200/30 ${m.status === 'pending' ? 'bg-amber-500/5 border-amber-500/20' : 'bg-slate-50 border-slate-300'}`}
+                                                    className={`w-full text-left p-3 rounded-xl border transition-colors hover:bg-slate-200/30 ${m.status === 'pending' ? 'bg-yellow-50 border-yellow-300' : 'bg-slate-50 border-slate-300'}`}
                                                 >
                                                     <div className="flex items-center gap-2">
                                                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${theme.dot}`} />
@@ -1041,7 +1059,7 @@ export function CalendarMeetingSection() {
                                                     <p className="text-xs text-slate-500 mt-0.5 ml-4">👥 {m.guests.length} guest{m.guests.length > 1 ? 's' : ''}</p>
                                                 )}
                                                 {m.status === 'pending' && (
-                                                    <span className="inline-flex ml-4 mt-1 px-2 py-0.5 text-[10px] font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full">
+                                                    <span className="inline-flex ml-4 mt-1 px-2 py-0.5 text-[10px] font-medium bg-yellow-100 text-yellow-800 border border-yellow-300 rounded-full">
                                                         Pending
                                                     </span>
                                                 )}

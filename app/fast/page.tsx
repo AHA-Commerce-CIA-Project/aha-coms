@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { CountdownTimer } from '@/components/CountdownTimer';
 import { CalendarMeetingSection } from '@/components/CalendarMeetingSection';
+import { TeamInboxTaskModal, type TeamInboxTask } from '@/components/TeamInboxTaskModal';
 import { getPresence } from '@/lib/presence';
 import {
     CheckCircle2, ListTodo, AlertTriangle, Search,
@@ -71,6 +72,10 @@ export default function FastDashboard() {
     const [searching, setSearching] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const searchRef = useRef<HTMLDivElement | null>(null);
+    // Task-detail modal opened from a task hit in the global search dropdown.
+    // Channels still navigate; tasks open in-place so the dashboard context
+    // is preserved.
+    const [detailTask, setDetailTask] = useState<TeamInboxTask | null>(null);
 
 
     const fetchData = useCallback(async () => {
@@ -128,14 +133,19 @@ export default function FastDashboard() {
         setSearchQuery('');
     };
 
-    const goToTask = (t: SearchTask) => {
-        // Deep-link reuses the channel pane's existing ?task= handler — when
-        // the task has a target channel we land on it; otherwise the modal
-        // opens over the empty workspace.
-        const channelPart = t.targetChannel ? `&channel=${encodeURIComponent(t.targetChannel.id)}&purpose=assign_task` : '';
-        router.push(`/messages?task=${encodeURIComponent(t.id)}${channelPart}`);
+    const goToTask = async (t: SearchTask) => {
+        // Open the task locally in the same Task Detail Modal used by Team
+        // Inbox / channel deep-links. Avoids the surprising redirect-to-
+        // channel behavior the previous router.push had — the user wanted
+        // the task itself, not the channel it lives in.
         setSearchOpen(false);
         setSearchQuery('');
+        try {
+            const res = await fetch(`/api/tasks/${t.id}/full`);
+            if (!res.ok) return;
+            const full = await res.json();
+            setDetailTask(full);
+        } catch {}
     };
 
     const handleDirectAction = async (taskId: string, action: 'approve' | 'decline') => {
@@ -477,6 +487,19 @@ export default function FastDashboard() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Task-detail modal — opened from a task hit in the global
+                search dropdown. onChange refetches dashboard widgets so
+                anything that mutated (claim/complete/comments) reflects on
+                the cards immediately. */}
+            {detailTask && (
+                <TeamInboxTaskModal
+                    task={detailTask}
+                    currentUserId={profile?.id}
+                    onClose={() => setDetailTask(null)}
+                    onChange={() => fetchData()}
+                />
             )}
         </div>
     );
