@@ -3,24 +3,17 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { CountdownTimer } from '@/components/CountdownTimer';
+import { CalendarMeetingSection } from '@/components/CalendarMeetingSection';
 import { getPresence } from '@/lib/presence';
-import Link from 'next/link';
 import {
-    CheckCircle2, ListTodo, Clock, AlertTriangle, X, Search,
-    ChevronLeft, ChevronRight, Activity, MessageSquare, UserPlus,
-    Shield, FileText, RotateCcw, Users, Zap, Eye, ArrowRight, BarChart3,
+    CheckCircle2, ListTodo, AlertTriangle, Search,
+    Activity, MessageSquare, UserPlus,
+    Shield, FileText, RotateCcw, Users, BarChart3,
 } from 'lucide-react';
 
 const urgencyDots: Record<string, string> = {
     'P1': 'bg-rose-500', 'P2': 'bg-orange-500', 'P3': 'bg-amber-500',
     'P4': 'bg-emerald-500', '5-minute': 'bg-sky-400',
-};
-
-const statusLabels: Record<string, { label: string; color: string }> = {
-    'todo': { label: 'To Do', color: 'text-slate-500' },
-    'in-progress': { label: 'In Progress', color: 'text-indigo-500' },
-    'review': { label: 'Review', color: 'text-purple-500' },
-    'pending_completion_details': { label: 'Completing', color: 'text-amber-500' },
 };
 
 const activityIcons: Record<string, any> = {
@@ -50,10 +43,6 @@ export default function FastDashboard() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [calMonth, setCalMonth] = useState(() => {
-        const now = new Date();
-        return { year: now.getFullYear(), month: now.getMonth() };
-    });
 
 
     const fetchData = useCallback(async () => {
@@ -79,12 +68,6 @@ export default function FastDashboard() {
         fetchData();
     };
 
-    // Mini calendar helpers
-    const daysInMonth = new Date(calMonth.year, calMonth.month + 1, 0).getDate();
-    const firstDayOfWeek = new Date(calMonth.year, calMonth.month, 1).getDay();
-    const monthName = new Date(calMonth.year, calMonth.month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const today = new Date();
-
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-96">
@@ -96,9 +79,6 @@ export default function FastDashboard() {
     if (!data) return null;
 
     const displayName = profile?.name?.split(' ')[0] || 'there';
-    const filteredTasks = searchQuery
-        ? data.myTasks.filter((t: any) => t.title.toLowerCase().includes(searchQuery.toLowerCase()))
-        : data.myTasks;
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto">
@@ -150,105 +130,12 @@ export default function FastDashboard() {
                 </div>
             )}
 
-            {/* Main Grid: Calendar + Tasks */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Mini Calendar */}
-                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-bold text-slate-800">{monthName}</h3>
-                        <div className="flex gap-1">
-                            <button onClick={() => setCalMonth(m => m.month === 0 ? { year: m.year - 1, month: 11 } : { year: m.year, month: m.month - 1 })} className="p-1 hover:bg-slate-100 rounded-lg">
-                                <ChevronLeft className="w-4 h-4 text-slate-400" />
-                            </button>
-                            <button onClick={() => setCalMonth(m => m.month === 11 ? { year: m.year + 1, month: 0 } : { year: m.year, month: m.month + 1 })} className="p-1 hover:bg-slate-100 rounded-lg">
-                                <ChevronRight className="w-4 h-4 text-slate-400" />
-                            </button>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-7 gap-1 text-center">
-                        {['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'].map(d => (
-                            <div key={d} className="text-[10px] font-semibold text-slate-400 py-1">{d}</div>
-                        ))}
-                        {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-                            <div key={`empty-${i}`} />
-                        ))}
-                        {Array.from({ length: daysInMonth }, (_, i) => {
-                            const day = i + 1;
-                            const isToday = day === today.getDate() && calMonth.month === today.getMonth() && calMonth.year === today.getFullYear();
-                            return (
-                                <div
-                                    key={day}
-                                    className={`text-xs py-1.5 rounded-lg font-medium ${
-                                        isToday
-                                            ? 'bg-indigo-600 text-white'
-                                            : 'text-slate-700 hover:bg-slate-100'
-                                    }`}
-                                >
-                                    {day}
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    {/* Quick Stats below calendar */}
-                    <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-3">
-                        <div className="text-center">
-                            <p className="text-2xl font-bold text-emerald-500">{data.stats.completed}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">Completed</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-2xl font-bold text-indigo-500">{data.stats.active}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">Active</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* My Tasks */}
-                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                            <Zap className="w-4 h-4 text-amber-500" />
-                            My Active Tasks
-                        </h3>
-                        <Link href="/tasks" className="text-xs font-medium text-indigo-500 hover:text-indigo-600 flex items-center gap-1">
-                            View all <ArrowRight className="w-3 h-3" />
-                        </Link>
-                    </div>
-                    {filteredTasks.length === 0 ? (
-                        <div className="text-center py-8">
-                            <CheckCircle2 className="w-8 h-8 text-emerald-300 mx-auto mb-2" />
-                            <p className="text-sm text-slate-500">All caught up! No active tasks.</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {filteredTasks.map((task: any) => {
-                                const st = statusLabels[task.status] || { label: task.status, color: 'text-slate-500' };
-                                const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'done' && task.status !== 'pending';
-                                return (
-                                    <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 border border-slate-100 transition-colors">
-                                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${urgencyDots[task.urgency] || 'bg-slate-300'}`} />
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-slate-800 truncate">{task.title}</p>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                <span className={`text-[10px] font-semibold ${st.color}`}>{st.label}</span>
-                                                {task.requesterName && <span className="text-[10px] text-slate-400">· {task.requesterName}</span>}
-                                                {task.source === 'direct_request' && (
-                                                    <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-full font-medium">Direct</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2 flex-shrink-0">
-                                            {isOverdue && (
-                                                <span className="text-[10px] px-2 py-0.5 bg-rose-100 text-rose-600 rounded-full font-semibold">Overdue</span>
-                                            )}
-                                            <span className="text-[10px] text-slate-400">{formatRelative(task.createdAt)}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
+            {/* Full-width calendar + meetings — moved here from /tasks. The
+                old mini calendar + "My Active Tasks" widgets were redundant
+                with this view (calendar covers the schedule, /tasks owns the
+                board), so they're gone. */}
+            <div className="w-full">
+                <CalendarMeetingSection />
             </div>
 
             {/* Bottom Row: Recent Activity + Team */}
