@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { CountdownTimer } from '@/components/CountdownTimer';
 import { CalendarMeetingSection } from '@/components/CalendarMeetingSection';
@@ -9,7 +10,29 @@ import {
     CheckCircle2, ListTodo, AlertTriangle, Search,
     Activity, MessageSquare, UserPlus,
     Shield, FileText, RotateCcw, Users, BarChart3,
+    Hash, Lock, ClipboardList, Loader2,
 } from 'lucide-react';
+
+interface SearchChannel {
+    id: string;
+    name: string;
+    isPrivate: boolean;
+    purpose: string | null;
+}
+
+interface SearchTask {
+    id: string;
+    title: string;
+    taskToken: string | null;
+    status: string;
+    urgency: string | null;
+    targetChannel: { id: string; name: string } | null;
+}
+
+interface SearchResults {
+    channels: SearchChannel[];
+    tasks: SearchTask[];
+}
 
 const urgencyDots: Record<string, string> = {
     'P1': 'bg-rose-500', 'P2': 'bg-orange-500', 'P3': 'bg-amber-500',
@@ -39,10 +62,15 @@ function formatRelative(dateStr: string) {
 
 export default function FastDashboard() {
     const { profile } = useAuth();
+    const router = useRouter();
 
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
+    const [searching, setSearching] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
+    const searchRef = useRef<HTMLDivElement | null>(null);
 
 
     const fetchData = useCallback(async () => {
@@ -58,6 +86,57 @@ export default function FastDashboard() {
         const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
     }, [fetchData]);
+
+    // Debounced global search — fires /api/search 250ms after typing stops.
+    // Aborts in-flight requests on every keystroke so a slower earlier query
+    // can't overwrite a fresher result.
+    useEffect(() => {
+        const q = searchQuery.trim();
+        if (q.length < 2) {
+            setSearchResults(null);
+            setSearching(false);
+            return;
+        }
+        setSearching(true);
+        const ctrl = new AbortController();
+        const timer = setTimeout(async () => {
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+                if (res.ok) setSearchResults(await res.json());
+            } catch {} finally {
+                setSearching(false);
+            }
+        }, 250);
+        return () => { clearTimeout(timer); ctrl.abort(); };
+    }, [searchQuery]);
+
+    // Dismiss the dropdown when clicking outside the search wrapper.
+    useEffect(() => {
+        if (!searchOpen) return;
+        const onDown = (e: MouseEvent) => {
+            if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+                setSearchOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [searchOpen]);
+
+    const goToChannel = (c: SearchChannel) => {
+        router.push(`/messages?channel=${encodeURIComponent(c.id)}`);
+        setSearchOpen(false);
+        setSearchQuery('');
+    };
+
+    const goToTask = (t: SearchTask) => {
+        // Deep-link reuses the channel pane's existing ?task= handler — when
+        // the task has a target channel we land on it; otherwise the modal
+        // opens over the empty workspace.
+        const channelPart = t.targetChannel ? `&channel=${encodeURIComponent(t.targetChannel.id)}&purpose=assign_task` : '';
+        router.push(`/messages?task=${encodeURIComponent(t.id)}${channelPart}`);
+        setSearchOpen(false);
+        setSearchQuery('');
+    };
 
     const handleDirectAction = async (taskId: string, action: 'approve' | 'decline') => {
         await fetch(`/api/tasks/${taskId}/direct-action`, {
@@ -88,15 +167,81 @@ export default function FastDashboard() {
                     <h1 className="text-3xl font-bold text-slate-900">Welcome, {displayName}!</h1>
                     <p className="text-slate-500">Here is your agenda for today</p>
                 </div>
-                <div className="relative w-full md:w-80">
+                <div ref={searchRef} className="relative w-full md:w-80">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search tasks..."
+                        onFocus={() => setSearchOpen(true)}
+                        placeholder="Search channels & tasks…"
                         className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                     />
+
+                    {/* Omnibar dropdown — fixed-height scrollable list, only
+                        rendered while focused and the query has at least 2 chars. */}
+                    {searchOpen && searchQuery.trim().length >= 2 && (
+                        <div className="absolute z-30 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                            {searching && !searchResults ? (
+                                <div className="flex items-center gap-2 px-4 py-3 text-xs text-slate-400">
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Searching…
+                                </div>
+                            ) : searchResults && (searchResults.channels.length === 0 && searchResults.tasks.length === 0) ? (
+                                <p className="px-4 py-3 text-xs text-slate-400 italic">No matches for &quot;{searchQuery}&quot;</p>
+                            ) : searchResults ? (
+                                <div className="max-h-[360px] overflow-y-auto py-1">
+                                    {searchResults.channels.length > 0 && (
+                                        <>
+                                            <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Channels</p>
+                                            {searchResults.channels.map((c) => (
+                                                <button
+                                                    key={c.id}
+                                                    type="button"
+                                                    onClick={() => goToChannel(c)}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50"
+                                                >
+                                                    {c.isPrivate ? (
+                                                        <Lock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                                    ) : (
+                                                        <Hash className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                                    )}
+                                                    <span className="text-sm text-slate-800 truncate">{c.name}</span>
+                                                    {c.purpose === 'assign_task' && (
+                                                        <span className="ml-auto text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">Assign Task</span>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
+                                    {searchResults.tasks.length > 0 && (
+                                        <>
+                                            <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Tasks</p>
+                                            {searchResults.tasks.map((t) => (
+                                                <button
+                                                    key={t.id}
+                                                    type="button"
+                                                    onClick={() => goToTask(t)}
+                                                    className="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-slate-50"
+                                                >
+                                                    <ClipboardList className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0 mt-0.5" />
+                                                    <span className="flex-1 min-w-0">
+                                                        <span className="block text-sm text-slate-800 truncate">{t.title}</span>
+                                                        <span className="block text-[10px] text-slate-400 truncate">
+                                                            {t.taskToken ? `#${t.taskToken}` : '—'}
+                                                            {t.targetChannel ? ` · #${t.targetChannel.name}` : ''}
+                                                        </span>
+                                                    </span>
+                                                    {t.urgency && (
+                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${urgencyDots[t.urgency] || 'bg-slate-300'} text-white`}>{t.urgency}</span>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                            ) : null}
+                        </div>
+                    )}
                 </div>
             </div>
 
