@@ -12,7 +12,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { useAuth } from '@/lib/auth-context';
-import { ChannelHeader } from '@/components/channels/ChannelHeader';
 import { ChannelMessageFeed } from '@/components/channels/ChannelMessageFeed';
 import { ChannelMessageComposer, type ChannelMessageComposerHandle } from '@/components/channels/ChannelMessageComposer';
 import { ThreadPanel } from '@/components/channels/ThreadPanel';
@@ -82,6 +81,10 @@ export function ChannelPane() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createWithUserIds, setCreateWithUserIds] = useState<string[] | undefined>(undefined);
   const setDirectAssignOpen = useAppStore((s) => s.setDirectAssignOpen);
+  // Publish the channel header up to MessagesWorkspace so it can render
+  // &lt;ChannelHeader&gt; inline next to its Messages | Later tabs — the old
+  // standalone header row was burning a whole band of vertical space.
+  const setChatHeader = useAppStore((s) => s.setChatHeader);
   // Subscribe to Direct Assign submit ticks so we can refresh the feed when
   // the user converts a message into a task — the new endpoint edits the source
   // message in place and the SSE stream only pushes inserts, not updates.
@@ -462,11 +465,6 @@ export function ChannelPane() {
     );
   };
 
-  const openDeleteConfirm = () => {
-    setDeleteError(null);
-    setDeleteConfirmOpen(true);
-  };
-
   const confirmDeleteChannel = async () => {
     if (!selectedChannel) return;
     setDeleting(true);
@@ -491,6 +489,60 @@ export function ChannelPane() {
     }
   };
 
+  // Stable callbacks for the published ChatHeaderState — wrapped in useCallback
+  // so MessagesWorkspace doesn't re-render the workspace shell on every
+  // ChannelPane state tick. Inline closures here would tear down on every
+  // re-render and the published header object would never stabilise.
+  const handleHeaderSearchChange = useCallback((q: string) => setSearchQuery(q), []);
+  const handleHeaderDelete = useCallback(() => {
+    setDeleteError(null);
+    setDeleteConfirmOpen(true);
+  }, []);
+  const handleHeaderEdit = useCallback(() => setEditModalOpen(true), []);
+  const handleHeaderDirectAssign = useCallback(() => {
+    if (selectedChannel) setDirectAssignOpen(true, { channelId: selectedChannel.id });
+  }, [selectedChannel, setDirectAssignOpen]);
+  const handleHeaderBack = useCallback(() => setSelectedChannel(null), []);
+
+  // Publish header data into the workspace-level Zustand slot so the top tab
+  // row can render &lt;ChannelHeader&gt; inline. Clear when no channel is selected
+  // (or this pane unmounts) so the row collapses back to just the tabs.
+  useEffect(() => {
+    if (!selectedChannel || !session) {
+      setChatHeader(null);
+      return;
+    }
+    setChatHeader({
+      name: selectedChannel.name,
+      description: selectedChannel.description,
+      isPrivate: (selectedChannel as any).isPrivate,
+      memberCount: (selectedChannel as any).memberCount,
+      channelId: selectedChannel.id,
+      purpose: selectedChannel.purpose,
+      isCreator: selectedChannel.createdBy === session.user.id,
+      searchQuery,
+      searching,
+      onSearchChange: handleHeaderSearchChange,
+      onDelete: handleHeaderDelete,
+      onEdit: handleHeaderEdit,
+      onDirectAssign: handleHeaderDirectAssign,
+      onBack: handleHeaderBack,
+    });
+  }, [
+    selectedChannel,
+    session,
+    searchQuery,
+    searching,
+    setChatHeader,
+    handleHeaderSearchChange,
+    handleHeaderDelete,
+    handleHeaderEdit,
+    handleHeaderDirectAssign,
+    handleHeaderBack,
+  ]);
+
+  useEffect(() => () => setChatHeader(null), [setChatHeader]);
+
   if (isPending) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -509,22 +561,10 @@ export function ChannelPane() {
       <div className="flex flex-1 flex-col min-w-0 min-h-0">
         {selectedChannel ? (
           <>
-            <ChannelHeader
-              name={selectedChannel.name}
-              description={selectedChannel.description}
-              isPrivate={(selectedChannel as any).isPrivate}
-              memberCount={(selectedChannel as any).memberCount}
-              channelId={selectedChannel.id}
-              purpose={selectedChannel.purpose}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              searching={searching}
-              isCreator={selectedChannel.createdBy === session.user.id}
-              onDelete={openDeleteConfirm}
-              onEdit={() => setEditModalOpen(true)}
-              onDirectAssign={() => setDirectAssignOpen(true, { channelId: selectedChannel.id })}
-              onBack={() => setSelectedChannel(null)}
-            />
+            {/* ChannelHeader is now rendered by MessagesWorkspace inline next
+                to its Messages | Later tab row — see app/messages/page.tsx.
+                This pane publishes the header data + callbacks into the
+                Zustand `chatHeader` slot via the useEffect above. */}
             {searchResults ? (
               <div className="flex-1 overflow-y-auto px-6 py-4">
                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">

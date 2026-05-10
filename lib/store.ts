@@ -3,6 +3,26 @@ import { Task, Project, User, ProjectTemplate, TaskStatus, TaskPriority } from '
 import { mockUsers, mockProjects, mockTasks, mockTemplates } from './mock-data';
 import type { UserProfile } from './user-profile-types';
 
+// Shape consumed by &lt;ChannelHeader&gt; when rendered inline in the workspace's
+// top tab row. Callbacks should be useCallback-stabilised by the publisher
+// (ChannelPane) so MessagesWorkspace doesn't re-render on every keystroke.
+export interface ChatHeaderState {
+    name: string;
+    description: string | null;
+    isPrivate?: boolean;
+    memberCount?: number;
+    channelId: string;
+    purpose?: string;
+    isCreator: boolean;
+    searchQuery: string;
+    searching: boolean;
+    onSearchChange: (q: string) => void;
+    onDelete?: () => void;
+    onEdit?: () => void;
+    onDirectAssign?: () => void;
+    onBack?: () => void;
+}
+
 interface AppState {
     // Data
     users: User[];
@@ -47,6 +67,14 @@ interface AppState {
     // the button would just navigate them to the conversation they're already in.
     profileHideSendDm: boolean;
 
+    // Channel header data + actions published by ChannelPane so the unified
+    // /messages workspace can render the channel info (name, members, search,
+    // kebab) inline next to its Messages | Later tabs — replaces the old
+    // standalone header row that wasted a full vertical band of screen space.
+    // ChannelPane sets this whenever a channel is selected and clears it on
+    // unmount/deselect; MessagesWorkspace reads it and renders &lt;ChannelHeader&gt;.
+    chatHeader: ChatHeaderState | null;
+
     // Actions
     setSelectedProject: (id: string | null) => void;
     setSelectedTask: (id: string | null) => void;
@@ -64,6 +92,7 @@ interface AppState {
     }) => void;
     notifyDirectAssignSubmitted: () => void;
     setProfileUser: (user: UserProfile | null, opts?: { showAddToConversation?: boolean; hideSendDm?: boolean }) => void;
+    setChatHeader: (state: ChatHeaderState | null) => void;
 
     // Task Actions
     addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
@@ -114,6 +143,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     profileUser: null,
     profileShowAddToConversation: false,
     profileHideSendDm: false,
+    chatHeader: null,
 
     // UI Actions
     setSelectedProject: (id) => set({ selectedProjectId: id }),
@@ -137,6 +167,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         profileShowAddToConversation: user ? !!opts?.showAddToConversation : false,
         profileHideSendDm: user ? !!opts?.hideSendDm : false,
     }),
+    setChatHeader: (state) => set({ chatHeader: state }),
 
     // Task Actions
     addTask: (taskData) => set((state) => ({

@@ -116,7 +116,9 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
   };
 
   return (
-    <div className="flex items-center justify-between px-3 sm:px-6 py-3 border-b border-slate-200 bg-white gap-2 sm:gap-3">
+    // Outer chrome (padding-y, border-b, bg) is provided by the parent row
+    // in MessagesWorkspace — this header is no longer a self-contained band.
+    <div className="flex items-center justify-between gap-2 sm:gap-3 w-full min-w-0">
       <div className="flex items-center gap-2 min-w-0">
         {/* Mobile-only back arrow — returns to the channel list. Hidden on
             desktop where the channel rail is always visible. */}

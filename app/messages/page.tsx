@@ -20,6 +20,8 @@ import { ChannelPane } from '@/components/messaging/ChannelPane';
 import { DmPane } from '@/components/messaging/DmPane';
 import { LaterPane } from '@/components/messaging/LaterPane';
 import { CreateChannelModal } from '@/components/channels/CreateChannelModal';
+import { ChannelHeader } from '@/components/channels/ChannelHeader';
+import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 
 interface ChannelRow {
@@ -49,6 +51,10 @@ function MessagesWorkspace() {
     const router = useRouter();
     const params = useSearchParams();
     const { user, isLeader } = useAuth();
+    // Inline channel header — ChannelPane publishes this when a channel is
+    // selected so we can render its name/description/search/kebab next to the
+    // Messages | Later tabs instead of consuming a second vertical row.
+    const chatHeader = useAppStore((s) => s.chatHeader);
 
     const channelId = params.get('channel');
     const convId = params.get('conv');
@@ -211,22 +217,31 @@ function MessagesWorkspace() {
         // the white pane runs flush to the viewport edges. Mobile keeps the BottomNav
         // reservation so the composer doesn't slide under the nav.
         <div className="flex flex-col -mx-3 sm:-mx-6 md:-mb-6 h-[calc(100vh-160px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-112px)] bg-white overflow-hidden">
-            {/* Workspace tab toggle — Messages | Later. Sits at the top of the
-                card itself so it acts as the workspace's primary header (no
-                duplicate "Messages" title beneath). */}
-            <div className="flex items-center gap-1 px-4 pt-3 pb-2 border-b border-slate-100 flex-shrink-0">
-                <TopTabButton
-                    active={!isLaterMode}
-                    icon={MessageCircle}
-                    label="Messages"
-                    onClick={() => router.push('/messages')}
-                />
-                <TopTabButton
-                    active={isLaterMode}
-                    icon={Bookmark}
-                    label="Later"
-                    onClick={() => router.push('/messages?later=messages')}
-                />
+            {/* Workspace tab toggle — Messages | Later on the left; the active
+                channel's header (name, members, search, kebab) is rendered on
+                the right when ChannelPane has published one. Merging the two
+                rows into one reclaims the vertical band the old standalone
+                ChannelHeader used to consume. */}
+            <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 flex-shrink-0 min-h-[52px]">
+                <div className="flex items-center gap-1 flex-shrink-0">
+                    <TopTabButton
+                        active={!isLaterMode}
+                        icon={MessageCircle}
+                        label="Messages"
+                        onClick={() => router.push('/messages')}
+                    />
+                    <TopTabButton
+                        active={isLaterMode}
+                        icon={Bookmark}
+                        label="Later"
+                        onClick={() => router.push('/messages?later=messages')}
+                    />
+                </div>
+                {isChannelMode && chatHeader && !isLaterMode && (
+                    <div className="flex-1 min-w-0 hidden md:block">
+                        <ChannelHeader {...chatHeader} />
+                    </div>
+                )}
             </div>
 
             <div className="flex flex-1 min-h-0 overflow-hidden">
