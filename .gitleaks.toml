@@ -1,0 +1,49 @@
+# .gitleaks.toml — secret-scanning configuration for the aha-coms monorepo.
+#
+# Activation (once per clone):
+#   1. Install gitleaks — `brew install gitleaks` on macOS, or see
+#      https://github.com/gitleaks/gitleaks for other platforms.
+#   2. Point git at the version-controlled hooks directory:
+#        git config core.hooksPath .githooks
+#   3. The pre-commit hook will now scan staged content on every commit.
+#
+# Scanning modes:
+#   - Pre-commit:   `gitleaks git --staged`   (only staged content; runs from .githooks/pre-commit)
+#   - Working tree: `gitleaks dir .`          (every file, including untracked — useful for audits)
+#   - History:      `gitleaks git`            (every commit; useful before a release)
+#
+# Adding a false-positive exception:
+#   1. Verify the value is actually safe to publish (e.g., Firebase Web SDK
+#      API keys identify a project but do not authenticate it).
+#   2. Add an entry below, scoped as narrowly as possible — specific values
+#      beat broad regexes.
+
+# Extend gitleaks' built-in rules (rather than replacing them).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Suite-wide allowlist for known false positives"
+
+# Path-scoped: build output and external dependencies. These directories
+# should never contain real secrets beyond what's already in source.
+paths = [
+  '''node_modules/''',
+  '''\.svelte-kit/''',
+  '''build/''',
+  '''dist/''',
+  '''\.next/''',
+  '''\.terraform/''',
+  '''\.git/''',
+  '''bun\.lock''',
+  '''package-lock\.json''',
+]
+
+# Specific known-public values. Each entry must have a comment explaining
+# why publishing this value is safe.
+regexes = [
+  # Firebase Web SDK public API key for portal-web — public by design.
+  # Firebase API keys identify a Firebase project; access control is
+  # enforced by Firebase Security Rules and App Check, not by key secrecy.
+  '''AIzaSyAYviZEM36UVjAf7ROek8rR98DRI-z3kHI''',
+]

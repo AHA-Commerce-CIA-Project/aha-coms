@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pre-commit hook for the aha-coms monorepo.
+#
+# Activation: run once after clone:
+#     git config core.hooksPath .githooks
+#
+# Each check below is independent. A failure in any check blocks the commit.
+# To bypass intentionally (use sparingly), add `--no-verify` to git commit.
+
+set -e
+
+# --- 1. Secret scanning (gitleaks) ---
+# Scans only staged content. Configuration lives in .gitleaks.toml.
+# Exit code 1 on findings blocks the commit by default.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --staged --no-banner
+else
+  echo "⚠  gitleaks not installed — secret scan skipped." >&2
+  echo "   Install with: brew install gitleaks" >&2
+  echo "   Or see: https://github.com/gitleaks/gitleaks" >&2
+fi
+
+# --- 2. code-review-graph change detection (legacy hook, preserved) ---
+# Non-blocking by design (|| true). Used for graph-augmented review.
+if command -v code-review-graph >/dev/null 2>&1; then
+  code-review-graph detect-changes --brief || true
+fi
