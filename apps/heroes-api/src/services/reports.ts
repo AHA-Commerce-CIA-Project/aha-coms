@@ -1,8 +1,8 @@
 import { eq, and, gte, lte, count, sum, sql } from 'drizzle-orm'
-import { achievementPoints, pointCategories, heroesProfiles } from '@coms/shared/db/schema'
+import { achievementPoints, pointCategories, heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
 import { withRLS } from '../repositories/base'
 import type { AuthUser } from '../middleware/auth'
-import type { ReportsQueryInput } from '@coms/shared/schemas'
+import type { ReportsQueryInput } from '@coms-portal/heroes-shared/schemas'
 
 type ServiceContext = {
   readonly actor: AuthUser

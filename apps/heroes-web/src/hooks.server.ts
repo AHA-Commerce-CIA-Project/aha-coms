@@ -1,12 +1,12 @@
 import { sequence } from '@sveltejs/kit/hooks'
 import type { Handle } from '@sveltejs/kit'
-import type { AuthUser } from '@coms/shared/types'
+import type { AuthUser } from '@coms-portal/heroes-shared/types'
 import { paraglideMiddleware } from '$lib/paraglide/server'
 import { getTextDirection } from '$lib/paraglide/runtime'
 import {
   PORTAL_SESSION_COOKIE,
   getLocalSessionByToken,
-} from '@coms/shared/auth/session'
+} from '@coms-portal/heroes-shared/auth/session'
 
 const i18n: Handle = ({ event, resolve }) =>
   paraglideMiddleware(event.request, ({ request: localizedRequest, locale }) => {
@@ -34,8 +34,8 @@ const auth: Handle = async ({ event, resolve }) => {
   }
 
   const [{ db }, { heroesProfiles, emailCache, userConfigCache }, { eq }] = await Promise.all([
-    import('@coms/shared/db'),
-    import('@coms/shared/db/schema'),
+    import('@coms-portal/heroes-shared/db'),
+    import('@coms-portal/heroes-shared/db/schema'),
     import('drizzle-orm'),
   ])
 

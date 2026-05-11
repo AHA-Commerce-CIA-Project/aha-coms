@@ -1,8 +1,8 @@
 import { eq, and, count, desc, ilike, gte, lte } from 'drizzle-orm'
-import { achievementPoints, pointCategories, heroesProfiles, emailCache } from '@coms/shared/db/schema'
+import { achievementPoints, pointCategories, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
-import type { PointStatus, PointCategoryCode } from '@coms/shared/constants'
+import type { PointStatus, PointCategoryCode } from '@coms-portal/heroes-shared/constants'
 
 export type PointRow = typeof achievementPoints.$inferSelect
 

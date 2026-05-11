@@ -2,10 +2,10 @@ import { Elysia, t } from 'elysia'
 import {
   requestRedemptionSchema,
   resolveRedemptionSchema,
-} from '@coms/shared/schemas'
-import { REDEMPTION_STATUSES } from '@coms/shared/constants'
+} from '@coms-portal/heroes-shared/schemas'
+import { REDEMPTION_STATUSES } from '@coms-portal/heroes-shared/constants'
 import { paginationQuery } from './_query'
-import { bulkRedemptionActionSchema } from '@coms/shared/schemas'
+import { bulkRedemptionActionSchema } from '@coms-portal/heroes-shared/schemas'
 import * as redemptionsService from '../services/redemptions'
 import type { AuthUser } from '../middleware/auth'
 

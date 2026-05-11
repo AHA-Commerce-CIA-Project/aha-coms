@@ -3,8 +3,8 @@ import { writeAuditLog } from './audit'
 import { createNotification } from './notifications'
 import type { AuthUser } from '../middleware/auth'
 import { withRLS } from '../repositories/base'
-import type { ApproveRejectInput } from '@coms/shared/schemas'
-import type { BulkPointActionInput, BulkResult, BulkResultItem } from '@coms/shared/schemas'
+import type { ApproveRejectInput } from '@coms-portal/heroes-shared/schemas'
+import type { BulkPointActionInput, BulkResult, BulkResultItem } from '@coms-portal/heroes-shared/schemas'
 
 type ServiceContext = {
   readonly actor: AuthUser

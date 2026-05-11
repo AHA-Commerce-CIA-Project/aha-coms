@@ -15,12 +15,12 @@ COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_module
 COPY --from=deps /app/packages/server/node_modules ./packages/server/node_modules
 COPY --from=deps /app/packages/web/node_modules ./packages/web/node_modules
 COPY . .
-RUN bun run --filter=@coms/shared build
+RUN bun run --filter=@coms-portal/heroes-shared build
 # web and server only import each other's source for *types*, not built dist —
 # safe to build in parallel. Wait on each PID so the RUN exits non-zero if
 # either build fails.
-RUN bun run --filter=@coms/web build & WEB_PID=$!; \
-    NODE_ENV=production bun run --filter=@coms/server build & SRV_PID=$!; \
+RUN bun run --filter=@coms-portal/heroes-web build & WEB_PID=$!; \
+    NODE_ENV=production bun run --filter=@coms-portal/heroes-api build & SRV_PID=$!; \
     wait $WEB_PID && wait $SRV_PID
 
 # Stage 3: Production (minimal)

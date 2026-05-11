@@ -3,7 +3,7 @@ import {
   PORTAL_SESSION_COOKIE,
   PortalSessionDeniedError,
   createLocalSessionForPortalUser,
-} from '@coms/shared/auth/session'
+} from '@coms-portal/heroes-shared/auth/session'
 import { PortalBrokerError, exchangePortalCode } from '$lib/server/portal-broker'
 import type { RequestHandler } from './$types'
 

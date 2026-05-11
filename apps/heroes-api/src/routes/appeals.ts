@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia'
 import {
   fileAppealSchema,
   resolveAppealSchema,
-} from '@coms/shared/schemas'
+} from '@coms-portal/heroes-shared/schemas'
 import { paginationQuery } from './_query'
 import * as appealsService from '../services/appeals'
 import type { AuthUser } from '../middleware/auth'

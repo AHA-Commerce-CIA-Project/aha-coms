@@ -2,7 +2,7 @@ import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ locals }) => {
   const actor = locals.user!
-  const redemptionsService = await import('@coms/server/services/redemptions')
+  const redemptionsService = await import('@coms-portal/heroes-api/services/redemptions')
   const result = await redemptionsService.listRedemptions(
     { page: 1, limit: 50, mine: true },
     { actor },

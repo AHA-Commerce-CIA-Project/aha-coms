@@ -1,12 +1,12 @@
 import Elysia from 'elysia'
 import { eq } from 'drizzle-orm'
-import { db } from '@coms/shared/db'
-import { heroesProfiles, emailCache, userConfigCache } from '@coms/shared/db/schema'
+import { db } from '@coms-portal/heroes-shared/db'
+import { heroesProfiles, emailCache, userConfigCache } from '@coms-portal/heroes-shared/db/schema'
 import {
   getLocalSessionByToken,
   readSessionCookieFromHeaders,
-} from '@coms/shared/auth/session'
-import type { UserRole } from '@coms/shared/constants'
+} from '@coms-portal/heroes-shared/auth/session'
+import type { UserRole } from '@coms-portal/heroes-shared/constants'
 
 export type AuthUser = {
   readonly id: string

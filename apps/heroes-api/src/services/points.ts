@@ -1,12 +1,12 @@
 import { eq } from 'drizzle-orm'
-import { pointCategories, heroesProfiles, taxonomyCache } from '@coms/shared/db/schema'
+import { pointCategories, heroesProfiles, taxonomyCache } from '@coms-portal/heroes-shared/db/schema'
 import * as pointsRepo from '../repositories/points'
 import { writeAuditLog } from './audit'
 import { createNotification } from './notifications'
 import type { AuthUser } from '../middleware/auth'
 import { withRLS } from '../repositories/base'
-import type { SubmitPointInput, ListPointsInput } from '@coms/shared/schemas'
-import type { PointCategoryCode } from '@coms/shared/constants'
+import type { SubmitPointInput, ListPointsInput } from '@coms-portal/heroes-shared/schemas'
+import type { PointCategoryCode } from '@coms-portal/heroes-shared/constants'
 
 type ServiceContext = {
   readonly actor: AuthUser

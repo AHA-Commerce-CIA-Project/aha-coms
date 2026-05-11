@@ -5,8 +5,8 @@ import { withRLS } from '../repositories/base'
 import type {
   UpdateUserInput,
   ListUsersInput,
-} from '@coms/shared/schemas'
-import type { BulkUserActionInput, BulkResult, BulkResultItem } from '@coms/shared/schemas'
+} from '@coms-portal/heroes-shared/schemas'
+import type { BulkUserActionInput, BulkResult, BulkResultItem } from '@coms-portal/heroes-shared/schemas'
 
 type ServiceContext = {
   readonly actor: AuthUser

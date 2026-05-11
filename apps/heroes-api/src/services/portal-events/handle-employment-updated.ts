@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { EmploymentUpdatedPayload } from '@coms-portal/sdk'
-import { db } from '@coms/shared/db'
-import { heroesProfiles } from '@coms/shared/db/schema'
+import { db } from '@coms-portal/heroes-shared/db'
+import { heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
 import type { PortalEventHandler } from './dispatch'
 import { employmentUpdatedToDenormFields } from './payload-projection'
 

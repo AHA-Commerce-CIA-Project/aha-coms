@@ -1,7 +1,7 @@
-import { auditLogs } from '@coms/shared/db/schema'
+import { auditLogs } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from '../repositories/base'
 import { getDb } from '../repositories/base'
-import type { AuditAction, AuditEntityType } from '@coms/shared/constants'
+import type { AuditAction, AuditEntityType } from '@coms-portal/heroes-shared/constants'
 import type { AuthUser } from '../middleware/auth'
 
 type AuditEntry = {

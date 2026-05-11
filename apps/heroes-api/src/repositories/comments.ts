@@ -1,5 +1,5 @@
 import { eq, and, count, asc } from 'drizzle-orm'
-import { comments, heroesProfiles, emailCache } from '@coms/shared/db/schema'
+import { comments, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 

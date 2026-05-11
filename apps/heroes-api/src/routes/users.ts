@@ -3,10 +3,10 @@ import { requireRole } from '../middleware/rbac'
 import {
   createUserSchema,
   updateUserSchema,
-} from '@coms/shared/schemas'
-import { USER_ROLES } from '@coms/shared/constants'
+} from '@coms-portal/heroes-shared/schemas'
+import { USER_ROLES } from '@coms-portal/heroes-shared/constants'
 import { paginationQuery } from './_query'
-import { bulkUserActionSchema } from '@coms/shared/schemas'
+import { bulkUserActionSchema } from '@coms-portal/heroes-shared/schemas'
 import * as usersService from '../services/users'
 import type { AuthUser } from '../middleware/auth'
 

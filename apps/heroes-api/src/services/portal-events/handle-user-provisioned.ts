@@ -1,5 +1,5 @@
-import { db } from '@coms/shared/db'
-import { emailCache, heroesProfiles, userConfigCache } from '@coms/shared/db/schema'
+import { db } from '@coms-portal/heroes-shared/db'
+import { emailCache, heroesProfiles, userConfigCache } from '@coms-portal/heroes-shared/db/schema'
 import type { PortalEventHandler } from './dispatch'
 import {
   envelopeToEmailCacheRow,

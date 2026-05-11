@@ -1,7 +1,7 @@
 import type { AliasDeletedPayload } from '@coms-portal/sdk'
 import { eq } from 'drizzle-orm'
-import { db } from '@coms/shared/db'
-import { aliasCache } from '@coms/shared/db/schema'
+import { db } from '@coms-portal/heroes-shared/db'
+import { aliasCache } from '@coms-portal/heroes-shared/db/schema'
 import type { PortalEventHandler } from './dispatch'
 
 export const handleAliasDeleted: PortalEventHandler = async (body) => {

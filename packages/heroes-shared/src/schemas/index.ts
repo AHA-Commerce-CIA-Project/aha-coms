@@ -1,6 +1,6 @@
-// packages/shared/src/schemas/index.ts
+// packages/heroes-shared/src/schemas/index.ts
 // !! AUTO-GENERATED — do not edit by hand !!
-// Run `bun run generate:schemas` in packages/shared to regenerate.
+// Run `bun run generate:schemas` in packages/heroes-shared to regenerate.
 
 // --- Hand-written domain schemas (ported from src/shared/schemas) ---
 export { uuidSchema, paginationSchema, type PaginationInput } from './common'

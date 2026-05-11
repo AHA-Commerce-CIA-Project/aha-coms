@@ -6,7 +6,7 @@ import type {
   CreateTeamInput,
   UpdateTeamInput,
   ListTeamsInput,
-} from '@coms/shared/schemas'
+} from '@coms-portal/heroes-shared/schemas'
 
 type ServiceContext = {
   readonly actor: AuthUser

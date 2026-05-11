@@ -1,5 +1,5 @@
 /**
- * Schema generation script for @coms/shared
+ * Schema generation script for @coms-portal/heroes-shared
  * Generates TypeBox schemas from Drizzle table definitions using drizzle-typebox.
  *
  * Run with: bun run scripts/generate-schemas.ts
@@ -61,9 +61,9 @@ const authVarNames = AUTH_TABLES.map((t) => t.varName).join(',\n  ')
 const appVarNames  = APP_TABLES.map((t) => t.varName).join(',\n  ')
 
 const lines: string[] = [
-  '// packages/shared/src/schemas/index.ts',
+  '// packages/heroes-shared/src/schemas/index.ts',
   '// !! AUTO-GENERATED — do not edit by hand !!',
-  '// Run `bun run generate:schemas` in packages/shared to regenerate.',
+  '// Run `bun run generate:schemas` in packages/heroes-shared to regenerate.',
   '',
   '// --- Hand-written domain schemas (ported from src/shared/schemas) ---',
   "export { uuidSchema, paginationSchema, type PaginationInput } from './common'",

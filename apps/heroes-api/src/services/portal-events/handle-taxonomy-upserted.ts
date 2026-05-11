@@ -1,7 +1,7 @@
 import type { TaxonomyUpsertedPayload } from '@coms-portal/sdk'
 import { sql } from 'drizzle-orm'
-import { db } from '@coms/shared/db'
-import { taxonomyCache } from '@coms/shared/db/schema'
+import { db } from '@coms-portal/heroes-shared/db'
+import { taxonomyCache } from '@coms-portal/heroes-shared/db/schema'
 import type { PortalEventHandler } from './dispatch'
 
 export const handleTaxonomyUpserted: PortalEventHandler = async (body) => {

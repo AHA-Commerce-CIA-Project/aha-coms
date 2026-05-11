@@ -11,9 +11,9 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 
   const actor = locals.user
 
-  const { withRLS } = await import('@coms/server/repositories/base')
-  const usersRepo = await import('@coms/server/repositories/users')
-  const notificationsRepo = await import('@coms/server/repositories/notifications')
+  const { withRLS } = await import('@coms-portal/heroes-api/repositories/base')
+  const usersRepo = await import('@coms-portal/heroes-api/repositories/users')
+  const notificationsRepo = await import('@coms-portal/heroes-api/repositories/notifications')
 
   const [avatarUrl, unreadCount] = await withRLS(actor, (db) =>
     Promise.all([

@@ -1,5 +1,5 @@
 import { eq, and, count, desc, sql } from 'drizzle-orm'
-import { notifications } from '@coms/shared/db/schema'
+import { notifications } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 

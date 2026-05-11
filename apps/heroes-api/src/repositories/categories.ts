@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { pointCategories, pointCategoryTranslations } from '@coms/shared/db/schema'
+import { pointCategories, pointCategoryTranslations } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 

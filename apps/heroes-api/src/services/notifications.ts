@@ -1,4 +1,4 @@
-import { notifications } from '@coms/shared/db/schema'
+import { notifications } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from '../repositories/base'
 import { getDb } from '../repositories/base'
 

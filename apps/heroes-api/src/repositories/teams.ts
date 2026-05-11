@@ -1,5 +1,5 @@
 import { eq, count, ilike, and } from 'drizzle-orm'
-import { taxonomyCache, heroesProfiles, emailCache } from '@coms/shared/db/schema'
+import { taxonomyCache, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 

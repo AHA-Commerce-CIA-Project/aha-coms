@@ -1,4 +1,4 @@
-import type { UserRole } from '@coms/shared/constants'
+import type { UserRole } from '@coms-portal/heroes-shared/constants'
 import type { AuthUser } from './auth'
 import { AuthError } from './auth'
 

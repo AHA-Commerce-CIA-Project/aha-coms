@@ -1,12 +1,12 @@
 import { eq, and, sql } from 'drizzle-orm'
-import { heroesProfiles, userConfigCache } from '@coms/shared/db/schema'
+import { heroesProfiles, userConfigCache } from '@coms-portal/heroes-shared/db/schema'
 import * as challengesRepo from '../repositories/challenges'
 import * as pointsRepo from '../repositories/points'
 import { writeAuditLog } from './audit'
 import { createNotification } from './notifications'
 import type { AuthUser } from '../middleware/auth'
 import { withRLS } from '../repositories/base'
-import type { FileChallengeInput, ResolveChallengeInput, ListChallengesInput } from '@coms/shared/schemas'
+import type { FileChallengeInput, ResolveChallengeInput, ListChallengesInput } from '@coms-portal/heroes-shared/schemas'
 
 type ServiceContext = {
   readonly actor: AuthUser

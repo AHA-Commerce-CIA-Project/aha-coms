@@ -1,6 +1,6 @@
 import { eq, and, desc, count } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
-import { pointSummaries, achievementPoints, pointCategories, heroesProfiles } from '@coms/shared/db/schema'
+import { pointSummaries, achievementPoints, pointCategories, heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
 import { withRLS } from '../repositories/base'
 import { getPointImpactSettings } from './settings-cache'
 import type { AuthUser } from '../middleware/auth'

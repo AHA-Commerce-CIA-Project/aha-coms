@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types'
-import type { PointCategoryCode, PointStatus } from '@coms/shared/constants'
+import type { PointCategoryCode, PointStatus } from '@coms-portal/heroes-shared/constants'
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const actor = locals.user!
@@ -7,7 +7,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const status = url.searchParams.get('status') ?? undefined
   const category = url.searchParams.get('category') ?? undefined
 
-  const pointsService = await import('@coms/server/services/points')
+  const pointsService = await import('@coms-portal/heroes-api/services/points')
   const result = await pointsService.listPoints(
     {
       page,

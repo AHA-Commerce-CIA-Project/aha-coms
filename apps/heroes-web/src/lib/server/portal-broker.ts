@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private'
-import type { PortalSessionUser } from '@coms/shared/auth/session'
+import type { PortalSessionUser } from '@coms-portal/heroes-shared/auth/session'
 import { getOidcAuthHeader } from './google-oidc'
 
 export type PortalBrokerExchangePayload = {

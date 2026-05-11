@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { rewards } from '@coms/shared/db/schema'
+import { rewards } from '@coms-portal/heroes-shared/db/schema'
 import * as redemptionsRepo from '../repositories/redemptions'
 import { writeAuditLog } from './audit'
 import { createNotification } from './notifications'
@@ -9,8 +9,8 @@ import type {
   RequestRedemptionInput,
   ListRedemptionsInput,
   ResolveRedemptionInput,
-} from '@coms/shared/schemas'
-import type { BulkRedemptionActionInput, BulkResult, BulkResultItem } from '@coms/shared/schemas'
+} from '@coms-portal/heroes-shared/schemas'
+import type { BulkRedemptionActionInput, BulkResult, BulkResultItem } from '@coms-portal/heroes-shared/schemas'
 
 type ServiceContext = {
   readonly actor: AuthUser

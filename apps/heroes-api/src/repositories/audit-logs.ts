@@ -1,8 +1,8 @@
 import { eq, and, gte, lte, count, desc } from 'drizzle-orm'
-import { auditLogs, heroesProfiles, emailCache } from '@coms/shared/db/schema'
+import { auditLogs, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
-import type { ListAuditLogsInput } from '@coms/shared/schemas'
+import type { ListAuditLogsInput } from '@coms-portal/heroes-shared/schemas'
 
 export type AuditLogRow = typeof auditLogs.$inferSelect & {
   actorName: string

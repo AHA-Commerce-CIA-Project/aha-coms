@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm'
-import { db } from '@coms/shared/db'
+import { db } from '@coms-portal/heroes-shared/db'
 import {
   pendingAliasResolution,
   achievementPoints,
@@ -7,7 +7,7 @@ import {
   heroesProfiles,
   pointCategories,
   rewards,
-} from '@coms/shared/db/schema'
+} from '@coms-portal/heroes-shared/db/schema'
 import { parseTimestamp, parseReward } from './sheet-sync-helpers'
 
 export interface PendingAliasRow {

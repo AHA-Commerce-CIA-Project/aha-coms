@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia'
 import {
   createCommentSchema,
   updateCommentSchema,
-} from '@coms/shared/schemas'
+} from '@coms-portal/heroes-shared/schemas'
 import { paginationQuery } from './_query'
 import * as commentsService from '../services/comments'
 import type { AuthUser } from '../middleware/auth'

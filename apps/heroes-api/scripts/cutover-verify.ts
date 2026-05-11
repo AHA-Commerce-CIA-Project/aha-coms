@@ -21,12 +21,12 @@
 // the script inside the staging Heroes Cloud Run container, where the
 // metadata server provides email-bearing tokens automatically.
 import { sql, count, gte } from 'drizzle-orm'
-import { db } from '@coms/shared/db'
+import { db } from '@coms-portal/heroes-shared/db'
 import {
   heroesProfiles,
   pendingAliasResolution,
   taxonomyCache,
-} from '@coms/shared/db/schema'
+} from '@coms-portal/heroes-shared/db/schema'
 import { fetchTaxonomySync } from '../packages/server/src/lib/portal-api-client'
 
 interface CheckResult {

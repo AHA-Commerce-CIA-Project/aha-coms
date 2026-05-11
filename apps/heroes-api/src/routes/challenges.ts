@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia'
 import {
   fileChallengeSchema,
   resolveChallengeSchema,
-} from '@coms/shared/schemas'
+} from '@coms-portal/heroes-shared/schemas'
 import { paginationQuery } from './_query'
 import * as challengesService from '../services/challenges'
 import type { AuthUser } from '../middleware/auth'

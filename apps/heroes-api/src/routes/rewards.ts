@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia'
 import {
   createRewardSchema,
   updateRewardSchema,
-} from '@coms/shared/schemas'
+} from '@coms-portal/heroes-shared/schemas'
 import { paginationQuery } from './_query'
 import * as rewardsService from '../services/rewards'
 import type { AuthUser } from '../middleware/auth'

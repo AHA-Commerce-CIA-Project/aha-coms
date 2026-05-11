@@ -1,4 +1,4 @@
-import type { AuthUser } from '@coms/shared/types'
+import type { AuthUser } from '@coms-portal/heroes-shared/types'
 
 class UserState {
   current = $state<AuthUser | null>(null)

@@ -8,8 +8,8 @@ import {
   pointSummaries,
   pendingAliasResolution,
   deactivatedUserIngestAudit,
-} from '@coms/shared/db/schema'
-import { db as defaultDb } from '@coms/shared/db'
+} from '@coms-portal/heroes-shared/db/schema'
+import { db as defaultDb } from '@coms-portal/heroes-shared/db'
 import { readSheet } from './google-sheets'
 import { createJob, updateJob } from '../repositories/sheet-sync'
 import {
@@ -19,7 +19,7 @@ import {
   PENALTI_HEADERS,
   POIN_AHA_HEADERS,
   REDEEM_HEADERS,
-} from '@coms/shared/constants'
+} from '@coms-portal/heroes-shared/constants'
 import type { DbClient } from '../repositories/base'
 import { getDb } from '../repositories/base'
 import { buildHeaderIndex, parseReward, parseTimestamp } from './sheet-sync-helpers'

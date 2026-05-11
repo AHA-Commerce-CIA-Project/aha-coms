@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { UserUpdatedPayload } from '@coms-portal/sdk'
-import { db } from '@coms/shared/db'
-import { emailCache, heroesProfiles } from '@coms/shared/db/schema'
+import { db } from '@coms-portal/heroes-shared/db'
+import { emailCache, heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
 import type { PortalEventHandler } from './dispatch'
 
 interface SpecUserUpdatedPayload {

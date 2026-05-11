@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
-      "@coms/shared/*": ["../shared/src/*"]
+      "@coms-portal/heroes-shared/*": ["../../packages/heroes-shared/src/*"]
     }
   },
   "include": ["src/**/*.ts", "portal-manifest.ts"],

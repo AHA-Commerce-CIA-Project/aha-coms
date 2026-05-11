@@ -2,7 +2,7 @@ import { redirect } from '@sveltejs/kit'
 import {
   PORTAL_SESSION_COOKIE,
   destroyLocalSessionByToken,
-} from '@coms/shared/auth/session'
+} from '@coms-portal/heroes-shared/auth/session'
 import { buildPortalSignInUrl } from '$lib/server/portal-broker'
 import type { RequestHandler } from './$types'
 

@@ -3,7 +3,7 @@ import { requireRole } from '../middleware/rbac'
 import {
   createTeamSchema,
   updateTeamSchema,
-} from '@coms/shared/schemas'
+} from '@coms-portal/heroes-shared/schemas'
 import { paginationQuery } from './_query'
 import * as teamsService from '../services/teams'
 import type { AuthUser } from '../middleware/auth'

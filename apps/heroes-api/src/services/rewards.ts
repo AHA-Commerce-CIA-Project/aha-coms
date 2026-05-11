@@ -1,7 +1,7 @@
 import * as rewardsRepo from '../repositories/rewards'
 import type { AuthUser } from '../middleware/auth'
 import { withRLS } from '../repositories/base'
-import type { CreateRewardInput, UpdateRewardInput, ListRewardsInput } from '@coms/shared/schemas'
+import type { CreateRewardInput, UpdateRewardInput, ListRewardsInput } from '@coms-portal/heroes-shared/schemas'
 
 type ServiceContext = {
   readonly actor: AuthUser

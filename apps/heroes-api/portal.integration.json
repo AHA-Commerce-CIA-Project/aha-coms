@@ -13,7 +13,7 @@
     "transport": "portable_token",
     "handoffMode": "one_time_code",
     "protectedRouteMode": "app_wide",
-    "modulePath": "packages/web/src/hooks.server.ts",
+    "modulePath": "apps/heroes-web/src/hooks.server.ts",
     "audience": "portal:app:heroes",
     "brokerOrigin": "reads PORTAL_ORIGIN env at runtime",
     "callbackUrl": "https://coms-aha-heroes-app-45tyczfska-et.a.run.app/auth/portal/exchange"

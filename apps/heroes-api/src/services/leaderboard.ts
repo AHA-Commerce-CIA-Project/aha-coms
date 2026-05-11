@@ -1,5 +1,5 @@
 import { eq, and, count, sql, desc } from 'drizzle-orm'
-import { pointSummaries, heroesProfiles, achievementPoints, pointCategories } from '@coms/shared/db/schema'
+import { pointSummaries, heroesProfiles, achievementPoints, pointCategories } from '@coms-portal/heroes-shared/db/schema'
 import { withRLS } from '../repositories/base'
 import { getPointImpactSettings } from './settings-cache'
 import type { AuthUser } from '../middleware/auth'

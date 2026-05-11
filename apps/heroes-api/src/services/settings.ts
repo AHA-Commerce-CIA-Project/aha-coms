@@ -2,7 +2,7 @@ import * as settingsRepo from '../repositories/settings'
 import type { AuthUser } from '../middleware/auth'
 import { withRLS } from '../repositories/base'
 import { invalidatePointImpactCache } from './settings-cache'
-import type { UpdateSettingInput } from '@coms/shared/schemas'
+import type { UpdateSettingInput } from '@coms-portal/heroes-shared/schemas'
 
 type ServiceContext = {
   readonly actor: AuthUser

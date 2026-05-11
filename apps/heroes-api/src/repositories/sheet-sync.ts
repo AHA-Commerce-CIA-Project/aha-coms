@@ -1,5 +1,5 @@
 import { eq, desc, count } from 'drizzle-orm'
-import { sheetSyncJobs } from '@coms/shared/db/schema'
+import { sheetSyncJobs } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 

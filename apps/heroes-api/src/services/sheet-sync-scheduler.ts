@@ -1,6 +1,6 @@
 import { eq, and, lt, sql } from 'drizzle-orm'
-import { db } from '@coms/shared/db'
-import { taxonomyCache, sheetSyncJobs } from '@coms/shared/db/schema'
+import { db } from '@coms-portal/heroes-shared/db'
+import { taxonomyCache, sheetSyncJobs } from '@coms-portal/heroes-shared/db/schema'
 import { runFullSync, runFullResync } from './sheet-sync'
 
 type SyncConfig = {

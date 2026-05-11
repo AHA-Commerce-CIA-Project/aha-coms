@@ -1,9 +1,9 @@
-import { achievementPoints, challenges, appeals } from '@coms/shared/db/schema'
+import { achievementPoints, challenges, appeals } from '@coms-portal/heroes-shared/db/schema'
 import { eq } from 'drizzle-orm'
 import * as commentsRepo from '../repositories/comments'
 import type { AuthUser } from '../middleware/auth'
 import { withRLS } from '../repositories/base'
-import type { CreateCommentInput, UpdateCommentInput, ListCommentsInput } from '@coms/shared/schemas'
+import type { CreateCommentInput, UpdateCommentInput, ListCommentsInput } from '@coms-portal/heroes-shared/schemas'
 
 type ServiceContext = {
   readonly actor: AuthUser

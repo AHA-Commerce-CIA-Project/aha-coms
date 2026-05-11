@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia'
 import type { PortalWebhookEnvelope } from '@coms-portal/sdk'
-import { db } from '@coms/shared/db'
-import { portalWebhookEvents } from '@coms/shared/db/schema'
+import { db } from '@coms-portal/heroes-shared/db'
+import { portalWebhookEvents } from '@coms-portal/heroes-shared/db/schema'
 import { verifyGoogleIdToken } from '../lib/oidc'
 import { dispatchPortalEvent } from '../services/portal-events/dispatch'
 

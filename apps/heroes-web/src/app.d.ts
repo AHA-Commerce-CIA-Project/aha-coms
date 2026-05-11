@@ -1,4 +1,4 @@
-import type { AuthUser } from '@coms/shared/types'
+import type { AuthUser } from '@coms-portal/heroes-shared/types'
 
 declare global {
   namespace App {

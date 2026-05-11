@@ -1,5 +1,5 @@
 import { eq, asc, count } from 'drizzle-orm'
-import { rewards } from '@coms/shared/db/schema'
+import { rewards } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 

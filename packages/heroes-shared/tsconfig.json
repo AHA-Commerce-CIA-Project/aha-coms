@@ -14,7 +14,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "paths": {
-      "@coms/shared/*": ["./src/*"]
+      "@coms-portal/heroes-shared/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts"],

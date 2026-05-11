@@ -1,5 +1,5 @@
 {
-  "name": "@coms/server",
+  "name": "@coms-portal/heroes-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,8 +15,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@coms/shared": "workspace:*",
-    "@coms/web": "workspace:*",
+    "@coms-portal/heroes-shared": "workspace:*",
+    "@coms-portal/heroes-web": "workspace:*",
     "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.2.0",
     "@elysiajs/cors": "^1.3.0",
     "@elysiajs/static": "^1.3.0",

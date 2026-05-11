@@ -1,5 +1,5 @@
 import { treaty } from '@elysiajs/eden'
-import type { App } from '@coms/server'
+import type { App } from '@coms-portal/heroes-api'
 
 type TreatyError = {
   readonly status?: number

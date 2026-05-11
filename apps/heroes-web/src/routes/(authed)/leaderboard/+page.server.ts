@@ -5,7 +5,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const months = url.searchParams.get('months') ?? ''
   const type = (url.searchParams.get('type') ?? 'bintang') as 'bintang' | 'poin_aha' | 'penalti'
 
-  const leaderboardService = await import('@coms/server/services/leaderboard')
+  const leaderboardService = await import('@coms-portal/heroes-api/services/leaderboard')
   const result = await leaderboardService.getLeaderboard(
     {
       type,

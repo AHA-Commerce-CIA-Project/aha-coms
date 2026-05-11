@@ -1,7 +1,7 @@
 import {
   PORTAL_SESSION_COOKIE,
   destroyLocalSessionByToken,
-} from '@coms/shared/auth/session'
+} from '@coms-portal/heroes-shared/auth/session'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ cookies }) => {

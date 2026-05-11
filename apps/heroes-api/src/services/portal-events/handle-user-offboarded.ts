@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
-import { db } from '@coms/shared/db'
-import { heroesProfiles } from '@coms/shared/db/schema'
-import { destroySessionsForPortalSub } from '@coms/shared/auth/session'
+import { db } from '@coms-portal/heroes-shared/db'
+import { heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
+import { destroySessionsForPortalSub } from '@coms-portal/heroes-shared/auth/session'
 import type { PortalEventHandler } from './dispatch'
 
 interface UserOffboardedPayload {

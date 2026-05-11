@@ -1,10 +1,10 @@
 import { Elysia } from 'elysia'
 import { eq, sql } from 'drizzle-orm'
-import { db } from '@coms/shared/db'
+import { db } from '@coms-portal/heroes-shared/db'
 import {
   deactivatedUserIngestAudit,
   pendingAliasResolution,
-} from '@coms/shared/db/schema'
+} from '@coms-portal/heroes-shared/db/schema'
 import { resolveAliasesBatch } from '../lib/portal-api-client'
 import { verifyGoogleIdToken } from '../lib/oidc'
 import { drainPendingAliasQueue } from '../services/sheet-sync-pending'

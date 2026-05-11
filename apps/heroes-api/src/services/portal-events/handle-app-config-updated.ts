@@ -1,6 +1,6 @@
 import type { AppConfigEvent } from '@coms-portal/sdk'
-import { db } from '@coms/shared/db'
-import { userConfigCache } from '@coms/shared/db/schema'
+import { db } from '@coms-portal/heroes-shared/db'
+import { userConfigCache } from '@coms-portal/heroes-shared/db/schema'
 import type { PortalEventHandler } from './dispatch'
 
 export const handleAppConfigUpdated: PortalEventHandler = async (body) => {

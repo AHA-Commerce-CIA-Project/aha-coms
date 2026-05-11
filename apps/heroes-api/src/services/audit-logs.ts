@@ -1,7 +1,7 @@
 import * as auditLogsRepo from '../repositories/audit-logs'
 import type { AuthUser } from '../middleware/auth'
 import { withRLS } from '../repositories/base'
-import type { ListAuditLogsInput } from '@coms/shared/schemas'
+import type { ListAuditLogsInput } from '@coms-portal/heroes-shared/schemas'
 
 type ServiceContext = {
   readonly actor: AuthUser

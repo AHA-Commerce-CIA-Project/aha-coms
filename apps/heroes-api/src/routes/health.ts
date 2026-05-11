@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia'
-import { db } from '@coms/shared/db'
+import { db } from '@coms-portal/heroes-shared/db'
 import { sql } from 'drizzle-orm'
-import type { ApiResult } from '@coms/shared/types'
+import type { ApiResult } from '@coms-portal/heroes-shared/types'
 
 type HealthData = {
   status: 'ok' | 'degraded'

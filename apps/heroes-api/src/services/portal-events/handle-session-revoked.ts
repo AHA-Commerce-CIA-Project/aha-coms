@@ -1,5 +1,5 @@
 import type { SessionRevokedPayload } from '@coms-portal/sdk'
-import { destroySessionsForPortalSub } from '@coms/shared/auth/session'
+import { destroySessionsForPortalSub } from '@coms-portal/heroes-shared/auth/session'
 import type { PortalEventHandler } from './dispatch'
 
 export const handleSessionRevoked: PortalEventHandler = async (body) => {

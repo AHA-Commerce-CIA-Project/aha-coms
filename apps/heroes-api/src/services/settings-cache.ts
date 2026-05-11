@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { systemSettings } from '@coms/shared/db/schema'
+import { systemSettings } from '@coms-portal/heroes-shared/db/schema'
 import { getDb } from '../repositories/base'
 
 type PointImpactSettings = {

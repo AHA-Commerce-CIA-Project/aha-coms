@@ -1,8 +1,8 @@
 import { eq, and, ilike, count } from 'drizzle-orm'
-import { heroesProfiles, emailCache, userConfigCache } from '@coms/shared/db/schema'
+import { heroesProfiles, emailCache, userConfigCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
-import type { UserRole } from '@coms/shared/constants'
+import type { UserRole } from '@coms-portal/heroes-shared/constants'
 
 export type UserRow = {
   id: string

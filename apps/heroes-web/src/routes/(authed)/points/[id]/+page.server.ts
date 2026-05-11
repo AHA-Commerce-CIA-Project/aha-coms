@@ -4,9 +4,9 @@ import type { PageServerLoad } from './$types'
 export const load: PageServerLoad = async ({ locals, params }) => {
   const actor = locals.user!
   const [pointsService, challengesService, appealsService] = await Promise.all([
-    import('@coms/server/services/points'),
-    import('@coms/server/services/challenges'),
-    import('@coms/server/services/appeals'),
+    import('@coms-portal/heroes-api/services/points'),
+    import('@coms-portal/heroes-api/services/challenges'),
+    import('@coms-portal/heroes-api/services/appeals'),
   ])
 
   let point

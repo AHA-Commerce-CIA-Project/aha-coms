@@ -10,11 +10,11 @@ import * as repo from '../repositories/sheet-sync'
 import {
   getLocalSessionByToken,
   readSessionCookieFromHeaders,
-} from '@coms/shared/auth/session'
-import { db } from '@coms/shared/db'
-import { heroesProfiles, emailCache } from '@coms/shared/db/schema'
+} from '@coms-portal/heroes-shared/auth/session'
+import { db } from '@coms-portal/heroes-shared/db'
+import { heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import { eq } from 'drizzle-orm'
-import type { UserRole } from '@coms/shared/constants'
+import type { UserRole } from '@coms-portal/heroes-shared/constants'
 import type { AuthUser } from '../middleware/auth'
 
 type Ctx = { authUser: AuthUser }

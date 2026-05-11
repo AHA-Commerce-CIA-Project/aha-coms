@@ -1,7 +1,7 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { sql } from 'drizzle-orm'
-import type * as schema from '@coms/shared/db/schema'
-import { db as defaultDb } from '@coms/shared/db'
+import type * as schema from '@coms-portal/heroes-shared/db/schema'
+import { db as defaultDb } from '@coms-portal/heroes-shared/db'
 import type { AuthUser } from '../middleware/auth'
 
 /**

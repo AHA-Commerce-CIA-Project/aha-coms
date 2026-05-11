@@ -1,7 +1,7 @@
 import type { AliasUpdatedPayload } from '@coms-portal/sdk'
 import { eq } from 'drizzle-orm'
-import { db } from '@coms/shared/db'
-import { aliasCache } from '@coms/shared/db/schema'
+import { db } from '@coms-portal/heroes-shared/db'
+import { aliasCache } from '@coms-portal/heroes-shared/db/schema'
 import { drainPendingAliasQueue } from '../sheet-sync-pending'
 import type { PortalEventHandler } from './dispatch'
 

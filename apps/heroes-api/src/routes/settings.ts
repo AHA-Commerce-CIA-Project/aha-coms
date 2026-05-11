@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia'
-import { updateSettingSchema } from '@coms/shared/schemas'
+import { updateSettingSchema } from '@coms-portal/heroes-shared/schemas'
 import * as settingsService from '../services/settings'
 import type { AuthUser } from '../middleware/auth'
 
