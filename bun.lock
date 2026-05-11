@@ -106,10 +106,12 @@
         "jose": "^6",
       },
       "devDependencies": {
+        "@coms-portal/sdk": "workspace:*",
         "@types/bun": "latest",
         "elysia": "^1",
         "google-auth-library": "^10",
         "typescript": "^5.9.3",
+        "vite": "^6",
       },
       "peerDependencies": {
         "elysia": "^1",
