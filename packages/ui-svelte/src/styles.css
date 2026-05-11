@@ -1,0 +1,23 @@
+/**
+ * @coms-portal/ui — Tailwind source registration.
+ *
+ * Tailwind v4's auto-discovery excludes node_modules. When this package is
+ * installed as a git+url dependency, the host's Tailwind compile step does
+ * not see the chrome components' class strings (md:hidden, hidden md:flex,
+ * etc.), so the responsive utilities the chrome shells depend on never
+ * make it into the host's compiled CSS — and the desktop sidebar plus the
+ * mobile chrome end up rendering simultaneously.
+ *
+ * This file fixes that at the package boundary. The host imports it once in
+ * its Tailwind entry point (after `@import "tailwindcss"`), and the @source
+ * directive below — resolved relative to this file — opts every chrome,
+ * primitive, and composition component back into the scanner.
+ *
+ * Consumers do NOT need to know where the package lives in node_modules.
+ *
+ *   /* host app.css *\/
+ *   @import "tailwindcss";
+ *   @import "@coms-portal/ui/styles.css";
+ *   @import "@coms-portal/design-tokens/css";
+ */
+@source "./**/*.svelte";

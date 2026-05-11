@@ -48,7 +48,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-1`.
   - **Acceptance:** `packages/sdk/package.json` has `"@coms-portal/shared": "workspace:*"` (no git URL); name `@coms-portal/sdk`.
   - **Verification:** `bun --filter @coms-portal/sdk typecheck` passes; `bun --filter @coms-portal/sdk test` passes if tests exist.
 
-- [ ] **T04: Subtree-merge `coms-ui` → `packages/ui-svelte`; rename package**
+- [x] **T04: Subtree-merge `coms-ui` → `packages/ui-svelte`; rename package**
   - **Prerequisites:** T01, T02
   - **Steps:**
     - Subtree-merge to `packages/ui-svelte/`.
