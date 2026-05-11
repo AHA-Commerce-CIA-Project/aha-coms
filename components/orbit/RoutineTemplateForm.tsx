@@ -28,10 +28,39 @@ export interface RoutineTemplateFormInitial {
   checklistItems?: { id: string; title: string; position: number }[];
   deadlineTime?: string | null;
   deadlineDay?: number | null;
+  timezone?: string | null;
   // Legacy — kept on the interface so existing rows still hydrate cleanly,
   // but no longer surfaced in the form UI. type=TEAM replaces it.
   isTeamWide?: boolean;
   teamIds?: string[];
+}
+
+// Curated short list — covers the SE-Asia team that uses this app plus a
+// few common ones for visiting collaborators. Browser TZ is appended if not
+// already in this list so power users don't have to scroll to find it.
+const COMMON_TIMEZONES: string[] = [
+  'Asia/Jakarta',
+  'Asia/Singapore',
+  'Asia/Kuala_Lumpur',
+  'Asia/Bangkok',
+  'Asia/Manila',
+  'Asia/Tokyo',
+  'Asia/Hong_Kong',
+  'Asia/Kolkata',
+  'Australia/Sydney',
+  'Europe/London',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Los_Angeles',
+  'UTC',
+];
+
+function getBrowserTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jakarta';
+  } catch {
+    return 'Asia/Jakarta';
+  }
 }
 
 interface ChannelOption { id: string; name: string }
@@ -81,9 +110,21 @@ export function RoutineTemplateForm({
   );
   const [deadlineTime, setDeadlineTime] = useState(initial?.deadlineTime ?? '');
   const [deadlineDay, setDeadlineDay] = useState(initial?.deadlineDay?.toString() ?? '');
+  // Default to the browser's IANA timezone on first paint; this matches the
+  // "creator's wall-clock" intent. Editing an existing template uses its
+  // stored timezone so re-saving doesn't silently shift the fire window.
+  const [timezone, setTimezone] = useState<string>(initial?.timezone || getBrowserTimezone());
   const [referenceUrls, setReferenceUrls] = useState<string[]>(initial?.referenceUrls ?? []);
   const [pendingUrl, setPendingUrl] = useState('');
   const [pendingUrlError, setPendingUrlError] = useState('');
+
+  // Make sure the browser TZ shows up in the dropdown even if it's not in
+  // the curated list.
+  const timezoneOptions = useMemo(() => {
+    const set = new Set<string>(COMMON_TIMEZONES);
+    set.add(timezone);
+    return Array.from(set);
+  }, [timezone]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -170,6 +211,7 @@ export function RoutineTemplateForm({
           channelId: channelId || null,
           mentionTarget,
           referenceUrls,
+          timezone,
           deadlineTime,
           deadlineDay,
           checklistItems: cleaned,
@@ -511,6 +553,28 @@ export function RoutineTemplateForm({
             className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
           />
         </div>
+      </div>
+
+      {/* Timezone — the wall-clock above is interpreted in this zone. Defaults
+          to the browser's IANA tz on a new template so creators don't have
+          to think about it. Power users can override per-template. */}
+      <div>
+        <label className="text-sm font-medium text-slate-600">Timezone</label>
+        <select
+          value={timezone}
+          onChange={(e) => setTimezone(e.target.value)}
+          className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+        >
+          {timezoneOptions.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+              {tz === getBrowserTimezone() ? ' · your browser' : ''}
+            </option>
+          ))}
+        </select>
+        <p className="text-[11px] text-slate-400 mt-1">
+          The bot fires the reminder when this timezone&apos;s clock reaches your Due Time.
+        </p>
       </div>
 
       <div className="flex items-center gap-2 pt-2">

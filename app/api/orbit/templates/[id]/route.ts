@@ -36,6 +36,16 @@ function normalizeReferenceUrls(value: unknown): string[] {
   return out;
 }
 
+function normalizeTimezone(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return 'Asia/Jakarta';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return value;
+  } catch {
+    return 'Asia/Jakarta';
+  }
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -56,6 +66,7 @@ export async function PUT(
     channelId,
     mentionTarget,
     referenceUrls,
+    timezone,
     deadlineTime,
     deadlineDay,
     teamId,
@@ -102,6 +113,7 @@ export async function PUT(
         ...(channelId !== undefined ? { channelId: channelId || null } : {}),
         ...(mentionTarget !== undefined ? { mentionTarget: normalizeMentionTarget(mentionTarget) } : {}),
         ...(referenceUrls !== undefined ? { referenceUrls: normalizeReferenceUrls(referenceUrls) } : {}),
+        ...(timezone !== undefined ? { timezone: normalizeTimezone(timezone) } : {}),
         ...(deadlineTime !== undefined ? { deadlineTime: deadlineTime || null } : {}),
         ...(deadlineDay !== undefined ? { deadlineDay: deadlineDay ? parseInt(deadlineDay) : null } : {}),
         ...(teamIds !== undefined

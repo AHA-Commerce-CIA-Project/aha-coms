@@ -41,6 +41,19 @@ function normalizeReferenceUrls(value: unknown): string[] {
   return out;
 }
 
+// Validate IANA timezone strings by feeding them to Intl.DateTimeFormat —
+// invalid values throw RangeError. Falls back to the schema default so a
+// malformed client submission can't break scheduling.
+function normalizeTimezone(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return 'Asia/Jakarta';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return value;
+  } catch {
+    return 'Asia/Jakarta';
+  }
+}
+
 export async function GET() {
   const session = await requireAuth();
   if (!session) {
@@ -99,6 +112,7 @@ export async function POST(request: Request) {
     channelId,
     mentionTarget,
     referenceUrls,
+    timezone,
     deadlineTime,
     deadlineDay,
     teamId,
@@ -135,6 +149,7 @@ export async function POST(request: Request) {
       channelId: channelId || null,
       mentionTarget: normalizeMentionTarget(mentionTarget),
       referenceUrls: normalizeReferenceUrls(referenceUrls),
+      timezone: normalizeTimezone(timezone),
       deadlineTime: deadlineTime || null,
       deadlineDay: deadlineDay ? parseInt(deadlineDay) : null,
       teamId: (teamIds && teamIds.length > 0) ? teamIds[0] : (teamId || null),

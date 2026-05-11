@@ -714,6 +714,11 @@ model RoutineTaskTemplate {
   type         TemplateType @default(INDIVIDUAL)
   deadlineTime String?      @map("deadline_time") @db.VarChar(5) // HH:MM format, e.g. "17:00"
   deadlineDay  Int?         @map("deadline_day") // For weekly: 1=Mon..7=Sun, for monthly: 1-31
+  // IANA timezone the deadlineTime / deadlineDay are evaluated in. Defaults
+  // to Asia/Jakarta because that's where the user base lives; the form lets
+  // creators override per-template. Stored as the canonical IANA string so
+  // we can hand it straight to Intl.DateTimeFormat at scheduler time.
+  timezone     String       @default("Asia/Jakarta")
   // Channel the bot posts the generated Task card into. Null = no channel
   // (template still appears on /orbit but the bot won't post a reminder).
   channelId    String?      @map("channel_id")

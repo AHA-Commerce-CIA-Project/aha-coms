@@ -3,64 +3,143 @@
 // hit an HTTP endpoint). Idempotent: runs that fire after a template has
 // already spawned its Task for the current period are a no-op.
 //
-// Time handling: all comparisons are in UTC. `deadlineTime` (HH:MM) on the
-// template is interpreted as UTC for now — a future enhancement could carry
-// a timezone per template, but until then it's the operator's job to set
-// times in UTC.
+// Time handling: every comparison runs in the template's IANA timezone (e.g.
+// "Asia/Jakarta"). Cloud Run runs UTC; we use native Intl APIs to project
+// the current UTC instant into the template's wall-clock, then convert
+// computed wall-clock moments back to UTC for storage / dedup.
 
 import { prisma } from '@/lib/db';
 import { getOrCreateSystemBot } from '@/lib/system-bot';
 
 type Frequency = 'daily' | 'weekly' | 'monthly';
 
-/** Start of the current period for the given frequency, in UTC. */
-export function startOfPeriod(now: Date, frequency: Frequency): Date {
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  if (frequency === 'daily') return d;
-  if (frequency === 'weekly') {
-    // ISO week starts Monday. JS Sunday=0, so shift.
-    const dow = (d.getUTCDay() + 6) % 7;
-    d.setUTCDate(d.getUTCDate() - dow);
-    return d;
-  }
-  // monthly
-  d.setUTCDate(1);
-  return d;
+// ---------- Timezone helpers (Intl-based, no extra dep) ----------
+
+// Map Intl weekday strings to ISO weekday numbers (1=Mon..7=Sun).
+const WEEKDAY: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+
+interface ZonedWallClock {
+  year: number;
+  month: number; // 1-12
+  day: number; // 1-31
+  hour: number; // 0-23
+  minute: number; // 0-59
+  weekday: number; // 1-7 (Mon=1)
+}
+
+/** What wall-clock does this UTC instant correspond to in the given IANA tz? */
+export function wallClockInTz(at: Date, tz: string): ZonedWallClock {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    weekday: 'short',
+    hourCycle: 'h23',
+  });
+  const parts = fmt.formatToParts(at);
+  const pick = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  return {
+    year: parseInt(pick('year'), 10),
+    month: parseInt(pick('month'), 10),
+    day: parseInt(pick('day'), 10),
+    hour: parseInt(pick('hour'), 10),
+    minute: parseInt(pick('minute'), 10),
+    weekday: WEEKDAY[pick('weekday')] ?? 1,
+  };
 }
 
 /**
- * The moment within the current period at which the template should fire.
- * Falls back gracefully when deadlineDay/deadlineTime aren't set — never
- * returns null so the caller can always compare against `now`.
+ * Convert a wall-clock time IN THE GIVEN TZ to the matching UTC Date.
+ * Uses the well-known Intl trick: assume the wall-clock as if it were UTC,
+ * ask Intl what wall-clock that UTC reads as in the target tz, and the
+ * difference is the offset to apply. Handles DST correctly for non-fixed
+ * zones; Asia/Jakarta has no DST so it's effectively `-7h`.
+ */
+export function zonedWallClockToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  tz: string,
+): Date {
+  const candidateUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+  const wc = wallClockInTz(new Date(candidateUtc), tz);
+  const wcAsUtc = Date.UTC(wc.year, wc.month - 1, wc.day, wc.hour, wc.minute, 0);
+  const offset = candidateUtc - wcAsUtc; // ms to add to candidate so its TZ wall-clock matches the requested one
+  return new Date(candidateUtc + offset);
+}
+
+// ---------- Period math (TZ-aware) ----------
+
+/** Start of the current period (00:00 of the right day in `tz`), returned as UTC. */
+export function startOfPeriod(now: Date, frequency: Frequency, tz: string): Date {
+  const wc = wallClockInTz(now, tz);
+
+  if (frequency === 'daily') {
+    return zonedWallClockToUtc(wc.year, wc.month, wc.day, 0, 0, tz);
+  }
+  if (frequency === 'weekly') {
+    // Walk back to Monday in the target tz. We just shift the wall-clock
+    // day and reconvert — anchors the result to the correct local Monday
+    // even across DST boundaries.
+    const daysBack = wc.weekday - 1;
+    // Use the millisecond delta on the UTC-equivalent day-zero so the
+    // resulting local date lands on Monday in `tz`.
+    const monday = zonedWallClockToUtc(wc.year, wc.month, wc.day - daysBack, 0, 0, tz);
+    return monday;
+  }
+  // monthly
+  return zonedWallClockToUtc(wc.year, wc.month, 1, 0, 0, tz);
+}
+
+/**
+ * The moment within the current period at which the template should fire,
+ * as a UTC Date. Wall-clock math is done in the template's tz.
  */
 export function dueMomentInPeriod(
   now: Date,
   frequency: Frequency,
   deadlineDay: number | null,
   deadlineTime: string | null,
+  tz: string,
 ): Date {
-  const base = startOfPeriod(now, frequency);
-  const due = new Date(base);
-
-  if (frequency === 'weekly') {
-    // deadlineDay 1=Mon..7=Sun. Default Monday.
-    const day = Math.min(Math.max(deadlineDay ?? 1, 1), 7);
-    due.setUTCDate(due.getUTCDate() + (day - 1));
-  } else if (frequency === 'monthly') {
-    // deadlineDay 1-31. Clamp to month length so Feb-30 doesn't roll into March.
-    const day = Math.min(Math.max(deadlineDay ?? 1, 1), 31);
-    const monthEnd = new Date(Date.UTC(due.getUTCFullYear(), due.getUTCMonth() + 1, 0)).getUTCDate();
-    due.setUTCDate(Math.min(day, monthEnd));
-  }
+  const wc = wallClockInTz(now, tz);
 
   // deadlineTime: HH:MM. Default 00:00.
+  let hh = 0;
+  let mm = 0;
   if (deadlineTime && /^\d{1,2}:\d{2}$/.test(deadlineTime)) {
     const [h, m] = deadlineTime.split(':').map((s) => parseInt(s, 10));
-    due.setUTCHours(h, m, 0, 0);
-  } else {
-    due.setUTCHours(0, 0, 0, 0);
+    hh = h;
+    mm = m;
   }
-  return due;
+
+  if (frequency === 'daily') {
+    return zonedWallClockToUtc(wc.year, wc.month, wc.day, hh, mm, tz);
+  }
+
+  if (frequency === 'weekly') {
+    const day = Math.min(Math.max(deadlineDay ?? 1, 1), 7);
+    // Anchor on this week's Monday in tz, then add (day-1) days.
+    const daysToShift = day - wc.weekday;
+    return zonedWallClockToUtc(wc.year, wc.month, wc.day + daysToShift, hh, mm, tz);
+  }
+
+  // monthly
+  const day = Math.min(Math.max(deadlineDay ?? 1, 1), 31);
+  // Clamp to actual month length in the target tz: ask Intl for "day 0 of
+  // next month" which is the last day of this month.
+  const lastDayOfMonth = wallClockInTz(
+    zonedWallClockToUtc(wc.year, wc.month + 1, 0, 12, 0, tz),
+    tz,
+  ).day;
+  const clampedDay = Math.min(day, lastDayOfMonth);
+  return zonedWallClockToUtc(wc.year, wc.month, clampedDay, hh, mm, tz);
 }
 
 interface SpawnResult {
@@ -168,7 +247,10 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
     return { templateId, status: 'error', error: `Unsupported frequency: ${freq}` };
   }
 
-  const periodStart = startOfPeriod(now, freq);
+  // Default tz to Asia/Jakarta to match the schema default — and so legacy
+  // rows that predate the column have stable behaviour.
+  const tz = template.timezone || 'Asia/Jakarta';
+  const periodStart = startOfPeriod(now, freq, tz);
 
   if (!force) {
     // Has this template already fired in the current period? If yes, no-op.
@@ -181,7 +263,7 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
     }
 
     // Not yet at the due moment for this period? Wait for a later run.
-    const dueAt = dueMomentInPeriod(now, freq, template.deadlineDay, template.deadlineTime);
+    const dueAt = dueMomentInPeriod(now, freq, template.deadlineDay, template.deadlineTime, tz);
     if (now < dueAt) {
       return { templateId, status: 'skipped_not_due' };
     }

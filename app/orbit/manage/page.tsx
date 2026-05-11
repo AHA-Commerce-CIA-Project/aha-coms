@@ -21,6 +21,7 @@ interface Template {
   channel?: { id: string; name: string } | null;
   mentionTarget?: string | null;
   referenceUrls?: string[];
+  timezone?: string | null;
   checklistItems?: { id: string; title: string; position: number }[];
   isActive: boolean;
   creator: { id: string; name: string };
@@ -101,6 +102,7 @@ export default function ManageOrbitPage() {
       channelId: t.channelId,
       mentionTarget: t.mentionTarget,
       referenceUrls: t.referenceUrls ?? [],
+      timezone: t.timezone ?? null,
       checklistItems: t.checklistItems,
       deadlineTime: (t as any).deadlineTime ?? null,
       deadlineDay: (t as any).deadlineDay ?? null,
