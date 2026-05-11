@@ -277,7 +277,7 @@ export function LaterPane({ tabOverride, onTabChange }: LaterPaneProps = {}) {
             </p>
           </div>
         ) : (
-          <div className="space-y-3 max-w-3xl">
+          <div className="space-y-3 max-w-3xl mx-auto">
             {messages.map((item) => {
               const isReply = !!item.reply;
               const displayContent = isReply ? item.reply! : item.message;
@@ -423,7 +423,7 @@ export function LaterPane({ tabOverride, onTabChange }: LaterPaneProps = {}) {
           </p>
         </div>
       ) : (
-        <div className="space-y-3 max-w-3xl">
+        <div className="space-y-3 max-w-3xl mx-auto">
           {tasks.map((item) => {
             const t = item.task;
             if (!t) return null;
