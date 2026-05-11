@@ -60,9 +60,10 @@ function MessagesWorkspace() {
     const convId = params.get('conv');
     const withUserId = params.get('with');
     const newDm = params.get('new') === '1';
-    // ?later=messages|tasks|posted-cards renders the Later experience inline.
+    // ?later=messages|tasks renders the Later experience inline. (Posted cards
+    // moved out to the dedicated /my-request page.)
     const laterTabParam = params.get('later');
-    const laterTab = (laterTabParam === 'tasks' || laterTabParam === 'posted-cards' || laterTabParam === 'messages')
+    const laterTab = (laterTabParam === 'tasks' || laterTabParam === 'messages')
         ? laterTabParam
         : null;
     const isChannelMode = !!channelId;
@@ -204,7 +205,7 @@ function MessagesWorkspace() {
 
     // Later sub-items render LaterPane inline in the right pane via ?later=<tab>
     // — the user stays in the unified workspace instead of navigating to /later.
-    const goLater = useCallback((tab: 'messages' | 'tasks' | 'posted-cards') => {
+    const goLater = useCallback((tab: 'messages' | 'tasks') => {
         router.push(`/messages?later=${tab}`);
     }, [router]);
 

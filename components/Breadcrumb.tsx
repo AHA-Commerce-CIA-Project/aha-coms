@@ -34,7 +34,8 @@ function getBreadcrumbs(pathname: string, searchParams: URLSearchParams): Crumb[
   if (pathname === '/later') return [{ label: 'Later' }];
   if (pathname === '/profile') return [{ label: 'Profile' }];
   if (pathname === '/changelog') return [{ label: 'Changelog' }];
-  if (pathname === '/team-inbox') return [{ label: 'Cards Inbox' }];
+  if (pathname === '/team-inbox') return [{ label: 'Task Inbox' }];
+  if (pathname === '/my-request') return [{ label: 'My Request' }];
   if (pathname === '/request') return [{ label: 'Request Form' }];
   if (pathname === '/analytics') return [{ label: 'Analytics' }];
   if (pathname === '/activity-log') return [{ label: 'Activity Log' }];

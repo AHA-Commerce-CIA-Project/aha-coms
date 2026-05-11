@@ -671,8 +671,9 @@ function MyTasksContent() {
 
             <PageTabs tabs={[
                 { href: '/tasks', label: 'My Tasks' },
+                { href: '/my-request', label: 'My Request' },
                 { href: '/nexus', label: 'Task Queue' },
-                { href: '/team-inbox', label: 'Cards Inbox' },
+                { href: '/team-inbox', label: 'Task Inbox' },
                 { href: '/orbit', label: 'AHA Orbit' },
             ]} />
 
@@ -1705,7 +1706,7 @@ function MyTasksContent() {
 
             {/* Mark-as-Pending modal — My Tasks. Layered above the View Task
                 modal (z-[80]) so it stays visible while the underlying detail
-                stays open behind it. Same shape as Cards Inbox / Task Queue
+                stays open behind it. Same shape as Task Inbox / Task Queue
                 so reporting can group blockers the same way. */}
             {pendingModalTask && (
                 <div

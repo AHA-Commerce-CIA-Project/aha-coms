@@ -173,7 +173,7 @@ function NexusContent() {
     const [forwardData, setForwardData] = useState<any | null>(null);
 
     // Mark-as-Pending modal — opened from the View Task modal. Free-text
-    // reason + structured tag mirrors Cards Inbox so reporting can group
+    // reason + structured tag mirrors Task Inbox so reporting can group
     // blockers across surfaces.
     const [pendingModalTask, setPendingModalTask] = useState<TicketRow | null>(null);
     const [pendingModalReason, setPendingModalReason] = useState('');
@@ -728,8 +728,9 @@ function NexusContent() {
             <div className="flex items-start justify-between gap-4">
                 <PageTabs tabs={[
                     { href: '/tasks', label: 'My Tasks' },
+                    { href: '/my-request', label: 'My Request' },
                     { href: '/nexus', label: 'Task Queue' },
-                    { href: '/team-inbox', label: 'Cards Inbox' },
+                    { href: '/team-inbox', label: 'Task Inbox' },
                     { href: '/orbit', label: 'AHA Orbit' },
                 ]} />
                 {isLeader && (
@@ -2096,7 +2097,7 @@ function NexusContent() {
                                     {/* Pending state callout + Mark/Resume actions.
                                         Hidden once the task is Done — completed tasks aren't
                                         eligible for pause. Reason copy mirrors /track and
-                                        Cards Inbox so the user sees the same words wherever
+                                        Task Inbox so the user sees the same words wherever
                                         they look at the task. */}
                                     {viewTicket.status === 'pending' && (viewTicket.pending_reason || viewTicket.pending_tag) && (
                                         <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">

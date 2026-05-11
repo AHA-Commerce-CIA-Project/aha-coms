@@ -293,8 +293,9 @@ export default function OrbitPage() {
       {/* Tabs — keep AHA Orbit reachable alongside My Tasks / Task Queue. */}
       <PageTabs tabs={[
         { href: '/tasks', label: 'My Tasks' },
+        { href: '/my-request', label: 'My Request' },
         { href: '/nexus', label: 'Task Queue' },
-        { href: '/team-inbox', label: 'Cards Inbox' },
+        { href: '/team-inbox', label: 'Task Inbox' },
         { href: '/orbit', label: 'AHA Orbit' },
       ]} />
       {/* Header */}

@@ -63,8 +63,9 @@ const sectionConfigs: Record<string, NavSection> = {
             { href: '/fast', icon: LayoutDashboard, label: 'Dashboard' },
             { href: '/tasks', icon: CheckSquare, label: 'Tasks', hasBadge: true, badgeKey: 'tasks', subItems: [
                 { href: '/tasks', label: 'My Tasks' },
+                { href: '/my-request', label: 'My Request' },
                 { href: '/nexus', label: 'Task Queue' },
-                { href: '/team-inbox', label: 'Cards Inbox' },
+                { href: '/team-inbox', label: 'Task Inbox' },
                 { href: '/orbit', label: 'AHA Orbit' },
             ] },
             // Unified Messages workspace — DMs and Channels live in a single

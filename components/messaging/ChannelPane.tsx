@@ -19,7 +19,6 @@ import { CreateChannelModal } from '@/components/channels/CreateChannelModal';
 import { EditChannelModal } from '@/components/channels/EditChannelModal';
 import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';
 import { TeamInboxTaskModal, TeamInboxTask } from '@/components/TeamInboxTaskModal';
-import { RoutineTemplateModal } from '@/components/orbit/RoutineTemplateModal';
 import { Hash, AlertTriangle, Trash2, MessageSquare } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 
@@ -103,10 +102,6 @@ export function ChannelPane() {
   const [forwardMessage, setForwardMessage] = useState<any | null>(null);
   const [scrollTrigger, setScrollTrigger] = useState(0);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  // `/remind` slash-command opens a New Routine Template modal scoped to the
-  // current channel. Leaders only — non-leaders see no modal even if they
-  // type the command (the composer will instead post `/remind` as text).
-  const [remindModalOpen, setRemindModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -758,7 +753,7 @@ export function ChannelPane() {
                   users={users}
                   teams={teams}
                   onTypingUsersChange={handleTypingUsersChange}
-                  onRemindCommand={isLeader ? () => setRemindModalOpen(true) : undefined}
+                  onRemindCommand={isLeader ? () => router.push('/orbit') : undefined}
                   onTaskCommand={(description, atts) => {
                     const images = atts
                       .filter((a) => a.isImage || (a.type || '').startsWith('image/'))
@@ -821,14 +816,6 @@ export function ChannelPane() {
         onCreated={fetchChannels}
         purpose={purpose}
         preselectedMemberIds={createWithUserIds}
-      />
-
-      {/* /remind slash command → New Routine Template modal, pre-scoped to the
-          channel the command was typed in. */}
-      <RoutineTemplateModal
-        open={remindModalOpen}
-        onClose={() => setRemindModalOpen(false)}
-        defaultChannelId={selectedChannel?.id}
       />
 
       {/* Edit channel modal */}

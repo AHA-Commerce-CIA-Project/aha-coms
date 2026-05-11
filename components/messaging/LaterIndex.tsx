@@ -1,22 +1,21 @@
 'use client';
 
 // Left-pane index for the "Later" view of the unified Messages workspace.
-// Shows the three Later sub-tabs (Saved messages, Saved tasks, Posted cards)
-// as primary items — when this index is rendered, the right pane is showing
-// LaterPane and the user is fully inside the Later mode.
+// Shows the Later sub-tabs (Saved messages, Saved tasks) as primary items —
+// when this index is rendered, the right pane is showing LaterPane and the
+// user is fully inside the Later mode. (Posted cards moved out to /my-request.)
 
-import { Bookmark, ListTodo, Send } from 'lucide-react';
+import { Bookmark, ListTodo } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const ITEMS: { tab: 'messages' | 'tasks' | 'posted-cards'; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+const ITEMS: { tab: 'messages' | 'tasks'; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { tab: 'messages', label: 'Saved messages', icon: Bookmark },
     { tab: 'tasks', label: 'Saved tasks', icon: ListTodo },
-    { tab: 'posted-cards', label: 'Posted cards', icon: Send },
 ];
 
 interface LaterIndexProps {
-    activeTab: 'messages' | 'tasks' | 'posted-cards';
-    onSelect: (tab: 'messages' | 'tasks' | 'posted-cards') => void;
+    activeTab: 'messages' | 'tasks';
+    onSelect: (tab: 'messages' | 'tasks') => void;
 }
 
 export function LaterIndex({ activeTab, onSelect }: LaterIndexProps) {

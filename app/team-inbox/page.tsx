@@ -649,14 +649,15 @@ export default function TeamInboxPage() {
         <div className="space-y-5">
             <PageTabs tabs={[
                 { href: '/tasks', label: 'My Tasks' },
+                { href: '/my-request', label: 'My Request' },
                 { href: '/nexus', label: 'Task Queue' },
-                { href: '/team-inbox', label: 'Cards Inbox' },
+                { href: '/team-inbox', label: 'Task Inbox' },
                 { href: '/orbit', label: 'AHA Orbit' },
             ]} />
             <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                     <Inbox className="w-5 h-5 text-indigo-600" />
-                    <h1 className="text-xl font-bold text-slate-800">Cards Inbox</h1>
+                    <h1 className="text-xl font-bold text-slate-800">Task Inbox</h1>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 px-2.5 py-2 rounded-lg cursor-pointer hover:border-slate-300">

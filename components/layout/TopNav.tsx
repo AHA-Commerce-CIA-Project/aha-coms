@@ -64,15 +64,16 @@ const MODULES: ModuleTab[] = [
         key: 'fast', label: 'AHA Fast', href: '/fast', icon: Zap,
         // Orbit lives under AHA Fast now — surfaced via the My Tasks / Task Queue / AHA Orbit tab row
         // instead of a top-bar module.
-        matchPaths: ['/fast', '/tasks', '/nexus', '/analytics', '/activity-log', '/later', '/channels', '/messages', '/orbit', '/team-inbox'],
+        matchPaths: ['/fast', '/tasks', '/my-request', '/nexus', '/analytics', '/activity-log', '/later', '/channels', '/messages', '/orbit', '/team-inbox'],
         subItems: [
             { label: 'Dashboard', href: '/fast' },
             {
                 label: 'Tasks', href: '/tasks',
                 subItems: [
                     { label: 'My Tasks', href: '/tasks' },
+                    { label: 'My Request', href: '/my-request' },
                     { label: 'Task Queue', href: '/nexus' },
-                    { label: 'Cards Inbox', href: '/team-inbox' },
+                    { label: 'Task Inbox', href: '/team-inbox' },
                     { label: 'AHA Orbit', href: '/orbit' },
                 ],
             },
