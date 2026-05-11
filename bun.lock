@@ -67,6 +67,15 @@
         "vite": "^6",
       },
     },
+    "packages/design-tokens": {
+      "name": "@coms-portal/design-tokens",
+      "version": "1.1.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.5.0",
+        "yaml": "^2.5.1",
+      },
+    },
     "packages/shared": {
       "name": "@coms-portal/shared",
       "version": "1.7.0",
@@ -83,7 +92,7 @@
 
     "@coms-portal/api": ["@coms-portal/api@workspace:apps/api"],
 
-    "@coms-portal/design-tokens": ["@coms-portal/design-tokens@github:mrdoorba/coms-design-tokens#2ab5f3d", {}, "mrdoorba-coms-design-tokens-2ab5f3d", "sha512-w7PZKFIVxM3nYINH0FXpECBjRME/VR3jInp0my4g9MjNxE4kfpGAAnrEXxIk+tua5RTbX8gm8BTLKpq4jIRO6w=="],
+    "@coms-portal/design-tokens": ["@coms-portal/design-tokens@workspace:packages/design-tokens"],
 
     "@coms-portal/sdk": ["@coms-portal/sdk@github:mrdoorba/coms-sdk#20f88db", { "dependencies": { "jose": "^6" } }, "mrdoorba-coms-sdk-20f88db", "sha512-W1dEaCwirLVbIz9Gcg3d0/AffinU/rkPWAHVxZ6k5SjHBnjex2/RsiBQxbNnntDroIRs5R0VjxyVTUJUWVxxgA=="],
 
@@ -1054,6 +1063,8 @@
     "zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
 
     "@coms-portal/api/@coms-portal/shared": ["@coms-portal/shared@github:mrdoorba/coms-shared#6452869", {}, "mrdoorba-coms-shared-6452869", "sha512-DBHmdZPQ8D1qGE1GmBVOO00/f46fmrtyG2VQNd77ionmDIuL/iDlJIsQojm8Cv4sOkia4p0rdSK0g+nKEHvaAg=="],
+
+    "@coms-portal/web/@coms-portal/design-tokens": ["@coms-portal/design-tokens@github:mrdoorba/coms-design-tokens#2ab5f3d", {}, "mrdoorba-coms-design-tokens-2ab5f3d", "sha512-w7PZKFIVxM3nYINH0FXpECBjRME/VR3jInp0my4g9MjNxE4kfpGAAnrEXxIk+tua5RTbX8gm8BTLKpq4jIRO6w=="],
 
     "@coms-portal/web/@coms-portal/shared": ["@coms-portal/shared@github:mrdoorba/coms-shared#6452869", {}, "mrdoorba-coms-shared-6452869", "sha512-DBHmdZPQ8D1qGE1GmBVOO00/f46fmrtyG2VQNd77ionmDIuL/iDlJIsQojm8Cv4sOkia4p0rdSK0g+nKEHvaAg=="],
 

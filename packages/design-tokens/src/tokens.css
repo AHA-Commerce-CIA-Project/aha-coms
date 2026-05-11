@@ -1,0 +1,142 @@
+/*
+ * @coms-portal/design-tokens — generated CSS token layer
+ *
+ * Source of truth: src/tokens.yaml. Do not hand-edit this file —
+ * `bun run build` regenerates it from yaml.
+ *
+ * Tailwind v4 consumers `@import` this file directly. The @theme block
+ * exposes brand + status colors, fonts, spacing, radii, and shadows as
+ * CSS custom properties Tailwind picks up via @theme.
+ * The :root and .dark blocks define light/dark semantic surfaces.
+ */
+
+@theme {
+  /* Brand palette (immutable across themes) */
+  --color-primary-dark: #1D388B;
+  --color-primary-light: #96ADF5;
+  --color-deep-navy: #0F0E7F;
+  --color-gold: #F4C144;
+  --color-gold-light: #FFD97D;
+  --color-purple: #6D50B8;
+  --color-sky-blue: #759EEE;
+  --color-penalti: #C73E3E;
+  --color-white: #FFFFFF;
+
+  /* Status colors */
+  --color-status-approved: #16a34a;
+  --color-status-approved-bg: #22C55E26;
+  --color-status-pending: #a07700;
+  --color-status-pending-bg: #F4C14426;
+  --color-status-challenged: #6D50B8;
+  --color-status-challenged-bg: #6D50B826;
+  --color-status-rejected: #dc2626;
+  --color-status-rejected-bg: #EF44441A;
+
+  /* Fonts */
+  --font-sans: 'Manrope', sans-serif;
+  --font-manrope: 'Manrope', sans-serif;
+
+  /* Radii — kept in source units; px values like 99px / 9999px
+     express "fully rounded" intent and do not belong on the spacing scale */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-button: 12px;
+  --radius-card: 16px;
+  --radius-badge: 99px;
+  --radius-avatar: 9999px;
+  --radius-service-tab: 6px;
+  --radius-input: 12px;
+
+  /* Spacing scale */
+  --spacing-page-padding-desktop: 1.5rem;
+  --spacing-page-padding-mobile: 1rem;
+  --spacing-page-bottom-desktop: 2rem;
+  --spacing-page-bottom-mobile: 6rem;
+  --spacing-grid-gap-desktop: 1rem;
+  --spacing-grid-gap-mobile: 0.75rem;
+  --spacing-card-padding: 1rem;
+  --spacing-card-padding-hero: 1.25rem;
+  --spacing-service-bar-height: 2.25rem;
+  --spacing-header-height: 3.5rem;
+  --spacing-sidebar-collapsed: 4rem;
+  --spacing-sidebar-expanded: 16rem;
+  --spacing-mobile-nav-height: 4rem;
+  --spacing-touch-target-min: 2.75rem;
+  --spacing-page-max-width: 64rem;
+  --spacing-content-max-width: 40rem;
+
+  /* Surface shadows (carried forward from prior portal app.css) */
+  --shadow-card: 0 2px 12px rgba(15, 14, 127, 0.10), 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-card-hover: 0 8px 28px rgba(15, 14, 127, 0.16), 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-modal: 0 8px 32px rgba(15, 14, 127, 0.18), 0 2px 8px rgba(0,0,0,0.10);
+  --shadow-glow-gold: 0 0 20px rgba(244, 193, 68, 0.35), 0 4px 12px rgba(244, 193, 68, 0.20);
+  --shadow-glow-blue: 0 0 20px rgba(50, 95, 236, 0.30), 0 4px 12px rgba(50, 95, 236, 0.18);
+}
+
+/*
+ * @theme inline binds Tailwind v4's --color-* utility names to the
+ * semantic CSS variables defined in :root and .dark below. Tailwind
+ * generates `bg-background`, `text-foreground`, etc. from this map.
+ */
+@theme inline {
+  --color-primary: var(--primary);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+:root {
+  --primary: #325FEC;
+  --background: #F2F3F8;
+  --foreground: #1A1B2E;
+  --card: #FFFFFF;
+  --card-foreground: #1A1B2E;
+  --primary-foreground: #FFFFFF;
+  --secondary: #EBEDF5;
+  --secondary-foreground: #2E3566;
+  --muted: #F0F1F5;
+  --muted-foreground: #6B7094;
+  --accent: #EBEDF5;
+  --accent-foreground: #2E3566;
+  --destructive: #EF4444;
+  --border: #E0E2EC;
+  --input: #E0E2EC;
+  --ring: #325FEC;
+  --radius: 0.625rem;
+}
+
+.dark {
+  --background: #1C1E30;
+  --foreground: #F5F5FA;
+  --card: #272A40;
+  --card-foreground: #F5F5FA;
+  --primary: #6495FF;
+  --primary-foreground: #1E2240;
+  --secondary: #2E3250;
+  --secondary-foreground: #D8DAE5;
+  --muted: #333755;
+  --muted-foreground: #8890B0;
+  --accent: #2E3250;
+  --accent-foreground: #D8DAE5;
+  --border: #3C4060;
+  --input: #3C4060;
+  --ring: #6495FF;
+}

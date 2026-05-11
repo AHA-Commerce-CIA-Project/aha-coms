@@ -38,7 +38,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-1`.
   - **Acceptance:** `packages/shared/package.json` exists with `name: @coms-portal/shared`; `bun install` at root succeeds.
   - **Verification:** `bun --filter @coms-portal/shared typecheck` passes.
 
-- [ ] **T02: Subtree-merge `coms-design-tokens` → `packages/design-tokens`**
+- [x] **T02: Subtree-merge `coms-design-tokens` → `packages/design-tokens`**
   - **Prerequisites:** T01 (workspaces glob)
   - **Acceptance:** package in tree; `bun install` succeeds; name `@coms-portal/design-tokens`.
   - **Verification:** `bun --filter @coms-portal/design-tokens build` succeeds.
