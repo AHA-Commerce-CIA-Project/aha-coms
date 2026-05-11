@@ -8,7 +8,12 @@ import {
   Hand,
   Loader2,
   Lock,
+  MessageCircle,
+  Pencil,
+  Plus,
   RotateCcw,
+  Send,
+  Trash2,
   User as UserIcon,
   Users,
   X,
@@ -33,10 +38,19 @@ interface RoutineSnapshot {
   status: string;
   type: 'INDIVIDUAL' | 'TEAM' | null;
   reference_urls: string[];
+  channel_id: string | null;
+  channel_message_id: string | null;
   claimed_at: string | null;
   completed_at: string | null;
   assignee: AssigneeMini | null;
   checklist_items: ChecklistItem[] | null;
+}
+
+interface ThreadReply {
+  id: string;
+  content: string;
+  createdAt: string;
+  sender: { id: string; name: string; image: string | null };
 }
 
 interface RoutineTaskDetailModalProps {
@@ -51,6 +65,24 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Dynamic checklist UX state.
+  // `newItemTitle` powers the "Add item" row; in-flight adds clear it.
+  // `editingId` tracks which item is currently in inline-edit mode and
+  // `editingTitle` is the working draft for that row (committed on Enter
+  // / blur / Save).
+  const [newItemTitle, setNewItemTitle] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+
+  // Comment thread state — comments here ARE the thread replies on the
+  // bot's parent ChannelMessage. Fetched + posted via the existing
+  // /api/channels/[channelId]/[messageId]/replies endpoint so the in-feed
+  // thread view and the in-modal comments stay in sync automatically.
+  const [replies, setReplies] = useState<ThreadReply[]>([]);
+  const [repliesLoading, setRepliesLoading] = useState(false);
+  const [draftReply, setDraftReply] = useState('');
+  const [postingReply, setPostingReply] = useState(false);
 
   const fetchSnapshot = useCallback(async () => {
     if (!taskId) return;
@@ -135,6 +167,138 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
       await fetchSnapshot();
     } finally {
       setBusy(null);
+    }
+  };
+
+  // Dynamic-checklist mutations. Each one round-trips through the existing
+  // /api/tasks/[id]/checklist endpoints; the API enforces the real
+  // permission rules — these client paths just gate the affordance.
+  const addItem = async () => {
+    if (!taskId) return;
+    const title = newItemTitle.trim();
+    if (!title) return;
+    setBusy('add-item');
+    setError(null);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/checklist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || 'Failed to add item');
+      } else {
+        setNewItemTitle('');
+        await fetchSnapshot();
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const renameItem = async (itemId: string) => {
+    if (!taskId) return;
+    const title = editingTitle.trim();
+    if (!title) {
+      setEditingId(null);
+      return;
+    }
+    setBusy(itemId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/checklist/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || 'Failed to rename item');
+      } else {
+        setEditingId(null);
+        await fetchSnapshot();
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const deleteItem = async (itemId: string) => {
+    if (!taskId) return;
+    if (!confirm('Remove this item?')) return;
+    setBusy(itemId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/checklist/${itemId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || 'Failed to delete item');
+      } else {
+        await fetchSnapshot();
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Thread replies — fetch + post against the bot's parent ChannelMessage.
+  // The endpoint is the same one the in-feed thread view uses, so a reply
+  // posted here shows up there immediately and vice versa.
+  const channelId = snapshot?.channel_id || null;
+  const channelMessageId = snapshot?.channel_message_id || null;
+
+  const fetchReplies = useCallback(async () => {
+    if (!channelId || !channelMessageId) {
+      setReplies([]);
+      return;
+    }
+    setRepliesLoading(true);
+    try {
+      const res = await fetch(`/api/channels/${channelId}/${channelMessageId}/replies`);
+      if (res.ok) {
+        const data = await res.json();
+        setReplies(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // Best-effort — leave the existing list in place on transient errors.
+    } finally {
+      setRepliesLoading(false);
+    }
+  }, [channelId, channelMessageId]);
+
+  useEffect(() => {
+    if (!open || !channelId || !channelMessageId) return;
+    fetchReplies();
+    // Light polling so a reply posted from the in-feed thread appears here
+    // without forcing a manual refresh. Same cadence as the snapshot poll.
+    const interval = setInterval(fetchReplies, 8000);
+    return () => clearInterval(interval);
+  }, [open, channelId, channelMessageId, fetchReplies]);
+
+  const postReply = async () => {
+    if (!channelId || !channelMessageId) return;
+    const content = draftReply.trim();
+    if (!content) return;
+    setPostingReply(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/channels/${channelId}/${channelMessageId}/replies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, attachments: [], mentions: [] }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || 'Failed to post reply');
+      } else {
+        setDraftReply('');
+        await fetchReplies();
+      }
+    } finally {
+      setPostingReply(false);
     }
   };
 
@@ -270,57 +434,115 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
                 </section>
               )}
 
-              {/* Checklist — same dual-mode rendering as the channel card. */}
-              {checklist.length > 0 && (
-                <section>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Checklist</h3>
+              {/* Checklist — dynamic mode. Anyone in the channel can add items;
+                  individual items are editable/deletable when unclaimed OR by
+                  the claimer. Completion toggle still requires ownership. */}
+              <section>
+                <div className="flex items-center justify-between mb-1.5">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Checklist</h3>
+                  {totalCount > 0 && (
                     <span className="text-[11px] font-medium text-slate-500">
                       {completedCount} / {totalCount} done · {progress}%
                     </span>
-                  </div>
+                  )}
+                </div>
+                {totalCount > 0 && (
                   <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
                     <div
                       className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
+                )}
 
-                  <div className="space-y-1.5">
-                    {checklist.map((it) => {
-                      if (type === 'TEAM') {
-                        const ownedByMe = it.assignee?.id === currentUserId;
-                        const claimed = !!it.assignee;
-                        return (
+                <div className="space-y-1.5">
+                  {checklist.map((it) => {
+                    const ownedByMe = it.assignee?.id === currentUserId;
+                    const claimed = !!it.assignee;
+                    // Edit / delete affordance gate matches the server rule:
+                    //   TEAM       → unclaimed OR the item's claimer
+                    //   INDIVIDUAL → no whole-task owner yet, or that owner is me
+                    const canMutate = type === 'TEAM'
+                      ? (!claimed || ownedByMe)
+                      : (!isClaimed || claimedByMe);
+                    const isEditing = editingId === it.id;
+
+                    if (type === 'TEAM') {
+                      return (
+                        <div
+                          key={it.id}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-100 bg-slate-50/40 group"
+                        >
                           <div
-                            key={it.id}
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-100 bg-slate-50/40"
+                            className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                              it.is_completed
+                                ? 'bg-emerald-500 border-emerald-500'
+                                : claimed
+                                  ? 'border-slate-300 bg-white'
+                                  : 'border-dashed border-slate-300 bg-slate-100 opacity-50'
+                            }`}
                           >
-                            <div
-                              className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                                it.is_completed ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'
+                            {it.is_completed && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          {isEditing ? (
+                            <input
+                              autoFocus
+                              type="text"
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              onBlur={() => renameItem(it.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); renameItem(it.id); }
+                                if (e.key === 'Escape') { setEditingId(null); }
+                              }}
+                              className="flex-1 bg-white border border-indigo-300 rounded px-2 py-0.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          ) : (
+                            <span
+                              className={`flex-1 text-sm truncate ${
+                                it.is_completed ? 'line-through text-slate-400' : claimed ? 'text-slate-700' : 'text-slate-500'
                               }`}
                             >
-                              {it.is_completed && <Check className="w-3 h-3 text-white" />}
-                            </div>
-                            <span className={`flex-1 text-sm ${it.is_completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                               {it.title}
                             </span>
-                            {claimed && it.assignee ? (
-                              <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md bg-white border border-slate-200">
-                                {it.assignee.image ? (
-                                  <img src={it.assignee.image} alt="" className="w-4 h-4 rounded-full object-cover" />
-                                ) : (
-                                  <div className="w-4 h-4 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[9px] font-bold">
-                                    {it.assignee.name.charAt(0).toUpperCase()}
-                                  </div>
-                                )}
-                                <span className="text-[11px] text-slate-600 font-medium truncate max-w-[100px]">
-                                  {ownedByMe ? 'You' : it.assignee.name.split(' ')[0]}
-                                </span>
-                              </div>
-                            ) : null}
-                            {!claimed ? (
+                          )}
+                          {claimed && it.assignee ? (
+                            <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md bg-white border border-slate-200">
+                              {it.assignee.image ? (
+                                <img src={it.assignee.image} alt="" className="w-4 h-4 rounded-full object-cover" />
+                              ) : (
+                                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[9px] font-bold">
+                                  {it.assignee.name.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <span className="text-[11px] text-slate-600 font-medium truncate max-w-[100px]">
+                                {ownedByMe ? 'You' : it.assignee.name.split(' ')[0]}
+                              </span>
+                            </div>
+                          ) : null}
+                          {!isEditing && canMutate && !it.is_completed && (
+                            <button
+                              type="button"
+                              onClick={() => { setEditingId(it.id); setEditingTitle(it.title); }}
+                              className="p-1 text-slate-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Edit item"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {!isEditing && canMutate && (
+                            <button
+                              type="button"
+                              onClick={() => deleteItem(it.id)}
+                              disabled={busy === it.id}
+                              className="p-1 text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {!isEditing && (
+                            !claimed ? (
                               <button
                                 type="button"
                                 onClick={() => claimItem(it.id)}
@@ -349,49 +571,185 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
                               >
                                 Undo
                               </button>
-                            ) : null}
-                          </div>
-                        );
-                      }
-                      // INDIVIDUAL: only the whole-task assignee can toggle.
-                      const canToggle = claimedByMe && !isDone;
-                      return (
+                            ) : null
+                          )}
+                        </div>
+                      );
+                    }
+                    // INDIVIDUAL — only the whole-task assignee can toggle / edit / delete.
+                    const canToggle = claimedByMe && !isDone;
+                    return (
+                      <div
+                        key={it.id}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-100 group"
+                      >
                         <button
-                          key={it.id}
                           type="button"
-                          disabled={!canToggle || busy === it.id}
+                          disabled={!canToggle || busy === it.id || isEditing}
                           onClick={() => toggleItem(it.id, !it.is_completed)}
-                          className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-100 text-sm transition-colors ${
-                            canToggle ? 'hover:bg-slate-50' : ''
-                          }`}
+                          className="flex-shrink-0"
                         >
                           <div
-                            className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                            className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
                               it.is_completed
                                 ? 'bg-indigo-600 border-indigo-600'
                                 : canToggle
-                                  ? 'border-slate-300'
+                                  ? 'border-slate-300 hover:border-indigo-400'
                                   : 'border-slate-200 bg-slate-50'
                             }`}
                           >
                             {it.is_completed && <Check className="w-3 h-3 text-white" />}
                           </div>
-                          <span className={`flex-1 text-left ${it.is_completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                        </button>
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onBlur={() => renameItem(it.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); renameItem(it.id); }
+                              if (e.key === 'Escape') { setEditingId(null); }
+                            }}
+                            className="flex-1 bg-white border border-indigo-300 rounded px-2 py-0.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        ) : (
+                          <span className={`flex-1 text-left text-sm ${it.is_completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                             {it.title}
                           </span>
-                          {busy === it.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
+                        )}
+                        {!isEditing && canMutate && !it.is_completed && (
+                          <button
+                            type="button"
+                            onClick={() => { setEditingId(it.id); setEditingTitle(it.title); }}
+                            className="p-1 text-slate-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Edit item"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {!isEditing && canMutate && (
+                          <button
+                            type="button"
+                            onClick={() => deleteItem(it.id)}
+                            disabled={busy === it.id}
+                            className="p-1 text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {busy === it.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />}
+                      </div>
+                    );
+                  })}
+
+                  {/* Add row — open to everyone (server is the access boundary). */}
+                  {!isDone && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-dashed border-slate-300 bg-white">
+                      <Plus className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                      <input
+                        type="text"
+                        value={newItemTitle}
+                        onChange={(e) => setNewItemTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); addItem(); }
+                        }}
+                        placeholder="Add an item…"
+                        className="flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={addItem}
+                        disabled={!newItemTitle.trim() || busy === 'add-item'}
+                        className="text-[12px] font-semibold text-indigo-600 hover:bg-indigo-50 disabled:opacity-40 disabled:hover:bg-transparent px-2 py-1 rounded-md transition-colors"
+                      >
+                        {busy === 'add-item' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Add'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </section>
 
               {isDone && (
                 <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
                   <CheckCircle2 className="w-4 h-4" />
                   <span className="font-medium">Completed{snapshot?.completed_at ? ` ${new Date(snapshot.completed_at).toLocaleString()}` : ''}</span>
                 </div>
+              )}
+
+              {/* Comments — bi-directional with the bot message's thread replies.
+                  Posting here calls the same endpoint as posting in the channel
+                  thread view, so the two surfaces stay in sync. */}
+              {channelId && channelMessageId && (
+                <section>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <MessageCircle className="w-3.5 h-3.5 text-slate-400" />
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                      Comments
+                    </h3>
+                    {repliesLoading && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+                    <span className="text-[11px] text-slate-400">
+                      {replies.length === 0 ? 'No comments yet.' : `${replies.length}`}
+                    </span>
+                  </div>
+
+                  {replies.length > 0 && (
+                    <div className="space-y-2 mb-3 max-h-[260px] overflow-y-auto">
+                      {replies.map((r) => (
+                        <div key={r.id} className="flex items-start gap-2">
+                          {r.sender.image ? (
+                            <img src={r.sender.image} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+                              {r.sender.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-sm font-semibold text-slate-800">{r.sender.name}</span>
+                              <span className="text-[11px] text-slate-400">{new Date(r.createdAt).toLocaleString()}</span>
+                            </div>
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+                              {r.content}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-end gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-300/40 transition-colors">
+                    <textarea
+                      value={draftReply}
+                      onChange={(e) => setDraftReply(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Enter sends, Shift+Enter inserts a newline — matches
+                        // the chat composer's mental model.
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          postReply();
+                        }
+                      }}
+                      placeholder="Comment on this routine… (Enter to send)"
+                      rows={1}
+                      className="flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none resize-none max-h-32"
+                    />
+                    <button
+                      type="button"
+                      onClick={postReply}
+                      disabled={!draftReply.trim() || postingReply}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[12px] font-semibold transition-colors disabled:opacity-40"
+                    >
+                      {postingReply ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      Send
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1.5">
+                    Comments sync with the bot message&apos;s thread in the channel.
+                  </p>
+                </section>
               )}
             </>
           )}

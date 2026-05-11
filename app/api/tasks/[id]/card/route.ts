@@ -28,6 +28,11 @@ export async function GET(
             type: true,
             routineTemplateId: true,
             referenceUrls: true,
+            // Surface the channel + message linkage so the detail modal can
+            // route its comment input to the matching thread on the bot's
+            // ChannelMessage (single source of truth for routine convo).
+            targetChannelId: true,
+            channelMessageId: true,
             claimedAt: true,
             completedAt: true,
             assigneeId: true,
@@ -61,6 +66,8 @@ export async function GET(
         type: task.type,
         routine_template_id: task.routineTemplateId,
         reference_urls: task.referenceUrls ?? [],
+        channel_id: task.targetChannelId,
+        channel_message_id: task.channelMessageId,
         claimed_at: task.claimedAt?.toISOString() || null,
         completed_at: task.completedAt?.toISOString() || null,
         assignee: task.assignee

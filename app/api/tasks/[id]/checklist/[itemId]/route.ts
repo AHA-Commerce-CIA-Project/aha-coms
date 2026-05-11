@@ -33,19 +33,32 @@ export async function PATCH(
     }
 
     // Per-type permission gate.
-    //   TEAM:       only the item's claimer (or leader) can mutate it.
+    //   TEAM:       title edits allowed when the item is UNCLAIMED OR the
+    //               caller is the item's claimer (anyone in the channel can
+    //               curate the dynamic list before someone picks it up).
+    //               Completion toggles still require ownership — you can't
+    //               check off someone else's claimed work.
     //   INDIVIDUAL: once the whole task is claimed, locks to that assignee.
     //   non-routine (item.task.type == null): unchanged — anyone with task
     //                                         access can edit, matching the
     //                                         legacy queue/direct-assign flow.
+    const isCompletionToggle = typeof body.isCompleted === 'boolean';
     if (item.task.type === 'TEAM' || item.task.type === 'INDIVIDUAL') {
         const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true } });
         const isLeader = me?.role === 'leader' || me?.role === 'admin';
         if (!isLeader) {
             if (item.task.type === 'TEAM') {
-                if (item.assigneeId !== session.user.id) {
+                const ownsItem = item.assigneeId === session.user.id;
+                const isUnclaimed = !item.assigneeId;
+                if (isCompletionToggle && !ownsItem) {
                     return NextResponse.json(
-                        { error: 'Claim this item first before updating it.' },
+                        { error: 'Claim this item first before marking it done.' },
+                        { status: 403 },
+                    );
+                }
+                if (!isCompletionToggle && !ownsItem && !isUnclaimed) {
+                    return NextResponse.json(
+                        { error: 'Only the claimer can edit this item.' },
                         { status: 403 },
                     );
                 }
@@ -97,7 +110,9 @@ export async function PATCH(
 }
 
 // DELETE — remove the item entirely. No soft-delete; checklist items are
-// cheap and users expect "x" to actually remove the row.
+// cheap and users expect "x" to actually remove the row. Same TEAM-mode
+// gate as PATCH: anyone in the channel can prune unclaimed items, but a
+// claimed item is the claimer's (or a leader's) to remove.
 export async function DELETE(
     _req: NextRequest,
     { params }: { params: Promise<{ id: string; itemId: string }> },
@@ -108,11 +123,39 @@ export async function DELETE(
     const { id, itemId } = await params;
     const item = await prisma.checklistItem.findUnique({
         where: { id: itemId },
-        select: { id: true, taskId: true },
+        select: {
+            id: true,
+            taskId: true,
+            assigneeId: true,
+            task: { select: { type: true, assigneeId: true } },
+        },
     });
     if (!item || item.taskId !== id) {
         return NextResponse.json({ error: 'Checklist item not found' }, { status: 404 });
     }
+
+    if (item.task.type === 'TEAM' || item.task.type === 'INDIVIDUAL') {
+        const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true } });
+        const isLeader = me?.role === 'leader' || me?.role === 'admin';
+        if (!isLeader) {
+            if (item.task.type === 'TEAM') {
+                const ownsItem = item.assigneeId === session.user.id;
+                const isUnclaimed = !item.assigneeId;
+                if (!ownsItem && !isUnclaimed) {
+                    return NextResponse.json(
+                        { error: 'Only the claimer can remove this item.' },
+                        { status: 403 },
+                    );
+                }
+            } else if (item.task.assigneeId && item.task.assigneeId !== session.user.id) {
+                return NextResponse.json(
+                    { error: 'This task is claimed by another member.' },
+                    { status: 403 },
+                );
+            }
+        }
+    }
+
     await prisma.checklistItem.delete({ where: { id: itemId } });
     return NextResponse.json({ ok: true });
 }
