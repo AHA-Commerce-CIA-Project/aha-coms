@@ -71,9 +71,11 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         urgencyCounts[u] = (urgencyCounts[u] || 0) + 1;
     });
 
-    // Tickets by division
+    // Tickets by division — exclude routine-spawned tasks (cron reminders have
+    // no human requester/division and would inflate the default bucket).
     const divisionCounts: Record<string, number> = {};
     activeTasks.forEach(t => {
+        if (t.routineTemplateId) return;
         const d = t.requesterDivision || 'Internal';
         divisionCounts[d] = (divisionCounts[d] || 0) + 1;
     });
@@ -196,6 +198,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     }> = {};
 
     for (const t of tasks) {
+        // Routine reminders are bot-spawned, not human-submitted — keep them
+        // out of requester analytics so they don't all collapse into "Unknown".
+        if (t.routineTemplateId) continue;
         const key = (t.requesterName || 'Unknown').trim();
         if (!requesterAgg[key]) {
             requesterAgg[key] = {
@@ -388,10 +393,12 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         avgRating: number | null;
         ratingCount: number;
     }[]> => {
-        const where: Record<string, unknown> = {};
+        // Exclude routine-spawned tasks — they're cron reminders, not human
+        // requests, and would all bucket as "Unknown" requester.
+        const where: Record<string, unknown> = { routineTemplateId: null };
         if (key === 'thisWeek') where.createdAt = { gte: weekStartUTC };
         else if (key === 'l30d') where.createdAt = { gte: thirtyDaysAgoUTC };
-        // allTime: no filter
+        // allTime: no date filter
 
         const rows = await prisma.task.findMany({
             where,
