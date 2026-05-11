@@ -71,8 +71,19 @@ export async function POST(
     // task lands in the right Team Inbox going forward.
     const existing = await prisma.task.findUnique({
         where: { id },
-        select: { source: true, assignedTeamId: true },
+        select: { source: true, assignedTeamId: true, type: true },
     });
+
+    // TEAM-type routine tasks expose only the per-item claim endpoint — the
+    // whole-task claim isn't valid for them. Reject early so a stale client
+    // can't accidentally seize the whole card.
+    if (existing?.type === 'TEAM') {
+        return NextResponse.json(
+            { error: 'TEAM tasks are claimed per checklist item, not as a whole.' },
+            { status: 400 },
+        );
+    }
+
     const shouldBackfillTeam =
         existing?.source === 'direct_assign' &&
         !existing?.assignedTeamId &&

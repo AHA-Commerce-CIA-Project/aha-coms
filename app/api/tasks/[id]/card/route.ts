@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
 
-// GET — Lightweight task snapshot for the "Direct Assign" channel card.
-// Returns just enough to render claim/claimed/done state without pulling the full task record.
+// GET — Lightweight task snapshot for channel-feed cards (Direct Assign +
+// Routine Reminder). Returns just enough to render claim/claimed/done state
+// without pulling the full task record. For routine cards (task.type set)
+// also returns the checklist with each item's assignee so the TEAM-mode
+// per-item Claim/Done buttons can render without an extra round-trip.
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
@@ -18,15 +21,30 @@ export async function GET(
             id: true,
             taskToken: true,
             title: true,
+            description: true,
             urgency: true,
             status: true,
             source: true,
+            type: true,
+            routineTemplateId: true,
             claimedAt: true,
             completedAt: true,
             assigneeId: true,
             assignee: { select: { id: true, name: true, image: true } },
             requesterName: true,
             dueDate: true,
+            checklistItems: {
+                orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+                select: {
+                    id: true,
+                    title: true,
+                    isCompleted: true,
+                    position: true,
+                    assigneeId: true,
+                    assignee: { select: { id: true, name: true, image: true } },
+                    claimedAt: true,
+                },
+            },
         },
     });
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
@@ -35,9 +53,12 @@ export async function GET(
         id: task.id,
         task_token: task.taskToken,
         title: task.title,
+        description: task.description,
         urgency: task.urgency,
         status: task.status,
         source: task.source,
+        type: task.type,
+        routine_template_id: task.routineTemplateId,
         claimed_at: task.claimedAt?.toISOString() || null,
         completed_at: task.completedAt?.toISOString() || null,
         assignee: task.assignee
@@ -45,5 +66,19 @@ export async function GET(
             : null,
         requester_name: task.requesterName,
         due_date: task.dueDate?.toISOString() || null,
+        // Only return checklist for routine tasks — direct-assign/queue cards
+        // never render one, so omitting it keeps the payload terse.
+        checklist_items: task.type
+            ? task.checklistItems.map((it) => ({
+                  id: it.id,
+                  title: it.title,
+                  is_completed: it.isCompleted,
+                  position: it.position,
+                  assignee: it.assignee
+                      ? { id: it.assignee.id, name: it.assignee.name, image: it.assignee.image }
+                      : null,
+                  claimed_at: it.claimedAt?.toISOString() || null,
+              }))
+            : null,
     });
 }

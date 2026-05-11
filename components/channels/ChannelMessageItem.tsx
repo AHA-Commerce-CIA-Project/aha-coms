@@ -7,6 +7,7 @@ import { ReactionDisplay } from './ReactionDisplay';
 import { MentionTextarea } from './MentionTextarea';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { DirectAssignCard } from './DirectAssignCard';
+import { RoutineTaskCard } from './RoutineTaskCard';
 import { TeamMembersPopover } from './TeamMembersPopover';
 import { useCustomEmojiMap } from '@/lib/customEmojis';
 import { renderShortcodes } from '@/lib/renderShortcodes';
@@ -321,6 +322,10 @@ export function ChannelMessageItem({
   // For direct-assign messages, the same attachments are surfaced inside the
   // task detail modal — don't render them again next to the card.
   const isDirectAssignCard = !!message.content?.match(/<!--direct_assign:[^\s>]+?-->/);
+  // Routine reminder card — message carries a <!--routine_task:TASK_ID--> marker
+  // dropped in by the scheduler. Same containment rule as direct-assign cards:
+  // attachments belong to the task, not the message bubble.
+  const isRoutineCard = !!message.content?.match(/<!--routine_task:[^\s>]+?-->/);
 
   // Slack-style system messages (channel created, member added, member removed).
   // These bypass the normal avatar/name layout and render as a centered, italic
@@ -475,6 +480,28 @@ export function ChannelMessageItem({
               </div>
             ) : message.content ? (
               (() => {
+                // Routine reminder card — bot-authored message with a
+                // <!--routine_task:TASK_ID--> marker. Header line is the
+                // ⏰-prefixed template name; everything after the first line
+                // is description that the card already re-renders, so we
+                // keep `previewBody` as the remaining text just for instant
+                // render before the snapshot fetches.
+                const routineMatch = message.content.match(/<!--routine_task:([^\s>]+?)-->/);
+                if (routineMatch) {
+                  const taskId = routineMatch[1].trim();
+                  const rest = message.content.replace(/<!--routine_task:[^\s>]+?-->/, '').trim();
+                  const lines = rest.split('\n');
+                  const titleLine = (lines[0] || '').replace(/^⏰\s*/, '').trim();
+                  const bodyPreview = lines.slice(1).join('\n').trim();
+                  return (
+                    <RoutineTaskCard
+                      taskId={taskId}
+                      previewTitle={titleLine || '(routine task)'}
+                      previewBody={bodyPreview}
+                      currentUserId={currentUserId}
+                    />
+                  );
+                }
                 // Direct Assign card — message carries a <!--direct_assign:TASK_ID--> marker.
                 // Task IDs are UUIDs and contain hyphens, so match any non-whitespace chars up to -->.
                 const directAssignMatch = message.content.match(/<!--direct_assign:([^\s>]+?)-->/);
@@ -602,7 +629,7 @@ export function ChannelMessageItem({
             ) : null}
 
             {/* Image attachments */}
-            {!isDirectAssignCard && images.length > 0 && (
+            {!isDirectAssignCard && !isRoutineCard && images.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {images.map((img, idx) => (
                   <button
@@ -622,7 +649,7 @@ export function ChannelMessageItem({
             )}
 
             {/* Document attachments */}
-            {!isDirectAssignCard && docs.length > 0 && (
+            {!isDirectAssignCard && !isRoutineCard && docs.length > 0 && (
               <div className="flex flex-col gap-1 mt-2">
                 {docs.map((doc, idx) => (
                   <a

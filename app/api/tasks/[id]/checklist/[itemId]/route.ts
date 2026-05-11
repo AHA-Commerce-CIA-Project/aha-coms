@@ -3,6 +3,11 @@ import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
 
 // PATCH — toggle isCompleted and/or rename the title.
+//
+// For TEAM-type routine tasks the per-item assigneeId is the access boundary:
+// only the user who claimed an item can mark it done. INDIVIDUAL/legacy tasks
+// keep the old "anyone with task access can edit" behavior so existing
+// queue/direct-assign flows aren't disturbed.
 export async function PATCH(
     req: NextRequest,
     { params }: { params: Promise<{ id: string; itemId: string }> },
@@ -16,10 +21,41 @@ export async function PATCH(
 
     const item = await prisma.checklistItem.findUnique({
         where: { id: itemId },
-        select: { id: true, taskId: true },
+        select: {
+            id: true,
+            taskId: true,
+            assigneeId: true,
+            task: { select: { id: true, type: true, assigneeId: true } },
+        },
     });
     if (!item || item.taskId !== id) {
         return NextResponse.json({ error: 'Checklist item not found' }, { status: 404 });
+    }
+
+    // Per-type permission gate.
+    //   TEAM:       only the item's claimer (or leader) can mutate it.
+    //   INDIVIDUAL: once the whole task is claimed, locks to that assignee.
+    //   non-routine (item.task.type == null): unchanged — anyone with task
+    //                                         access can edit, matching the
+    //                                         legacy queue/direct-assign flow.
+    if (item.task.type === 'TEAM' || item.task.type === 'INDIVIDUAL') {
+        const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true } });
+        const isLeader = me?.role === 'leader' || me?.role === 'admin';
+        if (!isLeader) {
+            if (item.task.type === 'TEAM') {
+                if (item.assigneeId !== session.user.id) {
+                    return NextResponse.json(
+                        { error: 'Claim this item first before updating it.' },
+                        { status: 403 },
+                    );
+                }
+            } else if (item.task.assigneeId && item.task.assigneeId !== session.user.id) {
+                return NextResponse.json(
+                    { error: 'This task is claimed by another member.' },
+                    { status: 403 },
+                );
+            }
+        }
     }
 
     const data: { title?: string; isCompleted?: boolean } = {};
@@ -35,6 +71,28 @@ export async function PATCH(
     }
 
     const updated = await prisma.checklistItem.update({ where: { id: itemId }, data });
+
+    // Auto-complete the parent task when every checklist item is done. Only
+    // for routine tasks (type set) — we don't want a partial checklist on a
+    // queue task to silently close it.
+    if (data.isCompleted === true && item.task.type) {
+        const remaining = await prisma.checklistItem.count({
+            where: { taskId: id, isCompleted: false },
+        });
+        if (remaining === 0) {
+            await prisma.task.update({
+                where: { id },
+                data: { status: 'done', completedAt: new Date() },
+            });
+        }
+    } else if (data.isCompleted === false && item.task.type) {
+        // Un-checking an item on an already-completed routine task reopens it.
+        await prisma.task.updateMany({
+            where: { id, status: 'done' },
+            data: { status: 'in-progress', completedAt: null },
+        });
+    }
+
     return NextResponse.json(updated);
 }
 
