@@ -2,7 +2,7 @@
   "name": "coms-portal",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["apps/*"],
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "bun run --filter '*' --parallel dev",
     "dev:api": "bun run --filter @coms-portal/api dev",

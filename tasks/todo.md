@@ -29,7 +29,7 @@
 
 Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-1`.
 
-- [ ] **T01: Subtree-merge `coms-shared` → `packages/shared`**
+- [x] **T01: Subtree-merge `coms-shared` → `packages/shared`**
   - **Prerequisites:** none
   - **Steps:**
     - Add the shared repo as a remote (or use local path).
