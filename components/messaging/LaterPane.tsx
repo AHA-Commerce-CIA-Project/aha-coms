@@ -224,10 +224,6 @@ export function LaterPane({ tabOverride, onTabChange }: LaterPaneProps = {}) {
 
   return (
     <div className="space-y-4 px-4 sm:px-6 py-4">
-      {/* Clean page title — single short h1 at top-left, matching the rest
-          of the app. (The bulky icon+subtitle header was removed.) */}
-      <h1 className="text-xl font-semibold text-slate-800">Later</h1>
-
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200">
         <button
