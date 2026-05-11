@@ -1,7 +1,7 @@
 # Execution Plan: Monorepo Consolidation + Heroes Cleanup
 
 > Last updated: 2026-05-11 (after T16)
-> Status: Phase 1 sealed at `34fbedd`; Phase 3 sealed and Checkpoint 2 crossed at `33593a9`; T16 lands the portal split + per-service Cloud Build scaffolding. Next: T17 (Cloud Build triggers with includedFiles filters) — finishing Phase 4 before Checkpoint 3. Findings 1 + 2 from T15 are closed in T16.
+> Status: Phase 1 sealed at `34fbedd`; Phase 3 sealed and Checkpoint 2 crossed at `33593a9`; T16 lands the portal split + per-service Cloud Build scaffolding at `5935d00`. Next: T16.5 (split `infra/heroes/` into `coms-heroes-api` + `coms-heroes-web` so the heroes cloudbuild yamls have a live target), then T17 (Cloud Build triggers with includedFiles filters) — finishing Phase 4 before Checkpoint 3. Findings 1 + 2 from T15 are closed in T16.
 > Source specs: `docs/spec/01-monorepo-consolidation.md`, `docs/spec/02-heroes-cleanup.md`
 
 ## Goal

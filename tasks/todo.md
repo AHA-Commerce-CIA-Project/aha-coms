@@ -182,8 +182,20 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-4`. Also see integration
   - **Verification:** Trigger each build manually; all succeed.
   - **Done:** Directories renamed (`apps/api` → `apps/portal-api`, `apps/web` → `apps/portal-web`); package names follow (`@coms-portal/api` → `@coms-portal/portal-api`, `@coms-portal/web` → `@coms-portal/portal-web`); all import sites and the `~/*` svelte alias chased. Portal split: `apps/portal-api/server.ts` no longer imports `web/build/handler.js` — portal-api ships API-only. Per-service Dockerfile + `cloudbuild.yaml` authored for all four services from monorepo-root context; root combined `Dockerfile` and `.github/workflows/deploy.yml` retired. `infra/cloud-run.tf` split into `google_cloud_run_v2_service.coms_portal_api` + `coms_portal_web`, sharing the runtime SA and Cloud SQL proxy; `cloud-tasks.tf`, `cloud-scheduler.tf`, and `outputs.tf` re-aimed at `coms_portal_api`. Findings 1 + 2 from T15 closed in the same wave: `HEROES_WEB_DEV_PORT` (heroes-api dev proxy + heroes-web vite default `5174`) and `scripts/dev-heroes-web.sh` (sources `apps/heroes-api/.env` before `bun --filter` strips the cwd-relative .env). Verified: `bun install --frozen-lockfile` clean (929/1031); `bun --filter '*' typecheck` green; `bun --filter` build green for all four services; `bun --filter @coms-portal/portal-api test` passes; `tofu fmt -check` + `tofu validate` clean. Trigger-side wiring (path-filtered `includedFiles`) lands in T17; until then the cloudbuild.yamls can be invoked manually via `gcloud builds submit --config apps/<service>/cloudbuild.yaml .`. Heroes' tofu split (`coms-aha-heroes-app` → `coms-heroes-api` + `coms-heroes-web`) is deliberately deferred — the cloudbuild.yamls target the contract-aligned names and a follow-up task will reshape `infra/heroes/` to match.
 
-- [ ] **T17: Update Cloud Build triggers with `includedFiles` filters**
+- [ ] **T16.5: Split `infra/heroes/` Cloud Run service into `coms-heroes-api` + `coms-heroes-web`**
   - **Prerequisites:** T16
+  - **Why:** T16 authored `apps/heroes-api/cloudbuild.yaml` and `apps/heroes-web/cloudbuild.yaml` that deploy to the contract-aligned names `coms-heroes-api` and `coms-heroes-web`, but `infra/heroes/main.tf` still declares the single combined `coms-aha-heroes-app` service. Without the split the heroes Cloud Build pipelines have no live target — and Checkpoint 3 ("per-service deploys verified independent") cannot be crossed.
+  - **Steps:**
+    - Mirror the shape of `infra/cloud-run.tf` (now two `google_cloud_run_v2_service` resources sharing the runtime SA + Cloud SQL proxy) inside `infra/heroes/main.tf` — declare `coms_heroes_api` and `coms_heroes_web` resources, fold shared env into a `locals` block.
+    - Update the heroes `monitoring` module (`infra/heroes/modules/monitoring/`) so the SLO/alert filters reference both new service names instead of `coms-aha-heroes-app`.
+    - Chase any cross-references: `infra/heroes/outputs.tf`, IAM bindings, scheduler/tasks if heroes uses them.
+    - Plan the state migration: `tofu state mv google_cloud_run_v2_service.coms_aha_heroes google_cloud_run_v2_service.coms_heroes_api` (preserves the API service in-place via rename — Cloud Run `name` change forces replace, so a destroy-then-create cycle is expected; coordinate with the user before applying).
+    - Decide whether heroes-web's SSR needs DATABASE_URL access in-process (same in-process auth pattern as portal-web) or stays JWT-only — defaults the env subset accordingly.
+  - **Acceptance:** `infra/heroes/` declares two services with names matching the cloudbuild yamls; `tofu fmt -check` + `tofu validate` clean inside `infra/heroes/`; monitoring resources reference the new names.
+  - **Verification:** `cd infra/heroes && tofu plan` shows the expected diff (replace `coms-aha-heroes-app`, create `coms-heroes-api` + `coms-heroes-web`); apply gated on user approval.
+
+- [ ] **T17: Update Cloud Build triggers with `includedFiles` filters**
+  - **Prerequisites:** T16, T16.5
   - **Filter shape per service:**
     - portal-api: `apps/portal-api/**`, `packages/**`, `package.json`, `bun.lock`
     - portal-web: `apps/portal-web/**`, `packages/**`, `package.json`, `bun.lock`
