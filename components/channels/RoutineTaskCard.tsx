@@ -140,9 +140,11 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
   // header so the hover affordance is obvious.
   const headerClickable = !!onOpenDetail;
   return (
-    // Thick left border in indigo is the "routine DNA" — instantly tells the
-    // eye this is a bot-spawned, recurring card vs. a one-off direct-assign.
-    <div className="mt-1 max-w-xl bg-white border border-slate-200 border-l-4 border-l-indigo-500 rounded-xl overflow-hidden shadow-sm">
+    // "Sticky note" reminder palette — soft amber tint + thick amber left
+    // border. Signals "warning/needs attention" without the visual fatigue
+    // of a saturated yellow. Routine tasks don't have hard deadlines, so
+    // the color is static rather than time-based.
+    <div className="mt-1 max-w-xl bg-amber-50/40 border border-amber-100 border-l-4 border-l-amber-500 rounded-xl overflow-hidden shadow-sm">
       <div
         onClick={headerClickable ? () => onOpenDetail!(taskId) : undefined}
         role={headerClickable ? 'button' : undefined}
@@ -153,17 +155,17 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
             onOpenDetail!(taskId);
           }
         } : undefined}
-        className={`px-4 py-3 bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-slate-100 flex items-center gap-2 ${
-          headerClickable ? 'cursor-pointer hover:from-indigo-100 hover:to-violet-100 transition-colors' : ''
+        className={`px-4 py-3 bg-gradient-to-r from-amber-100/70 to-orange-100/60 border-b border-amber-200/60 flex items-center gap-2 ${
+          headerClickable ? 'cursor-pointer hover:from-amber-100 hover:to-orange-100 transition-colors' : ''
         }`}
       >
-        <RotateCcw className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+        <RotateCcw className="w-4 h-4 text-amber-600 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="text-sm font-semibold text-slate-800 truncate">{title}</p>
             {/* "Routine DNA" — small subtle badge so the card is unmistakably
                 bot-spawned even when the type pill on the right wraps off. */}
-            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-indigo-700/80 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700/80 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
               <Sparkles className="w-2.5 h-2.5" /> Automated
             </span>
           </div>
@@ -172,8 +174,12 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
           )}
         </div>
         <span
-          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 flex-shrink-0 ${
-            type === 'TEAM' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
+          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 flex-shrink-0 border ${
+            // Both type badges live in the warm palette to match the sticky-
+            // note vibe; orange vs. amber keeps TEAM/INDIVIDUAL distinguishable.
+            type === 'TEAM'
+              ? 'bg-amber-200/70 text-amber-800 border-amber-300'
+              : 'bg-orange-100 text-orange-700 border-orange-200'
           }`}
         >
           {type === 'TEAM' ? <Users className="w-3 h-3" /> : <UserIcon className="w-3 h-3" />}
@@ -305,7 +311,7 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
                 </div>
                 <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all"
+                    className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
