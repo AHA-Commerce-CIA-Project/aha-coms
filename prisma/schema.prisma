@@ -89,6 +89,9 @@ model User {
   // the task's global status (Leaders still see it as Completed in Task Queue).
   archivedTasks UserArchivedTask[] @relation("UserArchivedTasks")
 
+  // Per-checklist-item claims (TEAM-type routine tasks)
+  claimedChecklistItems ChecklistItem[] @relation("ChecklistItemAssignee")
+
   // Workspace custom emojis the user has created.
   customEmojis CustomEmoji[] @relation("CustomEmojiCreator")
 
@@ -218,6 +221,13 @@ model Task {
   notes                 String?
   isRecurring           Boolean   @default(false) @map("is_recurring")
   recurrenceType        String?   @map("recurrence_type") @db.VarChar(20)
+  // Carried from the RoutineTaskTemplate when the cron spawns a Task instance.
+  // Null on non-routine tasks (queue/direct-request/etc.). Drives the card's
+  // claim flow: INDIVIDUAL → "Claim Task" button locks the card; TEAM →
+  // per-checklist-item claim, with overall progress from item completion.
+  type                  TemplateType?        @map("template_type")
+  routineTemplateId     String?              @map("routine_template_id")
+  routineTemplate       RoutineTaskTemplate? @relation("TaskFromRoutineTemplate", fields: [routineTemplateId], references: [id], onDelete: SetNull)
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   claimedAt             DateTime? @map("claimed_at") @db.Timestamptz(6)
   completedAt           DateTime? @map("completed_at") @db.Timestamptz(6)
@@ -285,9 +295,16 @@ model ChecklistItem {
   title       String
   isCompleted Boolean  @default(false) @map("is_completed")
   position    Int      @default(0)
+  // For TEAM-type Tasks the cron leaves items unassigned; users claim items
+  // individually from the channel card. For INDIVIDUAL-type Tasks this stays
+  // null — the whole-task assignee owns every item.
+  assigneeId  String?  @map("assignee_id")
+  assignee    User?    @relation("ChecklistItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  claimedAt   DateTime? @map("claimed_at") @db.Timestamptz(6)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([taskId])
+  @@index([assigneeId])
   @@map("checklist_item")
 }
 
@@ -503,6 +520,7 @@ model Channel {
   readStatuses      ChannelReadStatus[]
   members           ChannelMember[]
   directAssignTasks Task[]              @relation("DirectAssignChannel")
+  routineTemplates  RoutineTaskTemplate[] @relation("RoutineTemplateChannel")
 
   @@map("channels")
 }
@@ -669,27 +687,63 @@ model Note {
 // AHA ORBIT - ROUTINE TASK MANAGEMENT
 // ==========================================
 
-model RoutineTaskTemplate {
-  id           String   @id @default(uuid())
-  name         String   @db.VarChar(255)
-  description  String?
-  frequency    String   @db.VarChar(20) // 'daily', 'weekly', 'monthly'
-  category     String?  @db.VarChar(100)
-  deadlineTime String?  @map("deadline_time") @db.VarChar(5) // HH:MM format, e.g. "17:00"
-  deadlineDay  Int?     @map("deadline_day") // For weekly: 1=Mon..7=Sun, for monthly: 1-31
-  teamId       String?  @map("team_id")
-  team         Team?    @relation("TeamRoutineTemplates", fields: [teamId], references: [id], onDelete: SetNull)
-  teamIds      Json     @default("[]") @map("team_ids") // Array of team IDs for multi-team visibility
-  isTeamWide   Boolean  @default(false) @map("is_team_wide") // All team members must individually complete
-  isActive     Boolean  @default(true) @map("is_active")
-  createdBy    String   @map("created_by")
-  creator      User     @relation("RoutineTemplateCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+// Drives how generated Task instances are claimed.
+//   INDIVIDUAL — one user claims the whole Task; the card locks to them.
+//   TEAM       — checklist items are claimed individually; the Task auto-
+//                completes when every item is done.
+// Default INDIVIDUAL keeps existing rows unchanged on migration.
+enum TemplateType {
+  INDIVIDUAL
+  TEAM
 
-  claims RoutineTaskClaim[]
+  @@map("template_type")
+}
+
+model RoutineTaskTemplate {
+  id           String       @id @default(uuid())
+  name         String       @db.VarChar(255)
+  description  String?
+  frequency    String       @db.VarChar(20) // 'daily', 'weekly', 'monthly'
+  category     String?      @db.VarChar(100)
+  // INDIVIDUAL vs TEAM. The legacy `isTeamWide` flag is kept for back-compat
+  // with existing rows/queries; new code should read `type`.
+  type         TemplateType @default(INDIVIDUAL)
+  deadlineTime String?      @map("deadline_time") @db.VarChar(5) // HH:MM format, e.g. "17:00"
+  deadlineDay  Int?         @map("deadline_day") // For weekly: 1=Mon..7=Sun, for monthly: 1-31
+  // Channel the bot posts the generated Task card into. Null = no channel
+  // (template still appears on /orbit but the bot won't post a reminder).
+  channelId    String?      @map("channel_id")
+  channel      Channel?     @relation("RoutineTemplateChannel", fields: [channelId], references: [id], onDelete: SetNull)
+  teamId       String?      @map("team_id")
+  team         Team?        @relation("TeamRoutineTemplates", fields: [teamId], references: [id], onDelete: SetNull)
+  teamIds      Json         @default("[]") @map("team_ids") // Array of team IDs for multi-team visibility
+  isTeamWide   Boolean      @default(false) @map("is_team_wide") // DEPRECATED — superseded by `type`. Kept so existing reads don't break.
+  isActive     Boolean      @default(true) @map("is_active")
+  createdBy    String       @map("created_by")
+  creator      User         @relation("RoutineTemplateCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  claims         RoutineTaskClaim[]
+  checklistItems TemplateChecklistItem[]
+  spawnedTasks   Task[]                  @relation("TaskFromRoutineTemplate")
 
   @@map("routine_task_templates")
+}
+
+// Per-template claimable items used when the template's type is TEAM. The
+// cron job copies these into the spawned Task's ChecklistItem rows so the
+// generated card has the same line items every period.
+model TemplateChecklistItem {
+  id         String              @id @default(uuid())
+  templateId String              @map("template_id")
+  template   RoutineTaskTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title      String
+  position   Int                 @default(0)
+  createdAt  DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([templateId])
+  @@map("template_checklist_items")
 }
 
 model RoutineTaskClaim {

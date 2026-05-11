@@ -8,23 +8,20 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Get current user's team to filter templates
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { teamId: true, role: true },
   });
 
-  // Build where clause: show templates for user's team OR templates with no team
-  // Master/admin sees all templates
-  // Note: teamIds is a JSON array. For visibility:
-  // - Templates with no teams (teamIds=[] AND teamId=null) → visible to all
-  // - Templates with teamIds containing user's team → visible
-  // - Templates with teamId matching user's team → visible (legacy)
+  // Visibility: empty teamIds + no teamId → all teams; otherwise must include user's team.
+  // Master/admin always sees everything.
   const allTemplates = await prisma.routineTaskTemplate.findMany({
     where: { isActive: true },
     include: {
       creator: { select: { id: true, name: true } },
       team: { select: { id: true, name: true } },
+      channel: { select: { id: true, name: true } },
+      checklistItems: { orderBy: { position: 'asc' } },
     },
     orderBy: [{ frequency: 'asc' }, { name: 'asc' }],
   });
@@ -35,7 +32,7 @@ export async function GET() {
 
   const filtered = allTemplates.filter(t => {
     const ids = Array.isArray(t.teamIds) ? t.teamIds as string[] : [];
-    if (ids.length === 0 && !t.teamId) return true; // visible to all
+    if (ids.length === 0 && !t.teamId) return true;
     if (user?.teamId && ids.includes(user.teamId)) return true;
     if (user?.teamId && t.teamId === user.teamId) return true;
     return false;
@@ -54,10 +51,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Only leaders can create routine tasks' }, { status: 403 });
   }
 
-  const { name, description, frequency, category, deadlineTime, deadlineDay, teamId, teamIds, isTeamWide } = await request.json();
+  const {
+    name,
+    description,
+    frequency,
+    category,
+    type,
+    channelId,
+    deadlineTime,
+    deadlineDay,
+    teamId,
+    teamIds,
+    isTeamWide,
+    checklistItems,
+  } = await request.json();
 
   if (!name?.trim() || !['daily', 'weekly', 'monthly'].includes(frequency)) {
     return NextResponse.json({ error: 'Name and valid frequency required' }, { status: 400 });
+  }
+
+  const templateType = type === 'TEAM' ? 'TEAM' : 'INDIVIDUAL';
+  const items: { title: string; position: number }[] = Array.isArray(checklistItems)
+    ? checklistItems
+        .map((it: any, idx: number) => ({ title: String(it?.title ?? '').trim(), position: idx }))
+        .filter((it) => it.title.length > 0)
+    : [];
+
+  if (templateType === 'TEAM' && items.length === 0) {
+    return NextResponse.json(
+      { error: 'TEAM templates need at least one checklist item — these are what members claim.' },
+      { status: 400 },
+    );
   }
 
   const template = await prisma.routineTaskTemplate.create({
@@ -66,16 +90,21 @@ export async function POST(request: Request) {
       description: description?.trim() || null,
       frequency,
       category: category?.trim() || null,
+      type: templateType,
+      channelId: channelId || null,
       deadlineTime: deadlineTime || null,
       deadlineDay: deadlineDay ? parseInt(deadlineDay) : null,
       teamId: (teamIds && teamIds.length > 0) ? teamIds[0] : (teamId || null),
       teamIds: teamIds && teamIds.length > 0 ? teamIds : [],
       isTeamWide: !!isTeamWide,
       createdBy: session.user.id,
+      checklistItems: items.length > 0 ? { create: items } : undefined,
     },
     include: {
       creator: { select: { id: true, name: true } },
       team: { select: { id: true, name: true } },
+      channel: { select: { id: true, name: true } },
+      checklistItems: { orderBy: { position: 'asc' } },
     },
   });
 
