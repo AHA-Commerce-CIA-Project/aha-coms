@@ -20,6 +20,7 @@ interface Template {
   channelId?: string | null;
   channel?: { id: string; name: string } | null;
   mentionTarget?: string | null;
+  referenceUrls?: string[];
   checklistItems?: { id: string; title: string; position: number }[];
   isActive: boolean;
   creator: { id: string; name: string };
@@ -99,6 +100,7 @@ export default function ManageOrbitPage() {
       type: t.type ?? ((t as any).isTeamWide ? 'TEAM' : 'INDIVIDUAL'),
       channelId: t.channelId,
       mentionTarget: t.mentionTarget,
+      referenceUrls: t.referenceUrls ?? [],
       checklistItems: t.checklistItems,
       deadlineTime: (t as any).deadlineTime ?? null,
       deadlineDay: (t as any).deadlineDay ?? null,

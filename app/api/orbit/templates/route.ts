@@ -11,9 +11,10 @@ function normalizeMentionTarget(value: unknown): string | null {
   return v;
 }
 
-// Accept absolute http(s) URLs only — keeps card rendering simple (no
-// resolving relative paths) and blocks `javascript:`/`data:` schemes.
-function normalizeReferenceUrl(value: unknown): string | null {
+// Accept absolute http(s) URLs only — keeps card rendering simple and blocks
+// `javascript:`/`data:` schemes. Returns null when invalid so callers can
+// drop bad entries from an array cleanly.
+function sanitizeUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const v = value.trim();
   if (!v) return null;
@@ -24,6 +25,20 @@ function normalizeReferenceUrl(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function normalizeReferenceUrls(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value) {
+    const clean = sanitizeUrl(raw);
+    if (clean && !seen.has(clean)) {
+      seen.add(clean);
+      out.push(clean);
+    }
+  }
+  return out;
 }
 
 export async function GET() {
@@ -83,7 +98,7 @@ export async function POST(request: Request) {
     type,
     channelId,
     mentionTarget,
-    referenceUrl,
+    referenceUrls,
     deadlineTime,
     deadlineDay,
     teamId,
@@ -119,7 +134,7 @@ export async function POST(request: Request) {
       type: templateType,
       channelId: channelId || null,
       mentionTarget: normalizeMentionTarget(mentionTarget),
-      referenceUrl: normalizeReferenceUrl(referenceUrl),
+      referenceUrls: normalizeReferenceUrls(referenceUrls),
       deadlineTime: deadlineTime || null,
       deadlineDay: deadlineDay ? parseInt(deadlineDay) : null,
       teamId: (teamIds && teamIds.length > 0) ? teamIds[0] : (teamId || null),

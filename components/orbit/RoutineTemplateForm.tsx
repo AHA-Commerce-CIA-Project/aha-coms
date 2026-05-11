@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { User as UserIcon, Users, Hash, GripVertical, Plus, Trash2, AtSign, BellOff, Megaphone, Search, Check } from 'lucide-react';
+import { User as UserIcon, Users, Hash, GripVertical, Plus, Trash2, AtSign, BellOff, Megaphone, Search, Check, ExternalLink, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type TemplateType = 'INDIVIDUAL' | 'TEAM';
@@ -24,7 +24,7 @@ export interface RoutineTemplateFormInitial {
   type?: TemplateType;
   channelId?: string | null;
   mentionTarget?: string | null;
-  referenceUrl?: string | null;
+  referenceUrls?: string[];
   checklistItems?: { id: string; title: string; position: number }[];
   deadlineTime?: string | null;
   deadlineDay?: number | null;
@@ -81,7 +81,9 @@ export function RoutineTemplateForm({
   );
   const [deadlineTime, setDeadlineTime] = useState(initial?.deadlineTime ?? '');
   const [deadlineDay, setDeadlineDay] = useState(initial?.deadlineDay?.toString() ?? '');
-  const [referenceUrl, setReferenceUrl] = useState(initial?.referenceUrl ?? '');
+  const [referenceUrls, setReferenceUrls] = useState<string[]>(initial?.referenceUrls ?? []);
+  const [pendingUrl, setPendingUrl] = useState('');
+  const [pendingUrlError, setPendingUrlError] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -93,6 +95,29 @@ export function RoutineTemplateForm({
       setChannelId(defaultChannelId);
     }
   }, [defaultChannelId, editId, channelId]);
+
+  const addReferenceUrl = () => {
+    const raw = pendingUrl.trim();
+    if (!raw) return;
+    // Mild client-side gate so the chip list never holds garbage; the server
+    // re-validates so this is just UX, not security.
+    let normalized: string;
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error();
+      normalized = u.toString();
+    } catch {
+      setPendingUrlError('Enter a valid http:// or https:// URL.');
+      return;
+    }
+    if (referenceUrls.includes(normalized)) {
+      setPendingUrlError('That link is already in the list.');
+      return;
+    }
+    setReferenceUrls((prev) => [...prev, normalized]);
+    setPendingUrl('');
+    setPendingUrlError('');
+  };
 
   const updateChecklistTitle = (idx: number, title: string) => {
     setChecklist((prev) => prev.map((it, i) => (i === idx ? { ...it, title } : it)));
@@ -144,7 +169,7 @@ export function RoutineTemplateForm({
           type,
           channelId: channelId || null,
           mentionTarget,
-          referenceUrl: referenceUrl || null,
+          referenceUrls,
           deadlineTime,
           deadlineDay,
           checklistItems: cleaned,
@@ -205,22 +230,70 @@ export function RoutineTemplateForm({
         />
       </div>
 
-      {/* Reference Link — usually a Google Sheet / Notion doc. Copied onto
-          every spawned Task so the channel card can offer a one-click
-          "Open Reference" button. Optional; server-side normalizer rejects
-          anything that isn't http(s). */}
+      {/* Reference Links — typically Google Sheets / Notion docs. Dynamic
+          list: type a URL, click Add (or press Enter), it lands as a chip.
+          x removes. The server-side normalizer dedupes + rejects non-http(s)
+          so it's safe to be permissive here. */}
       <div>
-        <label className="text-sm font-medium text-slate-600">Reference Link (URL)</label>
-        <input
-          type="url"
-          value={referenceUrl}
-          onChange={(e) => setReferenceUrl(e.target.value)}
-          placeholder="https://docs.google.com/spreadsheets/d/..."
-          className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-        />
-        <p className="text-[11px] text-slate-400 mt-1">
-          Optional — surfaces as a clickable button on the bot's channel card.
-        </p>
+        <label className="text-sm font-medium text-slate-600">Reference Links</label>
+        <div className="mt-1 flex items-stretch gap-2">
+          <input
+            type="url"
+            value={pendingUrl}
+            onChange={(e) => { setPendingUrl(e.target.value); if (pendingUrlError) setPendingUrlError(''); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addReferenceUrl();
+              }
+            }}
+            placeholder="https://docs.google.com/spreadsheets/d/..."
+            className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+          />
+          <button
+            type="button"
+            onClick={addReferenceUrl}
+            disabled={!pendingUrl.trim()}
+            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white text-sm font-semibold rounded-xl transition-colors flex-shrink-0"
+          >
+            Add
+          </button>
+        </div>
+        {pendingUrlError && (
+          <p className="text-[11px] text-rose-600 mt-1">{pendingUrlError}</p>
+        )}
+        {referenceUrls.length > 0 ? (
+          <div className="mt-2 space-y-1.5">
+            {referenceUrls.map((url, idx) => {
+              const host = (() => {
+                try { return new URL(url).hostname.replace(/^www\./, ''); }
+                catch { return url; }
+              })();
+              return (
+                <div
+                  key={`${url}-${idx}`}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 group"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                  <span className="text-xs font-medium text-slate-700 truncate flex-1" title={url}>{host}</span>
+                  <span className="text-[10px] text-slate-400 truncate hidden sm:block max-w-[280px]" title={url}>{url}</span>
+                  <button
+                    type="button"
+                    onClick={() => setReferenceUrls((prev) => prev.filter((_, i) => i !== idx))}
+                    className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                    title="Remove link"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-[11px] text-slate-400 mt-1">
+            Optional — each link becomes a clickable button on the bot's card.
+          </p>
+        )}
       </div>
 
       <div>

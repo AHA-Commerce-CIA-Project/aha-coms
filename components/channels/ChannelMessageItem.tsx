@@ -8,6 +8,7 @@ import { MentionTextarea } from './MentionTextarea';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { DirectAssignCard } from './DirectAssignCard';
 import { RoutineTaskCard } from './RoutineTaskCard';
+import { RoutineTaskDetailModal } from './RoutineTaskDetailModal';
 import { TeamMembersPopover } from './TeamMembersPopover';
 import { useCustomEmojiMap } from '@/lib/customEmojis';
 import { renderShortcodes } from '@/lib/renderShortcodes';
@@ -273,6 +274,10 @@ export function ChannelMessageItem({
   const [teamPopoverId, setTeamPopoverId] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Set when the user clicks a routine card → opens RoutineTaskDetailModal.
+  // null when closed. Lives on each ChannelMessageItem instance so multiple
+  // cards in the feed can each open their own detail without colliding.
+  const [routineDetailTaskId, setRoutineDetailTaskId] = useState<string | null>(null);
   const setProfileUser = useAppStore((s) => s.setProfileUser);
   const isOwner = message.senderId === currentUserId;
   const customEmojiMap = useCustomEmojiMap();
@@ -491,32 +496,35 @@ export function ChannelMessageItem({
                   const taskId = routineMatch[1].trim();
                   const rest = message.content.replace(/<!--routine_task:[^\s>]+?-->/, '').trim();
                   const lines = rest.split('\n');
-                  // First line = the bot's "greeting" — carries the @mention
-                  // prefix + ⏰ title. Rendered above the card so the message
-                  // reads like a normal Slack bot post (text on top, rich
-                  // attachment below). renderContent() handles @-mention
-                  // pill styling automatically so @channel / @First.Last
-                  // pick up the same indigo background as human mentions.
+                  // First line = the bot's "greeting": "⏰ @mention Name ~ freq".
+                  // Rendered as a Slack-style notification line above the rich
+                  // card. We tokenize and render @mentions as beefier indigo
+                  // pills (heavier than the inline-chat style) so they read
+                  // as system mentions rather than casual ones.
                   const greetingLine = (lines[0] || '').trim();
-                  // Title for the card header strips the ⏰ + frequency suffix
-                  // so the inner card has a clean name.
+                  // Strip the leading ⏰, leading mention (if any), and trailing
+                  // "~ frequency" so the card title is clean.
                   const titleLine = greetingLine
-                    .replace(/^@\S+\s+/, '')           // strip leading mention if present
-                    .replace(/^⏰\s*/, '')              // strip leading clock emoji
-                    .replace(/\s*~\s*\w+\s*$/, '')     // strip trailing "~ frequency"
+                    .replace(/^⏰\s*/, '')
+                    .replace(/^@\S+\s+/, '')
+                    .replace(/\s*~\s*\w+\s*$/, '')
                     .trim();
                   const bodyPreview = lines.slice(1).join('\n').trim();
                   return (
                     <>
                       {greetingLine && (
-                        <p className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed mb-1">
-                          {renderContent(
-                            greetingLine,
-                            allUsers,
-                            handleMentionClick,
-                            allTeams,
-                            (teamId) => setTeamPopoverId(teamId),
-                            customEmojiMap,
+                        <p className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed mb-1.5">
+                          {greetingLine.split(/(@[\w.-]+)/g).map((part, i) =>
+                            part.startsWith('@') ? (
+                              <span
+                                key={i}
+                                className="inline-block bg-indigo-100 text-indigo-700 font-semibold px-1.5 py-0.5 rounded mx-0.5"
+                              >
+                                {part}
+                              </span>
+                            ) : (
+                              <span key={i}>{part}</span>
+                            ),
                           )}
                         </p>
                       )}
@@ -525,6 +533,7 @@ export function ChannelMessageItem({
                         previewTitle={titleLine || '(routine task)'}
                         previewBody={bodyPreview}
                         currentUserId={currentUserId}
+                        onOpenDetail={(id) => setRoutineDetailTaskId(id)}
                       />
                     </>
                   );
@@ -876,6 +885,14 @@ export function ChannelMessageItem({
 
       {/* Lightbox — closes on ESC (document-level listener) and backdrop click */}
       <ImageLightbox src={lightboxUrl} images={lightboxGallery} onClose={() => setLightboxUrl(null)} />
+
+      {/* Routine task detail — opens when the user clicks a routine card header. */}
+      <RoutineTaskDetailModal
+        open={!!routineDetailTaskId}
+        taskId={routineDetailTaskId}
+        currentUserId={currentUserId}
+        onClose={() => setRoutineDetailTaskId(null)}
+      />
 
       <DeleteMessageModal
         open={deleteOpen}

@@ -129,7 +129,9 @@ async function resolveMention(
   return { prefix: `@${handle} `, mentionedUserIds: [user.id] };
 }
 
-/** Build the channel-message body the bot posts. Keep terse — the card UI carries the action. */
+/** Build the channel-message body the bot posts. Keep terse — the card UI
+ *  carries the action. Format: ⏰ leads as a visual anchor, then the
+ *  @mention (if any), then the template name and frequency. */
 function renderBotMessage(
   template: { name: string; description: string | null; frequency: string },
   taskId: string,
@@ -137,7 +139,7 @@ function renderBotMessage(
 ): string {
   const lines = [
     `<!--routine_task:${taskId}-->`,
-    `${mentionPrefix}⏰ ${template.name} ~ ${template.frequency}`,
+    `⏰ ${mentionPrefix}${template.name} ~ ${template.frequency}`,
   ];
   if (template.description?.trim()) lines.push(template.description.trim());
   return lines.join('\n');
@@ -210,7 +212,7 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
           priority: 'medium',
           type: templateType,
           routineTemplateId: template.id,
-          referenceUrl: template.referenceUrl,
+          referenceUrls: template.referenceUrls,
           source: 'direct_assign',
           targetChannelId: template.channelId,
           assignedTeamId: template.teamId ?? null,

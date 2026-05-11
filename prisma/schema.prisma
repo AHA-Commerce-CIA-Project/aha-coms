@@ -228,10 +228,10 @@ model Task {
   type                  TemplateType?        @map("template_type")
   routineTemplateId     String?              @map("routine_template_id")
   routineTemplate       RoutineTaskTemplate? @relation("TaskFromRoutineTemplate", fields: [routineTemplateId], references: [id], onDelete: SetNull)
-  // Copied from the source RoutineTaskTemplate at spawn time so the card can
-  // render a "🔗 Open Reference" affordance without having to round-trip
-  // through the template row.
-  referenceUrl          String?              @map("reference_url")
+  // Copied from the source RoutineTaskTemplate at spawn time so the card +
+  // detail modal can render reference buttons without re-joining to the
+  // template. Empty array = no links.
+  referenceUrls         String[]             @default([]) @map("reference_urls")
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   claimedAt             DateTime? @map("claimed_at") @db.Timestamptz(6)
   completedAt           DateTime? @map("completed_at") @db.Timestamptz(6)
@@ -726,10 +726,11 @@ model RoutineTaskTemplate {
   // Resolved at spawn time so a deleted/renamed user simply degrades to no
   // prefix rather than crashing the scheduler.
   mentionTarget String?     @map("mention_target")
-  // Optional reference document (usually a Google Sheet / Notion doc) that
-  // operators need to open to complete the routine. Copied onto each spawned
-  // Task so the channel card can render a one-click "Open Reference" button.
-  referenceUrl  String?     @map("reference_url")
+  // Reference documents (usually Google Sheets / Notion docs) operators need
+  // to open to do the routine. Copied onto each spawned Task so the channel
+  // card can render clickable buttons without re-joining to the template.
+  // Empty array = no links; UI hides the section.
+  referenceUrls String[]    @default([]) @map("reference_urls")
   teamId       String?      @map("team_id")
   team         Team?        @relation("TeamRoutineTemplates", fields: [teamId], references: [id], onDelete: SetNull)
   teamIds      Json         @default("[]") @map("team_ids") // Array of team IDs for multi-team visibility

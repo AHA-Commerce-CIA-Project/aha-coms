@@ -9,7 +9,7 @@ function normalizeMentionTarget(value: unknown): string | null {
   return v;
 }
 
-function normalizeReferenceUrl(value: unknown): string | null {
+function sanitizeUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const v = value.trim();
   if (!v) return null;
@@ -20,6 +20,20 @@ function normalizeReferenceUrl(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function normalizeReferenceUrls(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value) {
+    const clean = sanitizeUrl(raw);
+    if (clean && !seen.has(clean)) {
+      seen.add(clean);
+      out.push(clean);
+    }
+  }
+  return out;
 }
 
 export async function PUT(
@@ -41,7 +55,7 @@ export async function PUT(
     type,
     channelId,
     mentionTarget,
-    referenceUrl,
+    referenceUrls,
     deadlineTime,
     deadlineDay,
     teamId,
@@ -87,7 +101,7 @@ export async function PUT(
         ...(type ? { type: type === 'TEAM' ? 'TEAM' : 'INDIVIDUAL' } : {}),
         ...(channelId !== undefined ? { channelId: channelId || null } : {}),
         ...(mentionTarget !== undefined ? { mentionTarget: normalizeMentionTarget(mentionTarget) } : {}),
-        ...(referenceUrl !== undefined ? { referenceUrl: normalizeReferenceUrl(referenceUrl) } : {}),
+        ...(referenceUrls !== undefined ? { referenceUrls: normalizeReferenceUrls(referenceUrls) } : {}),
         ...(deadlineTime !== undefined ? { deadlineTime: deadlineTime || null } : {}),
         ...(deadlineDay !== undefined ? { deadlineDay: deadlineDay ? parseInt(deadlineDay) : null } : {}),
         ...(teamIds !== undefined
