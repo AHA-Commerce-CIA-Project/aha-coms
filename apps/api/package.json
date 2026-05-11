@@ -22,7 +22,9 @@
     "db:seed-admin": "bun scripts/seed-admin.ts",
     "db:studio": "drizzle-kit studio",
     "spec07:register-fast": "bun scripts/spec07-register-fast.ts",
-    "spec07:provision-fast-orphans": "bun scripts/spec07-provision-fast-orphans.ts"
+    "spec07:provision-fast-orphans": "bun scripts/spec07-provision-fast-orphans.ts",
+    "register:heroes": "bun scripts/register-heroes.ts",
+    "bootstrap:heroes-membership": "bun scripts/bootstrap-heroes-membership.ts"
   },
   "dependencies": {
     "@coms-portal/sdk": "workspace:*",
