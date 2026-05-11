@@ -213,17 +213,17 @@ function MessagesWorkspace() {
     const showIndexOnMobile = !isChannelMode && !isDmMode && !isLaterMode;
 
     return (
-        // Slack-style full-bleed workspace on desktop: negate AppShell's px-6 + pb-6 so
-        // the white pane runs flush to the viewport edges. Mobile keeps the BottomNav
-        // reservation so the composer doesn't slide under the nav.
-        <div className="flex flex-col -mx-3 sm:-mx-6 md:-mb-6 h-[calc(100vh-160px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-112px)] bg-white overflow-hidden">
-            {/* Workspace tab toggle — Messages | Later on the left; the active
-                channel's header (name, members, search, kebab) is rendered on
-                the right when ChannelPane has published one. Merging the two
-                rows into one reclaims the vertical band the old standalone
-                ChannelHeader used to consume. */}
-            <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 flex-shrink-0 min-h-[52px]">
-                <div className="flex items-center gap-1 flex-shrink-0">
+        // Slack-style 2-column workspace: the unified top bar is gone — instead each
+        // column is a self-contained flex column with its own header at the top.
+        // Negate AppShell's px-6 + pb-6 so the white pane runs flush to the viewport
+        // edges. Mobile keeps the BottomNav reservation so the composer doesn't slide
+        // under the nav.
+        <div className="flex -mx-3 sm:-mx-6 md:-mb-6 h-[calc(100vh-160px-env(safe-area-inset-bottom,0px))] md:h-[calc(100vh-112px)] bg-white overflow-hidden">
+            {/* LEFT COLUMN — sidebar. Full-height flex column: its own header
+                (Messages | Later tabs) sits at the top, then the search bar and
+                channel/DM list (or Later sub-nav) fill the rest. */}
+            <div className={`${showIndexOnMobile ? 'flex' : 'hidden md:flex'} w-full md:w-[280px] flex-shrink-0 flex-col min-h-0 border-r border-slate-100`}>
+                <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-100 flex-shrink-0 min-h-[52px]">
                     <TopTabButton
                         active={!isLaterMode}
                         icon={MessageCircle}
@@ -237,15 +237,7 @@ function MessagesWorkspace() {
                         onClick={() => router.push('/messages?later=messages')}
                     />
                 </div>
-                {isChannelMode && chatHeader && !isLaterMode && (
-                    <div className="flex-1 min-w-0 hidden md:block">
-                        <ChannelHeader {...chatHeader} />
-                    </div>
-                )}
-            </div>
-
-            <div className="flex flex-1 min-h-0 overflow-hidden">
-                <div className={`${showIndexOnMobile ? 'flex' : 'hidden md:flex'} w-full md:w-[280px] flex-shrink-0 flex-col min-h-0`}>
+                <div className="flex-1 min-h-0 flex flex-col">
                     {isLaterMode && laterTab ? (
                         <LaterIndex
                             activeTab={laterTab}
@@ -266,53 +258,65 @@ function MessagesWorkspace() {
                         />
                     )}
                 </div>
+            </div>
 
-                <div className={`${showIndexOnMobile ? 'hidden md:flex' : 'flex'} flex-1 min-w-0 min-h-0 flex-col`}>
-                    {/* Mobile back-button row — visible only when a conversation/Later sub-view is active. */}
+            {/* RIGHT COLUMN — main chat area. Full-height flex column: dedicated
+                ChatHeader at the top (channel name on the left, member count +
+                actions on the right) then the chat feed + composer below. */}
+            <div className={`${showIndexOnMobile ? 'hidden md:flex' : 'flex'} flex-1 min-w-0 min-h-0 flex-col`}>
+                <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100 flex-shrink-0 min-h-[52px]">
+                    {/* Mobile-only back arrow returns to the sidebar/index. */}
                     {(isChannelMode || isDmMode || isLaterMode) && (
-                        <div className="md:hidden flex items-center px-3 py-2 border-b border-slate-100">
-                            <button
-                                onClick={() => router.push(isLaterMode ? '/messages?later=messages' : '/messages')}
-                                className="flex items-center gap-1 text-sm text-indigo-600 font-medium"
-                            >
-                                <ChevronLeft className="w-4 h-4" /> Back
-                            </button>
+                        <button
+                            onClick={() => router.push(isLaterMode ? '/messages?later=messages' : '/messages')}
+                            className="md:hidden flex items-center gap-1 text-sm text-indigo-600 font-medium mr-1"
+                        >
+                            <ChevronLeft className="w-4 h-4" /> Back
+                        </button>
+                    )}
+                    {isChannelMode && chatHeader ? (
+                        <div className="flex-1 min-w-0">
+                            <ChannelHeader {...chatHeader} />
+                        </div>
+                    ) : (
+                        <div className="flex-1 min-w-0 text-sm text-slate-400">
+                            {isLaterMode ? 'Later' : isDmMode ? 'Direct message' : ''}
                         </div>
                     )}
-
-                    {/* ChannelPane and DmPane stay MOUNTED across mode switches so
-                        switching from a channel to a DM (or vice-versa) doesn't
-                        unmount → tear down SSE → remount → reconnect. We toggle
-                        visibility via CSS, and each pane's own SSE/effect logic
-                        only does work when its URL params actually point at it
-                        (selectedChannel / selected DM). LaterPane and the empty
-                        state are still mounted on demand — they're cheap and
-                        rarely toggled. */}
-                    <div className={cn('flex-1 min-h-0', isChannelMode ? 'flex' : 'hidden')}>
-                        <ChannelPane />
-                    </div>
-                    <div className={cn('flex-1 min-h-0', isDmMode ? 'flex' : 'hidden')}>
-                        <DmPane />
-                    </div>
-                    {isLaterMode && laterTab && (
-                        <LaterPane
-                            tabOverride={laterTab}
-                            onTabChange={(t) => router.replace(`/messages?later=${t}`)}
-                        />
-                    )}
-                    {!isChannelMode && !isDmMode && !isLaterMode && <EmptyState />}
                 </div>
 
-                <CreateChannelModal
-                    open={showCreateChannel}
-                    onClose={() => setShowCreateChannel(false)}
-                    onCreated={() => {
-                        fetchChannels();
-                        setShowCreateChannel(false);
-                    }}
-                    purpose="discussion"
-                />
+                {/* ChannelPane and DmPane stay MOUNTED across mode switches so
+                    switching from a channel to a DM (or vice-versa) doesn't
+                    unmount → tear down SSE → remount → reconnect. We toggle
+                    visibility via CSS, and each pane's own SSE/effect logic
+                    only does work when its URL params actually point at it
+                    (selectedChannel / selected DM). LaterPane and the empty
+                    state are still mounted on demand — they're cheap and
+                    rarely toggled. */}
+                <div className={cn('flex-1 min-h-0', isChannelMode ? 'flex' : 'hidden')}>
+                    <ChannelPane />
+                </div>
+                <div className={cn('flex-1 min-h-0', isDmMode ? 'flex' : 'hidden')}>
+                    <DmPane />
+                </div>
+                {isLaterMode && laterTab && (
+                    <LaterPane
+                        tabOverride={laterTab}
+                        onTabChange={(t) => router.replace(`/messages?later=${t}`)}
+                    />
+                )}
+                {!isChannelMode && !isDmMode && !isLaterMode && <EmptyState />}
             </div>
+
+            <CreateChannelModal
+                open={showCreateChannel}
+                onClose={() => setShowCreateChannel(false)}
+                onCreated={() => {
+                    fetchChannels();
+                    setShowCreateChannel(false);
+                }}
+                purpose="discussion"
+            />
         </div>
     );
 }
