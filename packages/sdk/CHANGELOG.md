@@ -1,0 +1,273 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.3.0] - 2026-05-07
+
+Additive: new `runSmoketest` programmatic API and `coms-portal-cli smoketest <slug>` verb (Rev 4 Spec 06 PR B).
+
+`runSmoketest({ portalUrl, appSlug, getIdToken })` exercises the integration end-to-end and returns a structured per-step result:
+
+- **Step 1 — Registry check.** POST `<portalUrl>/api/v1/apps/<slug>/smoketest` (OIDC-authed, audience = `portalUrl`). Confirms the app is registered and active; returns the registry summary (`{ id, slug, name, url, status, handoffMode }`) plus per-endpoint webhook dispatch results in one call.
+- **Step 2 — App URL reachable.** GET `<app.url><healthPath>` (default `/`, override via `healthPath` option). Default 5s timeout. 2xx → step passes.
+- **Step 3 — Webhook delivery.** Pass-through of the portal's per-endpoint dispatch results. The portal already synthesised an `app.smoketest` envelope and sent it to every active endpoint; receivers are expected to ack 2xx without business processing.
+
+The CLI verb wraps `runSmoketest` and renders a three-step report:
+
+```
+[1/3] Registry check     → app registered, status=active, handoff_mode=one_time_code
+[2/3] App URL reachable  → GET https://your-app.example/
+                            ✓ 200 OK (134ms)
+[3/3] Webhook delivery   → POST <portal>/api/v1/apps/<slug>/smoketest
+                            ✓ endpoint=https://your-app.example/webhook  status=200  latency=87ms
+
+Smoketest OK.
+```
+
+Exit codes mirror `register-manifest`: 0 success; 1 auth failure (401/403); 2 validation (slug not registered, missing args); 3 network/portal (5xx, app URL unreachable, webhook endpoint failure). Same auth resolution: `COMS_PORTAL_CLI_OIDC_TOKEN` (production CD) → `COMS_PORTAL_CLI_TEST_TOKEN` (tests) → ADC (Cloud Run / GCB / GCE / local).
+
+Pure additive — v1.2.x consumers are unaffected. Requires the portal to expose `POST /api/v1/apps/:slug/smoketest`, which landed in `mrdoorba/coms_portal` commit `fa78164` (Rev 4 Spec 06 PR A).
+
+## [1.2.0] - 2026-05-07
+
+Additive: `coms-portal-cli register-manifest` now accepts a pre-minted OIDC ID token via `COMS_PORTAL_CLI_OIDC_TOKEN`.
+
+When set, the CLI uses the env var's value as the `Authorization: Bearer …` header verbatim and does not invoke `google-auth-library`. Necessary for CD environments that mint ID tokens externally — particularly Workload Identity Federation with service-account impersonation, where `GoogleAuth.getIdTokenClient` cannot mint local ID tokens through the impersonation chain and fails with "Cannot fetch ID token in this environment". The canonical CD pattern with `google-github-actions/auth` is now:
+
+```yaml
+- uses: google-github-actions/auth@v3
+  id: auth
+  with:
+    workload_identity_provider: ...
+    service_account: <runtime-sa>@...
+    token_format: 'id_token'
+    id_token_audience: '<portal-url>'
+    id_token_include_email: true
+- run: bun x coms-portal-cli register-manifest --portal-url ... --app-slug ... --manifest ...
+  env:
+    COMS_PORTAL_CLI_OIDC_TOKEN: ${{ steps.auth.outputs.id_token }}
+```
+
+The existing ADC path (`new GoogleAuth().getIdTokenClient(audience)`) remains the default when `COMS_PORTAL_CLI_OIDC_TOKEN` is absent — works on Cloud Run / GCB / GCE / local `gcloud auth application-default login`. The test-only `COMS_PORTAL_CLI_TEST_TOKEN` env var is unchanged and takes precedence over both for unit tests.
+
+No surface change beyond the new env var. v1.1.x consumers are unaffected.
+
+## [1.1.1] - 2026-05-07
+
+Bugfix: unblock browser-bundle consumers (Heroes' SvelteKit `(authed)/+layout.svelte`).
+
+The v1.1.0 top-level re-export of `APP_LAUNCHER` is correct for server-side
+consumers but tripped Vite/Rollup tree-shaking when imported from a
+browser entry: even with `"sideEffects": false` declared, the barrel's
+sibling re-exports from `webhook.ts` (`node:crypto`) and `manifest.ts`
+(lazy `google-auth-library`) kept those modules in the dependency graph,
+breaking the build with "createHmac is not exported by
+__vite-browser-external".
+
+Two changes ship together:
+- **Add `"sideEffects": false`** so any tree-shaking-aware bundler can
+  drop unused barrel exports cleanly. Verified safe — every runtime
+  module under `src/` is pure; only `src/cli.ts` holds top-level
+  `await main()`, and that file is the `bin` entry, never imported as a
+  module.
+- **Add `./constants/app-launcher` subpath** (`@coms-portal/sdk/constants/app-launcher`)
+  that re-exports the shared constant directly, with no barrel
+  scanning. Heroes' web layout (and any future browser-bundled consumer)
+  imports through this subpath; server-side consumers can keep the
+  top-level import.
+
+No breaking change. v1.1.0 consumers that only ship to a Node/Bun
+runtime are unaffected.
+
+## [1.1.0] - 2026-05-07
+
+Additive: re-exports `APP_LAUNCHER` from `@coms-portal/shared/constants/app-launcher` so H-app consumers that render the cross-app launcher have the same single-import-source guarantee as the rest of the v1.0 surface (Rev 4 Spec 02 §Q1, §SA). The shared package's `@deprecated` marker propagates through the re-export — runtime behaviour and removal target are unchanged.
+
+No other surface change.
+
+## [1.0.0] - 2026-05-07
+
+The first semver-stable release. Surface lock per Rev 4 Spec 01. The
+v0.1.x export surface (`verifyBrokerToken`, `verifyWebhookSignature`,
+`signWebhookPayload`, `resolveAlias`, `introspectSession`,
+`getAuditLog`) is preserved verbatim — bumping a v0.1.1 consumer to
+v1.0.0 requires no code changes. The v1.0 additions below are purely
+additive opt-ins.
+
+HS256 broker-token verification is preserved in the entire 1.x line and
+removed in v2.0, gated on Heroes Phase 7.
+
+### Added since v0.1.x (cumulative summary)
+
+- **Typed webhook envelope dispatch** — `defineWebhookHandler` with
+  per-event payload types via `PayloadFor<E>`; `WebhookEnvelopeError`
+  with discriminated `code`.
+- **Role envelope reader** — `getAppRole(envelope, options?)`.
+- **Contract-version surface** — `PORTAL_AUTH_CONTRACT_VERSION`,
+  `PORTAL_WEBHOOK_CONTRACT_VERSION`, `assertContractVersionCompatible`,
+  `ContractVersionMismatchError`, opt-in `strictContractVersion` on
+  `verifyBrokerToken` and `defineWebhookHandler`.
+- **Manifest helpers** — `defineManifest`, `registerManifest`,
+  `ManifestDefinition` and per-variant field types.
+- **`coms-portal-cli` binary** — `register-manifest` subcommand,
+  exit codes 0/1/2/3.
+- **Elysia adapter at `@coms-portal/sdk/elysia`** — `requireBrokerAuth`
+  plugin attaches `user: BrokerTokenPayload` to context.
+- **Test-kit at `@coms-portal/sdk/testing`** — `mintTestBrokerToken`,
+  `buildEnvelope`, `stubJwks`.
+- **Type re-exports from `@coms-portal/shared`** — H-apps now import
+  every contract type from `@coms-portal/sdk` directly. `@coms-portal/shared`
+  is a runtime dep of the SDK pinned at `v1.6.0`.
+- **Optional peer deps** — `elysia ^1`, `google-auth-library ^9 || ^10`.
+
+### Pre-release minors (archived)
+
+The PR-by-PR work that landed v1.0 was tagged on `0.2.0` through
+`0.8.0`. Those tags remain on the repo; the per-minor entries below are
+preserved for archival reference. See the corresponding commit messages
+for the design rationale of each PR.
+
+### Added in 0.8.0
+
+- **Test-kit at `@coms-portal/sdk/testing`.** New subpath ships three
+  fakes used by every serious H-app test suite:
+  - `mintTestBrokerToken(opts?)` — signs an ES256 (default) or HS256
+    portal-shaped token using a freshly-generated JWK / secret. Returns
+    `{ token, jwk, sharedSecret?, appSlug, issuer }` so callers can pair
+    it with `stubJwks` (ES256) or pass the secret straight back to
+    `verifyBrokerToken` (HS256). All payload fields take sensible
+    defaults; pass partials to override.
+  - `buildEnvelope(event, payload, opts?)` — constructs a fully-typed
+    `PortalWebhookEnvelope<T>` matching the production wire shape, with
+    `contractVersion`, a fresh `eventId` (or seeded), and an ISO
+    `occurredAt`. Drops directly into `defineWebhookHandler`.
+  - `stubJwks(jwks)` — stands up a tiny `Bun.serve` HTTP server returning
+    the supplied JWKS at `/`. Returns `{ url, restore }`. Each stub gets
+    its own port so multiple parallel tests do not collide.
+- **No production-side fetch / network code in the test-kit.** The kit
+  uses `jose`'s key generators and `Bun.serve`; nothing in the production
+  surface depends on `@coms-portal/sdk/testing`, so importers of the main
+  surface pay zero cost.
+
+### Added in 0.7.0
+
+- **Elysia adapter at `@coms-portal/sdk/elysia`.** New subpath ships
+  `requireBrokerAuth(options)` — an Elysia plugin that gates downstream
+  routes on a valid portal broker token, attaches `user:
+  BrokerTokenPayload` to the route context on success, and throws 401
+  with a structured `{ error: 'unauthorized', code: BrokerTokenErrorCode }`
+  body on any failure (`expired` / `invalid_signature` /
+  `invalid_audience` / `invalid_issuer` / `missing_kid` / `unknown_kid` /
+  `malformed` / `missing_token`). H-apps drop ~30 lines of bespoke auth
+  middleware and gain a single source of truth for broker-token decode.
+- **Optional peer dep on Elysia (`^1`).** No runtime dep added — H-apps
+  that import only the framework-neutral surface are unaffected.
+
+### Added in 0.6.0
+
+- **`coms-portal-cli` binary.** `bun add @coms-portal/sdk` now puts a
+  `coms-portal-cli` command on `$PATH` (via the `bin` entry in
+  package.json). One subcommand: `register-manifest --portal-url <url>
+  --app-slug <slug> --manifest <path>`. Loads the H-app's
+  `portal-manifest.ts` via dynamic import, asserts the slug matches the
+  manifest's `appId`, and POSTs through `registerManifest`. Argument
+  parsing uses `node:util.parseArgs` — no external CLI framework
+  dependency.
+- **Discriminated exit codes.** `0` success / idempotent no-op,
+  `1` auth failure (no GCP creds, app not registered with
+  serviceAccountEmail), `2` manifest validation (shape, missing args, slug
+  mismatch), `3` network or portal 5xx. CD pipelines branch on these
+  without parsing stderr.
+
+### Added in 0.5.0
+
+- **Manifest authoring helpers.** `defineManifest(def)` is an identity
+  function that constrains the input to the `ManifestDefinition` shape so
+  H-app authors get TypeScript-checked `configSchema` field types in their
+  `portal-manifest.ts` without runtime cost. The `ManifestDefinition`,
+  `ConfigField`, `FieldType` types (and their per-variant siblings:
+  `EnumField`, `BooleanField`, `IntegerField`, `StringField`) are now
+  exported from the top of the SDK.
+- **`registerManifest(opts)`.** Runtime client that POSTs the manifest to
+  the portal's new `POST /api/v1/apps/:slug/manifest` endpoint. Defaults
+  to a lazy `google-auth-library` import for OIDC ID-token minting (works
+  automatically on Cloud Run / GCB / GCE workloads via Application Default
+  Credentials); accepts a custom `getIdToken` for tests or alternate auth
+  paths. Returns `{ schemaVersion, registeredAt }`. `google-auth-library`
+  is now declared as an optional peer dependency (`^9 || ^10`).
+- **Portal-side route shipped alongside this SDK release** (separate
+  commit in `mrdoorba/coms_portal`). The portal accepts the SDK's manifest
+  payload at `POST /api/v1/apps/:slug/manifest` under `requireAppToken`,
+  rejects slug-mismatch with 409, malformed `configSchema` with 422, and
+  delegates the idempotent UPSERT to the existing
+  `services/manifests.ts:registerManifest`.
+
+### Added in 0.4.0
+
+- **Contract-version constants.** `PORTAL_AUTH_CONTRACT_VERSION` and
+  `PORTAL_WEBHOOK_CONTRACT_VERSION` are now exported from the SDK, sourced
+  from `@coms-portal/shared` (currently `2` and `1` respectively). H-apps
+  can pin against these to catch drift at compile time.
+- **`assertContractVersionCompatible(received, supported, kind)`.** Stripe-
+  Version-style fail-loud helper. Throws `ContractVersionMismatchError`
+  (typed `code: 'auth_version_mismatch' | 'webhook_version_mismatch'`,
+  with `received` and `supported` numeric fields) when `Math.floor(received)
+  > supported`. Same-major minor bumps and missing/non-numeric inputs are
+  permitted by design.
+- **Opt-in strict mode for `verifyBrokerToken` and `defineWebhookHandler`.**
+  New options `strictContractVersion?: boolean` (default `false`). When
+  `true`, the SDK enforces the contract-version assertion on the decoded
+  payload's `contractVersion` claim / envelope field. Forward-compatible:
+  the assertion is a no-op when the field is absent (e.g. against a portal
+  that has not yet started emitting it), but starts biting the moment the
+  field appears.
+
+### Added in 0.3.0
+
+- **Typed webhook envelope.** `defineWebhookHandler(map)` returns a
+  dispatcher that type-discriminates on `envelope.event` and invokes the
+  matching handler with `{ payload, envelope }` where both are typed via
+  `PayloadFor<E>`. Unknown events throw a typed `WebhookEnvelopeError` with
+  `code: 'malformed' | 'unknown_event'`. Unhandled known events are silent
+  no-ops so an H-app subscribes only to what it cares about.
+- **Role envelope reader.** `getAppRole(envelope, options?)` extracts the
+  resolved app-local role from `user.provisioned` / `user.updated`
+  envelopes per the 2026-05-06 portal role refactor. Returns `null` for
+  any other event, malformed input, or absent role. Optional
+  `expectedAppSlug` argument acts as a defensive sanity check on shared
+  receivers.
+- **Type re-exports from `@coms-portal/shared`.** H-apps now import every
+  contract type they need from `@coms-portal/sdk` — webhook payloads,
+  envelopes, headers, session/auth contracts, integration manifest types
+  and helpers. Heroes (and any consumer still importing from `shared`
+  directly) continues to work; this is purely additive.
+
+### Added in 0.2.0
+
+- `@coms-portal/shared` is now a runtime dependency (pinned to `v1.6.0`),
+  enabling the SDK to re-export the platform's contract types directly to
+  H-app consumers. No surface change yet — re-exports land in 0.3.0 (PR B).
+- Typecheck passes under jose v6 — replaced the removed `KeyLike` type with
+  `CryptoKey` in tests and made the `algorithms` JWT verify option
+  conditionally spread to satisfy `exactOptionalPropertyTypes`.
+
+## [0.1.1] - 2026-04-29
+
+### Performance
+
+- JWKS RemoteJWKSet now cached per-URL at module level instead of re-instantiated per call. Closes Spec 03c red-cell finding F-3.
+
+## [0.1.0] - 2026-04-29
+
+### Added
+
+- `verifyBrokerToken(token, options)` — ES256 (JWKS) and HS256 (shared secret) broker token verification with typed `BrokerTokenError` discriminated by `code`
+- `verifyWebhookSignature(payload, signature, secret, timestamp)` — HMAC-SHA256 constant-time webhook signature verification
+- `signWebhookPayload(secret, timestamp, payload)` — webhook signing helper
+- `resolveAlias(client, names)` — POST /api/aliases/resolve-batch with rate-limit header exposure
+- `introspectSession(client, params)` — POST /api/auth/broker/introspect
+- `getAuditLog(client, params)` — GET /api/v1/audit-log with cursor pagination
+- `BrokerTokenError` class with discriminated `code`: `'expired' | 'invalid_signature' | 'invalid_audience' | 'invalid_issuer' | 'missing_kid' | 'unknown_kid' | 'malformed'`

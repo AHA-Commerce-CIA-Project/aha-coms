@@ -76,6 +76,31 @@
         "yaml": "^2.5.1",
       },
     },
+    "packages/sdk": {
+      "name": "@coms-portal/sdk",
+      "version": "1.3.0",
+      "bin": {
+        "coms-portal-cli": "./src/cli.ts",
+      },
+      "dependencies": {
+        "@coms-portal/shared": "workspace:*",
+        "jose": "^6",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "elysia": "^1",
+        "google-auth-library": "^10",
+        "typescript": "^5.9.3",
+      },
+      "peerDependencies": {
+        "elysia": "^1",
+        "google-auth-library": "^9 || ^10",
+      },
+      "optionalPeers": [
+        "elysia",
+        "google-auth-library",
+      ],
+    },
     "packages/shared": {
       "name": "@coms-portal/shared",
       "version": "1.7.0",
@@ -94,7 +119,7 @@
 
     "@coms-portal/design-tokens": ["@coms-portal/design-tokens@workspace:packages/design-tokens"],
 
-    "@coms-portal/sdk": ["@coms-portal/sdk@github:mrdoorba/coms-sdk#20f88db", { "dependencies": { "jose": "^6" } }, "mrdoorba-coms-sdk-20f88db", "sha512-W1dEaCwirLVbIz9Gcg3d0/AffinU/rkPWAHVxZ6k5SjHBnjex2/RsiBQxbNnntDroIRs5R0VjxyVTUJUWVxxgA=="],
+    "@coms-portal/sdk": ["@coms-portal/sdk@workspace:packages/sdk"],
 
     "@coms-portal/shared": ["@coms-portal/shared@workspace:packages/shared"],
 
@@ -1061,6 +1086,8 @@
     "zimmerframe": ["zimmerframe@1.1.4", "", {}, "sha512-B58NGBEoc8Y9MWWCQGl/gq9xBCe4IiKM0a2x7GZdQKOW5Exr8S1W24J6OgM1njK8xCRGvAJIL/MxXHf6SkmQKQ=="],
 
     "zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
+
+    "@coms-portal/api/@coms-portal/sdk": ["@coms-portal/sdk@github:mrdoorba/coms-sdk#20f88db", { "dependencies": { "jose": "^6" } }, "mrdoorba-coms-sdk-20f88db", "sha512-W1dEaCwirLVbIz9Gcg3d0/AffinU/rkPWAHVxZ6k5SjHBnjex2/RsiBQxbNnntDroIRs5R0VjxyVTUJUWVxxgA=="],
 
     "@coms-portal/api/@coms-portal/shared": ["@coms-portal/shared@github:mrdoorba/coms-shared#6452869", {}, "mrdoorba-coms-shared-6452869", "sha512-DBHmdZPQ8D1qGE1GmBVOO00/f46fmrtyG2VQNd77ionmDIuL/iDlJIsQojm8Cv4sOkia4p0rdSK0g+nKEHvaAg=="],
 
