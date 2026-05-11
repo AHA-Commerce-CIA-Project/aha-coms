@@ -1,0 +1,30 @@
+# .pre-commit-config.yaml — git hook orchestration via the pre-commit framework.
+# Docs: https://pre-commit.com
+#
+# Activation (once per clone):
+#   pre-commit install
+#
+# Common operations:
+#   pre-commit run --all-files       # run every hook against the whole repo
+#   pre-commit run gitleaks          # run one hook by id
+#   pre-commit autoupdate            # bump pinned hook versions
+#   SKIP=gitleaks git commit -m ...  # skip one hook for this commit
+
+repos:
+  # Secret scanning. Rules and allowlist live in .gitleaks.toml.
+  # Reference: https://github.com/gitleaks/gitleaks#pre-commit
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # code-review-graph change detection (non-blocking; preserves legacy hook
+  # behavior from before pre-commit framework adoption).
+  - repo: local
+    hooks:
+      - id: code-review-graph
+        name: code-review-graph detect-changes
+        entry: sh -c 'command -v code-review-graph >/dev/null 2>&1 && code-review-graph detect-changes --brief || true'
+        language: system
+        pass_filenames: false
+        always_run: true
