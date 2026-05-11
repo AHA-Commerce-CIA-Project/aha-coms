@@ -144,7 +144,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-3`.
   - **Verification:** Heroes-api and heroes-web build via `bun --filter "@coms-portal/heroes-*" build`.
   - **Done:** Six git+https deps converted to `workspace:*` across the three heroes package.jsons. Two name-corrections rode the wave: `@coms-portal/ui` → `@coms-portal/ui-svelte` and `@coms-portal/account-widget` → `@coms-portal/account-widget-svelte` (the in-tree libs carry the framework-suffixed names since the T01–T05 lib subtree-merges). Bounded sed sweep across heroes-web's .ts/.svelte/.css renamed all 27 corresponding imports/`@import`s. `typescript: ^6.0.0` added as devDep on `@coms-portal/heroes-api` and `@coms-portal/heroes-shared` (heroes' deleted root package.json had supplied it via hoisting; bun's isolated install needs per-workspace declaration). One TS 6 strictness fix: `apps/heroes-api/src/routes/uploads.ts:124` `as ReadableStream` → `as unknown as ReadableStream` (node:stream/web ReadableStream vs global ReadableStream no longer cast-compatible). Verification: `bun install --frozen-lockfile` clean (929/1031), all 12 workspace packages typecheck green (heroes-shared/api/web included), full heroes-* build cycle succeeds (heroes-web emits SvelteKit + PWA assets; heroes-api emits dist bundle; heroes-shared no-build by design). Sample `bun test apps/heroes-api/src/routes/healthz.test.ts` passes — heroes test infrastructure intact.
 
-- [ ] **T15: Verify heroes SSO end-to-end against in-tree SDK**
+- [x] **T15: Verify heroes SSO end-to-end against in-tree SDK**
   - **Prerequisites:** T14
   - **Steps:**
     - Run heroes-api and heroes-web locally.
@@ -152,8 +152,16 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-3`.
     - Access a protected route in heroes.
   - **Acceptance:** Login flow completes; user session works in heroes.
   - **Verification:** Manual E2E pass (or scripted if a test suite covers it).
+  - **Done:** Full handoff dance verified green on 2026-05-11. portal-api signed `handers.the@ahacommerce.net` in via personal_otp (session `30ca187f-…`), portal launcher rendered heroes after `team_app_access` was wired, click on heroes minted a `portal_code`, heroes-web's `/auth/portal/exchange` consumed it and minted a local heroes session, user landed on a protected heroes route. Three pre-existing-but-monorepo-newly-surfaced caveats recorded in the closing commit and the Findings below.
 
-- [ ] **CHECKPOINT 2**: Heroes builds in-tree + SSO works end-to-end.
+- [x] **CHECKPOINT 2**: Heroes builds in-tree + SSO works end-to-end.
+  - **Crossed 2026-05-11:** `bun install --frozen-lockfile` clean (929/1031); `bun --filter '*' typecheck` green across all 12 workspace packages; `bun --filter '@coms-portal/heroes-*' build` succeeds; heroes SSO smoke completes end-to-end (sign-in → portal → app launcher → heroes-web exchange → protected heroes route).
+
+#### Findings during T15 — to address before Phase 4
+
+1. **Heroes-api dev proxy hardcodes port 5173** (`apps/heroes-api/src/index.ts:99`). Inherited from heroes' standalone repo where vite always ran on 5173. In monorepo, portal-web claims 5173 and heroes-web must run elsewhere (we used 5174). The proxy is unused on the dev smoke path (we hit heroes-web directly at 5174) but will misbehave on anyone who hits `http://localhost:8080/anything-not-/api`. **Fix:** read from `HEROES_WEB_DEV_PORT` env with fallback to 5173.
+2. **heroes-web doesn't see `process.env.DATABASE_URL` via the standard `bun run dev:heroes-web` path.** Bun's `--filter` cwd-switch happens AFTER bun has already loaded its own .env from the parent cwd, and `bun x` doesn't propagate `--env-file=.env` into child processes. Smoke needed `set -a; source .env; set +a` before invoking vite. In production (Cloud Run) env comes from the runtime so this is dev-only. **Fix:** either migrate heroes-web to SvelteKit's `$env/static/private` (loads .env itself), or add a dev script wrapper that sources .env first.
+3. **Heroes registration in portal's `app_registry` is not reproducible from the repo.** The smoke required hand-written SQL inserts into `app_registry`, `app_manifests`, `teams`, `team_members`, and `team_app_access`. A future fresh-laptop setup would have to redo this. **Fix:** add `apps/api/scripts/register-heroes.ts` modeled on `spec07-register-fast.ts` so heroes registration is one `bun run` away.
 
 ### Phase 4: Per-service path-filtered Cloud Build
 

@@ -1,7 +1,7 @@
 # Execution Plan: Monorepo Consolidation + Heroes Cleanup
 
-> Last updated: 2026-05-11 (after CP1 + T10)
-> Status: Phase 1 sealed at `34fbedd`; T10 closed at `9426307`. Next: T11 (subtree-merge `coms_aha_heroes`) — to be picked up in a fresh session.
+> Last updated: 2026-05-11 (after Phase 3 + CP2)
+> Status: Phase 1 sealed at `34fbedd`; Phase 3 sealed and Checkpoint 2 crossed at the T15-close commit. Next: T16 (per-service path-filtered Cloud Build) — Phase 4 entry.
 > Source specs: `docs/spec/01-monorepo-consolidation.md`, `docs/spec/02-heroes-cleanup.md`
 
 ## Goal
