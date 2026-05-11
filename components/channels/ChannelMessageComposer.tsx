@@ -48,6 +48,10 @@ interface ChannelMessageComposerProps {
   // attachments instead of sending a chat message. Parents that don't pass
   // this (e.g. DM pane) keep plain chat behavior.
   onTaskCommand?: (description: string, attachments: Attachment[]) => void;
+  // Slash-command hook for `/remind` — typing it and pressing Enter clears
+  // the editor and calls this to open the New Routine Template modal.
+  // Parents that don't pass this fall back to sending `/remind` as text.
+  onRemindCommand?: () => void;
 }
 
 export const ChannelMessageComposer = forwardRef<ChannelMessageComposerHandle, ChannelMessageComposerProps>(function ChannelMessageComposer({
@@ -60,6 +64,7 @@ export const ChannelMessageComposer = forwardRef<ChannelMessageComposerHandle, C
   teams = [],
   onTypingUsersChange,
   onTaskCommand,
+  onRemindCommand,
 }, ref) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -397,6 +402,17 @@ export const ChannelMessageComposer = forwardRef<ChannelMessageComposerHandle, C
       e.preventDefault();
       submitTaskCommand();
       return;
+    }
+    // `/remind` + Enter → open the New Routine Template modal. We check
+    // before the generic Enter→send so the literal "/remind" never gets
+    // posted as a chat message.
+    if (e.key === 'Enter' && !e.shiftKey && onRemindCommand) {
+      if (getEditorText().trim() === '/remind') {
+        e.preventDefault();
+        if (editorRef.current) editorRef.current.innerHTML = '';
+        onRemindCommand();
+        return;
+      }
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
