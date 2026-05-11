@@ -17,10 +17,13 @@
     "generate:schemas": "bun run scripts/generate-schemas.ts"
   },
   "dependencies": {
-    "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.2.0",
+    "@coms-portal/sdk": "workspace:*",
     "@sinclair/typebox": "^0.34.0",
     "drizzle-orm": "^0.45.0",
     "drizzle-typebox": "^0.2.0",
     "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.0"
   }
 }

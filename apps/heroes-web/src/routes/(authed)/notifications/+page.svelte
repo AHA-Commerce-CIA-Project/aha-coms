@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from '@coms-portal/ui/primitives'
+  import { Button } from '@coms-portal/ui-svelte/primitives'
   import * as m from '$lib/paraglide/messages'
   import { goto } from '$app/navigation'
   import {

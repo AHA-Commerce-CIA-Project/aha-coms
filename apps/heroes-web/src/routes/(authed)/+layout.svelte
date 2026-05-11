@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ServiceBar, Sidebar, MobileTopBar, MobileBottomNav } from '@coms-portal/ui/chrome'
-  import { AccountWidget } from '@coms-portal/account-widget'
+  import { ServiceBar, Sidebar, MobileTopBar, MobileBottomNav } from '@coms-portal/ui-svelte/chrome'
+  import { AccountWidget } from '@coms-portal/account-widget-svelte'
   import { APP_LAUNCHER } from '@coms-portal/sdk/constants/app-launcher'
   import {
     Trophy,

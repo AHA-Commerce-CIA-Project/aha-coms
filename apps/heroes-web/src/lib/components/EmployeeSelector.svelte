@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '$lib/api/client'
-  import { Input, Label } from '@coms-portal/ui/primitives'
+  import { Input, Label } from '@coms-portal/ui-svelte/primitives'
   import * as m from '$lib/paraglide/messages'
 
   interface User {

@@ -121,7 +121,7 @@ export const uploadsRoute = new Elysia({ prefix: '/uploads' })
       const contentType = contentTypes[ext ?? ''] ?? 'application/octet-stream'
 
       const stream = createReadStream(filePath)
-      const webStream = Readable.toWeb(stream) as ReadableStream
+      const webStream = Readable.toWeb(stream) as unknown as ReadableStream
 
       return new Response(webStream, {
         headers: {

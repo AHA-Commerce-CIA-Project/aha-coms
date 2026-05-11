@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, Badge, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@coms-portal/ui/primitives'
+  import { Button, Badge, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@coms-portal/ui-svelte/primitives'
   import * as m from '$lib/paraglide/messages'
   import {
     RefreshCw,

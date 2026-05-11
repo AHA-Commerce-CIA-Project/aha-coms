@@ -10,9 +10,9 @@
 @import "@fontsource/manrope/800.css";
 
 @import "tailwindcss";
-@import "@coms-portal/ui/styles.css";
+@import "@coms-portal/ui-svelte/styles.css";
 @import "@coms-portal/design-tokens/css";
-@import "@coms-portal/account-widget/styles.css";
+@import "@coms-portal/account-widget-svelte/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 

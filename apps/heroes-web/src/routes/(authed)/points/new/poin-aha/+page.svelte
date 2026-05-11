@@ -4,7 +4,7 @@
   import { api } from '$lib/api/client'
   import { uploadScreenshot } from '$lib/api/uploads'
   import { userState } from '$lib/state/userState.svelte'
-  import { Button } from '@coms-portal/ui/primitives'
+  import { Button } from '@coms-portal/ui-svelte/primitives'
   import EmployeeSelector from '$lib/components/points/EmployeeSelector.svelte'
   import { Award, AlertTriangle, ChevronRight } from 'lucide-svelte'
   import * as m from '$lib/paraglide/messages'

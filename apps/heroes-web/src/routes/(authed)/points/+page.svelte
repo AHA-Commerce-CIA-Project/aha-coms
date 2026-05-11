@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation'
   import { page } from '$app/stores'
   import { userState } from '$lib/state/userState.svelte'
-  import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from '@coms-portal/ui/primitives'
+  import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from '@coms-portal/ui-svelte/primitives'
   import PointCard from '$lib/components/points/PointCard.svelte'
   import PointTypeSelector from '$lib/components/points/PointTypeSelector.svelte'
   import { SlidersHorizontal, Plus, Filter } from 'lucide-svelte'

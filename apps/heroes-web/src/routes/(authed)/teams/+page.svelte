@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Card, CardHeader, CardTitle, CardContent, Button } from '@coms-portal/ui/primitives'
+  import { Card, CardHeader, CardTitle, CardContent, Button } from '@coms-portal/ui-svelte/primitives'
   import { userState } from '$lib/state/userState.svelte'
   import * as m from '$lib/paraglide/messages'
   import { Search, Plus, Users, Crown, ChevronDown, ChevronUp, Pencil } from 'lucide-svelte'
