@@ -12,7 +12,11 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "bun --env-file=.env ../../packages/heroes-shared/src/db/seed/index.ts"
   },
   "dependencies": {
     "@coms-portal/heroes-shared": "workspace:*",
@@ -30,6 +34,7 @@
     "google-auth-library": "^9.15.1"
   },
   "devDependencies": {
+    "drizzle-kit": "^0.31",
     "typescript": "^6.0.0"
   }
 }
