@@ -31,7 +31,9 @@ function getBreadcrumbs(pathname: string, searchParams: URLSearchParams): Crumb[
   if (pathname === '/fast') return [{ label: 'Dashboard' }];
   if (pathname === '/messages') return [{ label: 'Messages' }];
   if (pathname === '/channels') return [{ label: 'Channels' }];
-  if (pathname === '/later') return [{ label: 'Later' }];
+  // /later renders its own bold header inside LaterPane, so suppress the
+  // breadcrumb here to avoid a duplicate "Later" label above it.
+  if (pathname === '/later') return [];
   if (pathname === '/profile') return [{ label: 'Profile' }];
   if (pathname === '/changelog') return [{ label: 'Changelog' }];
   if (pathname === '/team-inbox') return [{ label: 'Task Inbox' }];
