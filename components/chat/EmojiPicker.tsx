@@ -263,10 +263,24 @@ export function EmojiPicker({ onSelect, open, onClose, position = 'below' }: Emo
             // container handles overflow.
             top = Math.max(M, Math.min(top, vh - PICKER_H - M));
 
-            // Horizontal: right-align to anchor by default, then clamp.
-            let left = r.right - PICKER_W;
-            if (left < M) left = M;
-            if (left + PICKER_W > vw - M) left = vw - PICKER_W - M;
+            // Horizontal: prefer left-align (picker's left edge = anchor's
+            // left edge → picker grows rightward, like Slack). This is what
+            // composer/chat-input buttons want — they sit on the left side of
+            // the chat column, so growing left would bleed into the sidebar.
+            // If left-align would overflow the right viewport edge, flip to
+            // right-align (picker's right edge = anchor's right edge → grow
+            // left) — the natural choice for message-hover toolbars near the
+            // right side. Final clamp keeps it on-screen as a safety net.
+            const leftAligned = r.left;
+            const rightAligned = r.right - PICKER_W;
+            let left: number;
+            if (leftAligned + PICKER_W <= vw - M) {
+                left = leftAligned;
+            } else if (rightAligned >= M) {
+                left = rightAligned;
+            } else {
+                left = Math.max(M, Math.min(leftAligned, vw - PICKER_W - M));
+            }
             setCoords({ top, left });
         };
         compute();
