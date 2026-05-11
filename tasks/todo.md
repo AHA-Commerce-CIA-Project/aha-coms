@@ -89,7 +89,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-1`.
   - **Acceptance:** `apps/web/package.json` has no `git+https://` URLs.
   - **Verification:** `bun --filter @coms-portal/web build` succeeds.
 
-- [ ] **CHECKPOINT 1**: `bun install --frozen-lockfile` at monorepo root + `bun run typecheck` across all packages + portal-api builds + portal-web builds + all existing tests pass.
+- [x] **CHECKPOINT 1**: `bun install --frozen-lockfile` at monorepo root + `bun run typecheck` across all packages + portal-api builds + portal-web builds + all existing tests pass.
 
 ### Phase 2: Rename (already complete)
 
