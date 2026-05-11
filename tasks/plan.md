@@ -1,7 +1,7 @@
 # Execution Plan: Monorepo Consolidation + Heroes Cleanup
 
 > Last updated: 2026-05-11 (after Phase 3 + CP2)
-> Status: Phase 1 sealed at `34fbedd`; Phase 3 sealed and Checkpoint 2 crossed at the T15-close commit. Next: T16 (per-service path-filtered Cloud Build) — Phase 4 entry.
+> Status: Phase 1 sealed at `34fbedd`; Phase 3 sealed and Checkpoint 2 crossed at `33593a9`. Next: T16 (per-service path-filtered Cloud Build) — Phase 4 entry. **Before/during T16**, see the "Findings during T15" block at the end of Phase 3 in `todo.md` — three pre-existing-but-monorepo-newly-surfaced gaps (heroes-api dev proxy port, heroes-web env loading, heroes registration script + webhook bootstrap) that Phase 4 absorbs (Findings 1 + 2) and Finding 3 lands as standalone polish either before T16 or alongside it.
 > Source specs: `docs/spec/01-monorepo-consolidation.md`, `docs/spec/02-heroes-cleanup.md`
 
 ## Goal
