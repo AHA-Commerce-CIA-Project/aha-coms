@@ -1,2 +1,2 @@
 [test]
-root = "apps/api/src"
+root = "apps/portal-api/src"

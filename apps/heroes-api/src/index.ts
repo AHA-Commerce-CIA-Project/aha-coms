@@ -92,11 +92,14 @@ if (process.env.NODE_ENV === 'production') {
     console.warn('[server] SvelteKit handler not found — running API-only mode', e)
   }
 } else {
-  // In dev, proxy to SvelteKit dev server
+  // In dev, proxy to SvelteKit dev server. The port is read from
+  // HEROES_WEB_DEV_PORT so heroes-web can run on any port — in the monorepo
+  // portal-web claims 5173 by default, so heroes-web must bind elsewhere.
+  const HEROES_WEB_DEV_PORT = process.env.HEROES_WEB_DEV_PORT ?? '5173'
   app.all('/*', async ({ request }) => {
     try {
       const url = new URL(request.url)
-      url.port = '5173'
+      url.port = HEROES_WEB_DEV_PORT
       const proxyReq = new Request(url.toString(), {
         method: request.method,
         headers: request.headers,

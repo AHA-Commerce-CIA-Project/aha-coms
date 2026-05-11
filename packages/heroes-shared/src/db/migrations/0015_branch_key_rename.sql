@@ -1,6 +1,6 @@
 -- Rename branch_id (uuid) → branch_key (varchar(128)) across 10 tables.
 --
--- The portal taxonomy contract (coms_portal/apps/api/src/routes/taxonomies.ts)
+-- The portal taxonomy contract (apps/portal-api/src/routes/taxonomies.ts)
 -- returns string keys (e.g. 'indonesia'), never UUIDs. The original `uuid`
 -- column type was a misalignment that made every sheet-sync resync fail
 -- with PG cast error 22P02 ('invalid input syntax for type uuid: …') the

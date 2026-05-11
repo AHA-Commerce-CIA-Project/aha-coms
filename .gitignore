@@ -67,11 +67,15 @@ infra/**/*.tfvars
 my-document/
 
 # Dev scripts (local-only) — anchored to repo root.
-# `apps/*/scripts/` are tracked; only the top-level scripts/ folder is local-only.
-/scripts/
+# `apps/*/scripts/` are tracked. The top-level scripts/ folder is local-only
+# except for explicit wrappers that belong in the repo (dev-* and similar).
+# Glob the children rather than the directory so `!` re-inclusion works.
+/scripts/*
+!/scripts/dev-*.sh
 
 # SvelteKit build output
-apps/web/build/
+apps/portal-web/build/
+apps/heroes-web/build/
 AGENTS.md
 .mcp.json
 .omx/

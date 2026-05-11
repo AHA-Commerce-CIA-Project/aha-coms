@@ -14,7 +14,7 @@
 | **Primitive component** (Button, Card, Dialog, Input, Select, Table, etc.) | [`mrdoorba/coms-ui`](https://github.com/mrdoorba/coms-ui) `src/primitives/` | Tag bump → consumer pin update |
 | **Chrome shell** (ServiceBar, Sidebar, MobileTopBar, MobileBottomNav) | [`mrdoorba/coms-ui`](https://github.com/mrdoorba/coms-ui) `src/chrome/` | Tag bump → consumer pin update |
 | **Account widget** (avatar popover, sign-out, account links) | [`mrdoorba/coms-account-widget`](https://github.com/mrdoorba/coms-account-widget) | Tag bump → consumer pin update |
-| **One specific page's layout or behavior** | Your app's own repo (`apps/web/src/routes/**` for portal, `packages/web/src/routes/**` for Heroes, etc.) | Direct edit; no version bump |
+| **One specific page's layout or behavior** | Your app's own repo (`apps/portal-web/src/routes/**` for portal, `apps/heroes-web/src/routes/**` for Heroes, etc.) | Direct edit; no version bump |
 | **App-local component** that doesn't belong in the suite | Your app's own `lib/components/` | Direct edit; no version bump |
 
 When in doubt, ask: **"who else needs this change?"** Both apps or any future app → shared package. Only this app, ever → app's own repo.
@@ -48,7 +48,7 @@ mrdoorba/coms-account-widget ─►  AccountWidget (avatar popover, sign-out flo
 Apps consume these like any external package:
 
 ```jsonc
-// apps/web/package.json (portal) — same shape in Heroes' packages/web/package.json
+// apps/portal-web/package.json (portal) — same shape in apps/heroes-web/package.json
 "dependencies": {
   "@coms-portal/design-tokens": "git+https://github.com/mrdoorba/coms-design-tokens.git#v1.1.0",
   "@coms-portal/ui": "git+https://github.com/mrdoorba/coms-ui.git#v1.2.0",

@@ -8,7 +8,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'bun run --filter @coms-portal/api start',
+    command: 'bun run --filter @coms-portal/portal-api start',
     port: 3000,
     reuseExistingServer: true,
   },

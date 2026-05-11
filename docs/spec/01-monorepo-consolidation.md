@@ -96,7 +96,7 @@ bun run typecheck
 bun run test
 
 # migrate the portal DB
-bun run db:migrate --filter @coms-portal/api
+bun run db:migrate --filter @coms-portal/portal-api
 
 # migrate the heroes DB
 bun run db:migrate --filter @coms-portal/heroes-api

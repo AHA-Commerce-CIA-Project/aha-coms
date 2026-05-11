@@ -31,20 +31,20 @@ resource "google_cloud_scheduler_job" "otp_cleanup" {
 
   http_target {
     http_method = "POST"
-    uri         = "${google_cloud_run_v2_service.coms_portal.uri}/api/internal/cleanup/otp"
+    uri         = "${google_cloud_run_v2_service.coms_portal_api.uri}/api/internal/cleanup/otp"
 
     oidc_token {
       service_account_email = google_service_account.otp_cleanup_scheduler.email
-      audience              = google_cloud_run_v2_service.coms_portal.uri
+      audience              = google_cloud_run_v2_service.coms_portal_api.uri
     }
   }
 }
 
 # The OTP cleanup SA needs invoker permission on Cloud Run.
 resource "google_cloud_run_v2_service_iam_member" "otp_cleanup_invoker" {
-  project  = google_cloud_run_v2_service.coms_portal.project
-  location = google_cloud_run_v2_service.coms_portal.location
-  name     = google_cloud_run_v2_service.coms_portal.name
+  project  = google_cloud_run_v2_service.coms_portal_api.project
+  location = google_cloud_run_v2_service.coms_portal_api.location
+  name     = google_cloud_run_v2_service.coms_portal_api.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.otp_cleanup_scheduler.email}"
 }

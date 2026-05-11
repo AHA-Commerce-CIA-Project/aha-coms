@@ -1,10 +1,44 @@
-resource "google_cloud_run_v2_service" "coms_portal" {
-  name     = "coms-portal-app"
+############################################################
+# COMS Portal — two Cloud Run services
+#
+# Per integration contract §8 + ADR 0004 firebase.json, the portal is two
+# services rather than one combined image:
+#
+#   coms-portal-api  — Elysia + Bun: identity, app catalog, webhooks
+#   coms-portal-web  — SvelteKit SSR: the portal app shell
+#
+# Both share the runtime SA (coms-portal-run-sa) and the Cloud SQL proxy.
+# portal-api owns Cloud Tasks dispatch, OTP cleanup, and the broker signing
+# secret. portal-web carries the subset needed for SSR (GIP config,
+# DATABASE_URL for in-process auth lookups, broker secret for cookie
+# verification).
+#
+# Image tag is owned by Cloud Build (apps/portal-*/cloudbuild.yaml pushes
+# :<git-sha>). Tofu pins :latest at create time and ignores subsequent
+# image changes so it does not fight the deploy pipeline.
+############################################################
+
+locals {
+  portal_image_api = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.coms_portal.repository_id}/coms-portal-api:latest"
+  portal_image_web = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.coms_portal.repository_id}/coms-portal-web:latest"
+
+  # Shared plain env — same value, both services. portal-web's SSR needs
+  # these because hooks.server.ts validates sessions in-process via
+  # @coms-portal/portal-api/services/auth.
+  portal_shared_env = {
+    GIP_PROJECT_ID         = var.gip_project_id
+    GIP_AUTH_DOMAIN        = var.gip_auth_domain
+    COMS_DOMAIN            = var.coms_domain
+    SESSION_COOKIE_MAX_AGE = var.session_cookie_max_age
+  }
+}
+
+# ── portal-api ─────────────────────────────────────────────────
+resource "google_cloud_run_v2_service" "coms_portal_api" {
+  name     = "coms-portal-api"
   location = var.region
 
   template {
-    # Dedicated portal runtime identity. See infra/iam-portal-runtime.tf.
-    # Outbound webhook OIDC tokens carry this SA's email as the `email` claim.
     service_account = google_service_account.portal_runtime.email
 
     scaling {
@@ -15,7 +49,7 @@ resource "google_cloud_run_v2_service" "coms_portal" {
     max_instance_request_concurrency = 80
 
     containers {
-      image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.coms_portal.repository_id}/coms-portal:latest"
+      image = local.portal_image_api
 
       ports {
         container_port = 3000
@@ -28,31 +62,19 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         }
       }
 
-      # Cloud Run mounts the cloudsql volume at /cloudsql automatically when
-      # the volumes block below is present; declaring the mount explicitly
-      # keeps Tofu state aligned with the v2 API surface.
       volume_mounts {
         name       = "cloudsql"
         mount_path = "/cloudsql"
       }
 
-      # ── Plain env vars ──────────────────────────────────────────
-      env {
-        name  = "GIP_PROJECT_ID"
-        value = var.gip_project_id
+      dynamic "env" {
+        for_each = local.portal_shared_env
+        content {
+          name  = env.key
+          value = env.value
+        }
       }
-      env {
-        name  = "GIP_AUTH_DOMAIN"
-        value = var.gip_auth_domain
-      }
-      env {
-        name  = "COMS_DOMAIN"
-        value = var.coms_domain
-      }
-      env {
-        name  = "SESSION_COOKIE_MAX_AGE"
-        value = var.session_cookie_max_age
-      }
+
       env {
         name  = "SHEETS_PERSONAL_EMAIL_ID"
         value = var.sheets_personal_email_id
@@ -61,8 +83,6 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         name  = "SHEETS_PERSONAL_EMAIL_TAB"
         value = var.sheets_personal_email_tab
       }
-
-      # ── Bootstrap admin (spec-06) ───────────────────────────────
       env {
         name  = "BOOTSTRAP_ADMIN_EMAIL"
         value = var.bootstrap_admin_email
@@ -72,7 +92,6 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         value = var.bootstrap_admin_name
       }
 
-      # ── Cloud Tasks (webhook delivery) ──────────────────────────
       env {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
@@ -98,7 +117,6 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         value = var.service_url
       }
 
-      # ── OTP cleanup (spec-06) ───────────────────────────────────
       env {
         name  = "OTP_CLEANUP_SCHEDULER_SA_EMAIL"
         value = google_service_account.otp_cleanup_scheduler.email
@@ -112,17 +130,11 @@ resource "google_cloud_run_v2_service" "coms_portal" {
         value = var.brevo_from
       }
 
-      # ── Spec 07/08 cutover ──────────────────────────────────────
-      # Gates taxonomy.upserted / taxonomy.deleted / employment.updated
-      # webhook fan-out. PR 07-3 ships the emit machinery dormant; this
-      # flag turns it on. Flip back to "false" only if the consumer
-      # (heroes) is unable to receive events during a temporary outage.
       env {
         name  = "ENABLE_TAXONOMY_EVENTS"
         value = "true"
       }
 
-      # ── Secrets ─────────────────────────────────────────────────
       env {
         name = "DATABASE_URL"
         value_source {
@@ -150,10 +162,6 @@ resource "google_cloud_run_v2_service" "coms_portal" {
           }
         }
       }
-      # BREVO_API_KEY only wired when transport is brevo — Cloud Run v2
-      # rejects secret_key_ref with version="latest" if no version exists yet,
-      # so Phase 1 of PR B2 (transport=stdout, secret resource created but
-      # not yet populated) has to leave this env entry off.
       dynamic "env" {
         for_each = var.mail_transport == "brevo" ? [1] : []
         content {
@@ -168,7 +176,6 @@ resource "google_cloud_run_v2_service" "coms_portal" {
       }
     }
 
-    # Cloud SQL Auth Proxy sidecar
     volumes {
       name = "cloudsql"
       cloud_sql_instance {
@@ -183,14 +190,6 @@ resource "google_cloud_run_v2_service" "coms_portal" {
   ]
 
   lifecycle {
-    # GCP returns a default resource-level `scaling { manual_instance_count = 0,
-    # min_instance_count = 0 }` block for services using template-level
-    # auto-scaling. Setting it in config would force manual scaling mode, so we
-    # ignore the perma-diff instead.
-    #
-    # The image tag is owned by deploy.yml's google-github-actions/deploy-cloudrun
-    # step, which pushes :<sha>. Tofu sets the image once at creation (to :latest)
-    # and ignores subsequent updates so it doesn't fight the deploy workflow.
     ignore_changes = [
       scaling,
       template[0].containers[0].image,
@@ -198,15 +197,119 @@ resource "google_cloud_run_v2_service" "coms_portal" {
   }
 }
 
-# Allow unauthenticated access (public portal, auth handled by app)
-resource "google_cloud_run_v2_service_iam_member" "public" {
-  name     = google_cloud_run_v2_service.coms_portal.name
+# ── portal-web ─────────────────────────────────────────────────
+resource "google_cloud_run_v2_service" "coms_portal_web" {
+  name     = "coms-portal-web"
+  location = var.region
+
+  template {
+    service_account = google_service_account.portal_runtime.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 2
+    }
+
+    max_instance_request_concurrency = 80
+
+    containers {
+      image = local.portal_image_web
+
+      ports {
+        container_port = 3000
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "512Mi"
+        }
+      }
+
+      # SvelteKit SSR's hooks.server.ts calls into portal-api's services/auth
+      # in-process, which touches Cloud SQL. The /cloudsql socket and
+      # DATABASE_URL mirror portal-api's wiring. Spec 02 Phase 2 (JWT
+      # sessions) will narrow this once portal-web stops touching the DB.
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
+      }
+
+      dynamic "env" {
+        for_each = local.portal_shared_env
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+
+      env {
+        name = "DATABASE_URL"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.database_url.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "GIP_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.gip_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "PORTAL_BROKER_SIGNING_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.portal_broker_signing_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+    }
+
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [data.google_sql_database_instance.existing.connection_name]
+      }
+    }
+  }
+
+  depends_on = [
+    google_secret_manager_secret_version.database_url,
+    google_secret_manager_secret_version.portal_broker_signing_secret,
+  ]
+
+  lifecycle {
+    ignore_changes = [
+      scaling,
+      template[0].containers[0].image,
+    ]
+  }
+}
+
+# Public invoker — Firebase Hosting fronts both services (ADR 0004), so
+# unauthenticated invoker access is the routing layer's responsibility.
+resource "google_cloud_run_v2_service_iam_member" "public_api" {
+  name     = google_cloud_run_v2_service.coms_portal_api.name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+resource "google_cloud_run_v2_service_iam_member" "public_web" {
+  name     = google_cloud_run_v2_service.coms_portal_web.name
   location = var.region
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
 
 # data.google_project.current is retained for any future cross-file consumer.
-# Secret access has moved to the dedicated portal_runtime SA — see
+# Secret access lives on the dedicated portal_runtime SA — see
 # infra/iam-portal-runtime.tf.
 data "google_project" "current" {}

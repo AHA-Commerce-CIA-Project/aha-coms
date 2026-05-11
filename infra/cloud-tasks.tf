@@ -16,7 +16,7 @@ resource "google_service_account" "cloud_tasks_invoker" {
 
 # Allow the invoker SA to call the Cloud Run service.
 resource "google_cloud_run_v2_service_iam_member" "tasks_invoker_run" {
-  name     = google_cloud_run_v2_service.coms_portal.name
+  name     = google_cloud_run_v2_service.coms_portal_api.name
   location = var.region
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.cloud_tasks_invoker.email}"

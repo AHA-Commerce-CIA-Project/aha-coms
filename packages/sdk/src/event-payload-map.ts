@@ -32,7 +32,7 @@ export interface EventPayloadMap {
   'taxonomy.deleted': TaxonomyDeletedPayload
   // Spec 06 onboarding probe — receivers ack 2xx without business-side
   // processing. Payload shape matches portal-api's dispatch at
-  // apps/api/src/routes/app-smoketest.ts.
+  // apps/portal-api/src/routes/app-smoketest.ts.
   'app.smoketest': { note: string }
 }
 

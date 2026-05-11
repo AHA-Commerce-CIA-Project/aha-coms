@@ -30,8 +30,8 @@ jobs:
           path: |
             ~/.bun/install/cache
             node_modules
-            apps/api/node_modules
-            apps/web/node_modules
+            apps/portal-api/node_modules
+            apps/portal-web/node_modules
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: |
             bun-${{ runner.os }}-
@@ -53,8 +53,8 @@ jobs:
           # not URLs and won't trip this — we want to catch hardcoded fetches
           # that would break on the run.app → coms.ahacommerce.net cutover.
           ! git grep -nE '["'\'']https?://[^"'\''[:space:]]*(\.run\.app|ahacommerce\.net)' -- \
-            ':!apps/api/src/config.ts' \
-            ':!apps/web/src/lib/config.ts' \
+            ':!apps/portal-api/src/config.ts' \
+            ':!apps/portal-web/src/lib/config.ts' \
             ':!.env.example' \
             ':!**/__tests__/**' \
             ':!**/*.test.ts' \

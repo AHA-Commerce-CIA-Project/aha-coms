@@ -1,6 +1,11 @@
-output "cloud_run_url" {
-  description = "Cloud Run service URL"
-  value       = google_cloud_run_v2_service.coms_portal.uri
+output "cloud_run_url_portal_api" {
+  description = "Cloud Run service URL — portal-api"
+  value       = google_cloud_run_v2_service.coms_portal_api.uri
+}
+
+output "cloud_run_url_portal_web" {
+  description = "Cloud Run service URL — portal-web"
+  value       = google_cloud_run_v2_service.coms_portal_web.uri
 }
 
 output "wif_provider" {

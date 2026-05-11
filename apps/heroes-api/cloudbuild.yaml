@@ -1,0 +1,67 @@
+# Cloud Build pipeline for the COMS Heroes API service.
+# Per integration contract §8 — monorepo-root context, image tag = git SHA,
+# secrets sourced from Secret Manager (not substitutions).
+#
+# Deploy targets `coms-heroes-api`, which is the contract-aligned end state
+# (per ADR 0004 firebase.json and contract §8 glossary). Heroes' existing
+# combined Cloud Run service `coms-aha-heroes-app` predates the split and
+# lives in infra/heroes/. The heroes-infra split is deliberately scoped out
+# of T16 (see tasks/plan.md "Split portal only" decision); until that lands,
+# trigger config can override `_SERVICE_NAME` if a stop-gap deploy target is
+# needed.
+#
+# Trigger should set `includedFiles`:
+#   - apps/heroes-api/**
+#   - packages/heroes-shared/**
+#   - packages/sdk/**
+#   - packages/shared/**
+#   - package.json
+#   - bun.lock
+
+substitutions:
+  _REGION: asia-southeast2
+  _SERVICE_NAME: coms-heroes-api
+  _ARTIFACT_REPO: coms-portal-registry
+  _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_SERVICE_NAME}
+  _RUNTIME_SA: coms-portal-run-sa@${PROJECT_ID}.iam.gserviceaccount.com
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file=apps/heroes-api/Dockerfile
+      - --tag=${_IMAGE}:${COMMIT_SHA}
+      - --tag=${_IMAGE}:latest
+      - --cache-from=${_IMAGE}:latest
+      - --build-arg=BUILDKIT_INLINE_CACHE=1
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build]
+    args: [push, --all-tags, '${_IMAGE}']
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    waitFor: [push]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE_NAME}
+      - --image=${_IMAGE}:${COMMIT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --service-account=${_RUNTIME_SA}
+      - --quiet
+
+images:
+  - ${_IMAGE}:${COMMIT_SHA}
+  - ${_IMAGE}:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: 1500s

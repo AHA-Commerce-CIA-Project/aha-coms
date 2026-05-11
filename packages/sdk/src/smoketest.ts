@@ -24,7 +24,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// Response shapes — must match apps/api/src/routes/app-smoketest.ts in the
+// Response shapes — must match apps/portal-api/src/routes/app-smoketest.ts in the
 // portal repo. If the portal route changes, this contract changes.
 // ---------------------------------------------------------------------------
 
