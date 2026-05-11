@@ -1,7 +1,7 @@
 # Execution Plan: Monorepo Consolidation + Heroes Cleanup
 
-> Last updated: 2026-05-11
-> Status: ready for execution; will be picked up in a fresh session
+> Last updated: 2026-05-11 (after CP1 + T10)
+> Status: Phase 1 sealed at `34fbedd`; T10 closed at `9426307`. Next: T11 (subtree-merge `coms_aha_heroes`) — to be picked up in a fresh session.
 > Source specs: `docs/spec/01-monorepo-consolidation.md`, `docs/spec/02-heroes-cleanup.md`
 
 ## Goal
@@ -20,24 +20,27 @@ In order:
 4. `docs/adr/0001..0010` — the why behind load-bearing decisions; reference as needed for each task.
 5. This file (`tasks/plan.md`) and `tasks/todo.md`.
 
-## Current state (as of doc set v1 commit `981ae02`)
+## Current state (as of CP1 + T10 commit `9426307`)
 
 **On disk** (in `~/HT/AHA COMS/`):
 
-- `aha-coms/` — renamed from `coms_portal`. Bun workspace with `apps/{api,web}`, `infra/`, `docs/` (the new doc set). The consolidation host.
+- `aha-coms/` — Bun workspace with `apps/{api,web}` and `packages/{shared,design-tokens,sdk,ui-svelte,account-widget-svelte,ui-react,account-widget-react}`. The consolidation host with seven packages now resolved through `workspace:*`.
 - `aha-fast/` — Next.js project management tool, npm-based, separate repo. **Not in Spec 01 scope.** Onboarding is a future spec (post-Spec 02).
-- `coms_aha_heroes/` — SvelteKit + Elysia, Bun workspace, separate repo. Moves in Spec 01 Phase 3.
-- `coms-{sdk,shared,ui,design-tokens,account-widget}/` — five external lib repos. Move in Spec 01 Phase 1.
+- `coms_aha_heroes/` — SvelteKit + Elysia, Bun workspace, separate repo. Still external; T11 begins the subtree-merge.
+- `coms-{sdk,shared,ui,design-tokens,account-widget}/` — five external lib repos, **subtree-merged in-tree** but **not yet archived on GitHub** (Phase 6 / T21).
 
 **Already complete:**
 
-- Renamed `coms_portal` → `aha-coms` (Spec 01 Phase 2 effectively done).
-- Doc set v1 committed.
+- Phase 2: renamed `coms_portal` → `aha-coms` (doc set v1, commit `981ae02`).
+- Phase 1: all five lib subtree-merges + two React stubs + apps/{api,web} workspace flip + SDK gap closure + SDK example-test fix. Crossed Checkpoint 1 at `48649c5`, healed in `34fbedd`.
+- T10: heroes freeze window — sole maintainer; freeze trivially in effect (`9426307`).
 
 **Not started:**
 
-- Spec 01 Phases 1, 3, 4, 5, 6.
+- Spec 01 Phases 3, 4, 5, 6 — T11 is next (subtree-merge `coms_aha_heroes`).
 - All of Spec 02.
+
+**Known pre-T11 caveat:** three non-main remote branches exist on `coms_aha_heroes` (`ci/parallelize-and-harden`, `ci/skip-redundant-build-and-docker-parallel`, `rev3/spec-01-02-adoption`). User confirmed 2026-05-11 they hold no work that needs preserving; `git subtree add ../coms_aha_heroes main` will not pull them and they will be archived alongside the repo at T22.
 
 ## Dependency graph (Spec 01 → Spec 02)
 
