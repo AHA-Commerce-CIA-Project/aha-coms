@@ -3,8 +3,8 @@
   import { page } from '$app/stores'
   import { api } from '$lib/api'
   import { hasPortalRole } from '@coms-portal/shared'
-  import { ServiceBar, Sidebar, MobileTopBar, MobileBottomNav } from '@coms-portal/ui/chrome'
-  import { AccountWidget } from '@coms-portal/account-widget'
+  import { ServiceBar, Sidebar, MobileTopBar, MobileBottomNav } from '@coms-portal/ui-svelte/chrome'
+  import { AccountWidget } from '@coms-portal/account-widget-svelte'
   import { readHandoffIntent, popStashedIntent, navigateToLaunch } from '$lib/portal-handoff'
   import { BASE_NAV, ADMIN_NAV } from '$lib/nav'
 

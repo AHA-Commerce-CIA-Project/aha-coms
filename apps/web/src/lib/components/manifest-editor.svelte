@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Input, Label, Select, SelectTrigger, SelectContent, SelectItem } from '@coms-portal/ui/primitives'
+  import { Input, Label, Select, SelectTrigger, SelectContent, SelectItem } from '@coms-portal/ui-svelte/primitives'
 
   interface EnumField { type: 'enum'; values: string[]; default: string }
   interface BooleanField { type: 'boolean'; default: boolean }

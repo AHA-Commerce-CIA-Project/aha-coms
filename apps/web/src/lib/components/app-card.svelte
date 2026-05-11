@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from '@coms-portal/ui/primitives'
+  import { Button } from '@coms-portal/ui-svelte/primitives'
 
   let { app, redirectTo }: {
     app: { id: string; slug: string; name: string; description: string | null; url: string; iconUrl: string | null; status: string; healthStatus?: string }

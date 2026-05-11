@@ -1,6 +1,6 @@
 <script lang="ts">
   import { teamsQuery } from '$lib/queries/teams'
-  import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Button } from '@coms-portal/ui/primitives'
+  import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Button } from '@coms-portal/ui-svelte/primitives'
 
   const query = teamsQuery()
 </script>

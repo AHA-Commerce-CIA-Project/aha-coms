@@ -12,7 +12,7 @@
     type UserinfoResponse,
   } from '$lib/auth'
   import { PORTAL_ROLE_LABELS } from '@coms-portal/shared'
-  import { Button, Input, Label, Card, CardContent } from '@coms-portal/ui/primitives'
+  import { Button, Input, Label, Card, CardContent } from '@coms-portal/ui-svelte/primitives'
   import {
     listSessions,
     revokeSessionById,

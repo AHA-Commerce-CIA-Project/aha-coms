@@ -3,7 +3,7 @@
   import { createEmployeeMutation } from '$lib/queries/employees'
   import { teamsQuery } from '$lib/queries/teams'
   import { PORTAL_ROLES, PORTAL_ROLE_LABELS, type PortalRole } from '@coms-portal/shared'
-  import { Card, CardHeader, CardTitle, CardContent, Button, Label, Input, Select, SelectTrigger, SelectContent, SelectItem } from '@coms-portal/ui/primitives'
+  import { Card, CardHeader, CardTitle, CardContent, Button, Label, Input, Select, SelectTrigger, SelectContent, SelectItem } from '@coms-portal/ui-svelte/primitives'
 
   const mutation = createEmployeeMutation()
   const teams = teamsQuery()

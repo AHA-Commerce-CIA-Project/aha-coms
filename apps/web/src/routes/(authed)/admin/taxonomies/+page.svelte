@@ -21,7 +21,7 @@
     DialogTitle,
     DialogDescription,
     DialogFooter,
-  } from '@coms-portal/ui/primitives'
+  } from '@coms-portal/ui-svelte/primitives'
   import { createQuery, createMutation, useQueryClient } from '@tanstack/svelte-query'
 
   const queryClient = useQueryClient()

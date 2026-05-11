@@ -28,7 +28,7 @@
     DialogTitle,
     DialogDescription,
     DialogFooter,
-  } from '@coms-portal/ui/primitives'
+  } from '@coms-portal/ui-svelte/primitives'
 
   // ---------------------------------------------------------------------------
   // App selection

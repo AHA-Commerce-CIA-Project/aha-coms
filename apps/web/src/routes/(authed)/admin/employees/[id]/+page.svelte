@@ -17,7 +17,7 @@
     SelectTrigger,
     SelectContent,
     SelectItem,
-  } from '@coms-portal/ui/primitives'
+  } from '@coms-portal/ui-svelte/primitives'
 
   // Current user — used to gate the super_admin-only one-time login link card.
   const getCurrentUser = getContext<() => SessionUser | null>('user')

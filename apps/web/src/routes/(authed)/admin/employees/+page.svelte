@@ -3,7 +3,7 @@
   import BatchToolbar from '$lib/components/batch-toolbar.svelte'
   import { PORTAL_ROLE_LABELS, PORTAL_ROLES } from '@coms-portal/shared'
   import { adminApi } from '$lib/admin-api'
-  import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Input, Button, Badge } from '@coms-portal/ui/primitives'
+  import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Input, Button, Badge } from '@coms-portal/ui-svelte/primitives'
 
   const MAX_EMPLOYEE_IMPORT_CSV_BYTES = 2 * 1024 * 1024
 

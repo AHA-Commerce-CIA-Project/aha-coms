@@ -14,7 +14,7 @@
   } from '$lib/portal-handoff'
   import { onMount, onDestroy } from 'svelte'
   import StarField from '$lib/components/login/StarField.svelte'
-  import { Input, Label, Button } from '@coms-portal/ui/primitives'
+  import { Input, Label, Button } from '@coms-portal/ui-svelte/primitives'
 
   type Step = 'choose' | 'email' | 'otp'
 

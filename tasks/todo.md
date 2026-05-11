@@ -84,7 +84,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-1`.
   - **Acceptance:** `apps/api/package.json` has no `git+https://` URLs; build succeeds against current SDK.
   - **Verification:** `bun --filter @coms-portal/api build` succeeds; existing tests pass.
 
-- [ ] **T09: Convert `apps/web` git URL deps → `workspace:*`**
+- [x] **T09: Convert `apps/web` git URL deps → `workspace:*`**
   - **Prerequisites:** T01–T05 (all libs in tree)
   - **Acceptance:** `apps/web/package.json` has no `git+https://` URLs.
   - **Verification:** `bun --filter @coms-portal/web build` succeeds.

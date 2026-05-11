@@ -3,7 +3,7 @@
     Button,
     Select, SelectTrigger, SelectContent, SelectItem,
     Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
-  } from '@coms-portal/ui/primitives'
+  } from '@coms-portal/ui-svelte/primitives'
 
   interface BatchAction {
     key: string

@@ -15,8 +15,8 @@
    ships its own styles.css with an @source directive (relative to the package),
    so the host imports them here to opt the package's components into the
    class scanner. Order: tailwindcss → package source registrations → tokens. */
-@import "@coms-portal/ui/styles.css";
-@import "@coms-portal/account-widget/styles.css";
+@import "@coms-portal/ui-svelte/styles.css";
+@import "@coms-portal/account-widget-svelte/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 

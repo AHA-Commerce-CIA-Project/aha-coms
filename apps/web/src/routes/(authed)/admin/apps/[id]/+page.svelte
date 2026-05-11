@@ -26,7 +26,7 @@
     SelectTrigger,
     SelectContent,
     SelectItem,
-  } from '@coms-portal/ui/primitives'
+  } from '@coms-portal/ui-svelte/primitives'
 
   const id = $derived($page.params.id!)
 

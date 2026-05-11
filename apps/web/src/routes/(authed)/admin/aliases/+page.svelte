@@ -19,7 +19,7 @@
     DialogTitle,
     DialogDescription,
     DialogFooter,
-  } from '@coms-portal/ui/primitives'
+  } from '@coms-portal/ui-svelte/primitives'
 
   const query = createAliasQueueQuery()
   const resolveMutation = createResolveAliasMutation()

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { createTeamMutation } from '$lib/queries/teams'
-  import { Card, CardHeader, CardTitle, CardContent, Button, Label, Input, Textarea } from '@coms-portal/ui/primitives'
+  import { Card, CardHeader, CardTitle, CardContent, Button, Label, Input, Textarea } from '@coms-portal/ui-svelte/primitives'
 
   const mutation = createTeamMutation()
 
