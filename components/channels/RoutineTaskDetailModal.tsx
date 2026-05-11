@@ -459,11 +459,15 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
                   {checklist.map((it) => {
                     const ownedByMe = it.assignee?.id === currentUserId;
                     const claimed = !!it.assignee;
-                    // Edit / delete affordance gate matches the server rule:
-                    //   TEAM       → unclaimed OR the item's claimer
-                    //   INDIVIDUAL → no whole-task owner yet, or that owner is me
+                    // Strict-ownership gate — matches the server rule.
+                    //   TEAM       → caller must BE the item's claimer.
+                    //                Unclaimed items get no edit/delete UI;
+                    //                user is forced to click Claim first.
+                    //   INDIVIDUAL → caller must own the whole task (or the
+                    //                task isn't claimed yet, since INDIVIDUAL
+                    //                items have no per-item assignee).
                     const canMutate = type === 'TEAM'
-                      ? (!claimed || ownedByMe)
+                      ? ownedByMe
                       : (!isClaimed || claimedByMe);
                     const isEditing = editingId === it.id;
 

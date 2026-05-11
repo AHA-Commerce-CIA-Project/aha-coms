@@ -32,33 +32,27 @@ export async function PATCH(
         return NextResponse.json({ error: 'Checklist item not found' }, { status: 404 });
     }
 
-    // Per-type permission gate.
-    //   TEAM:       title edits allowed when the item is UNCLAIMED OR the
-    //               caller is the item's claimer (anyone in the channel can
-    //               curate the dynamic list before someone picks it up).
-    //               Completion toggles still require ownership — you can't
-    //               check off someone else's claimed work.
+    // Per-type permission gate — strict ownership.
+    //   TEAM:       every mutation (title edit AND completion toggle) requires
+    //               the caller to BE the item's assignee. Unclaimed items must
+    //               be claimed first; you can't mutate someone else's claim
+    //               either.
     //   INDIVIDUAL: once the whole task is claimed, locks to that assignee.
     //   non-routine (item.task.type == null): unchanged — anyone with task
     //                                         access can edit, matching the
     //                                         legacy queue/direct-assign flow.
-    const isCompletionToggle = typeof body.isCompleted === 'boolean';
     if (item.task.type === 'TEAM' || item.task.type === 'INDIVIDUAL') {
         const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true } });
         const isLeader = me?.role === 'leader' || me?.role === 'admin';
         if (!isLeader) {
             if (item.task.type === 'TEAM') {
-                const ownsItem = item.assigneeId === session.user.id;
-                const isUnclaimed = !item.assigneeId;
-                if (isCompletionToggle && !ownsItem) {
+                if (item.assigneeId !== session.user.id) {
                     return NextResponse.json(
-                        { error: 'Claim this item first before marking it done.' },
-                        { status: 403 },
-                    );
-                }
-                if (!isCompletionToggle && !ownsItem && !isUnclaimed) {
-                    return NextResponse.json(
-                        { error: 'Only the claimer can edit this item.' },
+                        {
+                            error: item.assigneeId
+                                ? 'Only the claimer can edit this item.'
+                                : 'Claim this item first before editing it.',
+                        },
                         { status: 403 },
                     );
                 }
@@ -139,11 +133,13 @@ export async function DELETE(
         const isLeader = me?.role === 'leader' || me?.role === 'admin';
         if (!isLeader) {
             if (item.task.type === 'TEAM') {
-                const ownsItem = item.assigneeId === session.user.id;
-                const isUnclaimed = !item.assigneeId;
-                if (!ownsItem && !isUnclaimed) {
+                if (item.assigneeId !== session.user.id) {
                     return NextResponse.json(
-                        { error: 'Only the claimer can remove this item.' },
+                        {
+                            error: item.assigneeId
+                                ? 'Only the claimer can remove this item.'
+                                : 'Claim this item first before removing it.',
+                        },
                         { status: 403 },
                     );
                 }

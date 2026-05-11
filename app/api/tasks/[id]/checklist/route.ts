@@ -31,7 +31,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     if (title.length > 200) return NextResponse.json({ error: 'Title is too long (max 200 chars)' }, { status: 400 });
 
-    const task = await prisma.task.findUnique({ where: { id }, select: { id: true } });
+    const task = await prisma.task.findUnique({
+        where: { id },
+        select: { id: true, type: true },
+    });
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
 
     const last = await prisma.checklistItem.findFirst({
@@ -41,8 +44,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
     const position = (last?.position ?? -1) + 1;
 
+    // TEAM-mode auto-claim: the user who appends an item takes ownership of
+    // it immediately. Matches the mental model that "I added it because I'm
+    // going to do it" and avoids the clunky add → claim → edit dance. The
+    // creator can release the claim from the card if it wasn't intentional.
+    // INDIVIDUAL/legacy: leave assigneeId null — items are owned via the
+    // whole-task assignee, not per-item.
+    const autoClaim = task.type === 'TEAM';
+
     const created = await prisma.checklistItem.create({
-        data: { taskId: id, title, position },
+        data: {
+            taskId: id,
+            title,
+            position,
+            ...(autoClaim
+                ? { assigneeId: session.user.id, claimedAt: new Date() }
+                : {}),
+        },
+        include: autoClaim
+            ? { assignee: { select: { id: true, name: true, image: true } } }
+            : undefined,
     });
 
     return NextResponse.json(created, { status: 201 });
