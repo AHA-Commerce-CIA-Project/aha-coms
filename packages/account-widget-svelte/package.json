@@ -1,0 +1,34 @@
+{
+  "name": "@coms-portal/account-widget-svelte",
+  "version": "0.2.0",
+  "description": "Shared COMS account widget — avatar + popover (profile, app switcher, RP-initiated sign-out). Mounted in the chrome's right slot by every COMS app.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mrdoorba/coms-account-widget.git"
+  },
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./svelte": "./src/AccountWidget.svelte",
+    "./sign-out": "./src/sign-out.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}

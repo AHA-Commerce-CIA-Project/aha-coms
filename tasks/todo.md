@@ -56,7 +56,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-1`.
   - **Acceptance:** package name is `@coms-portal/ui-svelte`; old name not referenced anywhere in-tree.
   - **Verification:** `bun --filter @coms-portal/ui-svelte typecheck` passes.
 
-- [ ] **T05: Subtree-merge `coms-account-widget` → `packages/account-widget-svelte`; rename package**
+- [x] **T05: Subtree-merge `coms-account-widget` → `packages/account-widget-svelte`; rename package**
   - **Prerequisites:** T01, T02
   - **Acceptance:** package name `@coms-portal/account-widget-svelte`.
   - **Verification:** typecheck passes.

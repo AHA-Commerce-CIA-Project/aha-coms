@@ -67,6 +67,18 @@
         "vite": "^6",
       },
     },
+    "packages/account-widget-svelte": {
+      "name": "@coms-portal/account-widget-svelte",
+      "version": "0.2.0",
+      "devDependencies": {
+        "svelte": "^5.0.0",
+        "svelte-check": "^4.0.0",
+        "typescript": "^5.5.0",
+      },
+      "peerDependencies": {
+        "svelte": "^5.0.0",
+      },
+    },
     "packages/design-tokens": {
       "name": "@coms-portal/design-tokens",
       "version": "1.1.0",
@@ -133,6 +145,8 @@
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
     "@coms-portal/account-widget": ["@coms-portal/account-widget@github:mrdoorba/coms-account-widget#191489e", { "peerDependencies": { "svelte": "^5.0.0" } }, "mrdoorba-coms-account-widget-191489e", "sha512-dQJkEB/dHmXeAyob+2SgJ/uoUpoA+vNOnBCZu01+3Ns7+U/rR9/cSDzPFauhJ8M83RV3HiBFlTV713jdTf1prA=="],
+
+    "@coms-portal/account-widget-svelte": ["@coms-portal/account-widget-svelte@workspace:packages/account-widget-svelte"],
 
     "@coms-portal/api": ["@coms-portal/api@workspace:apps/api"],
 

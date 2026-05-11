@@ -1,0 +1,22 @@
+/**
+ * @coms-portal/account-widget-svelte — Tailwind source registration.
+ *
+ * Tailwind v4's auto-discovery excludes node_modules. When this package is
+ * installed as a git+url dependency, the host's Tailwind compile step does
+ * not see AccountWidget's class strings, so utilities like `hidden sm:inline`
+ * never make it into the host's compiled CSS — the widget renders, but the
+ * responsive bits are missing.
+ *
+ * This file fixes that at the package boundary. The host imports it once in
+ * its Tailwind entry point (after `@import "tailwindcss"`), and the @source
+ * directive below — resolved relative to this file — opts every component in
+ * this package back into the scanner.
+ *
+ * Consumers do NOT need to know where the package lives in node_modules.
+ *
+ *   /* host app.css *\/
+ *   @import "tailwindcss";
+ *   @import "@coms-portal/account-widget-svelte/styles.css";
+ *   @import "@coms-portal/design-tokens/css";
+ */
+@source "./**/*.svelte";
