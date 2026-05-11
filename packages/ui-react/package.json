@@ -1,0 +1,23 @@
+{
+  "name": "@coms-portal/ui-react",
+  "version": "0.0.0",
+  "description": "React variant of the COMS chrome library — empty stub. Populated when aha-fast onboards (post-Spec 02).",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mrdoorba/aha-coms.git",
+    "directory": "packages/ui-react"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": ["src"],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

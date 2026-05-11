@@ -67,6 +67,13 @@
         "vite": "^6",
       },
     },
+    "packages/account-widget-react": {
+      "name": "@coms-portal/account-widget-react",
+      "version": "0.0.0",
+      "devDependencies": {
+        "typescript": "^5.5.0",
+      },
+    },
     "packages/account-widget-svelte": {
       "name": "@coms-portal/account-widget-svelte",
       "version": "0.2.0",
@@ -121,6 +128,13 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/ui-react": {
+      "name": "@coms-portal/ui-react",
+      "version": "0.0.0",
+      "devDependencies": {
+        "typescript": "^5.5.0",
+      },
+    },
     "packages/ui-svelte": {
       "name": "@coms-portal/ui-svelte",
       "version": "1.2.0",
@@ -146,6 +160,8 @@
 
     "@coms-portal/account-widget": ["@coms-portal/account-widget@github:mrdoorba/coms-account-widget#191489e", { "peerDependencies": { "svelte": "^5.0.0" } }, "mrdoorba-coms-account-widget-191489e", "sha512-dQJkEB/dHmXeAyob+2SgJ/uoUpoA+vNOnBCZu01+3Ns7+U/rR9/cSDzPFauhJ8M83RV3HiBFlTV713jdTf1prA=="],
 
+    "@coms-portal/account-widget-react": ["@coms-portal/account-widget-react@workspace:packages/account-widget-react"],
+
     "@coms-portal/account-widget-svelte": ["@coms-portal/account-widget-svelte@workspace:packages/account-widget-svelte"],
 
     "@coms-portal/api": ["@coms-portal/api@workspace:apps/api"],
@@ -157,6 +173,8 @@
     "@coms-portal/shared": ["@coms-portal/shared@workspace:packages/shared"],
 
     "@coms-portal/ui": ["@coms-portal/ui@github:mrdoorba/coms-ui#8afee43", { "dependencies": { "bits-ui": "^2.16.3", "clsx": "^2.1.1", "lucide-svelte": "^0.460.0", "tailwind-merge": "^3.5.0", "tailwind-variants": "^3.2.2" }, "peerDependencies": { "svelte": "^5.0.0" } }, "mrdoorba-coms-ui-8afee43", "sha512-axQuj3Zdctm8k81Xr2YT6pAr+zKLFTxCzIvGEdE/FWmPk5aVGsEvzKX3gej1KX7KryndLSB5W192H9OppBLbFA=="],
+
+    "@coms-portal/ui-react": ["@coms-portal/ui-react@workspace:packages/ui-react"],
 
     "@coms-portal/ui-svelte": ["@coms-portal/ui-svelte@workspace:packages/ui-svelte"],
 

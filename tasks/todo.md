@@ -61,7 +61,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-1`.
   - **Acceptance:** package name `@coms-portal/account-widget-svelte`.
   - **Verification:** typecheck passes.
 
-- [ ] **T06: Stub `packages/ui-react` (empty placeholder)**
+- [x] **T06: Stub `packages/ui-react` (empty placeholder)**
   - **Prerequisites:** T01
   - **Steps:**
     - Create directory `packages/ui-react/`.
@@ -70,7 +70,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-1`.
   - **Acceptance:** workspace recognises the package; `bun install` includes it.
   - **Verification:** `bun --filter @coms-portal/ui-react typecheck` doesn't error (empty package).
 
-- [ ] **T07: Stub `packages/account-widget-react`**
+- [x] **T07: Stub `packages/account-widget-react`**
   - **Prerequisites:** T01
   - **Acceptance:** like T06, name `@coms-portal/account-widget-react`.
 
