@@ -27,6 +27,7 @@ export async function GET(
             source: true,
             type: true,
             routineTemplateId: true,
+            referenceUrl: true,
             claimedAt: true,
             completedAt: true,
             assigneeId: true,
@@ -59,6 +60,7 @@ export async function GET(
         source: task.source,
         type: task.type,
         routine_template_id: task.routineTemplateId,
+        reference_url: task.referenceUrl,
         claimed_at: task.claimedAt?.toISOString() || null,
         completed_at: task.completedAt?.toISOString() || null,
         assignee: task.assignee

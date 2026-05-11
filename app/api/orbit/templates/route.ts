@@ -11,6 +11,21 @@ function normalizeMentionTarget(value: unknown): string | null {
   return v;
 }
 
+// Accept absolute http(s) URLs only — keeps card rendering simple (no
+// resolving relative paths) and blocks `javascript:`/`data:` schemes.
+function normalizeReferenceUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (!v) return null;
+  try {
+    const u = new URL(v);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function GET() {
   const session = await requireAuth();
   if (!session) {
@@ -68,6 +83,7 @@ export async function POST(request: Request) {
     type,
     channelId,
     mentionTarget,
+    referenceUrl,
     deadlineTime,
     deadlineDay,
     teamId,
@@ -103,6 +119,7 @@ export async function POST(request: Request) {
       type: templateType,
       channelId: channelId || null,
       mentionTarget: normalizeMentionTarget(mentionTarget),
+      referenceUrl: normalizeReferenceUrl(referenceUrl),
       deadlineTime: deadlineTime || null,
       deadlineDay: deadlineDay ? parseInt(deadlineDay) : null,
       teamId: (teamIds && teamIds.length > 0) ? teamIds[0] : (teamId || null),

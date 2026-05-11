@@ -24,20 +24,21 @@ export interface RoutineTemplateFormInitial {
   type?: TemplateType;
   channelId?: string | null;
   mentionTarget?: string | null;
+  referenceUrl?: string | null;
   checklistItems?: { id: string; title: string; position: number }[];
   deadlineTime?: string | null;
   deadlineDay?: number | null;
-  teamIds?: string[];
+  // Legacy — kept on the interface so existing rows still hydrate cleanly,
+  // but no longer surfaced in the form UI. type=TEAM replaces it.
   isTeamWide?: boolean;
+  teamIds?: string[];
 }
 
-interface TeamOption { id: string; name: string }
 interface ChannelOption { id: string; name: string }
 interface UserOption { id: string; name: string; image?: string | null }
 
 interface RoutineTemplateFormProps {
   initial?: RoutineTemplateFormInitial | null;
-  teams: TeamOption[];
   channels: ChannelOption[];
   users: UserOption[];
   onSaved: () => void;
@@ -48,7 +49,6 @@ interface RoutineTemplateFormProps {
 
 export function RoutineTemplateForm({
   initial,
-  teams,
   channels,
   users,
   onSaved,
@@ -81,8 +81,7 @@ export function RoutineTemplateForm({
   );
   const [deadlineTime, setDeadlineTime] = useState(initial?.deadlineTime ?? '');
   const [deadlineDay, setDeadlineDay] = useState(initial?.deadlineDay?.toString() ?? '');
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(initial?.teamIds ?? []);
-  const [isTeamWide, setIsTeamWide] = useState(!!initial?.isTeamWide);
+  const [referenceUrl, setReferenceUrl] = useState(initial?.referenceUrl ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -145,10 +144,9 @@ export function RoutineTemplateForm({
           type,
           channelId: channelId || null,
           mentionTarget,
+          referenceUrl: referenceUrl || null,
           deadlineTime,
           deadlineDay,
-          teamIds: selectedTeamIds,
-          isTeamWide,
           checklistItems: cleaned,
         }),
       });
@@ -205,6 +203,24 @@ export function RoutineTemplateForm({
           className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors resize-none"
           placeholder="Describe the routine task..."
         />
+      </div>
+
+      {/* Reference Link — usually a Google Sheet / Notion doc. Copied onto
+          every spawned Task so the channel card can offer a one-click
+          "Open Reference" button. Optional; server-side normalizer rejects
+          anything that isn't http(s). */}
+      <div>
+        <label className="text-sm font-medium text-slate-600">Reference Link (URL)</label>
+        <input
+          type="url"
+          value={referenceUrl}
+          onChange={(e) => setReferenceUrl(e.target.value)}
+          placeholder="https://docs.google.com/spreadsheets/d/..."
+          className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+        />
+        <p className="text-[11px] text-slate-400 mt-1">
+          Optional — surfaces as a clickable button on the bot's channel card.
+        </p>
       </div>
 
       <div>
@@ -421,67 +437,6 @@ export function RoutineTemplateForm({
             onChange={(e) => setDeadlineTime(e.target.value)}
             className="w-full mt-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
           />
-        </div>
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-slate-600">Visible to Team</label>
-        <div className="mt-1.5 space-y-1.5">
-          {selectedTeamIds.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {selectedTeamIds.map((id) => {
-                const team = teams.find((t) => t.id === id);
-                return (
-                  <span key={id} className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200">
-                    {team?.name || id}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTeamIds(selectedTeamIds.filter((tid) => tid !== id))}
-                      className="text-indigo-400 hover:text-indigo-600 ml-0.5"
-                    >
-                      ×
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value && !selectedTeamIds.includes(e.target.value)) {
-                setSelectedTeamIds([...selectedTeamIds, e.target.value]);
-              }
-            }}
-            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-          >
-            <option value="">+ Add team...</option>
-            {teams.filter((t) => !selectedTeamIds.includes(t.id)).map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
-        </div>
-        <p className="text-[11px] text-slate-400 mt-1">
-          {selectedTeamIds.length === 0 ? 'Visible to all teams. Add teams to restrict visibility.' : `Visible to ${selectedTeamIds.length} team${selectedTeamIds.length > 1 ? 's' : ''}.`}
-        </p>
-      </div>
-
-      <div
-        className="flex items-start gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer select-none"
-        onClick={() => setIsTeamWide(!isTeamWide)}
-      >
-        <div className={cn('mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors', isTeamWide ? 'bg-amber-500 border-amber-500' : 'border-slate-300 bg-white')}>
-          {isTeamWide && (
-            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          )}
-        </div>
-        <div>
-          <p className="text-sm font-medium text-slate-700">Team-wide task (legacy)</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            Older flag — kept for back-compat. Prefer the Team task type above; that handles checklist-level claiming.
-          </p>
         </div>
       </div>
 

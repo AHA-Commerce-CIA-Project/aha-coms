@@ -5,6 +5,7 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  ExternalLink,
   Hand,
   Loader2,
   RotateCcw,
@@ -34,6 +35,7 @@ interface RoutineSnapshot {
   description: string | null;
   status: string;
   type: 'INDIVIDUAL' | 'TEAM' | null;
+  reference_url: string | null;
   claimed_at: string | null;
   completed_at: string | null;
   assignee: AssigneeMini | null;
@@ -151,6 +153,27 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
       <div className="px-4 py-3 space-y-3">
         {error && (
           <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">{error}</div>
+        )}
+
+        {/* Reference Link — usually a Google Sheet / Notion doc the claimer
+            needs to open before doing the work. Rendered identically for
+            INDIVIDUAL and TEAM tasks because the resource is the same. */}
+        {snapshot?.reference_url && (
+          <a
+            href={snapshot.reference_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-sm font-medium text-slate-700 hover:text-indigo-700 transition-colors group"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+            <span className="flex-1 truncate">Open Reference Link</span>
+            <span className="text-[11px] text-slate-400 truncate max-w-[180px] hidden sm:inline group-hover:text-slate-600">
+              {(() => {
+                try { return new URL(snapshot.reference_url).hostname.replace(/^www\./, ''); }
+                catch { return ''; }
+              })()}
+            </span>
+          </a>
         )}
 
         {/* INDIVIDUAL: whole-task claim, locked checklist for non-assignees. */}

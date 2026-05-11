@@ -210,6 +210,7 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
           priority: 'medium',
           type: templateType,
           routineTemplateId: template.id,
+          referenceUrl: template.referenceUrl,
           source: 'direct_assign',
           targetChannelId: template.channelId,
           assignedTeamId: template.teamId ?? null,

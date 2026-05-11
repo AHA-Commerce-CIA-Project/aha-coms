@@ -9,6 +9,19 @@ function normalizeMentionTarget(value: unknown): string | null {
   return v;
 }
 
+function normalizeReferenceUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (!v) return null;
+  try {
+    const u = new URL(v);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -28,6 +41,7 @@ export async function PUT(
     type,
     channelId,
     mentionTarget,
+    referenceUrl,
     deadlineTime,
     deadlineDay,
     teamId,
@@ -73,6 +87,7 @@ export async function PUT(
         ...(type ? { type: type === 'TEAM' ? 'TEAM' : 'INDIVIDUAL' } : {}),
         ...(channelId !== undefined ? { channelId: channelId || null } : {}),
         ...(mentionTarget !== undefined ? { mentionTarget: normalizeMentionTarget(mentionTarget) } : {}),
+        ...(referenceUrl !== undefined ? { referenceUrl: normalizeReferenceUrl(referenceUrl) } : {}),
         ...(deadlineTime !== undefined ? { deadlineTime: deadlineTime || null } : {}),
         ...(deadlineDay !== undefined ? { deadlineDay: deadlineDay ? parseInt(deadlineDay) : null } : {}),
         ...(teamIds !== undefined

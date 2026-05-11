@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { X, RotateCcw } from 'lucide-react';
 import { RoutineTemplateForm, type RoutineTemplateFormInitial } from './RoutineTemplateForm';
 
-interface TeamOption { id: string; name: string }
 interface ChannelOption { id: string; name: string }
 interface UserOption { id: string; name: string; image?: string | null }
 
@@ -25,7 +24,6 @@ export function RoutineTemplateModal({
   defaultChannelId,
   initial,
 }: RoutineTemplateModalProps) {
-  const [teams, setTeams] = useState<TeamOption[]>([]);
   const [channels, setChannels] = useState<ChannelOption[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,14 +33,12 @@ export function RoutineTemplateModal({
     let cancelled = false;
     setLoading(true);
     Promise.all([
-      fetch('/api/teams').then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch('/api/channels?purpose=discussion').then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch('/api/channels?purpose=assign_task').then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch('/api/users').then((r) => (r.ok ? r.json() : [])).catch(() => []),
     ])
-      .then(([t, d, a, u]) => {
+      .then(([d, a, u]) => {
         if (cancelled) return;
-        setTeams((t as any[]).map((x) => ({ id: x.id, name: x.name })));
         setChannels([...(d as any[]), ...(a as any[])].map((x) => ({ id: x.id, name: x.name })));
         setUsers(
           (u as any[])
@@ -102,7 +98,6 @@ export function RoutineTemplateModal({
           ) : (
             <RoutineTemplateForm
               initial={initial ?? null}
-              teams={teams}
               channels={channels}
               users={users}
               defaultChannelId={defaultChannelId}

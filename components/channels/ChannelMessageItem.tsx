@@ -491,15 +491,42 @@ export function ChannelMessageItem({
                   const taskId = routineMatch[1].trim();
                   const rest = message.content.replace(/<!--routine_task:[^\s>]+?-->/, '').trim();
                   const lines = rest.split('\n');
-                  const titleLine = (lines[0] || '').replace(/^⏰\s*/, '').trim();
+                  // First line = the bot's "greeting" — carries the @mention
+                  // prefix + ⏰ title. Rendered above the card so the message
+                  // reads like a normal Slack bot post (text on top, rich
+                  // attachment below). renderContent() handles @-mention
+                  // pill styling automatically so @channel / @First.Last
+                  // pick up the same indigo background as human mentions.
+                  const greetingLine = (lines[0] || '').trim();
+                  // Title for the card header strips the ⏰ + frequency suffix
+                  // so the inner card has a clean name.
+                  const titleLine = greetingLine
+                    .replace(/^@\S+\s+/, '')           // strip leading mention if present
+                    .replace(/^⏰\s*/, '')              // strip leading clock emoji
+                    .replace(/\s*~\s*\w+\s*$/, '')     // strip trailing "~ frequency"
+                    .trim();
                   const bodyPreview = lines.slice(1).join('\n').trim();
                   return (
-                    <RoutineTaskCard
-                      taskId={taskId}
-                      previewTitle={titleLine || '(routine task)'}
-                      previewBody={bodyPreview}
-                      currentUserId={currentUserId}
-                    />
+                    <>
+                      {greetingLine && (
+                        <p className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed mb-1">
+                          {renderContent(
+                            greetingLine,
+                            allUsers,
+                            handleMentionClick,
+                            allTeams,
+                            (teamId) => setTeamPopoverId(teamId),
+                            customEmojiMap,
+                          )}
+                        </p>
+                      )}
+                      <RoutineTaskCard
+                        taskId={taskId}
+                        previewTitle={titleLine || '(routine task)'}
+                        previewBody={bodyPreview}
+                        currentUserId={currentUserId}
+                      />
+                    </>
                   );
                 }
                 // Direct Assign card — message carries a <!--direct_assign:TASK_ID--> marker.
