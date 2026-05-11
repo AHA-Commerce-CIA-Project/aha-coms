@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { useAuth } from '@/lib/auth-context';
-import { RotateCcw, Plus, Pencil, Trash2, ArrowLeft, User as UserIcon, Users, Hash } from 'lucide-react';
+import { RotateCcw, Plus, Pencil, Trash2, ArrowLeft, User as UserIcon, Users, Hash, Zap, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { RoutineTemplateModal } from '@/components/orbit/RoutineTemplateModal';
@@ -46,6 +46,14 @@ export default function ManageOrbitPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<RoutineTemplateFormInitial | null>(null);
+
+  // Per-row state for the "Test Run" button. `running` flags which template
+  // is currently force-spawning so we can disable the button + spin its
+  // icon. `lastRun` lingers the result under each row until the next click
+  // so the leader can see what happened (Task id + Message id, or the
+  // skip/error reason) without diving into logs.
+  const [running, setRunning] = useState<string | null>(null);
+  const [lastRun, setLastRun] = useState<Record<string, { status: string; taskId?: string; messageId?: string; error?: string }>>({});
 
   useEffect(() => {
     if (!isPending && !session) router.push('/login');
@@ -108,6 +116,32 @@ export default function ManageOrbitPage() {
     fetchTemplates();
   };
 
+  // Force-fire the template right now — bypasses the cron schedule and the
+  // period-dedup check. Useful for verifying the bot message + claim flow
+  // without waiting for the next */5 tick.
+  const handleTestRun = async (t: Template) => {
+    if (!t.channelId) {
+      // The run-now endpoint will short-circuit on missing channel anyway,
+      // but flagging it client-side saves a round-trip and is clearer UX.
+      setLastRun((prev) => ({ ...prev, [t.id]: { status: 'skipped_no_channel' } }));
+      return;
+    }
+    setRunning(t.id);
+    try {
+      const res = await fetch(`/api/orbit/templates/${t.id}/run-now`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLastRun((prev) => ({ ...prev, [t.id]: { status: 'error', error: data?.error || `HTTP ${res.status}` } }));
+      } else {
+        setLastRun((prev) => ({ ...prev, [t.id]: { status: data.status, taskId: data.taskId, messageId: data.messageId, error: data.error } }));
+      }
+    } catch (err: any) {
+      setLastRun((prev) => ({ ...prev, [t.id]: { status: 'error', error: err?.message || 'Network error' } }));
+    } finally {
+      setRunning(null);
+    }
+  };
+
   if (isPending || !session) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -150,7 +184,8 @@ export default function ManageOrbitPage() {
       ) : (
         <div className="space-y-2">
           {templates.map((t) => (
-            <div key={t.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-5 py-4 hover:border-indigo-200 transition-colors">
+            <div key={t.id} className="bg-white border border-slate-200 rounded-xl px-5 py-4 hover:border-indigo-200 transition-colors">
+              <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className="font-semibold text-sm text-slate-800">{t.name}</span>
@@ -210,6 +245,19 @@ export default function ManageOrbitPage() {
               </div>
               <div className="flex items-center gap-1 ml-4">
                 <button
+                  onClick={() => handleTestRun(t)}
+                  disabled={running === t.id}
+                  title={t.channelId ? 'Force-spawn a Task + bot message right now (skips cron + dedup)' : 'Set a channel target to enable Test Run'}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {running === t.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="w-3.5 h-3.5" />
+                  )}
+                  Test Run
+                </button>
+                <button
                   onClick={() => openEdit(t)}
                   className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors"
                 >
@@ -222,6 +270,10 @@ export default function ManageOrbitPage() {
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
+              </div>
+              {lastRun[t.id] && (
+                <TestRunResult result={lastRun[t.id]} channelName={t.channel?.name} />
+              )}
             </div>
           ))}
         </div>
@@ -233,6 +285,54 @@ export default function ManageOrbitPage() {
         onSaved={fetchTemplates}
         initial={editing}
       />
+    </div>
+  );
+}
+
+function TestRunResult({
+  result,
+  channelName,
+}: {
+  result: { status: string; taskId?: string; messageId?: string; error?: string };
+  channelName?: string | null;
+}) {
+  // Three visual states: success (spawned), benign skip, real error.
+  if (result.status === 'spawned') {
+    return (
+      <div className="mt-2 flex items-start gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">
+        <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+        <div className="min-w-0">
+          <p className="font-semibold">
+            AHABOT posted in {channelName ? `#${channelName}` : 'the channel'}.
+          </p>
+          <p className="text-emerald-600/80 truncate">
+            task <code className="font-mono">{result.taskId?.slice(0, 8)}…</code>
+            {result.messageId ? <> · message <code className="font-mono">{result.messageId.slice(0, 8)}…</code></> : null}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (result.status === 'skipped_no_channel') {
+    return (
+      <div className="mt-2 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+        <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+        <p>Pick a channel target on this template first — bot has nowhere to post.</p>
+      </div>
+    );
+  }
+  if (result.status === 'error') {
+    return (
+      <div className="mt-2 flex items-start gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">
+        <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+        <p className="truncate">Failed: {result.error || 'unknown error'}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 flex items-start gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+      <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+      <p>Run status: <code className="font-mono">{result.status}</code></p>
     </div>
   );
 }
