@@ -99,11 +99,12 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-1`.
 
 Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-3`.
 
-- [ ] **T10: Coordinate heroes freeze window with heroes' eng**
+- [x] **T10: Coordinate heroes freeze window with heroes' eng**
   - **Prerequisites:** Checkpoint 1
   - **Acceptance:** Heroes' eng has acknowledged a 1–2 day no-merge window for T11–T15.
   - **Verification:** Confirmation in writing (Slack, comment, whatever channel applies).
   - **Note:** Do not start T11 until this is `[x]`.
+  - **Resolved 2026-05-11:** sole maintainer on `coms_aha_heroes`; freeze trivially in effect. `main` clean at `33d2a75`. Three non-main remote branches exist (`ci/parallelize-and-harden`, `ci/skip-redundant-build-and-docker-parallel`, `rev3/spec-01-02-adoption`) — confirm none of them hold work that should land on `main` before T11 runs, since `git subtree add` only pulls `main`.
 
 - [ ] **T11: Subtree-merge `coms_aha_heroes` → `apps/heroes-temp/`**
   - **Prerequisites:** T10
