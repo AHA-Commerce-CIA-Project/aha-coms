@@ -714,6 +714,14 @@ model RoutineTaskTemplate {
   // (template still appears on /orbit but the bot won't post a reminder).
   channelId    String?      @map("channel_id")
   channel      Channel?     @relation("RoutineTemplateChannel", fields: [channelId], references: [id], onDelete: SetNull)
+  // Who the bot mentions when it posts. Encoded as a string so we don't need
+  // a polymorphic FK:
+  //   null | "none"       → no mention prepended
+  //   "channel"           → "@channel" — broadcast notification to all members
+  //   <user-id>           → mention a specific user; notification goes to them
+  // Resolved at spawn time so a deleted/renamed user simply degrades to no
+  // prefix rather than crashing the scheduler.
+  mentionTarget String?     @map("mention_target")
   teamId       String?      @map("team_id")
   team         Team?        @relation("TeamRoutineTemplates", fields: [teamId], references: [id], onDelete: SetNull)
   teamIds      Json         @default("[]") @map("team_ids") // Array of team IDs for multi-team visibility

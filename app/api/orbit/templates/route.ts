@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
 
+// "none" / empty → null; "channel" → "channel"; anything else stored as-is
+// (expected to be a user id, resolved at spawn time).
+function normalizeMentionTarget(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (!v || v === 'none') return null;
+  return v;
+}
+
 export async function GET() {
   const session = await requireAuth();
   if (!session) {
@@ -58,6 +67,7 @@ export async function POST(request: Request) {
     category,
     type,
     channelId,
+    mentionTarget,
     deadlineTime,
     deadlineDay,
     teamId,
@@ -92,6 +102,7 @@ export async function POST(request: Request) {
       category: category?.trim() || null,
       type: templateType,
       channelId: channelId || null,
+      mentionTarget: normalizeMentionTarget(mentionTarget),
       deadlineTime: deadlineTime || null,
       deadlineDay: deadlineDay ? parseInt(deadlineDay) : null,
       teamId: (teamIds && teamIds.length > 0) ? teamIds[0] : (teamId || null),

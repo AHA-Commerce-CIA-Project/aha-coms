@@ -71,11 +71,73 @@ interface SpawnResult {
   error?: string;
 }
 
+/**
+ * Resolve the template's mentionTarget into a concrete prefix + a set of user
+ * ids to notify. Falls back to no-mention if the target is null or unresolvable
+ * (e.g. the picked user was deleted between save and fire — better to post
+ * silently than crash the scheduler).
+ *
+ * Channel-broadcast (mentionTarget="channel") notifies every channel member
+ * other than the bot itself. Private channels use the explicit membership
+ * list; public channels expand to all active users to match the existing
+ * channel-message notification semantics.
+ */
+async function resolveMention(
+  mentionTarget: string | null,
+  channelId: string,
+  botId: string,
+): Promise<{ prefix: string; mentionedUserIds: string[] }> {
+  if (!mentionTarget || mentionTarget === 'none') {
+    return { prefix: '', mentionedUserIds: [] };
+  }
+
+  if (mentionTarget === 'channel') {
+    const channel = await prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { isPrivate: true },
+    });
+    let ids: string[];
+    if (channel?.isPrivate) {
+      const members = await prisma.channelMember.findMany({
+        where: { channelId },
+        select: { userId: true },
+      });
+      ids = members.map((m) => m.userId);
+    } else {
+      const users = await prisma.user.findMany({
+        where: { accountStatus: 'active' },
+        select: { id: true },
+      });
+      ids = users.map((u) => u.id);
+    }
+    return {
+      prefix: '@channel ',
+      mentionedUserIds: ids.filter((id) => id !== botId),
+    };
+  }
+
+  // Specific user id. Look up the name so the @-handle in the message text
+  // matches the rendered mention chip convention (`@<First.Last>`).
+  const user = await prisma.user.findUnique({
+    where: { id: mentionTarget },
+    select: { id: true, name: true, accountStatus: true },
+  });
+  if (!user || user.accountStatus !== 'active') {
+    return { prefix: '', mentionedUserIds: [] };
+  }
+  const handle = user.name.replace(/\s+/g, '.');
+  return { prefix: `@${handle} `, mentionedUserIds: [user.id] };
+}
+
 /** Build the channel-message body the bot posts. Keep terse — the card UI carries the action. */
-function renderBotMessage(template: { name: string; description: string | null; frequency: string }, taskId: string): string {
+function renderBotMessage(
+  template: { name: string; description: string | null; frequency: string },
+  taskId: string,
+  mentionPrefix: string,
+): string {
   const lines = [
     `<!--routine_task:${taskId}-->`,
-    `⏰ ${template.name} ~ ${template.frequency}`,
+    `${mentionPrefix}⏰ ${template.name} ~ ${template.frequency}`,
   ];
   if (template.description?.trim()) lines.push(template.description.trim());
   return lines.join('\n');
@@ -126,6 +188,15 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
   const bot = await getOrCreateSystemBot();
   const templateType = template.type ?? (template.isTeamWide ? 'TEAM' : 'INDIVIDUAL');
 
+  // Resolve the mention before the transaction so the @-prefix gets baked
+  // into the message text. Fan-out notifications are written after the
+  // transaction commits — a fanout failure shouldn't roll back the spawn.
+  const { prefix, mentionedUserIds } = await resolveMention(
+    template.mentionTarget,
+    template.channelId,
+    bot.id,
+  );
+
   // Spawn Task + ChecklistItems + ChannelMessage as one transaction so the
   // card-message and its underlying task are atomic — no orphan messages
   // pointing at a Task that never got written.
@@ -162,9 +233,12 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
         data: {
           channelId: template.channelId!,
           senderId: bot.id,
-          content: renderBotMessage(template, task.id),
+          content: renderBotMessage(template, task.id, prefix),
           attachments: [],
-          mentions: [],
+          // `mentions` mirrors the resolved user-id list so the rest of the
+          // app (badges, unread counts, search) treats this exactly like a
+          // human-sent @-mention.
+          mentions: mentionedUserIds,
         },
         select: { id: true },
       });
@@ -181,6 +255,31 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
 
       return { task, message };
     });
+
+    // Notification fan-out: mirror the channel-message endpoint's pattern so
+    // mentioned users get the standard "AHABOT mentioned you in #channel"
+    // entry that the bell icon / unread badges already understand.
+    if (mentionedUserIds.length > 0) {
+      const channel = await prisma.channel.findUnique({
+        where: { id: template.channelId },
+        select: { name: true },
+      });
+      await prisma.notification.createMany({
+        data: mentionedUserIds.map((uid) => ({
+          userId: uid,
+          type: 'mention',
+          title: `AHABOT mentioned you in #${channel?.name || 'channel'}`,
+          message: `⏰ ${template.name}`.slice(0, 80),
+          data: {
+            channel_id: template.channelId,
+            message_id: message.id,
+            sender_id: bot.id,
+            sender_name: 'AHABOT',
+            routine_task_id: task.id,
+          },
+        })),
+      });
+    }
 
     return { templateId, status: 'spawned', taskId: task.id, messageId: message.id };
   } catch (err: any) {

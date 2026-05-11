@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth-server';
 
+function normalizeMentionTarget(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (!v || v === 'none') return null;
+  return v;
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -20,6 +27,7 @@ export async function PUT(
     category,
     type,
     channelId,
+    mentionTarget,
     deadlineTime,
     deadlineDay,
     teamId,
@@ -64,6 +72,7 @@ export async function PUT(
         ...(category !== undefined ? { category: category?.trim() || null } : {}),
         ...(type ? { type: type === 'TEAM' ? 'TEAM' : 'INDIVIDUAL' } : {}),
         ...(channelId !== undefined ? { channelId: channelId || null } : {}),
+        ...(mentionTarget !== undefined ? { mentionTarget: normalizeMentionTarget(mentionTarget) } : {}),
         ...(deadlineTime !== undefined ? { deadlineTime: deadlineTime || null } : {}),
         ...(deadlineDay !== undefined ? { deadlineDay: deadlineDay ? parseInt(deadlineDay) : null } : {}),
         ...(teamIds !== undefined
