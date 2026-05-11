@@ -74,7 +74,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-1`.
   - **Prerequisites:** T01
   - **Acceptance:** like T06, name `@coms-portal/account-widget-react`.
 
-- [ ] **T08: Convert `apps/api` git URL deps → `workspace:*`; resolve SDK 0.1.1 → current gap**
+- [x] **T08: Convert `apps/api` git URL deps → `workspace:*`; resolve SDK 0.1.1 → current gap**
   - **Prerequisites:** T01, T02, T03 (libs available for `workspace:*` resolution)
   - **Spec ref:** Spec 01 Phase 1 Step 4 + Risk #1 in plan.md.
   - **Steps:**
