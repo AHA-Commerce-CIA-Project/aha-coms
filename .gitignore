@@ -51,6 +51,15 @@ infra/*.tfvars
 # without re-injecting these values from repo vars.
 !infra/terraform.tfvars
 infra/tfplan
+# Nested terraform trees (e.g. infra/heroes/) inherit the same rules.
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.backup
+infra/**/*.tfvars
+!infra/**/*.tfvars.example
+
+# Service account keys — never commit, regardless of location
+*.sa-key.json
 # Note: infra/.terraform.lock.hcl IS tracked. CI runs
 # `tofu init -lockfile=readonly` against it for reproducible providers.
 

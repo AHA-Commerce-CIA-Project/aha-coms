@@ -112,7 +112,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-3`.
   - **Acceptance:** `apps/heroes-temp/packages/{server,web,shared}/` exists in monorepo.
   - **Done:** subtree-add at split `33d2a75`; `bun install` deliberately red while heroes-temp sits at its waystation (heroes' root `@coms/shared@workspace:*` does not yet resolve). Cleared at T13/T14.
 
-- [ ] **T12: Restructure heroes into final layout**
+- [x] **T12: Restructure heroes into final layout**
   - **Prerequisites:** T11
   - **Steps:**
     - `apps/heroes-temp/packages/server` → `apps/heroes-api/`
@@ -122,6 +122,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-3`.
     - Delete `apps/heroes-temp/`.
   - **Acceptance:** Final layout matches the structure described in Spec 01 Phase 3 + integration contract §8.
   - **Verification:** Directory layout verified by `find apps/heroes-* packages/heroes-shared -maxdepth 2 -type d`.
+  - **Done:** Spec-mandated moves all landed. Infra placement: `infra/heroes/` at repo root (deviates slightly from spec's `apps/heroes/infra/` suggestion — kept heroes infra grouped at infra root next to portal's flat terraform; cleaner separation, no apps/* workspace ambiguity, and parallel to the spec's optional `infra/shared/` slot). Co-located heroes-api configs (`Dockerfile`, `docker-compose.yml`, `drizzle.config.ts`, `.env.example`, `.dockerignore`, `portal.integration.json`) moved into `apps/heroes-api/`. heroes-web inherited `messages/`, `project.inlang/`, `public/`. Heroes' docs (`CONTEXT.md`, `DESIGN_SYSTEM.md`, `TODOS.md`, `adr/`, `architecture/`) consolidated under `docs/heroes/`. Heroes' obsolete root artifacts deleted: own `bun.lock`, `.gitignore`, `eslint.config.js`, `package.json`, `.github/workflows/` (Cloud Build replaces in T17). Root `.gitignore` augmented for security: `*.sa-key.json` global ignore + nested `infra/**/.terraform/`, `infra/**/*.tfstate*`, `infra/**/*.tfvars` to cover `infra/heroes/`. Internal paths inside relocated configs (Dockerfile, drizzle.config.ts, portal.integration.json) still reference heroes' old `packages/{server,web,shared}` layout — they will heal at T13 (rename) or T16 (Cloud Build).
 
 - [ ] **T13: Rename heroes' internal namespace `@coms/*` → `@coms-portal/heroes-*`**
   - **Prerequisites:** T12
