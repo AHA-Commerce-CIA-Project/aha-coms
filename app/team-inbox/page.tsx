@@ -207,10 +207,21 @@ export default function TeamInboxPage() {
             const qs = params.toString();
             const url = qs ? `/api/team-inbox?${qs}` : '/api/team-inbox';
             const res = await fetch(url);
-            const data = await res.json();
-            if (!res.ok) throw new Error(data?.error || 'Failed to load');
-            setTasks(data.tasks || []);
-            if (!selectedTeamId && data.teamId) setSelectedTeamId(data.teamId);
+            // Parse the body as text first so a server-side crash (which often
+            // returns an empty body or HTML error page) doesn't blow up the
+            // page with "Failed to execute 'json' on 'Response': Unexpected
+            // end of JSON input". We map status → message and surface a
+            // useful banner instead.
+            const rawText = await res.text();
+            let data: any = null;
+            try { data = rawText ? JSON.parse(rawText) : null; } catch { data = null; }
+            if (!res.ok) {
+                const reason = data?.error
+                    || (res.status >= 500 ? `Server error (HTTP ${res.status}). Try again in a moment.` : `Request failed (HTTP ${res.status}).`);
+                throw new Error(reason);
+            }
+            setTasks(data?.tasks || []);
+            if (!selectedTeamId && data?.teamId) setSelectedTeamId(data.teamId);
         } catch (err: any) {
             setError(err?.message || 'Failed to load');
         } finally {

@@ -129,6 +129,9 @@ function NexusContent() {
     const draftTaskIds = useCommentDraftTaskIds();
     const [tickets, setTickets] = useState<TicketRow[]>([]);
     const [loading, setLoading] = useState(true);
+    // Surface a server-side fetch failure instead of silently rendering 0
+    // tickets — empty-with-no-banner used to mask schema/migration bugs.
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'queue' | 'direct'>('queue');
     const [directRequests, setDirectRequests] = useState<any[]>([]);
     const [directLoading, setDirectLoading] = useState(false);
@@ -400,13 +403,24 @@ function NexusContent() {
     const fetchTickets = async (opts?: { silent?: boolean }) => {
         // Silent refreshes (polling, tab-focus) skip the loading spinner so the list doesn't flicker.
         if (!opts?.silent) setLoading(true);
+        if (!opts?.silent) setLoadError(null);
         try {
             const res = await fetch('/api/nexus');
-            if (res.ok) {
-                setTickets(await res.json());
+            // Parse safely — a 5xx body may be empty/HTML, which would throw
+            // on .json() and pop the cryptic "Unexpected end of JSON input".
+            const rawText = await res.text();
+            let data: any = null;
+            try { data = rawText ? JSON.parse(rawText) : null; } catch { data = null; }
+            if (!res.ok) {
+                const reason = data?.error
+                    || (res.status >= 500 ? `Server error (HTTP ${res.status}). Try refreshing.` : `Request failed (HTTP ${res.status}).`);
+                setLoadError(reason);
+                return;
             }
-        } catch (err) {
+            setTickets(Array.isArray(data) ? data : []);
+        } catch (err: any) {
             console.error('Error fetching tickets:', err);
+            setLoadError(err?.message || 'Network error.');
         }
         if (!opts?.silent) setLoading(false);
     };
@@ -695,6 +709,22 @@ function NexusContent() {
 
     return (
         <div className="space-y-6">
+            {loadError && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <p className="font-semibold">Couldn&apos;t load tasks.</p>
+                        <p className="text-rose-600/80 text-[12px]">{loadError}</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => fetchTickets()}
+                        className="text-[12px] font-semibold text-rose-700 hover:bg-rose-100 px-2 py-1 rounded-md transition-colors"
+                    >
+                        Retry
+                    </button>
+                </div>
+            )}
             <div className="flex items-start justify-between gap-4">
                 <PageTabs tabs={[
                     { href: '/tasks', label: 'My Tasks' },
