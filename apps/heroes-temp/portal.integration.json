@@ -1,0 +1,84 @@
+{
+  "manifestVersion": 1,
+  "appSlug": "heroes",
+  "appName": "AHA Heroes",
+  "runtime": {
+    "stack": "bun",
+    "framework": "sveltekit+elysia",
+    "language": "typescript",
+    "packageManager": "bun"
+  },
+  "adapter": {
+    "type": "server_middleware",
+    "transport": "portable_token",
+    "handoffMode": "one_time_code",
+    "protectedRouteMode": "app_wide",
+    "modulePath": "packages/web/src/hooks.server.ts",
+    "audience": "portal:app:heroes",
+    "brokerOrigin": "reads PORTAL_ORIGIN env at runtime",
+    "callbackUrl": "https://coms-aha-heroes-app-45tyczfska-et.a.run.app/auth/portal/exchange"
+  },
+  "authEntrypoints": [
+    {
+      "kind": "token_exchange",
+      "path": "/auth/portal/exchange",
+      "method": "GET",
+      "description": "Receives portal_code from broker launch redirect and mints a local session"
+    },
+    {
+      "kind": "logout",
+      "path": "/auth/portal/logout",
+      "method": "POST"
+    },
+    {
+      "kind": "webhook_receiver",
+      "path": "/api/webhooks/portal",
+      "method": "POST",
+      "description": "Receives portal session/user lifecycle events (HMAC-verified)"
+    }
+  ],
+  "protectedRoutes": [
+    { "pattern": "/(authed)", "kind": "prefix" },
+    { "pattern": "/api/v1", "kind": "prefix" }
+  ],
+  "requiredEnv": [
+    {
+      "name": "PORTAL_ORIGIN",
+      "required": true,
+      "description": "Origin of the COMS portal broker (e.g. https://coms.ahacommerce.net)"
+    },
+    {
+      "name": "PORTAL_APP_SLUG",
+      "required": true,
+      "description": "App slug registered with the portal — heroes"
+    },
+    {
+      "name": "PORTAL_SERVICE_ACCOUNT_EMAIL",
+      "required": true,
+      "description": "Portal Cloud Run SA email — used to verify Authorization: Bearer Google ID tokens on inbound webhooks (Rev 2 §03)"
+    },
+    {
+      "name": "SELF_PUBLIC_URL",
+      "required": true,
+      "description": "Heroes' own public URL — used as the expected 'aud' claim when verifying portal-issued ID tokens (Rev 2 §03)"
+    }
+  ],
+  "appRoles": [
+    { "key": "employee", "label": "Employee", "default": true, "description": "Standard user" },
+    { "key": "leader", "label": "Team Leader", "description": "Can submit points for team members" },
+    { "key": "hr", "label": "HR", "description": "Can manage users and view reports" },
+    { "key": "admin", "label": "Administrator", "description": "Full access including settings" }
+  ],
+  "compliance": {
+    "status": "planned",
+    "contractVersion": 1,
+    "notes": [
+      "Closed registration: 403 on portal users with no row in local users/userEmails table.",
+      "Local sessions reuse the existing better-auth session/user tables; cookie name is coms_session.",
+      "Currently deployed on Cloud Run URL; subdomain heroes.ahacommerce.net not yet provisioned.",
+      "Runtime reads PORTAL_ORIGIN env; adapter.brokerOrigin here is informational only."
+    ],
+    "blockerCategories": [],
+    "lastVerifiedAt": null
+  }
+}

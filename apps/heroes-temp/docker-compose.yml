@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: coms_aha_heroes_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: coms_aha_heroes_dev
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

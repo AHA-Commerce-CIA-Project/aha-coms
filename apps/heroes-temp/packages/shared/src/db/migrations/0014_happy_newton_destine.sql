@@ -1,0 +1,1 @@
+ALTER TABLE "heroes_profiles" DROP COLUMN "must_change_password";

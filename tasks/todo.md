@@ -106,10 +106,11 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-3`.
   - **Note:** Do not start T11 until this is `[x]`.
   - **Resolved 2026-05-11:** sole maintainer on `coms_aha_heroes`; freeze trivially in effect. `main` clean at `33d2a75`. Three non-main remote branches exist (`ci/parallelize-and-harden`, `ci/skip-redundant-build-and-docker-parallel`, `rev3/spec-01-02-adoption`) — confirm none of them hold work that should land on `main` before T11 runs, since `git subtree add` only pulls `main`.
 
-- [ ] **T11: Subtree-merge `coms_aha_heroes` → `apps/heroes-temp/`**
+- [x] **T11: Subtree-merge `coms_aha_heroes` → `apps/heroes-temp/`**
   - **Prerequisites:** T10
   - **Steps:** Use `git subtree add` to bring the whole repo in, preserving history.
   - **Acceptance:** `apps/heroes-temp/packages/{server,web,shared}/` exists in monorepo.
+  - **Done:** subtree-add at split `33d2a75`; `bun install` deliberately red while heroes-temp sits at its waystation (heroes' root `@coms/shared@workspace:*` does not yet resolve). Cleared at T13/T14.
 
 - [ ] **T12: Restructure heroes into final layout**
   - **Prerequisites:** T11

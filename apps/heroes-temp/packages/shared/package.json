@@ -1,0 +1,26 @@
+{
+  "name": "@coms/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./db": "./src/db/index.ts",
+    "./db/schema": "./src/db/schema/index.ts",
+    "./schemas": "./src/schemas/index.ts",
+    "./constants": "./src/constants/index.ts",
+    "./types": "./src/types/index.ts",
+    "./auth/session": "./src/auth/session.ts"
+  },
+  "scripts": {
+    "build": "echo 'shared uses direct TS imports — no build needed'",
+    "typecheck": "tsc --noEmit",
+    "generate:schemas": "bun run scripts/generate-schemas.ts"
+  },
+  "dependencies": {
+    "@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.2.0",
+    "@sinclair/typebox": "^0.34.0",
+    "drizzle-orm": "^0.45.0",
+    "drizzle-typebox": "^0.2.0",
+    "postgres": "^3.4.5"
+  }
+}

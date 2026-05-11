@@ -1,0 +1,2 @@
+ALTER TABLE "sheet_sync_jobs" DROP CONSTRAINT "chk_sync_direction";--> statement-breakpoint
+ALTER TABLE "sheet_sync_jobs" ADD CONSTRAINT "chk_sync_direction" CHECK (direction IN ('import', 'export', 'resync'));

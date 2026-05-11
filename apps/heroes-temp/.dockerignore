@@ -1,0 +1,43 @@
+# Version control (shallow clones break lix/inlang in Docker)
+.git
+
+# Dependencies (installed fresh in Docker)
+node_modules
+
+# Build artifacts
+**/dist
+.output
+.nitro
+packages/web/.svelte-kit
+packages/web/build
+
+# IDE / tooling
+.vscode
+.idea
+.claude
+.claude-flow
+.gemini
+.omc
+.omx
+.gstack
+.gitnexus
+.code-review-graph
+
+# Infrastructure
+infra/.terraform
+infra/*.tfstate
+infra/*.tfstate.backup
+*.tfvars
+
+# Design / docs (not needed for build)
+my-designs
+docs
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files
+.env
+.env.*
+!.env.example

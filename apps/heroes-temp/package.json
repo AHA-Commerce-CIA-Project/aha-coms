@@ -1,0 +1,41 @@
+{
+  "name": "coms-aha-heroes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "bun run --filter=server dev",
+    "build": "bun run --filter=@coms/shared build && bun run --filter=@coms/web build && bun run --filter=@coms/server build",
+    "lint": "eslint .",
+    "typecheck": "bun run --filter=* typecheck",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "bun run --env-file=.env tsx packages/shared/src/db/seed/index.ts",
+    "db:studio": "drizzle-kit studio",
+    "generate:schemas": "bun run --filter=shared generate:schemas",
+    "ci:check-no-illegal-inserts": "bun run scripts/check-no-illegal-inserts.ts",
+    "cutover:verify": "bun run scripts/cutover-verify.ts"
+  },
+  "devDependencies": {
+    "@coms/shared": "workspace:*",
+    "@eslint/js": "^9.20.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/node": "^22.5.4",
+    "drizzle-kit": "^0.31.0",
+    "drizzle-orm": "^0.45.0",
+    "eslint": "^9.20.0",
+    "eslint-plugin-svelte": "^3.17.0",
+    "globals": "^17.5.0",
+    "prettier": "^3.5.0",
+    "prettier-plugin-tailwindcss": "^0.6.12",
+    "svelte-eslint-parser": "^1.6.0",
+    "tailwindcss": "^4.2.2",
+    "tsx": "^4.19.0",
+    "typescript": "^6.0.0",
+    "typescript-eslint": "^8.25.0"
+  },
+  "trustedDependencies": [
+    "esbuild"
+  ]
+}
