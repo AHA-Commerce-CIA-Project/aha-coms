@@ -281,7 +281,7 @@ function MessagesWorkspace() {
                         </div>
                     ) : (
                         <div className="flex-1 min-w-0 text-sm text-slate-400">
-                            {isLaterMode ? 'Later' : isDmMode ? 'Direct message' : ''}
+                            {isDmMode ? 'Direct message' : ''}
                         </div>
                     )}
                 </div>
@@ -300,11 +300,19 @@ function MessagesWorkspace() {
                 <div className={cn('flex-1 min-h-0', isDmMode ? 'flex' : 'hidden')}>
                     <DmPane />
                 </div>
+                {/* LaterPane sits in the fixed-height workspace, so it needs
+                    an explicit flex-1 min-h-0 overflow-y-auto wrapper to scroll
+                    internally — without it the saved-message list overflows
+                    the pane and the bottom rows get clipped. ChannelPane and
+                    DmPane manage their own internal scroll, so they don't
+                    need this wrapper. */}
                 {isLaterMode && laterTab && (
-                    <LaterPane
-                        tabOverride={laterTab}
-                        onTabChange={(t) => router.replace(`/messages?later=${t}`)}
-                    />
+                    <div className="flex-1 min-h-0 overflow-y-auto">
+                        <LaterPane
+                            tabOverride={laterTab}
+                            onTabChange={(t) => router.replace(`/messages?later=${t}`)}
+                        />
+                    </div>
                 )}
                 {!isChannelMode && !isDmMode && !isLaterMode && <EmptyState />}
             </div>

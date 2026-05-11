@@ -223,17 +223,10 @@ export function LaterPane({ tabOverride, onTabChange }: LaterPaneProps = {}) {
   if (!session) return null;
 
   return (
-    <div className="space-y-6">
-      {/* Header — left-aligned at the page edge to match /tasks, /analytics, etc. */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-          <Bookmark className="w-5 h-5 text-indigo-600" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">Later</h1>
-          <p className="text-sm text-slate-400">Messages and tasks you saved for later</p>
-        </div>
-      </div>
+    <div className="space-y-4 px-4 sm:px-6 py-4">
+      {/* Clean page title — single short h1 at top-left, matching the rest
+          of the app. (The bulky icon+subtitle header was removed.) */}
+      <h1 className="text-xl font-semibold text-slate-800">Later</h1>
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200">
@@ -284,7 +277,7 @@ export function LaterPane({ tabOverride, onTabChange }: LaterPaneProps = {}) {
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 max-w-3xl">
             {messages.map((item) => {
               const isReply = !!item.reply;
               const displayContent = isReply ? item.reply! : item.message;
@@ -430,7 +423,7 @@ export function LaterPane({ tabOverride, onTabChange }: LaterPaneProps = {}) {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 max-w-3xl">
           {tasks.map((item) => {
             const t = item.task;
             if (!t) return null;
