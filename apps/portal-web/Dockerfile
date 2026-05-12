@@ -33,6 +33,10 @@ ENV VITE_GIP_API_KEY=$VITE_GIP_API_KEY
 ENV VITE_GIP_AUTH_DOMAIN=$VITE_GIP_AUTH_DOMAIN
 ENV VITE_GIP_PROJECT_ID=$VITE_GIP_PROJECT_ID
 COPY --from=deps /app/node_modules ./node_modules
+# Bun's isolated install puts third-party deps under per-workspace node_modules.
+# Copy every per-workspace node_modules tree so the builder can resolve all imports.
+COPY --from=deps /app/apps apps/
+COPY --from=deps /app/packages packages/
 COPY tsconfig.base.json ./
 # portal-web type-checks against @coms-portal/portal-api source — that
 # package must be present so svelte-check can follow the imports.
@@ -43,7 +47,7 @@ COPY packages/sdk packages/sdk
 COPY packages/design-tokens packages/design-tokens
 COPY packages/ui-svelte packages/ui-svelte
 COPY packages/account-widget-svelte packages/account-widget-svelte
-RUN bun run --filter @coms-portal/portal-web build
+RUN NODE_ENV=production bun run --filter @coms-portal/portal-web build
 
 FROM oven/bun:1-slim AS runtime
 LABEL org.opencontainers.image.title="COMS Portal Web" \

@@ -26,6 +26,10 @@ RUN bun install --frozen-lockfile
 FROM oven/bun:1 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+# Bun's isolated install puts third-party deps under per-workspace node_modules.
+# Copy every per-workspace node_modules tree so the builder can resolve all imports.
+COPY --from=deps /app/apps apps/
+COPY --from=deps /app/packages packages/
 COPY tsconfig.base.json ./
 # heroes-web type-checks against @coms-portal/heroes-api source.
 COPY apps/heroes-api apps/heroes-api
@@ -37,7 +41,7 @@ COPY packages/design-tokens packages/design-tokens
 COPY packages/ui-svelte packages/ui-svelte
 COPY packages/account-widget-svelte packages/account-widget-svelte
 RUN bun run --filter @coms-portal/heroes-shared build
-RUN bun run --filter @coms-portal/heroes-web build
+RUN NODE_ENV=production bun run --filter @coms-portal/heroes-web build
 
 FROM oven/bun:1-slim AS runtime
 LABEL org.opencontainers.image.title="COMS Heroes Web" \

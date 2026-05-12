@@ -27,12 +27,15 @@ RUN bun install --frozen-lockfile
 FROM oven/bun:1 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/portal-api/node_modules apps/portal-api/node_modules
+# Bun's isolated install puts third-party deps under per-workspace node_modules.
+# Copy every per-workspace node_modules tree so the builder can resolve all imports.
+COPY --from=deps /app/apps apps/
+COPY --from=deps /app/packages packages/
 COPY tsconfig.base.json ./
 COPY apps/portal-api apps/portal-api
 COPY packages/shared packages/shared
 COPY packages/sdk packages/sdk
-RUN bun run --filter @coms-portal/portal-api build
+RUN NODE_ENV=production bun run --filter @coms-portal/portal-api build
 
 FROM oven/bun:1-slim AS runtime
 LABEL org.opencontainers.image.title="COMS Portal API" \

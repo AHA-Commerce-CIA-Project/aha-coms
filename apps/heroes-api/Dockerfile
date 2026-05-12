@@ -26,6 +26,11 @@ RUN bun install --frozen-lockfile
 FROM oven/bun:1 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+# Bun's isolated install puts third-party deps under per-workspace node_modules
+# (e.g. elysia lives under apps/heroes-api/node_modules, not the hoisted root).
+# Copy every per-workspace node_modules tree so the builder can resolve all imports.
+COPY --from=deps /app/apps apps/
+COPY --from=deps /app/packages packages/
 COPY tsconfig.base.json ./
 COPY apps/heroes-api apps/heroes-api
 COPY apps/heroes-web apps/heroes-web
