@@ -1,0 +1,78 @@
+name: Deploy — heroes-web
+
+# Fires on push to main when heroes-web or its dependencies change.
+# ci.yml runs on PRs to main and gates merges via branch protection, so
+# this workflow trusts the merged code passed typecheck/test there and
+# skips re-running them.
+#
+# Repo vars expected:
+#   WIF_PROVIDER_HEROES  — full resource name of the heroes WIF provider
+#   WIF_SA_HEROES        — coms-heroes-deployer-sa@<project>.iam.gserviceaccount.com
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/heroes-web/**'
+      - 'apps/heroes-api/**'   # web typechecks against api types
+      - 'packages/heroes-shared/**'
+      - 'packages/sdk/**'
+      - 'packages/shared/**'
+      - 'packages/ui-svelte/**'
+      - 'packages/design-tokens/**'
+      - 'packages/account-widget-svelte/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/deploy-heroes-web.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-heroes-web
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: fbi-dev-484410
+  GCP_REGION: asia-southeast2
+  SERVICE_NAME: coms-heroes-web
+  ARTIFACT_REPO: coms-heroes-repo
+  RUNTIME_SA: coms-heroes-web-sa@fbi-dev-484410.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Authenticate to GCP via WIF
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_HEROES }}
+          service_account: ${{ vars.WIF_SA_HEROES }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure docker for Artifact Registry
+        run: gcloud auth configure-docker ${GCP_REGION}-docker.pkg.dev --quiet
+
+      - name: Build, push, deploy
+        env:
+          IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}
+        run: |
+          docker build \
+            --file=apps/heroes-web/Dockerfile \
+            --tag="${IMAGE}:${GITHUB_SHA}" \
+            --tag="${IMAGE}:latest" \
+            --cache-from="${IMAGE}:latest" \
+            --build-arg=BUILDKIT_INLINE_CACHE=1 \
+            .
+          docker push --all-tags "${IMAGE}"
+          gcloud run deploy "${SERVICE_NAME}" \
+            --image="${IMAGE}:${GITHUB_SHA}" \
+            --region="${GCP_REGION}" \
+            --platform=managed \
+            --service-account="${RUNTIME_SA}" \
+            --quiet

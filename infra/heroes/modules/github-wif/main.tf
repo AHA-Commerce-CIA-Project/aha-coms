@@ -1,12 +1,15 @@
 # ── Workload Identity Federation for GitHub Actions ───────────────────────────
-# Allows GitHub Actions to authenticate to GCP without long-lived keys.
-# The deployer SA is separate from the Cloud Run runtime SA (least privilege).
+# Allows GitHub Actions in `mrdoorba/coms-portal` (the monorepo holding both
+# heroes and portal) to authenticate to GCP without long-lived keys. The
+# deployer SA is separate from the Cloud Run runtime SAs (least privilege).
+# T17 returned heroes' deploys to GitHub Actions; this module powers the
+# `deploy-heroes-{api,web}.yml` workflows there.
 
 resource "google_iam_workload_identity_pool" "github" {
   project                   = var.project_id
-  workload_identity_pool_id = "coms-aha-heroes-wif-pool"
+  workload_identity_pool_id = "coms-heroes-wif-pool"
   display_name              = "GitHub Actions"
-  description               = "OIDC identity pool for GitHub Actions CI/CD"
+  description               = "OIDC identity pool for GitHub Actions CI/CD against the heroes corridor"
 }
 
 resource "google_iam_workload_identity_pool_provider" "github" {
@@ -32,8 +35,8 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 
 resource "google_service_account" "deployer" {
   project      = var.project_id
-  account_id   = "coms-aha-heroes-deployer-sa"
-  display_name = "CI/CD Deployer SA — coms-aha-heroes"
+  account_id   = "coms-heroes-deployer-sa"
+  display_name = "CI/CD Deployer SA — coms-heroes"
 }
 
 # Allow GitHub Actions (via WIF pool) to impersonate the deployer SA
@@ -73,21 +76,28 @@ resource "google_project_iam_member" "deployer_secret_accessor" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
-# Impersonate the Cloud Run runtime SA when deploying (--service-account flag)
+# Impersonate each Cloud Run runtime SA when deploying (--service-account flag).
+# Heroes runs as two services (api + web), each with its own runtime SA — the
+# deployer needs act-as on both so a single workflow per service can pass the
+# right --service-account to `gcloud run deploy`.
 resource "google_service_account_iam_member" "deployer_act_as_runtime" {
-  service_account_id = "projects/${var.project_id}/serviceAccounts/${var.cloud_run_service_account_email}"
+  for_each = toset(var.cloud_run_service_account_emails)
+
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${each.value}"
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }
 
-# Mint OIDC ID tokens on behalf of the runtime SA. Used by the
+# Mint OIDC ID tokens on behalf of each runtime SA. Used by the
 # register-manifest CD step (Rev 4 Spec 02 §HB) — google-github-actions/auth
 # impersonates the runtime SA via this binding so the OIDC token's `email`
 # claim matches the serviceAccountEmail the portal has registered for
 # slug='heroes'. Without this, `bun x coms-portal-cli register-manifest`
 # exits 1 with an auth failure before the request leaves the runner.
 resource "google_service_account_iam_member" "deployer_mint_token_as_runtime" {
-  service_account_id = "projects/${var.project_id}/serviceAccounts/${var.cloud_run_service_account_email}"
+  for_each = toset(var.cloud_run_service_account_emails)
+
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${each.value}"
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }
@@ -109,11 +119,14 @@ resource "google_project_iam_member" "deployer_viewer" {
 }
 
 # Read state from the GCS-backed OpenTofu backend. The bucket is the literal
-# from `infra/backend.tf` — the backend block doesn't accept variables
+# from `infra/heroes/backend.tf` — the backend block doesn't accept variables
 # (OpenTofu/Terraform limitation: backend config must be static), so the
-# name lives in two places by necessity. objectViewer is sufficient because
-# the infra-plan job uses `tofu plan -lock=false`; no lock-file write means
-# no objectAdmin needed.
+# name lives in two places by necessity. The bucket retains its
+# coms-aha-heroes-tfstate name because renaming a state bucket is
+# operationally heavy (move state + reconfigure backend); covered by the
+# "existing coms-aha-* names stay" exception in tasks/plan.md.
+# objectViewer is sufficient because the infra-plan job uses
+# `tofu plan -lock=false`; no lock-file write means no objectAdmin needed.
 resource "google_storage_bucket_iam_member" "deployer_tfstate_reader" {
   bucket = "coms-aha-heroes-tfstate"
   role   = "roles/storage.objectViewer"

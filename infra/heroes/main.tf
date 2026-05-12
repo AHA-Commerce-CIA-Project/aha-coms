@@ -46,9 +46,12 @@ module "github_wif" {
   project_id  = var.project_id
   github_org  = var.github_org
   github_repo = var.github_repo
-  # The deployer SA needs to act-as the api SA when running migrations from CI.
-  # T16 retired heroes' own GitHub Actions in favour of the monorepo's WIF
-  # (infra/wif.tf in the portal state). This module's deployer SA is now an
-  # orphan; cleanup deferred to a follow-up.
-  cloud_run_service_account_email = google_service_account.heroes_api_runtime.email
+  # T17 returned heroes' deploys to GitHub Actions (the public repo gets free
+  # unlimited Actions minutes; Cloud Build with E2_HIGHCPU_8 has no free tier).
+  # The deployer SA needs act-as on both runtime SAs so the per-service deploy
+  # workflows can each pass `--service-account` for their own service.
+  cloud_run_service_account_emails = [
+    google_service_account.heroes_api_runtime.email,
+    google_service_account.heroes_web_runtime.email,
+  ]
 }
