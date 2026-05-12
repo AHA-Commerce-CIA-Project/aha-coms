@@ -14,6 +14,7 @@ export const appRegistry = pgTable('app_registry', {
   name: varchar('name', { length: 100 }).notNull(),
   description: text('description'),
   url: varchar('url', { length: 500 }).notNull(),
+  healthCheckUrl: varchar('health_check_url', { length: 500 }),
   basePath: varchar('base_path', { length: 100 }).notNull(),
   iconUrl: text('icon_url'),
   cloudRunService: varchar('cloud_run_service', { length: 100 }),

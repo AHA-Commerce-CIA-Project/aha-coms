@@ -26,6 +26,20 @@ resource "google_secret_manager_secret_iam_member" "portal_runtime_gip_api_key" 
   member    = "serviceAccount:${google_service_account.portal_runtime.email}"
 }
 
+# Cloud Build (manual escape-hatch path `gcloud builds submit --config
+# apps/portal-web/cloudbuild.yaml .`) bakes the API key into the portal-web
+# SSR bundle at build time. The hot deploy path is GHA — it authenticates
+# under coms-portal-github-actions and reads the secret as that SA — but the
+# Cloud Build yaml stays in tree as a one-off fallback, and the legacy default
+# Cloud Build SA needs the read grant for that fallback to work. Firebase web
+# config (auth domain, project id) is inlined as substitutions; only the API
+# key is fetched here.
+resource "google_secret_manager_secret_iam_member" "cloud_build_gip_api_key" {
+  secret_id = google_secret_manager_secret.gip_api_key.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
+}
+
 resource "google_secret_manager_secret_iam_member" "portal_runtime_broker_signing_secret" {
   secret_id = google_secret_manager_secret.portal_broker_signing_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"

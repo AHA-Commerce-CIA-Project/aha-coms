@@ -3,11 +3,21 @@ import { db } from '~/db'
 import { appRegistry } from '~/db/schema'
 import { logger } from '~/logger'
 
-export async function probeAppHealth(app: { id: string; url: string; slug: string }): Promise<{
+export async function probeAppHealth(app: {
+  id: string
+  url: string
+  slug: string
+  healthCheckUrl: string | null
+}): Promise<{
   status: 'healthy' | 'degraded' | 'unhealthy'
   error?: string
 }> {
-  const healthUrl = new URL('/api/health', app.url).toString()
+  // Prefer the explicit probe target when present. Falls back to the legacy
+  // `${app.url}/api/health` convention for apps registered before the column
+  // existed (FAST today). The explicit field exists because the T16.5 split
+  // means an app's launch host (web) and its health endpoint (api) no longer
+  // share an origin — convention can't recover that.
+  const healthUrl = app.healthCheckUrl ?? new URL('/api/health', app.url).toString()
 
   try {
     const res = await fetch(healthUrl, {
@@ -25,7 +35,12 @@ export async function probeAppHealth(app: { id: string; url: string; slug: strin
 
 export async function probeAllApps(): Promise<void> {
   const apps = await db
-    .select({ id: appRegistry.id, url: appRegistry.url, slug: appRegistry.slug })
+    .select({
+      id: appRegistry.id,
+      url: appRegistry.url,
+      slug: appRegistry.slug,
+      healthCheckUrl: appRegistry.healthCheckUrl,
+    })
     .from(appRegistry)
     .where(eq(appRegistry.status, 'active'))
 

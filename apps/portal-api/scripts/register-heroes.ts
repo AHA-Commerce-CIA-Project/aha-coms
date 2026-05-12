@@ -50,21 +50,26 @@
  *     2>/dev/null || echo dev-heroes-hmac-secret) \
  *   bun run --cwd apps/portal-api register:heroes
  *
+ *   # HEROES_HEALTH_CHECK_URL defaults to the api origin of HEROES_WEBHOOK_URL
+ *   # + `/api/health` (i.e. heroes-api's health endpoint, not heroes-web's
+ *   # nonexistent one). Override only when probing a different target.
+ *
  *   # After T24 base-paths heroes-web at /heroes/* and T26 base-paths
  *   # heroes-api at /heroes/api/*, re-run with single-origin URLs:
  *   #   HEROES_APP_URL=https://aha-coms.web.app/heroes
  *   #   HEROES_WEBHOOK_URL=https://aha-coms.web.app/heroes/api/webhooks/portal
+ *   #   HEROES_HEALTH_CHECK_URL=https://aha-coms.web.app/heroes/api/health
  *   # so the launch flow stays same-origin and the __session cookie crosses.
  *
  * Upsert semantics: if `slug=heroes` does not exist, the script INSERTs all
  * three rows (app_registry, app_manifests, app_webhook_endpoints). If it
  * exists, the script UPDATEs only the drift-prone fields (url,
- * serviceAccountEmail, brokerOrigin on app_registry; url + secret on
- * app_webhook_endpoints). Immutable fields (slug, name, description,
- * basePath, adapterType, transportMode, handoffMode, appRoles) and the
- * manifest are left alone — change those through a contract revision, not a
- * re-registration. The script logs the specific fields that drifted, or "no
- * changes needed" if all values match.
+ * healthCheckUrl, serviceAccountEmail, brokerOrigin on app_registry; url +
+ * secret on app_webhook_endpoints). Immutable fields (slug, name,
+ * description, basePath, adapterType, transportMode, handoffMode, appRoles)
+ * and the manifest are left alone — change those through a contract
+ * revision, not a re-registration. The script logs the specific fields that
+ * drifted, or "no changes needed" if all values match.
  *
  * Webhook endpoint status is set to `active` because heroes' receiver at
  * `apps/heroes-api/src/routes/portal-webhooks.ts` is live (verifies inbound
@@ -160,6 +165,17 @@ async function main() {
   // shape for backwards compatibility with the original runbook; override via
   // HEROES_WEBHOOK_URL when the api lives on its own host.
   const webhookUrl = process.env.HEROES_WEBHOOK_URL?.trim() || `${heroesUrl}/api/webhooks/portal`
+  // Health probe target. The portal periodically GETs this URL and stamps
+  // healthStatus on the app_registry row; the dashboard reads that field for
+  // the per-app indicator. The probe must land on heroes-api (which exposes
+  // `/api/health`) — heroes-web has no such route, so deriving from
+  // HEROES_APP_URL would yield 404s and a perpetually "Degraded" card.
+  // Default derives the api origin by stripping the webhook path; override via
+  // HEROES_HEALTH_CHECK_URL when a different probe target is needed (e.g.
+  // post-T26 single-origin: https://aha-coms.web.app/heroes/api/health).
+  const healthCheckUrl =
+    process.env.HEROES_HEALTH_CHECK_URL?.trim() ||
+    new URL('/api/health', webhookUrl).toString()
 
   await db.transaction(async (tx) => {
     const existing = await tx
@@ -167,6 +183,7 @@ async function main() {
         id: appRegistry.id,
         status: appRegistry.status,
         url: appRegistry.url,
+        healthCheckUrl: appRegistry.healthCheckUrl,
         serviceAccountEmail: appRegistry.serviceAccountEmail,
         brokerOrigin: appRegistry.brokerOrigin,
       })
@@ -178,6 +195,9 @@ async function main() {
       const row = existing[0]
       const drift: string[] = []
       if (row.url !== heroesUrl) drift.push(`url: ${row.url} → ${heroesUrl}`)
+      if (row.healthCheckUrl !== healthCheckUrl) {
+        drift.push(`healthCheckUrl: ${row.healthCheckUrl ?? '(null)'} → ${healthCheckUrl}`)
+      }
       if (row.serviceAccountEmail !== heroesSa) {
         drift.push(`serviceAccountEmail: ${row.serviceAccountEmail} → ${heroesSa}`)
       }
@@ -192,7 +212,7 @@ async function main() {
         return
       }
 
-      // Update path: refresh the three drift-prone fields on app_registry, the
+      // Update path: refresh the four drift-prone fields on app_registry, the
       // webhook URL on app_webhook_endpoints, and the secret if it changed. The
       // immutable fields (slug, name, description, basePath, adapterType,
       // transportMode, handoffMode, appRoles) are left alone — change those
@@ -201,6 +221,7 @@ async function main() {
         .update(appRegistry)
         .set({
           url: heroesUrl,
+          healthCheckUrl,
           serviceAccountEmail: heroesSa,
           brokerOrigin,
         })
@@ -228,6 +249,7 @@ async function main() {
         name: NAME,
         description: DESCRIPTION,
         url: heroesUrl,
+        healthCheckUrl,
         basePath: BASE_PATH,
         adapterType: ADAPTER_TYPE,
         transportMode: TRANSPORT_MODE,

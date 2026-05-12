@@ -2,10 +2,20 @@
 # Per integration contract §8 — monorepo-root context, image tag = git SHA,
 # secrets sourced from Secret Manager (not substitutions).
 #
-# VITE_GIP_* build args are baked into the client bundle. They're stored in
-# Secret Manager (`coms-portal-vite-gip-*`) and fetched via availableSecrets
-# rather than passed as substitutions, per §8 's "never bake secrets into
-# substitutions" rule even though Firebase web config is technically public.
+# This file is the manual escape hatch for one-off deploys (`gcloud builds
+# submit --config apps/portal-web/cloudbuild.yaml .`). The hot deploy path is
+# `.github/workflows/deploy-portal-web.yml` (T17 returned deploys to GHA);
+# this yaml mirrors that workflow's build-arg shape so the two paths produce
+# byte-identical images.
+#
+# VITE_GIP_* are inlined into the portal-web SSR bundle at build time by Vite
+# (see apps/portal-web/src/lib/firebase.ts + Dockerfile ARGs).
+# - VITE_GIP_API_KEY: fetched from `coms-portal-gip-api-key` (the same secret
+#   portal-api reads at runtime — single source of truth, not a duplicate
+#   vite-prefixed copy).
+# - VITE_GIP_AUTH_DOMAIN, VITE_GIP_PROJECT_ID: inline plain values. Firebase
+#   web config is public by Firebase's own model and lives in the bundle that
+#   ships to the browser; storing them as secrets would buy no protection.
 #
 # Trigger should set `includedFiles`:
 #   - apps/portal-web/**
@@ -24,20 +34,17 @@ substitutions:
   _ARTIFACT_REPO: coms-portal-registry
   _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_SERVICE_NAME}
   _RUNTIME_SA: coms-portal-run-sa@${PROJECT_ID}.iam.gserviceaccount.com
+  _VITE_GIP_AUTH_DOMAIN: fbi-dev-484410.firebaseapp.com
 
 availableSecrets:
   secretManager:
-    - versionName: projects/${PROJECT_ID}/secrets/coms-portal-vite-gip-api-key/versions/latest
+    - versionName: projects/${PROJECT_ID}/secrets/coms-portal-gip-api-key/versions/latest
       env: VITE_GIP_API_KEY
-    - versionName: projects/${PROJECT_ID}/secrets/coms-portal-vite-gip-auth-domain/versions/latest
-      env: VITE_GIP_AUTH_DOMAIN
-    - versionName: projects/${PROJECT_ID}/secrets/coms-portal-vite-gip-project-id/versions/latest
-      env: VITE_GIP_PROJECT_ID
 
 steps:
   - id: build
     name: gcr.io/cloud-builders/docker
-    secretEnv: [VITE_GIP_API_KEY, VITE_GIP_AUTH_DOMAIN, VITE_GIP_PROJECT_ID]
+    secretEnv: [VITE_GIP_API_KEY]
     entrypoint: bash
     args:
       - -c
@@ -49,8 +56,8 @@ steps:
           --cache-from=${_IMAGE}:latest \
           --build-arg=BUILDKIT_INLINE_CACHE=1 \
           --build-arg=VITE_GIP_API_KEY="$$VITE_GIP_API_KEY" \
-          --build-arg=VITE_GIP_AUTH_DOMAIN="$$VITE_GIP_AUTH_DOMAIN" \
-          --build-arg=VITE_GIP_PROJECT_ID="$$VITE_GIP_PROJECT_ID" \
+          --build-arg=VITE_GIP_AUTH_DOMAIN="${_VITE_GIP_AUTH_DOMAIN}" \
+          --build-arg=VITE_GIP_PROJECT_ID="${PROJECT_ID}" \
           .
 
   - id: push

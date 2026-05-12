@@ -1,0 +1,1 @@
+ALTER TABLE "app_registry" ADD COLUMN "health_check_url" varchar(500);
