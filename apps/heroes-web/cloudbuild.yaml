@@ -2,9 +2,11 @@
 # Per integration contract §8 — monorepo-root context, image tag = git SHA,
 # secrets sourced from Secret Manager (not substitutions).
 #
-# Deploy targets `coms-heroes-web`, the contract-aligned end state. Same
-# caveat as apps/heroes-api/cloudbuild.yaml — heroes-infra split is deferred
-# to a follow-up; trigger config can override `_SERVICE_NAME` if needed.
+# Deploys to `coms-heroes-web`, declared in infra/heroes/cloud-run.tf alongside
+# `coms-heroes-api` (T16.5 split the heroes infra to match the contract-aligned
+# names). Runs as `coms-heroes-web-sa` — least-priv: DB access only, no GCS,
+# no signed-URL minting, no sheet-sync key. Spec 02 Phase 2 will narrow the
+# DB access once heroes-web stops touching the database for SSR.
 #
 # Trigger should set `includedFiles`:
 #   - apps/heroes-web/**
@@ -23,7 +25,7 @@ substitutions:
   _SERVICE_NAME: coms-heroes-web
   _ARTIFACT_REPO: coms-portal-registry
   _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_SERVICE_NAME}
-  _RUNTIME_SA: coms-portal-run-sa@${PROJECT_ID}.iam.gserviceaccount.com
+  _RUNTIME_SA: coms-heroes-web-sa@${PROJECT_ID}.iam.gserviceaccount.com
 
 steps:
   - id: build

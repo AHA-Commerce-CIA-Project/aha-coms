@@ -74,16 +74,21 @@ resource "google_monitoring_alert_policy" "uptime_failure" {
 }
 
 # ── Alert: Cloud Run 5xx Error Rate ──────────────────────────────────────────
+# One policy per service so an api-only blip pages with the api service named
+# in the alert subject (and likewise for web). A single combined policy would
+# obscure which service is degraded.
 
 resource "google_monitoring_alert_policy" "cloud_run_5xx" {
+  for_each = toset(var.cloud_run_service_names)
+
   project      = var.project_id
-  display_name = "AHA Heroes — Cloud Run 5xx > 5%"
+  display_name = "AHA Heroes — ${each.value} 5xx > 5%"
   combiner     = "OR"
 
   conditions {
     display_name = "5xx error rate > 5%"
     condition_threshold {
-      filter          = "resource.type = \"cloud_run_revision\" AND resource.labels.service_name = \"${var.cloud_run_service_name}\" AND metric.type = \"run.googleapis.com/request_count\" AND metric.labels.response_code_class = \"5xx\""
+      filter          = "resource.type = \"cloud_run_revision\" AND resource.labels.service_name = \"${each.value}\" AND metric.type = \"run.googleapis.com/request_count\" AND metric.labels.response_code_class = \"5xx\""
       comparison      = "COMPARISON_GT"
       threshold_value = 5
       duration        = "300s"

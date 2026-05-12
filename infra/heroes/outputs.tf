@@ -1,6 +1,11 @@
-output "cloud_run_url" {
-  description = "Public URL of the Cloud Run service"
-  value       = module.cloud_run.service_url
+output "cloud_run_url_api" {
+  description = "Public URL of the coms-heroes-api Cloud Run service"
+  value       = google_cloud_run_v2_service.coms_heroes_api.uri
+}
+
+output "cloud_run_url_web" {
+  description = "Public URL of the coms-heroes-web Cloud Run service"
+  value       = google_cloud_run_v2_service.coms_heroes_web.uri
 }
 
 output "artifact_registry_hostname" {
@@ -13,9 +18,14 @@ output "cloud_sql_connection_name" {
   value       = module.cloud_sql.connection_name
 }
 
-output "cloud_run_service_account" {
-  description = "Service account email used by Cloud Run"
-  value       = module.cloud_run.service_account_email
+output "cloud_run_service_account_api" {
+  description = "Service account email used by coms-heroes-api"
+  value       = google_service_account.heroes_api_runtime.email
+}
+
+output "cloud_run_service_account_web" {
+  description = "Service account email used by coms-heroes-web"
+  value       = google_service_account.heroes_web_runtime.email
 }
 
 output "wif_provider" {

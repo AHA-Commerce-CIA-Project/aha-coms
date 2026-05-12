@@ -52,20 +52,41 @@ variable "sheet_id_employees" {
 }
 
 variable "app_image" {
-  description = "Full Docker image URI for Cloud Run (overridden per deploy)"
+  description = "Bootstrap Docker image URI for Cloud Run — overridden by Cloud Build at first deploy."
   type        = string
   # Placeholder to bootstrap Cloud Run before the first real image is pushed.
-  # After the first successful deploy.yml run, this value is irrelevant —
-  # the workflow always overrides it with the SHA-tagged image.
+  # After the first successful Cloud Build run (apps/heroes-{api,web}/cloudbuild.yaml),
+  # this value is irrelevant — `gcloud run deploy --image=...` overrides it
+  # with the SHA-tagged image, and lifecycle.ignore_changes keeps Tofu from
+  # fighting subsequent deploys.
   default = "us-docker.pkg.dev/cloudrun/container/hello"
 }
 
 variable "portal_service_account_email" {
   description = "SA email the portal Cloud Run runs as — used to verify inbound webhook Bearer tokens (Rev 2 §03)."
   type        = string
-  # Defaults to the SA in this project. deploy.yml sources the same value from
-  # the GitHub repo variable PORTAL_SERVICE_ACCOUNT_EMAIL so a Cloud Run env
-  # update doesn't get reset on each deploy. Override here if portal moves
-  # projects.
+  # Defaults to the SA in this project. The cloudbuild deploy command sources
+  # the same value so a Cloud Run env update doesn't get reset on each deploy.
+  # Override here if portal moves projects.
   default = "coms-portal-run-sa@fbi-dev-484410.iam.gserviceaccount.com"
+}
+
+variable "portal_base_url" {
+  description = "Public base URL of portal-api — used by heroes for server-to-server calls and exposed to the client as PUBLIC_PORTAL_ORIGIN."
+  type        = string
+  # Same project; portal-api is the contract-aligned name from T16. Override
+  # via terraform.tfvars when portal lives at a custom domain.
+  default = "https://coms-portal-api-45tyczfska-et.a.run.app"
+}
+
+variable "heroes_public_origin" {
+  description = "Public origin heroes-web is served at — exposed to the client as PUBLIC_APP_ORIGIN. Used for absolute URL construction in OAuth callbacks etc."
+  type        = string
+  default     = "https://coms-heroes-web-45tyczfska-et.a.run.app"
+}
+
+variable "heroes_api_public_url" {
+  description = "Public URL of heroes-api — used as the expected 'aud' claim when verifying portal-issued ID tokens on inbound webhooks (Rev 2 §03)."
+  type        = string
+  default     = "https://coms-heroes-api-45tyczfska-et.a.run.app"
 }
