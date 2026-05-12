@@ -289,7 +289,7 @@ export default function OrbitPage() {
     : getPeriodLabel(activeTab, getCurrentPeriod(activeTab));
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
+    <div className="space-y-6">
       {/* Tabs — keep AHA Orbit reachable alongside My Tasks / Task Queue. */}
       <PageTabs tabs={[
         { href: '/tasks', label: 'My Tasks' },

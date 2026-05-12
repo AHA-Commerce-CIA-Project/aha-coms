@@ -5,7 +5,7 @@ import { MyRequestView } from '@/components/MyRequestView';
 
 export default function MyRequestPage() {
     return (
-        <div className="max-w-4xl mx-auto px-6 py-8">
+        <div className="space-y-6">
             <PageTabs tabs={[
                 { href: '/tasks', label: 'My Tasks' },
                 { href: '/my-request', label: 'My Request' },
