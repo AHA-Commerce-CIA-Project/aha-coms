@@ -18,6 +18,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { isHtml, sanitizeRichText } from '@/lib/sanitize';
 
 // Reuses the same shape /api/tasks/[id]/card returns. Kept in this file so
 // the detail modal stays self-contained and doesn't drag in DOM types from
@@ -715,9 +716,21 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
                               <span className="text-sm font-semibold text-slate-800">{r.sender.name}</span>
                               <span className="text-[11px] text-slate-400">{new Date(r.createdAt).toLocaleString()}</span>
                             </div>
-                            <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
-                              {r.content}
-                            </p>
+                            {isHtml(r.content) ? (
+                              // Comments arrive from the same composer as the
+                              // channel thread, so they can include mention
+                              // chips and other rich-text HTML. Sanitize and
+                              // render so chips/formatting appear styled
+                              // instead of as raw <span> source.
+                              <div
+                                className="text-sm text-slate-700 break-words leading-relaxed [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono"
+                                dangerouslySetInnerHTML={{ __html: sanitizeRichText(r.content) }}
+                              />
+                            ) : (
+                              <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+                                {r.content}
+                              </p>
+                            )}
                           </div>
                         </div>
                       ))}
