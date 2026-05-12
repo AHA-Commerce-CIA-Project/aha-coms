@@ -19,7 +19,7 @@
 substitutions:
   _REGION: asia-southeast2
   _SERVICE_NAME: coms-heroes-api
-  _ARTIFACT_REPO: coms-portal-registry
+  _ARTIFACT_REPO: coms-heroes-repo
   _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/${_SERVICE_NAME}
   _RUNTIME_SA: coms-heroes-api-sa@${PROJECT_ID}.iam.gserviceaccount.com
 

@@ -1,7 +1,7 @@
 # Execution Plan: Monorepo Consolidation + Heroes Cleanup
 
-> Last updated: 2026-05-12 (after T16.5)
-> Status: Phase 1 sealed at `34fbedd`; Phase 3 sealed and Checkpoint 2 crossed at `33593a9`; T16 lands the portal split + per-service Cloud Build scaffolding at `5935d00`; T16.5 splits `infra/heroes/` into `coms-heroes-api` + `coms-heroes-web` with their own least-priv runtime SAs. Next: T17 (Cloud Build triggers with includedFiles filters) — finishing Phase 4 before Checkpoint 3. Findings 1 + 2 from T15 are closed in T16.
+> Last updated: 2026-05-12 (after T16.5 + per-app-resources principle)
+> Status: Phase 1 sealed at `34fbedd`; Phase 3 sealed and Checkpoint 2 crossed at `33593a9`; T16 lands the portal split + per-service Cloud Build scaffolding at `5935d00`; T16.5 splits `infra/heroes/` into `coms-heroes-api` + `coms-heroes-web` with their own least-priv runtime SAs at `de68b28`; the per-app-resources principle in this file is the standing rule going forward (heroes images now route to heroes' own `coms-heroes-repo`, not the portal registry). Next: T17 (Cloud Build triggers with includedFiles filters) — finishing Phase 4 before Checkpoint 3. Findings 1 + 2 from T15 are closed in T16.
 > Source specs: `docs/spec/01-monorepo-consolidation.md`, `docs/spec/02-heroes-cleanup.md`
 
 ## Goal
@@ -186,6 +186,14 @@ When a fresh Claude session picks up this plan:
 | Webhook consumer relied on session staleness | Phase 2 Spec 02 (T36) | Low | Audit `portal_webhook_events` consumers for assumptions about session lifetime before drop-table migration. |
 | Heroes freeze window not coordinated | Phase 3 Spec 01 (T10) | Medium | T10 is explicitly a coordination task; do not skip. |
 | Firebase Hosting passthrough quirks (cookies, streaming SSR) | Phase 5 Spec 01 (T19-T20) | Medium | Pre-spike with one app behind Firebase Hosting before committing the architecture. |
+
+## Standing principles for IaC across all apps
+
+These predate the current plan and outlive it — every future app onboarding (aha-fast, app 3, app 4) follows the same shape unless an explicit ADR justifies an exception.
+
+1. **Per-app resources by default.** Each app owns its own Cloud Run services, Artifact Registry repo, runtime SAs (one per service), monitoring filters, secrets, and Cloud Build pipelines. Shared resources (Cloud SQL instance, project, VPC, WIF pool) need an explicit reason recorded in an ADR — not a copy-paste from another app's template. The blast radius of a bad change in app A must not reach app B; the migration path of spinning out an app must not require extracting its data from a shared store.
+2. **Naming convention: `coms-<app>-<resource>`.** New IaC drops the `aha` infix — heroes' new resources are `coms-heroes-api`, `coms-heroes-web`, `coms-heroes-repo`, `coms-heroes-{api,web}-sa`. Existing `coms-aha-*` names that are operationally costly to rename (GCS buckets holding data, the Tofu state bucket itself, the sheet-sync SA whose email is shared with live Google Sheets) stay as they are; cheap renames (the Artifact Registry repo, dead WIF resources) get aligned as the surrounding work touches them.
+3. **App-side Tofu state stays self-contained.** An app's Tofu state should not have a hard dependency on another app's state by data lookup unless the dependency is genuinely cross-cutting (e.g. an org-wide WIF pool). Cross-state lookups bind apply ordering and complicate the spin-out story; prefer duplicating a small constant over linking states.
 
 ## What's deliberately not in this plan
 

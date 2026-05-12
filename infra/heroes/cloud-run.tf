@@ -18,14 +18,13 @@
 ############################################################
 
 locals {
-  # Bootstrap placeholder. The cloudbuild pipelines push to coms-portal-registry
-  # (the monorepo-wide Artifact Registry repo declared by infra/registry.tf in
-  # the portal Tofu state) and `gcloud run deploy --image=...:<sha>` overrides
-  # this at first deploy. lifecycle.ignore_changes pins both image fields, so
-  # Tofu does not fight the deploy after bootstrap. Heroes' own
-  # coms-aha-heroes-repo (modules/artifact-registry/) is now orphaned by the
-  # cloudbuild rewiring done in T16 — leaving it alone for now; cleanup in a
-  # follow-up.
+  # Bootstrap placeholder. Heroes cloudbuild pipelines push to
+  # coms-heroes-repo (declared in modules/artifact-registry/) and
+  # `gcloud run deploy --image=...:<sha>` overrides this at first deploy.
+  # lifecycle.ignore_changes pins both image fields, so Tofu does not fight
+  # the deploy after bootstrap. Per the per-app-resources principle in
+  # tasks/plan.md, heroes images live in heroes' own AR repo — not in any
+  # shared monorepo-wide registry.
   heroes_image_bootstrap = var.app_image
 
   # Shared plain env — both services need to know who portal is and where

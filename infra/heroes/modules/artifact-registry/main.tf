@@ -1,9 +1,14 @@
 resource "google_artifact_registry_repository" "docker" {
   project       = var.project_id
   location      = var.region
-  repository_id = "coms-aha-heroes-repo"
+  repository_id = "coms-heroes-repo"
   format        = "DOCKER"
-  description   = "Docker images for coms-aha-heroes"
+  description   = "Docker images for coms-heroes-{api,web}"
+
+  # Note: google_artifact_registry_repository takes its contents with it on
+  # destroy — GCP deletes the repo and all images in one operation, no
+  # force flag needed (unlike GCS). The repo rename from coms-aha-heroes-repo
+  # to coms-heroes-repo therefore destroys + recreates cleanly.
 
   # Dry-run false: policies are actively enforced
   cleanup_policy_dry_run = false
