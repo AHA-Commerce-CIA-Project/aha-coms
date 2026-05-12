@@ -2,11 +2,13 @@ name: CI — Infra plan (OpenTofu)
 
 # Runs `tofu plan` on PRs that touch infra/**. Lets reviewers see the
 # diff before the operator runs `tofu apply` manually from a laptop
-# against the shared state bucket. **There is no auto-apply on merge
-# to main today** — apply remains a deliberate human action because
-# the blast radius (Cloud SQL recreation, IAM rotation, secrets
-# deletion) has no clean rollback path. Closing that orchestration
-# gap is tracked as FU-4 in tasks/todo.md (workflow_dispatch shape).
+# against the shared state bucket. **Apply is deliberately not
+# automated** — auto-apply has no clean rollback path for Cloud SQL
+# recreation, IAM rotation, or secrets deletion, and a workflow_dispatch
+# shape adds ceremony without material safety wins for a project this
+# size. The supported laptop-CLI runbook lives at `infra/README.md`
+# (FU-4 in tasks/todo.md, deferred until team size or incident rate
+# changes the math).
 
 on:
   pull_request:
