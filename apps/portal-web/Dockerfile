@@ -56,6 +56,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 COPY --from=deps /app/node_modules ./node_modules
+# SSR runtime imports third-party deps that bun's isolated install left under
+# apps/portal-web/node_modules (e.g. clsx, the SvelteKit Node adapter).
+COPY --from=deps /app/apps/portal-web/node_modules apps/portal-web/node_modules
 COPY --from=builder /app/apps/portal-web/build apps/portal-web/build
 COPY --from=builder /app/apps/portal-web/package.json apps/portal-web/package.json
 COPY package.json ./

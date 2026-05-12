@@ -50,6 +50,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 COPY --from=deps /app/node_modules ./node_modules
+# SSR runtime imports third-party deps that bun's isolated install left under
+# apps/heroes-web/node_modules (e.g. clsx, the SvelteKit Node adapter).
+COPY --from=deps /app/apps/heroes-web/node_modules apps/heroes-web/node_modules
 COPY --from=builder /app/apps/heroes-web/build apps/heroes-web/build
 COPY --from=builder /app/apps/heroes-web/package.json apps/heroes-web/package.json
 COPY --from=builder /app/packages/heroes-shared packages/heroes-shared
