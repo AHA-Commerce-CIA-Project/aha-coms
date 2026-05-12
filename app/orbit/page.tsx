@@ -298,6 +298,10 @@ export default function OrbitPage() {
         { href: '/team-inbox', label: 'Task Inbox' },
         { href: '/orbit', label: 'AHA Orbit' },
       ]} />
+      {/* Cap the orbit content body at max-w-4xl so cards don't stretch across
+          wide monitors. PageTabs stays outside this wrapper to preserve the
+          left-aligned tab row used by the other Tasks-group pages. */}
+      <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6 mt-4">
         <div className="flex items-center gap-3">
@@ -650,6 +654,7 @@ export default function OrbitPage() {
           })}
         </div>
       )}
+      </div>
 
       {/* Delegation Modal */}
       {delegateClaimId && (
