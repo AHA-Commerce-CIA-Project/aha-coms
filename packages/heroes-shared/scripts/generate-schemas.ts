@@ -42,7 +42,6 @@ const APP_TABLES = [
   { varName: 'pendingAliasResolution',        schemaPrefix: 'pendingAliasResolution' },
   { varName: 'aliasCache',                    schemaPrefix: 'aliasCache' },
   { varName: 'taxonomyCache',                 schemaPrefix: 'taxonomyCache' },
-  { varName: 'userConfigCache',               schemaPrefix: 'userConfigCache' },
   { varName: 'emailCache',                    schemaPrefix: 'emailCache' },
   { varName: 'deactivatedUserIngestAudit',    schemaPrefix: 'deactivatedUserIngestAudit' },
 ] as const

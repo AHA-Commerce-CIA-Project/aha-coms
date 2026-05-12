@@ -22,7 +22,7 @@ describe('ILLEGAL_USERS_INSERT_PATTERN', () => {
   it('does not match insert into heroes_profiles or other tables containing "users" as a substring', () => {
     expect('INSERT INTO heroes_profiles (id) VALUES (1);').not.toMatch(ILLEGAL_USERS_INSERT_PATTERN)
     expect('INSERT INTO usersroles (id) VALUES (1);').not.toMatch(ILLEGAL_USERS_INSERT_PATTERN)
-    expect('await db.insert(userConfigCache).values({...})').not.toMatch(
+    expect('await db.insert(taxonomyCache).values({...})').not.toMatch(
       ILLEGAL_USERS_INSERT_PATTERN,
     )
   })

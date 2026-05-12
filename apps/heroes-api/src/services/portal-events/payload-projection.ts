@@ -44,12 +44,6 @@ export interface EmailCacheRow {
   contactEmail: string
 }
 
-export interface UserConfigCacheRow {
-  portalSub: string
-  config: Record<string, unknown>
-  schemaVersion: number
-}
-
 function refKey(ref: TaxonomyRef | null | undefined): string | null {
   return ref?.key ?? null
 }
@@ -87,17 +81,6 @@ export function envelopeToEmailCacheRow(envelope: WebhookUserEnvelope): EmailCac
   return {
     portalSub: envelope.user.portalSub,
     contactEmail: envelope.contactEmail,
-  }
-}
-
-export function envelopeToUserConfigCacheRow(
-  envelope: WebhookUserEnvelope,
-): UserConfigCacheRow | null {
-  if (!envelope.appConfig) return null
-  return {
-    portalSub: envelope.user.portalSub,
-    config: envelope.appConfig.config,
-    schemaVersion: envelope.appConfig.schemaVersion,
   }
 }
 

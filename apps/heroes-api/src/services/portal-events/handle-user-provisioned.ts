@@ -1,10 +1,9 @@
 import { db } from '@coms-portal/heroes-shared/db'
-import { emailCache, heroesProfiles, userConfigCache } from '@coms-portal/heroes-shared/db/schema'
+import { emailCache, heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
 import type { PortalEventHandler } from './dispatch'
 import {
   envelopeToEmailCacheRow,
   envelopeToHeroesProfileRow,
-  envelopeToUserConfigCacheRow,
   type WebhookUserEnvelopeWithRole,
 } from './payload-projection'
 
@@ -45,19 +44,4 @@ export const handleUserProvisioned: PortalEventHandler = async (body) => {
       target: emailCache.portalSub,
       set: { contactEmail: emailRow.contactEmail, cachedAt: new Date() },
     })
-
-  const configRow = envelopeToUserConfigCacheRow(envelope)
-  if (configRow) {
-    await db
-      .insert(userConfigCache)
-      .values(configRow)
-      .onConflictDoUpdate({
-        target: userConfigCache.portalSub,
-        set: {
-          config: configRow.config,
-          schemaVersion: configRow.schemaVersion,
-          cachedAt: new Date(),
-        },
-      })
-  }
 }

@@ -654,7 +654,7 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-5`.
     - Update `apps/heroes-api/src/repositories/users.ts` (three call sites at :87, :131, :172) to read `heroes_profiles.can_submit_points` and drop the `user_config_cache` leftJoin.
   - **Acceptance:** No code reads `userConfigCache` anywhere. `loadHeroesAuthUser` reads `can_submit_points` from `heroes_profiles`. Test suite green.
 
-- [ ] **T46: Drop the `user_config_cache` table**
+- [x] **T46: Drop the `user_config_cache` table**
   - **Prerequisites:** T45
   - **Steps:**
     - Drop the `userConfigCache` re-export and typebox schemas from `packages/heroes-shared/src/db/schema/index.ts` + `schemas/index.ts`.
@@ -664,7 +664,7 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-5`.
     - Apply order at deploy mirrors T36: heroes-api new revision deploys first (no code touches the table anymore), then operator runs `bun db:migrate`.
   - **Acceptance:** `user_config_cache` table is gone; `loadHeroesAuthUser` queries only `heroes_profiles` on the common path.
 
-- [ ] **CHECKPOINT 10**: Auth-path query reduced.
+- [x] **CHECKPOINT 10**: Auth-path query reduced.
 
 ### Phase 6: Verification + documentation
 

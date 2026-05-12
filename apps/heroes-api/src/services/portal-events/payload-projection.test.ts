@@ -4,7 +4,6 @@ import {
   employmentUpdatedToDenormFields,
   envelopeToEmailCacheRow,
   envelopeToHeroesProfileRow,
-  envelopeToUserConfigCacheRow,
 } from './payload-projection'
 
 const baseEnvelope: WebhookUserEnvelope = {
@@ -99,21 +98,6 @@ describe('envelopeToEmailCacheRow', () => {
     expect(envelopeToEmailCacheRow(baseEnvelope)).toEqual({
       portalSub: '00000000-0000-0000-0000-000000000001',
       contactEmail: 'alice@example.com',
-    })
-  })
-})
-
-describe('envelopeToUserConfigCacheRow', () => {
-  it('returns null when the envelope has no appConfig', () => {
-    const row = envelopeToUserConfigCacheRow({ ...baseEnvelope, appConfig: null })
-    expect(row).toBeNull()
-  })
-
-  it('extracts portalSub + config + schemaVersion when appConfig is present', () => {
-    expect(envelopeToUserConfigCacheRow(baseEnvelope)).toEqual({
-      portalSub: '00000000-0000-0000-0000-000000000001',
-      config: { role: 'employee' },
-      schemaVersion: 2,
     })
   })
 })

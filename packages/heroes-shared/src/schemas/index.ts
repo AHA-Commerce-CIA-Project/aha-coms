@@ -121,7 +121,6 @@ import {
   pendingAliasResolution,
   aliasCache,
   taxonomyCache,
-  userConfigCache,
   emailCache,
   deactivatedUserIngestAudit,
 } from '../db/schema'
@@ -230,12 +229,6 @@ export const taxonomyCacheSelectSchema: TObject = createSelectSchema(taxonomyCac
 export type TaxonomyCacheSelect = Static<typeof taxonomyCacheSelectSchema>
 export const taxonomyCacheInsertSchema: TObject = createInsertSchema(taxonomyCache) as TObject
 export type TaxonomyCacheInsert = Static<typeof taxonomyCacheInsertSchema>
-
-// --- userConfigCache ---
-export const userConfigCacheSelectSchema: TObject = createSelectSchema(userConfigCache) as TObject
-export type UserConfigCacheSelect = Static<typeof userConfigCacheSelectSchema>
-export const userConfigCacheInsertSchema: TObject = createInsertSchema(userConfigCache) as TObject
-export type UserConfigCacheInsert = Static<typeof userConfigCacheInsertSchema>
 
 // --- emailCache ---
 export const emailCacheSelectSchema: TObject = createSelectSchema(emailCache) as TObject

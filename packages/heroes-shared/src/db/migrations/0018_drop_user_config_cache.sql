@@ -1,0 +1,24 @@
+-- Spec 02 Phase 5 / T46 — drop user_config_cache.
+--
+-- T44's audit found three of the table's four config-JSONB keys carried
+-- no live reader (`leaderboard_eligible`, `starting_points` had zero
+-- consumers anywhere in heroes src; `role` was duplicated on
+-- heroes_profiles.role since 0013_colossal_wolfsbane). T45 migrated the
+-- fourth (`canSubmitPoints`) onto heroes_profiles.can_submit_points and
+-- retired every read site — loadHeroesAuthUser, repositories/users.ts
+-- (×3), services/challenges.ts, services/appeals.ts. T46 is the seal:
+-- the table holds no reader and no writer in the new code, and this
+-- migration drops it.
+--
+-- Apply order at deploy mirrors T36 + T45: heroes-api new revision
+-- deploys first (no code touches the table anymore, the webhook
+-- handlers' cache writes retired in this same commit), operator runs
+-- `bun db:migrate` against prod via Cloud SQL Auth Proxy second.
+--
+-- Rollback procedure: restore from the pre-apply Cloud SQL automated
+-- backup. The cached rows held nothing not already projectable from the
+-- next `user.provisioned` / `app_config.updated` event the portal
+-- emits, so even a recovery without the backup is operationally
+-- recoverable from the portal side.
+
+DROP TABLE IF EXISTS "user_config_cache";
