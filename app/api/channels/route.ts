@@ -44,6 +44,13 @@ export async function GET(request: Request) {
       creator: { select: { id: true, name: true, image: true } },
       team: { select: { id: true, name: true } },
       _count: { select: { messages: true, members: true } },
+      // Include the current user's PinnedChannel row (0 or 1) so the sidebar
+      // can render a Pinned section without a second round-trip. The unique
+      // constraint on (user_id, channel_id) keeps this bounded.
+      pinnedBy: {
+        where: { userId },
+        select: { id: true },
+      },
     },
     orderBy: { updatedAt: 'desc' },
   });
@@ -62,7 +69,11 @@ export async function GET(request: Request) {
           where: { teamId: { in: ch.allowedTeamIds } },
         });
       }
-      return { ...ch, memberCount };
+      const isPinned = ch.pinnedBy.length > 0;
+      // Strip the join rows from the response — the boolean is all the
+      // client needs and it keeps the payload small.
+      const { pinnedBy: _pinnedBy, ...rest } = ch;
+      return { ...rest, memberCount, isPinned };
     })
   );
 

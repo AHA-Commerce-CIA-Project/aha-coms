@@ -45,6 +45,7 @@ interface Channel {
   _count: { messages: number };
   updatedAt: string;
   unreadCount?: number;
+  isPinned?: boolean;
 }
 
 interface Message {
@@ -88,6 +89,7 @@ export function ChannelPane() {
   // &lt;ChannelHeader&gt; inline next to its Messages | Later tabs — the old
   // standalone header row was burning a whole band of vertical space.
   const setChatHeader = useAppStore((s) => s.setChatHeader);
+  const notifyChannelPinned = useAppStore((s) => s.notifyChannelPinned);
   // Subscribe to Direct Assign submit ticks so we can refresh the feed when
   // the user converts a message into a task — the new endpoint edits the source
   // message in place and the SSE stream only pushes inserts, not updates.
@@ -545,6 +547,38 @@ export function ChannelPane() {
   }, [selectedChannel, setDirectAssignOpen]);
   const handleHeaderBack = useCallback(() => setSelectedChannel(null), []);
 
+  // Toggle the user-specific channel pin. Optimistic flip on both the
+  // channels list and the selected-channel snapshot so the kebab icon
+  // and the sidebar Pinned section both react before the round-trip
+  // returns; rolls back if the API rejects.
+  const handleHeaderPinChannel = useCallback(async () => {
+    if (!selectedChannel) return;
+    const previous = !!selectedChannel.isPinned;
+    setSelectedChannel((prev) => (prev ? { ...prev, isPinned: !previous } : prev));
+    setChannels((prev) =>
+      prev.map((c) => (c.id === selectedChannel.id ? { ...c, isPinned: !previous } : c)),
+    );
+    try {
+      const res = await fetch(`/api/channels/${selectedChannel.id}/pin`, { method: 'POST' });
+      if (!res.ok) throw new Error('pin failed');
+      const data = await res.json();
+      // Reconcile both snapshots with server truth in case the optimistic
+      // flip raced another tab.
+      setSelectedChannel((prev) => (prev ? { ...prev, isPinned: !!data.isPinned } : prev));
+      setChannels((prev) =>
+        prev.map((c) => (c.id === selectedChannel.id ? { ...c, isPinned: !!data.isPinned } : c)),
+      );
+      // MessagesWorkspace owns the sidebar channel list — nudge it to
+      // refetch so the Pinned section reflects this change immediately.
+      notifyChannelPinned();
+    } catch {
+      setSelectedChannel((prev) => (prev ? { ...prev, isPinned: previous } : prev));
+      setChannels((prev) =>
+        prev.map((c) => (c.id === selectedChannel.id ? { ...c, isPinned: previous } : c)),
+      );
+    }
+  }, [selectedChannel, notifyChannelPinned]);
+
   // Publish header data into the workspace-level Zustand slot so the top tab
   // row can render &lt;ChannelHeader&gt; inline. Clear when no channel is selected
   // (or this pane unmounts) so the row collapses back to just the tabs.
@@ -561,12 +595,14 @@ export function ChannelPane() {
       channelId: selectedChannel.id,
       purpose: selectedChannel.purpose,
       isCreator: selectedChannel.createdBy === session.user.id,
+      isPinnedForUser: !!selectedChannel.isPinned,
       searchQuery,
       searching,
       onSearchChange: handleHeaderSearchChange,
       onDelete: handleHeaderDelete,
       onEdit: handleHeaderEdit,
       onDirectAssign: handleHeaderDirectAssign,
+      onPinChannel: handleHeaderPinChannel,
       onBack: handleHeaderBack,
     });
   }, [
@@ -579,6 +615,7 @@ export function ChannelPane() {
     handleHeaderDelete,
     handleHeaderEdit,
     handleHeaderDirectAssign,
+    handleHeaderPinChannel,
     handleHeaderBack,
   ]);
 

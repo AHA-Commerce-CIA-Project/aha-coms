@@ -14,12 +14,14 @@ export interface ChatHeaderState {
     channelId: string;
     purpose?: string;
     isCreator: boolean;
+    isPinnedForUser?: boolean;
     searchQuery: string;
     searching: boolean;
     onSearchChange: (q: string) => void;
     onDelete?: () => void;
     onEdit?: () => void;
     onDirectAssign?: () => void;
+    onPinChannel?: () => void;
     onBack?: () => void;
 }
 
@@ -56,6 +58,10 @@ interface AppState {
     // Counter that bumps every time a Direct Assign submit succeeds. Channels
     // page subscribes so it can refetch the feed and show the in-place card.
     directAssignSubmittedTick: number;
+    // Counter that bumps every time the user pins/unpins a channel. The
+    // /messages workspace subscribes so it can refetch its channels list and
+    // refresh the sidebar's Pinned section right away.
+    channelPinTick: number;
     // The single source of truth for the right-side profile panel. When non-null
     // the panel is mounted in AppShell and the page reflows to leave room for it.
     profileUser: UserProfile | null;
@@ -91,6 +97,7 @@ interface AppState {
         onCancel?: (description: string) => void;
     }) => void;
     notifyDirectAssignSubmitted: () => void;
+    notifyChannelPinned: () => void;
     setProfileUser: (user: UserProfile | null, opts?: { showAddToConversation?: boolean; hideSendDm?: boolean }) => void;
     setChatHeader: (state: ChatHeaderState | null) => void;
 
@@ -140,6 +147,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     directAssignStartAtReview: false,
     directAssignOnCancel: null,
     directAssignSubmittedTick: 0,
+    channelPinTick: 0,
     profileUser: null,
     profileShowAddToConversation: false,
     profileHideSendDm: false,
@@ -162,6 +170,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         directAssignOnCancel: open ? (opts?.onCancel ?? null) : null,
     }),
     notifyDirectAssignSubmitted: () => set((s) => ({ directAssignSubmittedTick: s.directAssignSubmittedTick + 1 })),
+    notifyChannelPinned: () => set((s) => ({ channelPinTick: s.channelPinTick + 1 })),
     setProfileUser: (user, opts) => set({
         profileUser: user,
         profileShowAddToConversation: user ? !!opts?.showAddToConversation : false,

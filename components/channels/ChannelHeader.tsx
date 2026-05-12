@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Hash, Search, X, Lock, Users, Crown, MoreVertical, Trash2, Pencil, UserPlus, UserMinus, ClipboardList, ArrowLeft } from 'lucide-react';
+import { Hash, Search, X, Lock, Users, Crown, MoreVertical, Trash2, Pencil, UserPlus, UserMinus, ClipboardList, ArrowLeft, Pin, PinOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddChannelMembersModal } from './AddChannelMembersModal';
 
@@ -29,11 +29,16 @@ interface ChannelHeaderProps {
   onDelete?: () => void;
   onEdit?: () => void;
   onDirectAssign?: () => void;
+  /** True when the current user has this channel pinned to their sidebar. */
+  isPinnedForUser?: boolean;
+  /** Toggle the user-specific pin. Visible in the kebab menu for every
+   *  member when provided (pinning is per-user, not a creator action). */
+  onPinChannel?: () => void;
   /** Mobile-only: back to the channel list. Renders an arrow button when set. */
   onBack?: () => void;
 }
 
-export function ChannelHeader({ name, description, isPrivate, memberCount, channelId, purpose, searchQuery, onSearchChange, searching, isCreator, onDelete, onEdit, onDirectAssign, onBack }: ChannelHeaderProps) {
+export function ChannelHeader({ name, description, isPrivate, memberCount, channelId, purpose, searchQuery, onSearchChange, searching, isCreator, onDelete, onEdit, onDirectAssign, isPinnedForUser, onPinChannel, onBack }: ChannelHeaderProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -286,8 +291,9 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
             <Search className="w-5 h-5" />
           </button>
 
-          {/* Kebab menu — creator-only actions */}
-          {isCreator && (onEdit || onDelete) && (
+          {/* Kebab menu — shown for any member when Pin/Unpin is available;
+              Edit/Delete items only render for the channel creator. */}
+          {(onPinChannel || (isCreator && (onEdit || onDelete))) && (
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowMenu((v) => !v)}
@@ -303,7 +309,25 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
               </button>
               {showMenu && (
                 <div className="absolute right-0 top-full mt-2 w-[200px] bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50">
-                  {onEdit && (
+                  {onPinChannel && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onPinChannel();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors border-b border-slate-100"
+                    >
+                      {isPinnedForUser ? (
+                        <PinOff className="w-4 h-4 text-indigo-600" />
+                      ) : (
+                        <Pin className="w-4 h-4 text-slate-500" />
+                      )}
+                      <span className="font-medium">
+                        {isPinnedForUser ? 'Unpin from sidebar' : 'Pin to sidebar'}
+                      </span>
+                    </button>
+                  )}
+                  {isCreator && onEdit && (
                     <button
                       onClick={() => {
                         setShowMenu(false);
@@ -315,7 +339,7 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
                       <span className="font-medium">Edit channel</span>
                     </button>
                   )}
-                  {onDelete && (
+                  {isCreator && onDelete && (
                     <button
                       onClick={() => {
                         setShowMenu(false);

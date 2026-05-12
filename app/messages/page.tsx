@@ -30,6 +30,7 @@ interface ChannelRow {
     isPrivate?: boolean;
     purpose?: 'discussion' | 'assign_task';
     updatedAt?: string;
+    isPinned?: boolean;
 }
 
 interface ConvoRow {
@@ -55,6 +56,10 @@ function MessagesWorkspace() {
     // selected so we can render its name/description/search/kebab next to the
     // Messages | Later tabs instead of consuming a second vertical row.
     const chatHeader = useAppStore((s) => s.chatHeader);
+    // Channel-pin tick: ChannelPane bumps this after a user toggles a pin so
+    // the sidebar list refetches and the Pinned section reflects the change
+    // without waiting on the 60s safety interval.
+    const channelPinTick = useAppStore((s) => s.channelPinTick);
 
     const channelId = params.get('channel');
     const convId = params.get('conv');
@@ -154,6 +159,14 @@ function MessagesWorkspace() {
         };
     }, [user, fetchChannels, fetchConvos, fetchUnread]);
 
+    // Refetch channels whenever a pin toggle bumps the tick. Skip the first
+    // render (tick === 0) so we don't double-fetch alongside the mount-time
+    // load above.
+    useEffect(() => {
+        if (channelPinTick === 0) return;
+        fetchChannels();
+    }, [channelPinTick, fetchChannels]);
+
     // Build the index lists from the fetched data. Channel unread badges come
     // from /api/channels/unread; DM unread is on the convo row directly.
     const indexChannels: IndexChannel[] = useMemo(
@@ -167,6 +180,7 @@ function MessagesWorkspace() {
             // /api/channels/[channelId]/messages/route.ts), so it's a faithful
             // proxy for "last activity" without a join.
             lastMessageAt: c.updatedAt || null,
+            isPinned: c.isPinned ?? false,
         })),
         [channels, perChannelUnread],
     );

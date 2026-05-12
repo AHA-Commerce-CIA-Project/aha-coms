@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Hash, Lock, ChevronDown, ChevronRight, Plus, Search, MoreHorizontal, Check, ListFilter, ArrowDownAZ, Clock, MailCheck } from 'lucide-react';
+import { Hash, Lock, ChevronDown, ChevronRight, Plus, Search, MoreHorizontal, Check, ListFilter, ArrowDownAZ, Clock, MailCheck, Pin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PresenceDot } from '@/components/PresenceDot';
 
@@ -18,6 +18,11 @@ export interface IndexChannel {
     purpose?: 'discussion' | 'assign_task';
     unreadCount?: number;
     lastMessageAt?: string | null;
+    /** User-specific pin (PinnedChannel row exists for this user+channel).
+     *  Pinned channels float to the top in a dedicated section and are
+     *  removed from the regular Channels / Assign Task groups below so a
+     *  channel never appears twice. */
+    isPinned?: boolean;
 }
 
 export interface IndexDm {
@@ -31,7 +36,7 @@ export interface IndexDm {
     snippet?: string;
 }
 
-type SectionKey = 'channels' | 'assign_task' | 'dms';
+type SectionKey = 'pinned' | 'channels' | 'assign_task' | 'dms';
 type FilterMode = 'all' | 'unread';
 type SortMode = 'recency' | 'alpha';
 
@@ -44,6 +49,7 @@ type AllPrefs = Record<SectionKey, SectionPrefs>;
 const COLLAPSE_KEY = 'messages-index-collapsed';
 const PREFS_KEY = 'messages-index-prefs-v1';
 const DEFAULT_PREFS: AllPrefs = {
+    pinned: { filter: 'all', sort: 'recency' },
     channels: { filter: 'all', sort: 'recency' },
     assign_task: { filter: 'all', sort: 'recency' },
     dms: { filter: 'all', sort: 'recency' },
@@ -75,6 +81,7 @@ function loadPrefs(): AllPrefs {
         const parsed = JSON.parse(raw);
         // Shallow-merge so a partial saved value doesn't lose default fields.
         return {
+            pinned: { ...DEFAULT_PREFS.pinned, ...(parsed?.pinned || {}) },
             channels: { ...DEFAULT_PREFS.channels, ...(parsed?.channels || {}) },
             assign_task: { ...DEFAULT_PREFS.assign_task, ...(parsed?.assign_task || {}) },
             dms: { ...DEFAULT_PREFS.dms, ...(parsed?.dms || {}) },
@@ -194,17 +201,26 @@ export function MessagesIndex({
     const filteredChannels = q ? channels.filter(c => c.name.toLowerCase().includes(q)) : channels;
     const filteredDms = q ? dms.filter(d => d.otherName.toLowerCase().includes(q)) : dms;
 
-    // Two channel groups: regular (discussion) + assign_task. The split keeps
-    // task channels visually distinct without forcing a hard tab switch like
-    // the old standalone /channels page did. Section prefs (filter/sort) are
-    // applied per group so a user can sort Channels A-Z while keeping Assign
-    // Task sorted by recency.
+    // Pinned channels float to the top in their own section. They're filtered
+    // OUT of the discussion / assign-task groups below so a channel never
+    // appears twice — only its row in Pinned remains. Pinned is always sorted
+    // by recency (most-recently-active first) regardless of section prefs.
+    const pinnedChannels = applyChannelPrefs(
+        filteredChannels.filter(c => c.isPinned),
+        prefs.pinned,
+    );
+
+    // Two un-pinned channel groups: regular (discussion) + assign_task. The
+    // split keeps task channels visually distinct without forcing a hard tab
+    // switch like the old standalone /channels page did. Section prefs
+    // (filter/sort) are applied per group so a user can sort Channels A-Z
+    // while keeping Assign Task sorted by recency.
     const discussionChannels = applyChannelPrefs(
-        filteredChannels.filter(c => c.purpose !== 'assign_task'),
+        filteredChannels.filter(c => !c.isPinned && c.purpose !== 'assign_task'),
         prefs.channels,
     );
     const assignTaskChannels = applyChannelPrefs(
-        filteredChannels.filter(c => c.purpose === 'assign_task'),
+        filteredChannels.filter(c => !c.isPinned && c.purpose === 'assign_task'),
         prefs.assign_task,
     );
     const sortedDms = applyDmPrefs(filteredDms, prefs.dms);
@@ -227,6 +243,25 @@ export function MessagesIndex({
             </div>
 
             <div className="flex-1 overflow-y-auto py-2">
+                {pinnedChannels.length > 0 && (
+                    <SectionGroup
+                        label="Pinned"
+                        sectionKey="pinned"
+                        collapsed={collapsed.has('pinned')}
+                        onToggle={toggle}
+                        count={pinnedChannels.reduce((s, c) => s + (c.unreadCount || 0), 0)}
+                    >
+                        {pinnedChannels.map((c) => (
+                            <ChannelItem
+                                key={c.id}
+                                channel={c}
+                                active={c.id === activeChannelId}
+                                onClick={() => onSelectChannel(c)}
+                            />
+                        ))}
+                    </SectionGroup>
+                )}
+
                 <SectionGroup
                     label="Channels"
                     sectionKey="channels"
@@ -569,6 +604,15 @@ function ChannelItem({ channel, active, onClick }: { channel: IndexChannel; acti
                 )} />
             )}
             <span className="flex-1 truncate text-left">{channel.name}</span>
+            {channel.isPinned && (
+                // Small indigo pin next to pinned rows. Keeps the visual cue
+                // even when a pinned channel is collapsed under "Pinned" or
+                // the user has scrolled past the section label.
+                <Pin className={cn(
+                    'w-3 h-3 flex-shrink-0',
+                    active ? 'text-white/80' : 'text-indigo-500',
+                )} />
+            )}
             {hasUnread && !active && (
                 <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold text-white bg-rose-500 rounded-full">
                     {(channel.unreadCount ?? 0) > 99 ? '99+' : channel.unreadCount}
