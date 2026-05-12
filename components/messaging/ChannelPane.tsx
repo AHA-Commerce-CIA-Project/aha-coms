@@ -21,6 +21,7 @@ import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelMod
 import { TeamInboxTaskModal, TeamInboxTask } from '@/components/TeamInboxTaskModal';
 import { Hash, AlertTriangle, Trash2, MessageSquare } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
+import { htmlToPlainText } from '@/lib/sanitize';
 
 interface Attachment {
   url: string;
@@ -597,7 +598,7 @@ export function ChannelPane() {
                             {new Date(msg.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                           </span>
                         </div>
-                        <p className="text-sm text-slate-600 mt-0.5 line-clamp-2">{msg.content}</p>
+                        <p className="text-sm text-slate-600 mt-0.5 line-clamp-2">{htmlToPlainText(msg.content)}</p>
                       </div>
                     </div>
                   </button>
@@ -639,7 +640,7 @@ export function ChannelPane() {
                                 {new Date(reply.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                               </span>
                             </div>
-                            <p className="text-sm text-slate-600 mt-0.5 line-clamp-2">{reply.content}</p>
+                            <p className="text-sm text-slate-600 mt-0.5 line-clamp-2">{htmlToPlainText(reply.content)}</p>
                           </div>
                         </div>
                       </button>
