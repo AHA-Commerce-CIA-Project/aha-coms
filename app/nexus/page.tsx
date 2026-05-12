@@ -309,7 +309,7 @@ function NexusContent() {
             if (intervalId) return;
             intervalId = setInterval(() => {
                 fetchTickets({ silent: true });
-                if (isLeader) fetchDirectRequests();
+                if (isLeader) fetchDirectRequests({ silent: true });
             }, 15000);
         };
         const stop = () => {
@@ -318,7 +318,7 @@ function NexusContent() {
         const onVisibility = () => {
             if (document.visibilityState === 'visible') {
                 fetchTickets({ silent: true });
-                if (isLeader) fetchDirectRequests();
+                if (isLeader) fetchDirectRequests({ silent: true });
                 start();
             } else {
                 stop();
@@ -435,8 +435,8 @@ function NexusContent() {
         } catch { }
     };
 
-    const fetchDirectRequests = async () => {
-        setDirectLoading(true);
+    const fetchDirectRequests = async (opts?: { silent?: boolean }) => {
+        if (!opts?.silent) setDirectLoading(true);
         try {
             const res = await fetch('/api/tasks/direct-requests-all');
             if (res.ok) {
@@ -445,7 +445,7 @@ function NexusContent() {
         } catch (err) {
             console.error('Error fetching direct requests:', err);
         }
-        setDirectLoading(false);
+        if (!opts?.silent) setDirectLoading(false);
     };
 
     const handleArchive = async (ticketId: string) => {
@@ -771,8 +771,12 @@ function NexusContent() {
                 </div>
             )}
 
-            {activeTab === 'queue' ? (
-            <>
+            {/* Keep both tab trees mounted and toggle visibility via `display:
+                contents` / `hidden`. Switching tabs is a pure CSS show/hide —
+                no unmount/remount, so filter state, scroll position, and the
+                already-fetched data stay put. Matches the unified-workspace
+                pane-stay-mounted pattern used for ChannelPane/DmPane. */}
+            <div className={activeTab === 'queue' ? 'contents' : 'hidden'}>
             {/* KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-6 gap-2.5 sm:gap-4">
                 {[
@@ -1414,9 +1418,10 @@ function NexusContent() {
                     </div>
                 </div>
             )}
-            </>
-            ) : (
-            /* ─── Direct Requests Tab ──────────────────────────────────────── */
+            </div>
+
+            {/* ─── Direct Requests Tab ──────────────────────────────────────── */}
+            <div className={activeTab === 'direct' ? 'contents' : 'hidden'}>
             <div className="space-y-4">
                 {/* Direct Request KPI */}
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-4">
@@ -1468,7 +1473,7 @@ function NexusContent() {
                 </div>
 
                 {/* Direct Requests Table */}
-                {directLoading ? (
+                {directLoading && directRequests.length === 0 ? (
                     <div className="flex items-center justify-center py-16">
                         <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                     </div>
@@ -1763,7 +1768,7 @@ function NexusContent() {
                     </div>
                 )}
             </div>
-            )}
+            </div>
 
             {/* View Detail Modal */}
             {viewTicket && (
