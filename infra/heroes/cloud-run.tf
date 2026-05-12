@@ -134,6 +134,7 @@ resource "google_cloud_run_v2_service" "coms_heroes_api" {
   project  = var.project_id
   name     = "coms-heroes-api"
   location = var.region
+  labels   = local.heroes_labels_api
 
   deletion_protection = false
 
@@ -286,6 +287,7 @@ resource "google_cloud_run_v2_service" "coms_heroes_web" {
   project  = var.project_id
   name     = "coms-heroes-web"
   location = var.region
+  labels   = local.heroes_labels_web
 
   deletion_protection = false
 

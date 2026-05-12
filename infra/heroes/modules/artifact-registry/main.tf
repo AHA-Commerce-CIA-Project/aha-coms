@@ -4,6 +4,7 @@ resource "google_artifact_registry_repository" "docker" {
   repository_id = "coms-heroes-repo"
   format        = "DOCKER"
   description   = "Docker images for coms-heroes-{api,web}"
+  labels        = var.labels
 
   # Note: google_artifact_registry_repository takes its contents with it on
   # destroy — GCP deletes the repo and all images in one operation, no

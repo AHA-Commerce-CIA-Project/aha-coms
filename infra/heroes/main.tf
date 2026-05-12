@@ -2,11 +2,13 @@ module "artifact_registry" {
   source     = "./modules/artifact-registry"
   project_id = var.project_id
   region     = var.region
+  labels     = local.heroes_labels
 }
 
 module "storage" {
   source     = "./modules/storage"
   project_id = var.project_id
+  labels     = local.heroes_labels
 }
 
 module "cloud_sql" {
@@ -15,6 +17,7 @@ module "cloud_sql" {
   region     = var.region
   db_user    = var.db_user
   tier       = var.db_tier
+  labels     = local.heroes_labels
 }
 
 # Cloud Run services live in cloud-run.tf — mirrors the portal pattern at
@@ -39,6 +42,7 @@ module "sheet_sync" {
   project_id = var.project_id
   # Only heroes-api consumes the sheet-sync key — heroes-web never touches Sheets.
   cloud_run_sa_email = google_service_account.heroes_api_runtime.email
+  labels             = local.heroes_labels
 }
 
 module "github_wif" {

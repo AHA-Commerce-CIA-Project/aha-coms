@@ -1,6 +1,7 @@
 # ── DATABASE_URL (auto-wired) ─────────────────────────────────────
 resource "google_secret_manager_secret" "database_url" {
   secret_id = "coms-portal-database-url"
+  labels    = local.portal_labels
 
   replication {
     auto {}
@@ -15,6 +16,7 @@ resource "google_secret_manager_secret_version" "database_url" {
 # ── GIP_API_KEY (manually populated) ──────────────────────────────
 resource "google_secret_manager_secret" "gip_api_key" {
   secret_id = "coms-portal-gip-api-key"
+  labels    = local.portal_labels
 
   replication {
     auto {}
@@ -27,6 +29,7 @@ resource "google_secret_manager_secret" "gip_api_key" {
 # ── BREVO_API_KEY (manually populated; spec-06 PR B2) ────────────
 resource "google_secret_manager_secret" "brevo_api_key" {
   secret_id = "coms-portal-brevo-api-key"
+  labels    = merge(local.portal_labels, { service = "portal-api" })
 
   replication {
     auto {}
@@ -44,6 +47,7 @@ resource "random_password" "portal_broker_signing_secret" {
 
 resource "google_secret_manager_secret" "portal_broker_signing_secret" {
   secret_id = "portal-broker-signing-secret"
+  labels    = local.portal_labels
 
   replication {
     auto {}

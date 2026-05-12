@@ -3,6 +3,7 @@ resource "google_artifact_registry_repository" "coms_portal" {
   repository_id = "coms-portal-registry"
   format        = "DOCKER"
   description   = "Docker images for COMS Portal"
+  labels        = local.portal_labels
 
   cleanup_policies {
     id     = "keep-last-5"

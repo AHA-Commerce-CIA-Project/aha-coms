@@ -15,3 +15,9 @@ variable "tier" {
   type        = string
   default     = "db-f1-micro"
 }
+
+variable "labels" {
+  description = "Standard label set applied to the SQL instance and DB-related secrets for cost attribution."
+  type        = map(string)
+  default     = {}
+}

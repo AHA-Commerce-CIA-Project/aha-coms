@@ -5,6 +5,7 @@ resource "google_storage_bucket" "exports" {
   location                    = var.region
   force_destroy               = false
   uniform_bucket_level_access = true
+  labels                      = var.labels
 
   lifecycle_rule {
     action {
@@ -23,6 +24,7 @@ resource "google_storage_bucket" "uploads" {
   location                    = var.region
   force_destroy               = false
   uniform_bucket_level_access = true
+  labels                      = var.labels
 
   cors {
     origin          = ["https://*.run.app"]

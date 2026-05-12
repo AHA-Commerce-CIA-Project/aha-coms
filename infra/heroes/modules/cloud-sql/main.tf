@@ -14,8 +14,9 @@ resource "google_sql_database_instance" "main" {
   deletion_protection = true
 
   settings {
-    tier    = var.tier
-    edition = "ENTERPRISE"
+    tier        = var.tier
+    user_labels = var.labels
+    edition     = "ENTERPRISE"
 
     ip_configuration {
       # Public IP enabled; Auth Proxy is the only allowed access path.
@@ -82,6 +83,7 @@ locals {
 resource "google_secret_manager_secret" "db_url_production" {
   project   = var.project_id
   secret_id = "coms-aha-heroes-db-url-production"
+  labels    = var.labels
   replication {
     auto {}
   }
@@ -96,6 +98,7 @@ resource "google_secret_manager_secret_version" "db_url_production" {
 resource "google_secret_manager_secret" "db_url_staging" {
   project   = var.project_id
   secret_id = "coms-aha-heroes-db-url-staging"
+  labels    = var.labels
   replication {
     auto {}
   }
@@ -114,6 +117,7 @@ resource "google_secret_manager_secret_version" "db_url_staging" {
 resource "google_secret_manager_secret" "db_user" {
   project   = var.project_id
   secret_id = "coms-aha-heroes-db-user"
+  labels    = var.labels
   replication {
     auto {}
   }
@@ -128,6 +132,7 @@ resource "google_secret_manager_secret_version" "db_user" {
 resource "google_secret_manager_secret" "db_password" {
   project   = var.project_id
   secret_id = "coms-aha-heroes-db-password"
+  labels    = var.labels
   replication {
     auto {}
   }

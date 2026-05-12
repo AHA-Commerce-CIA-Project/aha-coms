@@ -19,8 +19,15 @@
 ############################################################
 
 locals {
-  portal_image_api = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.coms_portal.repository_id}/coms-portal-api:latest"
-  portal_image_web = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.coms_portal.repository_id}/coms-portal-web:latest"
+  # Bootstrap placeholder image. Cloud Run validates the image exists at create
+  # time, but on a fresh apply the registry holds nothing yet — so point at
+  # GCP's public hello-world image. lifecycle.ignore_changes pins the image
+  # field, so the GHA deploy workflows' first `gcloud run deploy --image=...`
+  # overrides this with the real `coms-portal-{api,web}:<sha>` from
+  # `coms-portal-registry` and Tofu does not fight it after.
+  portal_image_bootstrap = "us-docker.pkg.dev/cloudrun/container/hello"
+  portal_image_api       = local.portal_image_bootstrap
+  portal_image_web       = local.portal_image_bootstrap
 
   # Shared plain env — same value, both services. portal-web's SSR needs
   # these because hooks.server.ts validates sessions in-process via
@@ -37,6 +44,12 @@ locals {
 resource "google_cloud_run_v2_service" "coms_portal_api" {
   name     = "coms-portal-api"
   location = var.region
+  labels   = local.portal_labels_api
+
+  # GHA workflows manage the live image; Tofu only bootstraps. deletion_protection=false
+  # so a future destroy-then-create cycle (e.g. another rename or location change) doesn't
+  # require manual gcloud intervention.
+  deletion_protection = false
 
   template {
     service_account = google_service_account.portal_runtime.email
@@ -201,6 +214,9 @@ resource "google_cloud_run_v2_service" "coms_portal_api" {
 resource "google_cloud_run_v2_service" "coms_portal_web" {
   name     = "coms-portal-web"
   location = var.region
+  labels   = local.portal_labels_web
+
+  deletion_protection = false
 
   template {
     service_account = google_service_account.portal_runtime.email

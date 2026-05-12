@@ -14,6 +14,7 @@ resource "google_service_account_key" "sheet_sync_key" {
 resource "google_secret_manager_secret" "sheet_sync_sa_key" {
   project   = var.project_id
   secret_id = "coms-aha-heroes-sheet-sync-sa-key"
+  labels    = var.labels
   replication {
     auto {}
   }
