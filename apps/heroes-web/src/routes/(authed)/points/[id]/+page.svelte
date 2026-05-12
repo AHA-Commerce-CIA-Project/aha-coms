@@ -5,7 +5,7 @@
   import PointActions from '$lib/components/points/PointActions.svelte'
   import IssueLists from '$lib/components/points/IssueLists.svelte'
   import CommentThread from '$lib/components/points/CommentThread.svelte'
-  import { ArrowLeft, User } from 'lucide-svelte'
+  import { ArrowLeft, User } from '@lucide/svelte'
   import * as m from '$lib/paraglide/messages'
 
   let { data } = $props()

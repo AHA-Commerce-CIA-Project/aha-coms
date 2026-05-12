@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Card, CardContent, CardHeader, CardTitle } from '@coms-portal/ui-svelte/primitives'
   import * as m from '$lib/paraglide/messages'
-  import { BarChart3, FileText, Star, AlertTriangle, Award, ShieldOff } from 'lucide-svelte'
+  import { BarChart3, FileText, Star, AlertTriangle, Award, ShieldOff } from '@lucide/svelte'
   import { userState } from '$lib/state/userState.svelte'
 
   let { data } = $props()

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation'
-  import { RefreshCw } from 'lucide-svelte'
+  import { RefreshCw } from '@lucide/svelte'
   import type { Snippet } from 'svelte'
 
   let { children }: { children: Snippet } = $props()

@@ -2,7 +2,7 @@
   import { Badge } from '@coms-portal/ui-svelte/primitives'
   import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
-  import { ArrowLeft, User, Star } from 'lucide-svelte'
+  import { ArrowLeft, User, Star } from '@lucide/svelte'
 
   let { data } = $props()
 

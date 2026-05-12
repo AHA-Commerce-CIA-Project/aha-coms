@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Crown } from 'lucide-svelte'
+  import { Crown } from '@lucide/svelte'
 
   type PodiumEntry = {
     rank: number

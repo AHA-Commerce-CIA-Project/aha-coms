@@ -3,7 +3,7 @@
   import { api } from '$lib/api/client'
   import { getErrorMessage } from '$lib/api/client'
   import { Textarea, Button } from '@coms-portal/ui-svelte/primitives'
-  import { Send, User as UserIcon } from 'lucide-svelte'
+  import { Send, User as UserIcon } from '@lucide/svelte'
 
   interface Comment {
     id: string

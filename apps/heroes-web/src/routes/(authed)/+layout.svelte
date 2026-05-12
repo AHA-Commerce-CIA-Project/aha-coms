@@ -24,7 +24,7 @@
     Menu,
     X,
     User,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { page } from '$app/stores'
   import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
@@ -94,40 +94,35 @@
     userState.isAdmin || userState.current?.role === 'hr',
   )
 
-  // Nav item arrays — icons cast to satisfy chrome's Component type signature.
-  // Lucide exports are compatible at runtime; the type gap is a version-skew artefact.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  type AnyIcon = any
-
   const mainNavItems = [
-    { href: `${base}/dashboard`, label: m.nav_dashboard() as string, icon: LayoutDashboard as AnyIcon },
-    { href: `${base}/points`, label: m.nav_points() as string, icon: Award as AnyIcon },
-    { href: `${base}/leaderboard`, label: m.nav_leaderboard() as string, icon: Trophy as AnyIcon },
-    { href: `${base}/rewards`, label: m.nav_rewards() as string, icon: Gift as AnyIcon },
-    { href: `${base}/redemptions`, label: m.nav_redemptions() as string, icon: ShoppingCart as AnyIcon },
+    { href: `${base}/dashboard`, label: m.nav_dashboard() as string, icon: LayoutDashboard },
+    { href: `${base}/points`, label: m.nav_points() as string, icon: Award },
+    { href: `${base}/leaderboard`, label: m.nav_leaderboard() as string, icon: Trophy },
+    { href: `${base}/rewards`, label: m.nav_rewards() as string, icon: Gift },
+    { href: `${base}/redemptions`, label: m.nav_redemptions() as string, icon: ShoppingCart },
   ]
 
   const adminNavItems = [
-    { href: `${base}/admin/users`, label: m.nav_users() as string, icon: Users as AnyIcon },
-    { href: `${base}/teams`, label: m.nav_teams() as string, icon: Building2 as AnyIcon },
-    { href: `${base}/admin/reports`, label: m.nav_reports() as string, icon: BarChart3 as AnyIcon },
-    { href: `${base}/admin/audit-log`, label: m.nav_audit_log() as string, icon: FileText as AnyIcon },
-    { href: `${base}/admin/sheet-sync`, label: m.nav_sheet_sync() as string, icon: RefreshCw as AnyIcon },
-    { href: `${base}/admin/settings`, label: m.nav_settings() as string, icon: Settings as AnyIcon },
+    { href: `${base}/admin/users`, label: m.nav_users() as string, icon: Users },
+    { href: `${base}/teams`, label: m.nav_teams() as string, icon: Building2 },
+    { href: `${base}/admin/reports`, label: m.nav_reports() as string, icon: BarChart3 },
+    { href: `${base}/admin/audit-log`, label: m.nav_audit_log() as string, icon: FileText },
+    { href: `${base}/admin/sheet-sync`, label: m.nav_sheet_sync() as string, icon: RefreshCw },
+    { href: `${base}/admin/settings`, label: m.nav_settings() as string, icon: Settings },
   ]
 
   // Slide-over admin menu items (all items, for mobile full-nav panel)
   const slideOverNavItems = [
-    { href: `${base}/dashboard`, label: m.nav_dashboard() as string, icon: LayoutDashboard as AnyIcon },
-    { href: `${base}/points`, label: m.nav_points() as string, icon: Award as AnyIcon },
-    { href: `${base}/rewards`, label: m.nav_rewards() as string, icon: Gift as AnyIcon },
-    { href: `${base}/redemptions`, label: m.nav_redemptions() as string, icon: ShoppingCart as AnyIcon },
-    { href: `${base}/admin/users`, label: m.nav_users() as string, icon: Users as AnyIcon },
-    { href: `${base}/teams`, label: m.nav_teams() as string, icon: Building2 as AnyIcon },
-    { href: `${base}/admin/reports`, label: m.nav_reports() as string, icon: BarChart3 as AnyIcon },
-    { href: `${base}/admin/audit-log`, label: m.nav_audit_log() as string, icon: FileText as AnyIcon },
-    { href: `${base}/admin/sheet-sync`, label: m.nav_sheet_sync() as string, icon: RefreshCw as AnyIcon },
-    { href: `${base}/admin/settings`, label: m.nav_settings() as string, icon: Settings as AnyIcon },
+    { href: `${base}/dashboard`, label: m.nav_dashboard() as string, icon: LayoutDashboard },
+    { href: `${base}/points`, label: m.nav_points() as string, icon: Award },
+    { href: `${base}/rewards`, label: m.nav_rewards() as string, icon: Gift },
+    { href: `${base}/redemptions`, label: m.nav_redemptions() as string, icon: ShoppingCart },
+    { href: `${base}/admin/users`, label: m.nav_users() as string, icon: Users },
+    { href: `${base}/teams`, label: m.nav_teams() as string, icon: Building2 },
+    { href: `${base}/admin/reports`, label: m.nav_reports() as string, icon: BarChart3 },
+    { href: `${base}/admin/audit-log`, label: m.nav_audit_log() as string, icon: FileText },
+    { href: `${base}/admin/sheet-sync`, label: m.nav_sheet_sync() as string, icon: RefreshCw },
+    { href: `${base}/admin/settings`, label: m.nav_settings() as string, icon: Settings },
   ]
 
   const sidebarSections = $derived([
@@ -268,10 +263,10 @@
 
   <MobileBottomNav
     items={[
-      { href: `${base}/dashboard`, label: m.nav_dashboard() as string, icon: LayoutDashboard as AnyIcon },
-      { href: `${base}/points`, label: m.nav_points() as string, icon: Award as AnyIcon },
-      { href: `${base}/leaderboard`, label: m.nav_leaderboard() as string, icon: Trophy as AnyIcon },
-      { href: `${base}/rewards`, label: m.nav_rewards() as string, icon: Gift as AnyIcon },
+      { href: `${base}/dashboard`, label: m.nav_dashboard() as string, icon: LayoutDashboard },
+      { href: `${base}/points`, label: m.nav_points() as string, icon: Award },
+      { href: `${base}/leaderboard`, label: m.nav_leaderboard() as string, icon: Trophy },
+      { href: `${base}/rewards`, label: m.nav_rewards() as string, icon: Gift },
     ]}
     currentPath={$page.url.pathname}
   />

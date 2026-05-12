@@ -3,7 +3,7 @@
   import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
   import { buildSearchParams } from '$lib/utils'
-  import { Search, Plus, User, Pencil, Archive, ChevronLeft, ChevronRight } from 'lucide-svelte'
+  import { Search, Plus, User, Pencil, Archive, ChevronLeft, ChevronRight } from '@lucide/svelte'
 
   let { data } = $props()
 

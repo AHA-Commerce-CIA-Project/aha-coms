@@ -3,7 +3,7 @@
   import { base } from '$app/paths'
   import { userState } from '$lib/state/userState.svelte'
   import * as m from '$lib/paraglide/messages'
-  import { Search, Plus, Users, Crown, ChevronDown, ChevronUp, Pencil } from 'lucide-svelte'
+  import { Search, Plus, Users, Crown, ChevronDown, ChevronUp, Pencil } from '@lucide/svelte'
 
   let { data } = $props()
 

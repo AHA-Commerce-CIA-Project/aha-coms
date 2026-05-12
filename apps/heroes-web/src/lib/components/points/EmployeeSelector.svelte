@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '$lib/api/client'
-  import { Search, User } from 'lucide-svelte'
+  import { Search, User } from '@lucide/svelte'
 
   interface Employee {
     id: string

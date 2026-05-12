@@ -5,7 +5,7 @@
   import { api } from '$lib/api/client'
   import { getErrorMessage } from '$lib/api/client'
   import * as m from '$lib/paraglide/messages'
-  import { Gift, Coins, ArrowLeft, CheckCircle } from 'lucide-svelte'
+  import { Gift, Coins, ArrowLeft, CheckCircle } from '@lucide/svelte'
 
   let { data } = $props()
 

@@ -3,7 +3,7 @@
   import { toast } from 'svelte-sonner'
   import { api } from '$lib/api/client'
   import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Button, Label, Textarea } from '@coms-portal/ui-svelte/primitives'
-  import { AlertCircle } from 'lucide-svelte'
+  import { AlertCircle } from '@lucide/svelte'
   import * as m from '$lib/paraglide/messages'
   import { getErrorMessage } from '$lib/api/client'
 

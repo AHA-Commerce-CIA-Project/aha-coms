@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Clock, ChevronRight } from 'lucide-svelte'
+  import { Clock, ChevronRight } from '@lucide/svelte'
   import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
 

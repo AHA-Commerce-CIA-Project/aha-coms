@@ -6,7 +6,7 @@
   import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from '@coms-portal/ui-svelte/primitives'
   import PointCard from '$lib/components/points/PointCard.svelte'
   import PointTypeSelector from '$lib/components/points/PointTypeSelector.svelte'
-  import { SlidersHorizontal, Plus, Filter } from 'lucide-svelte'
+  import { SlidersHorizontal, Plus, Filter } from '@lucide/svelte'
   import * as m from '$lib/paraglide/messages'
   import { buildSearchParams } from '$lib/utils'
 

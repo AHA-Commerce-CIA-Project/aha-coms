@@ -17,7 +17,7 @@
     Building2,
     Users,
     ChevronRight,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
 
   const user = $derived(userState.current)
 

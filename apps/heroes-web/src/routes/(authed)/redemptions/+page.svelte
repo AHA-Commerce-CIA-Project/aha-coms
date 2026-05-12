@@ -4,7 +4,7 @@
   import { userState } from '$lib/state/userState.svelte'
   import { api } from '$lib/api/client'
   import * as m from '$lib/paraglide/messages'
-  import { Gift } from 'lucide-svelte'
+  import { Gift } from '@lucide/svelte'
 
   let { data } = $props()
 

@@ -16,15 +16,15 @@
     Bell,
     User,
     RefreshCw,
-  } from 'lucide-svelte'
+    type LucideIcon,
+  } from '@lucide/svelte'
   import * as m from '$lib/paraglide/messages'
-  import type { ComponentType } from 'svelte'
 
   interface CommandItem {
     id: string
     label: () => string
     href: string
-    icon: ComponentType
+    icon: LucideIcon
     group: 'navigation' | 'admin'
   }
 

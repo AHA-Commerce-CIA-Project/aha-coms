@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Sun, Moon, Monitor } from 'lucide-svelte'
+  import { Sun, Moon, Monitor } from '@lucide/svelte'
   import { uiState } from '$lib/state/uiState.svelte'
 
   const CYCLE: Array<'light' | 'dark' | 'system'> = ['light', 'dark', 'system']

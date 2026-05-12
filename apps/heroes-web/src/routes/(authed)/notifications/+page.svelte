@@ -12,7 +12,7 @@
     AlertCircle,
     ChevronLeft,
     ChevronRight,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
 
   let { data } = $props()
 

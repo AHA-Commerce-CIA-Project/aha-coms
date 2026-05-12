@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Trophy } from 'lucide-svelte'
+  import { Trophy } from '@lucide/svelte'
 </script>
 
 <svelte:head>

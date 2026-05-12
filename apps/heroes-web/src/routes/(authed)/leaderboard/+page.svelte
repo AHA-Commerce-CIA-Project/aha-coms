@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { page } from '$app/stores'
-  import { Trophy, Star, AlertTriangle } from 'lucide-svelte'
+  import { Trophy, Star, AlertTriangle } from '@lucide/svelte'
   import Podium from '$lib/components/leaderboard/Podium.svelte'
   import LeaderboardRow from '$lib/components/leaderboard/LeaderboardRow.svelte'
   import * as m from '$lib/paraglide/messages'

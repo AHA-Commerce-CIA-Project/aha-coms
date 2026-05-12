@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronRight, Crown, Trophy } from 'lucide-svelte'
+  import { ChevronRight, Crown, Trophy } from '@lucide/svelte'
   import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
 

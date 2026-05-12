@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Bell } from 'lucide-svelte'
+  import { Bell } from '@lucide/svelte'
   import { base } from '$app/paths'
 
   let { unreadCount = 0 }: { unreadCount?: number } = $props()

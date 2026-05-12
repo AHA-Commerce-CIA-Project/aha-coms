@@ -7,7 +7,7 @@
     ChevronLeft,
     ChevronRight,
     Loader2,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
 
   let { data } = $props()
 

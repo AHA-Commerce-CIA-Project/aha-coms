@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Search } from 'lucide-svelte'
+  import { Search } from '@lucide/svelte'
   import * as m from '$lib/paraglide/messages'
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte'
   import NotificationsBadge from '$lib/components/NotificationsBadge.svelte'

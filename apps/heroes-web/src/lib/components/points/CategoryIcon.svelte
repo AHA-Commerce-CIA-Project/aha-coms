@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Star, AlertTriangle, Award } from 'lucide-svelte'
+  import { Star, AlertTriangle, Award } from '@lucide/svelte'
 
   type CategoryCode = 'BINTANG' | 'POIN_AHA' | 'PENALTI'
   type Size = 'sm' | 'md' | 'lg'

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { dashboardQuery } from '$lib/queries/dashboard'
   import AppCard from '$lib/components/app-card.svelte'
-  import { AppWindow } from 'lucide-svelte'
+  import { AppWindow } from '@lucide/svelte'
 
   const query = dashboardQuery()
 </script>

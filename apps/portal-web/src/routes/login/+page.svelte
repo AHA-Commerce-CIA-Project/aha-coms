@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation'
   import { page } from '$app/stores'
   import { signInWithPopup, signOut, getIdToken } from 'firebase/auth'
-  import { ArrowLeft } from 'lucide-svelte'
+  import { ArrowLeft } from '@lucide/svelte'
   import { clientAuth, googleProvider } from '$lib/firebase'
   import { api } from '$lib/api'
   import { requestOtp, verifyOtp } from '$lib/auth'

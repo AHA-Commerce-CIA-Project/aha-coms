@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Star, Award, AlertTriangle, ChevronRight } from 'lucide-svelte'
+  import { Star, Award, AlertTriangle, ChevronRight } from '@lucide/svelte'
   import { base } from '$app/paths'
   import { userState } from '$lib/state/userState.svelte'
   import * as m from '$lib/paraglide/messages'

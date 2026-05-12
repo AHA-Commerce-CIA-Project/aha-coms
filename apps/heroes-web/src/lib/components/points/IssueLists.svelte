@@ -1,6 +1,6 @@
 <script lang="ts">
   import ResolveDialog from './ResolveDialog.svelte'
-  import { CheckCircle2, XCircle, Clock, User as UserIcon } from 'lucide-svelte'
+  import { CheckCircle2, XCircle, Clock, User as UserIcon } from '@lucide/svelte'
   import * as m from '$lib/paraglide/messages'
   import { userState } from '$lib/state/userState.svelte'
 

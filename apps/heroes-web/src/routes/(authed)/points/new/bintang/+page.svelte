@@ -7,7 +7,7 @@
   import { userState } from '$lib/state/userState.svelte'
   import { Button } from '@coms-portal/ui-svelte/primitives'
   import EmployeeSelector from '$lib/components/points/EmployeeSelector.svelte'
-  import { Star, AlertTriangle, ChevronRight } from 'lucide-svelte'
+  import { Star, AlertTriangle, ChevronRight } from '@lucide/svelte'
   import * as m from '$lib/paraglide/messages'
   import { getErrorMessage } from '$lib/api/client'
 

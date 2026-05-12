@@ -7,7 +7,7 @@
   import { userState } from '$lib/state/userState.svelte'
   import { Button } from '@coms-portal/ui-svelte/primitives'
   import EmployeeSelector from '$lib/components/points/EmployeeSelector.svelte'
-  import { AlertTriangle, ChevronRight } from 'lucide-svelte'
+  import { AlertTriangle, ChevronRight } from '@lucide/svelte'
   import * as m from '$lib/paraglide/messages'
   import { KITTA_CODES, KITTA_LABELS, KITTA_DESCRIPTIONS } from '@coms-portal/heroes-shared/constants'
   import type { KittaCode } from '@coms-portal/heroes-shared/constants'

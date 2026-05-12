@@ -2,7 +2,7 @@
   import { Button } from '@coms-portal/ui-svelte/primitives'
   import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
-  import { Settings, AlertTriangle, Save, Globe, Tag } from 'lucide-svelte'
+  import { Settings, AlertTriangle, Save, Globe, Tag } from '@lucide/svelte'
 
   let { data } = $props()
 

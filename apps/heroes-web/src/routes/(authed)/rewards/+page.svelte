@@ -3,7 +3,7 @@
   import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
   import { userState } from '$lib/state/userState.svelte'
-  import { Gift, Coins, Plus } from 'lucide-svelte'
+  import { Gift, Coins, Plus } from '@lucide/svelte'
 
   let { data } = $props()
 
