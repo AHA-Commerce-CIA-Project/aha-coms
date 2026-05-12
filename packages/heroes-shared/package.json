@@ -9,7 +9,8 @@
     "./schemas": "./src/schemas/index.ts",
     "./constants": "./src/constants/index.ts",
     "./types": "./src/types/index.ts",
-    "./auth/session": "./src/auth/session.ts"
+    "./auth/session": "./src/auth/session.ts",
+    "./auth/user": "./src/auth/user.ts"
   },
   "scripts": {
     "build": "echo 'shared uses direct TS imports — no build needed'",

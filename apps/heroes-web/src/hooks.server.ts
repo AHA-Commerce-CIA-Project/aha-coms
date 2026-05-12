@@ -1,12 +1,19 @@
 import { sequence } from '@sveltejs/kit/hooks'
 import type { Handle } from '@sveltejs/kit'
-import type { AuthUser } from '@coms-portal/heroes-shared/types'
+import { env } from '$env/dynamic/private'
 import { paraglideMiddleware } from '$lib/paraglide/server'
 import { getTextDirection } from '$lib/paraglide/runtime'
 import {
-  PORTAL_SESSION_COOKIE,
-  getLocalSessionByToken,
-} from '@coms-portal/heroes-shared/auth/session'
+  loadHeroesAuthUser,
+  PortalSessionDeniedError,
+} from '@coms-portal/heroes-shared/auth/user'
+
+// Spec 02 Phase 2 / T33 — heroes reads portal's `__session` cookie directly
+// (the only cookie Firebase Hosting forwards to Cloud Run) and introspects
+// it through portal-api's /api/userinfo. The legacy `coms_session` table
+// and getLocalSessionByToken path are retired; T35/T36 will sweep the
+// dead code and drop the underlying tables.
+const PORTAL_SESSION_COOKIE = '__session'
 
 const i18n: Handle = ({ event, resolve }) =>
   paraglideMiddleware(event.request, ({ request: localizedRequest, locale }) => {
@@ -25,61 +32,30 @@ const auth: Handle = async ({ event, resolve }) => {
     return resolve(event)
   }
 
-  const session = await getLocalSessionByToken(token)
-  if (!session) {
-    event.cookies.delete(PORTAL_SESSION_COOKIE, { path: '/' })
-    event.locals.user = null
-    event.locals.session = null
-    return resolve(event)
+  // PORTAL_ORIGIN points at the unified Firebase Hosting host (e.g.
+  // https://aha-coms.web.app), so the userinfo fetch routes back through
+  // Firebase's `/api/**` rewrite to coms-portal-api with the `__session`
+  // cookie attached.
+  const portalOrigin = env.PORTAL_ORIGIN
+  if (!portalOrigin) {
+    throw new Error('PORTAL_ORIGIN env var is required for session resolution')
   }
 
-  const [{ db }, { heroesProfiles, emailCache, userConfigCache }, { eq }] = await Promise.all([
-    import('@coms-portal/heroes-shared/db'),
-    import('@coms-portal/heroes-shared/db/schema'),
-    import('drizzle-orm'),
-  ])
-
-  const [raw] = await db
-    .select({
-      id: heroesProfiles.id,
-      name: heroesProfiles.name,
-      branchKey: heroesProfiles.branchKey,
-      branchValueSnapshot: heroesProfiles.branchValueSnapshot,
-      teamKey: heroesProfiles.teamKey,
-      teamValueSnapshot: heroesProfiles.teamValueSnapshot,
-      role: heroesProfiles.role,
-      email: emailCache.contactEmail,
-      configJson: userConfigCache.config,
-    })
-    .from(heroesProfiles)
-    .leftJoin(emailCache, eq(heroesProfiles.id, emailCache.portalSub))
-    .leftJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
-    .where(eq(heroesProfiles.id, session.userId))
-    .limit(1)
-
-  if (raw) {
-    const cfg = raw.configJson as Record<string, unknown> | null
-    event.locals.user = {
-      id: raw.id,
-      email: raw.email ?? '',
-      name: raw.name,
-      role: raw.role as AuthUser['role'],
-      branchKey: raw.branchKey ?? null,
-      branchValueSnapshot: raw.branchValueSnapshot ?? null,
-      teamKey: raw.teamKey ?? null,
-      teamValueSnapshot: raw.teamValueSnapshot ?? null,
-      canSubmitPoints: (cfg?.canSubmitPoints as boolean | undefined) ?? false,
-      portalRole: session.portalRole,
-      apps: session.apps,
+  try {
+    event.locals.user = await loadHeroesAuthUser(token, portalOrigin)
+  } catch (err) {
+    if (err instanceof PortalSessionDeniedError) {
+      // Authenticated portal user without heroes access — surface as a 403
+      // upstream rather than bouncing back through portal sign-in.
+      event.locals.user = null
+    } else {
+      throw err
     }
-  } else {
-    event.locals.user = null
   }
-  event.locals.session = {
-    id: session.sessionId,
-    userId: session.userId,
-    expiresAt: session.expiresAt,
-  }
+  // Locals.session was a heroes-side handle on the local session row; with
+  // portal-owned sessions there is nothing meaningful to surface here.
+  // Phase 2 T35/T36 will drop the type entirely.
+  event.locals.session = null
 
   return resolve(event)
 }

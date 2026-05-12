@@ -1,11 +1,8 @@
 import Elysia from 'elysia'
-import { eq } from 'drizzle-orm'
-import { db } from '@coms-portal/heroes-shared/db'
-import { heroesProfiles, emailCache, userConfigCache } from '@coms-portal/heroes-shared/db/schema'
 import {
-  getLocalSessionByToken,
-  readSessionCookieFromHeaders,
-} from '@coms-portal/heroes-shared/auth/session'
+  loadHeroesAuthUser,
+  PortalSessionDeniedError,
+} from '@coms-portal/heroes-shared/auth/user'
 import type { UserRole } from '@coms-portal/heroes-shared/constants'
 
 export type AuthUser = {
@@ -20,62 +17,68 @@ export type AuthUser = {
   readonly canSubmitPoints: boolean
 }
 
+const PORTAL_SESSION_COOKIE = '__session'
+
+// Spec 02 Phase 2 / T34 — heroes-api reads portal's `__session` cookie
+// (the only cookie Firebase Hosting forwards to Cloud Run) and introspects
+// it through portal-api's /api/userinfo via `loadHeroesAuthUser`. Mirrors
+// heroes-web's hooks.server.ts, intentionally — there should be exactly
+// one session-resolution code path in the heroes tree.
 export const authPlugin = new Elysia({ name: 'auth' }).derive(
   { as: 'scoped' },
   async ({ request }) => {
-    const token = readSessionCookieFromHeaders(request.headers)
+    const cookieHeader = request.headers.get('cookie') ?? ''
+    const token = extractSessionCookie(cookieHeader)
     if (!token) {
       throw new AuthError(401, 'UNAUTHORIZED', 'Authentication required')
     }
 
-    const session = await getLocalSessionByToken(token)
-    if (!session) {
+    const portalOrigin = process.env.PORTAL_ORIGIN
+    if (!portalOrigin) {
+      throw new Error('PORTAL_ORIGIN env var is required for session resolution')
+    }
+
+    let user
+    try {
+      user = await loadHeroesAuthUser(token, portalOrigin)
+    } catch (err) {
+      if (err instanceof PortalSessionDeniedError) {
+        throw new AuthError(
+          403,
+          'USER_NOT_FOUND',
+          'No application user linked to this account',
+        )
+      }
+      throw err
+    }
+
+    if (!user) {
       throw new AuthError(401, 'UNAUTHORIZED', 'Authentication required')
     }
 
-    const [raw] = await db
-      .select({
-        id: heroesProfiles.id,
-        name: heroesProfiles.name,
-        branchKey: heroesProfiles.branchKey,
-        branchValueSnapshot: heroesProfiles.branchValueSnapshot,
-        teamKey: heroesProfiles.teamKey,
-        teamValueSnapshot: heroesProfiles.teamValueSnapshot,
-        role: heroesProfiles.role,
-        email: emailCache.contactEmail,
-        configJson: userConfigCache.config,
-      })
-      .from(heroesProfiles)
-      .leftJoin(emailCache, eq(heroesProfiles.id, emailCache.portalSub))
-      .leftJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
-      .where(eq(heroesProfiles.id, session.userId))
-      .limit(1)
-
-    if (!raw) {
-      throw new AuthError(
-        403,
-        'USER_NOT_FOUND',
-        'No application user linked to this account',
-      )
-    }
-
-    const cfg = raw.configJson as Record<string, unknown> | null
-
     const appUser: AuthUser = {
-      id: raw.id,
-      email: raw.email ?? '',
-      name: raw.name,
-      role: raw.role as UserRole,
-      branchKey: raw.branchKey ?? null,
-      branchValueSnapshot: raw.branchValueSnapshot ?? null,
-      teamKey: raw.teamKey ?? null,
-      teamValueSnapshot: raw.teamValueSnapshot ?? null,
-      canSubmitPoints: (cfg?.canSubmitPoints as boolean | undefined) ?? false,
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      branchKey: user.branchKey,
+      branchValueSnapshot: user.branchValueSnapshot,
+      teamKey: user.teamKey,
+      teamValueSnapshot: user.teamValueSnapshot,
+      canSubmitPoints: user.canSubmitPoints,
     }
 
     return { authUser: appUser }
   },
 )
+
+function extractSessionCookie(cookieHeader: string): string | null {
+  for (const part of cookieHeader.split(';')) {
+    const [name, ...rest] = part.trim().split('=')
+    if (name === PORTAL_SESSION_COOKIE) return rest.join('=') || null
+  }
+  return null
+}
 
 export class AuthError extends Error {
   constructor(
