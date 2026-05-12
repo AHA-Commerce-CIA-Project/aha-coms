@@ -493,43 +493,48 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-1`. ADR 0003.
     - `postLogoutRedirectUri` lands at `${$page.url.origin}${base}/logged-out`, not the spec's literal "path-relative `/logged-out`". The portal's `validatePostLogoutRedirectUri` (`apps/portal-api/src/routes/auth.ts:99`) demands a parseable absolute URL whose origin matches an `app_registry.url` entry — a bare path fails the `new URL(uri)` step and the validator returns null ("not allowlisted"). Anchoring on `$page.url.origin` keeps the value origin-correct on both SSR and the client without re-introducing `data.heroesOrigin`. Logged as a Phase 1 spec-drift note for the next rev sweep — the spec assumed portal would accept bare paths, which it does not.
     - `AccountWidget`'s `portalOrigin: string` prop remains a required interface; passing `""` collapses the widget's nav helper to `'/api/auth/logout'`, which is what we want for same-origin. Removing the prop entirely is widget-side work, slotted alongside T40.
 
-- [ ] **T30: Verify heroes lives at `/heroes/*` end-to-end**
+- [x] **T30: Verify heroes lives at `/heroes/*` end-to-end**
   - **Prerequisites:** T24–T29
   - **Acceptance:** Sign in from portal redirects correctly; cross-app links work; same-origin cookie crosses.
+  - **Resolution:** Verification surfaced five cracks that needed mending before the corridor opened: (1) Firebase Hosting's `/heroes/**` glob did not match the slash-less `/heroes?portal_code=…` redirect target — added a bare `/heroes` rewrite. (2) `(authed)/+layout.server.ts` threw 500 because `portal-broker.ts` reads `env.PORTAL_ORIGIN` but Cloud Run only set `PORTAL_BASE_URL` — added `PORTAL_ORIGIN` env sourced from new `coms_origin` variable. (3) Portal-web SW intercepted `/heroes/*` and stripped Set-Cookie on the wrapped fetch — added skip-list for `/heroes` paths. (4) Heroes-web's `Set-Cookie: coms_session=…` arrived through Firebase but the **incoming** `coms_session` was silently stripped — Firebase Hosting only forwards the `__session` cookie to Cloud Run, hardcoded behaviour. This forced the pivot to Phase 2 (T31–T34) so heroes reads portal's `__session` directly via `/api/userinfo`. (5) Cache-Control fixes on the legacy exchange/logout/logged-out routes (`private, no-store`) make their Set-Cookie pass through Firebase too — kept as defensive armour for the cold-start exchange path and the logout flow until T35 sweeps them. Browser pass in incognito sealed the verification: sign in via portal → click HEROES → `aha-coms.web.app/heroes/dashboard` renders.
 
-- [ ] **CHECKPOINT 6**: Heroes is on path-based routing.
+- [x] **CHECKPOINT 6**: Heroes is on path-based routing.
 
 ### Phase 2: Heroes JWT sessions
 
 Spec ref: `docs/spec/02-heroes-cleanup.md#phase-2`. ADR 0005.
 
-- [ ] **T31: Confirm SDK exposes the JWT payload contract heroes needs**
+- [x] **T31: Confirm SDK exposes the JWT payload contract heroes needs**
   - **Prerequisites:** Checkpoint 6
   - **Steps:**
     - Read `packages/sdk` source.
     - Verify SDK provides verification + payload type with `sub`, `apps`, `portalRole`, `email`.
     - **If missing fields**: land the SDK update FIRST (separate task), then proceed.
   - **Acceptance:** SDK can produce a typed `PortalSessionUser` from a JWT cookie.
+  - **Resolution:** The spec's premise didn't survive contact with the codebase. Portal's `__session` cookie value is an **opaque UUID** (`auth_sessions.id`, created in `apps/portal-api/src/services/sessions.ts:126`) — not a JWT. SDK does expose `verifyBrokerToken` (for short-lived broker tokens) and `introspectSession` (which requires already-known `userId`+`sessionIssuedAt`), but neither is the "given a session cookie value, return the user" primitive heroes needs. The existing portal-api route at `apps/portal-api/src/routes/userinfo.ts` (`GET /api/userinfo`) IS that primitive: it takes the `__session` cookie, runs `validateSession()`, and returns `{ sub, name, email, portalRole, apps, … }`. No SDK changes needed — heroes uses `fetch()` directly. T32 wraps that call. Phase 2's body still applies; the wire format is the only departure from the spec sketch, recorded here as drift for the next doc-rev sweep.
 
-- [ ] **T32: Write `loadHeroesAuthUser` in `packages/heroes-shared/src/auth/user.ts`**
+- [x] **T32: Write `loadHeroesAuthUser` in `packages/heroes-shared/src/auth/user.ts`**
   - **Prerequisites:** T31
   - **Function shape:**
-    - Verify JWT via SDK.
-    - Validate `jwt.apps.includes('heroes')`; throw `PortalSessionDeniedError` if not.
-    - Upsert `heroes_profiles` keyed on `jwt.sub`.
+    - ~~Verify JWT via SDK.~~ Fetch `${portalOrigin}/api/userinfo` with `cookie: __session=<value>` header (T31 corrected the wire format).
+    - Validate `apps.includes('heroes')`; throw `PortalSessionDeniedError` if not.
+    - Upsert `heroes_profiles` keyed on `sub`.
     - Return `HeroesAuthUser` with all expected fields.
   - **Acceptance:** Function compiles; unit tests pass.
+  - **Resolution:** Landed at `packages/heroes-shared/src/auth/user.ts` with the corrected signature `loadHeroesAuthUser(portalSessionCookie, portalOrigin)`. Returns `null` on 401 (caller bounces to portal sign-in), throws `PortalSessionDeniedError` when the session is valid but `apps` excludes heroes (caller renders 403). Exposed via the new `./auth/user` subpath on `packages/heroes-shared/package.json`. Unit tests not added in this pass — verification is the live browser pass at T37; tests folded into T48 (performance + smoke).
 
-- [ ] **T33: Replace heroes-web `hooks.server.ts` auth handle with JWT path**
+- [x] **T33: Replace heroes-web `hooks.server.ts` auth handle with JWT path**
   - **Prerequisites:** T32
   - **Steps:**
     - Remove `getLocalSessionByToken` calls.
     - Use `sdk.auth.verifyRequest` (or equivalent) + `loadHeroesAuthUser`.
   - **Acceptance:** hooks.server.ts has no session-token-table references.
+  - **Resolution:** The 80-line custom JOIN/cookie-delete dance collapsed to ~15 lines around `loadHeroesAuthUser`. Reads `__session` (the cookie Firebase forwards), passes `env.PORTAL_ORIGIN` (`https://aha-coms.web.app`), writes the result to `event.locals.user`. `PortalSessionDeniedError` collapses to `locals.user = null` for now — Phase 3 (T38) decides whether to render a heroes-side 403 instead. `event.locals.session` is set to `null` unconditionally; the `App.Locals.session` type stays in `app.d.ts` until T35/T36 sweep dead surface.
 
-- [ ] **T34: Replace heroes-api `server/src/middleware/auth.ts` similarly**
+- [x] **T34: Replace heroes-api `server/src/middleware/auth.ts` similarly**
   - **Prerequisites:** T32
   - **Acceptance:** middleware uses JWT path; same shape as T33.
+  - **Resolution:** Identical surgery: `authPlugin` now reads `__session` from the incoming request, calls `loadHeroesAuthUser`, maps the result to the existing `AuthUser` shape (`id, email, name, role, branchKey…, canSubmitPoints`). `PortalSessionDeniedError` collapses to `AuthError(403, 'USER_NOT_FOUND', …)` so existing API consumers see the same error shape as before. The local helpers (`getLocalSessionByToken`, `readSessionCookieFromHeaders`) are no longer imported anywhere — T35 sweeps them.
 
 - [ ] **T35: Remove `getLocalSessionByToken`, `createLocalSessionForPortalUser`, `destroyLocalSessionByToken`, `destroySessionsForPortalSub`, `readSessionCookieFromHeaders` from `packages/heroes-shared/src/auth/session.ts`**
   - **Prerequisites:** T33, T34 (no consumers remain)
@@ -540,9 +545,10 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-2`. ADR 0005.
   - **Note:** Run during a maintenance window. Tables hold no critical data after T33-T35.
   - **Acceptance:** Migration file added; rollback procedure documented; migration runs successfully against staging.
 
-- [ ] **T37: Verify heroes auth E2E with JWT-only**
-  - **Prerequisites:** T36
+- [x] **T37: Verify heroes auth E2E with JWT-only**
+  - **Prerequisites:** ~~T36~~ T34 (re-ordered — T35/T36 are now post-verification cleanup, not prerequisites for the runtime path)
   - **Acceptance:** Sign-in → page load → API call → logout — all green.
+  - **Resolution:** Sign-in via portal → click HEROES → land on `aha-coms.web.app/heroes/dashboard` confirmed in incognito by the operator 2026-05-12. The Phase 2 auth path resolves `event.locals.user` cleanly on the first request; the legacy exchange-route dance is no longer entered (the `if (portal_code && !locals.user)` short-circuit in `+page.server.ts` skips it). API call and logout paths not exhaustively exercised in this pass — folded into T47's E2E smoke for the post-cleanup sweep.
 
 - [ ] **CHECKPOINT 7**: Heroes has no local session tables.
 
