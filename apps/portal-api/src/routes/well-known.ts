@@ -57,7 +57,7 @@ const discoveryDocument = {
   ],
 
   service_documentation:
-    'https://github.com/mrdoorba/aha-coms/blob/main/docs/architecture/rev2/spec-01-rs256-jwks.md',
+    'https://github.com/mrdoorba/aha-coms/blob/main/docs/integration-contract.md',
 
   'x-coms-platform-auth-contract-version': PLATFORM_AUTH_CONTRACT_VERSION,
   'x-coms-supported-app-transports': ['same_host_cookie', 'portable_token'],
