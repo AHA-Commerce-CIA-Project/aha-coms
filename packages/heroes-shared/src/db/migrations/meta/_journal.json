@@ -117,7 +117,7 @@
     {
       "idx": 16,
       "version": "7",
-      "when": 1778592800000,
+      "when": 1778700000000,
       "tag": "0016_drop_legacy_auth_tables",
       "breakpoints": true
     }
