@@ -13,7 +13,12 @@ export default function MyRequestPage() {
                 { href: '/team-inbox', label: 'Task Inbox' },
                 { href: '/orbit', label: 'AHA Orbit' },
             ]} />
-            <MyRequestView />
+            {/* Cap the cards body at max-w-4xl so they don't stretch on wide
+                monitors. PageTabs stays outside the wrapper to preserve the
+                left-aligned tab row shared by the other Tasks-group pages. */}
+            <div className="max-w-4xl mx-auto">
+                <MyRequestView />
+            </div>
         </div>
     );
 }
