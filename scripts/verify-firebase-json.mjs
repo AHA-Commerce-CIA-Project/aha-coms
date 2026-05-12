@@ -1,10 +1,13 @@
 #!/usr/bin/env bun
 // Shape-and-syntax verifier for firebase.json at the monorepo root.
 //
-// Asserts the JSON parses, names the staging site, and registers the four
+// Asserts the JSON parses, names the staging site, and registers the five
 // rewrites in precedence order (most specific first). Used by T18 as the
 // red-then-green check; can be re-run as a guard if the routing layer is
-// ever edited by hand.
+// ever edited by hand. The bare `/heroes` rewrite was added under T30 once
+// the single-origin migration revealed that Firebase Hosting's `/heroes/**`
+// glob does not match the slash-less path the portal launcher hands to the
+// browser (`aha-coms.web.app/heroes?portal_code=…`).
 
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
@@ -34,6 +37,7 @@ if (hosting.site !== 'aha-coms') {
 
 const expected = [
   { source: '/heroes/api/**', serviceId: 'coms-heroes-api' },
+  { source: '/heroes', serviceId: 'coms-heroes-web' },
   { source: '/heroes/**', serviceId: 'coms-heroes-web' },
   { source: '/api/**', serviceId: 'coms-portal-api' },
   { source: '**', serviceId: 'coms-portal-web' },

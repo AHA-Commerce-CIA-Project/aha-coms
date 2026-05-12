@@ -13,7 +13,16 @@ function safeRedirect(raw: string | null | undefined): string {
   return raw
 }
 
-export const GET: RequestHandler = async ({ url, cookies }) => {
+export const GET: RequestHandler = async ({ url, cookies, setHeaders }) => {
+  // Firebase Hosting strips Set-Cookie from any response it considers
+  // cacheable when fronting Cloud Run; the only escape hatch is to mark the
+  // response uncacheable so the CDN passes it through verbatim. Without this
+  // the `coms_session` Set-Cookie never reaches the browser and the post-
+  // exchange redirect to `/heroes/dashboard` arrives unauthed, kicking off
+  // the portal↔heroes redirect loop observed at T30.
+  // Ref: https://firebase.google.com/docs/hosting/manage-cache
+  setHeaders({ 'cache-control': 'private, no-store' })
+
   const code = url.searchParams.get('portal_code')
   if (!code) error(400, 'Missing portal_code')
 

@@ -16,6 +16,13 @@
         }
       },
       {
+        "source": "/heroes",
+        "run": {
+          "serviceId": "coms-heroes-web",
+          "region": "asia-southeast2"
+        }
+      },
+      {
         "source": "/heroes/**",
         "run": {
           "serviceId": "coms-heroes-web",

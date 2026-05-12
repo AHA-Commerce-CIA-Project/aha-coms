@@ -52,6 +52,7 @@ infra/*.tfvars
 !infra/terraform.tfvars
 infra/tfplan
 # Nested terraform trees (e.g. infra/heroes/) inherit the same rules.
+infra/**/tfplan
 infra/**/.terraform/
 infra/**/*.tfstate
 infra/**/*.tfstate.backup

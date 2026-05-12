@@ -30,6 +30,15 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   // Skip API calls — always go to network
   if (url.pathname.startsWith('/api')) return
 
+  // Skip /heroes/** — the single-origin migration mounts heroes-web at
+  // /heroes/*, but portal-web's SW scope is `/`, so it would otherwise
+  // intercept every heroes navigation. The wrapped `fetch(event.request)`
+  // round-trip drops Set-Cookie before the browser commits it (observed at
+  // T30 — heroes' broker-exchange 303 set `coms_session=…; Path=/` and the
+  // browser never persisted it, producing a portal↔heroes redirect loop).
+  // CP4 Finding 2 carried this caveat forward; T30 forced the fix.
+  if (url.pathname === '/heroes' || url.pathname.startsWith('/heroes/')) return
+
   event.respondWith(
     caches.match(event.request).then((cached) => cached ?? fetch(event.request))
   )

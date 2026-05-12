@@ -28,14 +28,30 @@ locals {
   heroes_image_bootstrap = var.app_image
 
   # Shared plain env — both services need to know who portal is and where
-  # they themselves live. PORTAL_BASE_URL points at portal-api for
-  # server-to-server calls; PUBLIC_PORTAL_ORIGIN is the same value exposed
-  # to client-side code via SvelteKit's $env/static/public.
+  # they themselves live.
+  #
+  # PORTAL_BASE_URL: direct portal-api Cloud Run URL — heroes-api uses this
+  #   for server-to-server `IdTokenClient` calls where the audience claim
+  #   must match the Cloud Run service identity (taxonomy sync, alias
+  #   resolution, etc.). Firebase Hosting would intervene with a hop and
+  #   complicate the aud verification.
+  # PORTAL_ORIGIN: unified COMS host — heroes-web uses this to build the
+  #   browser-redirect URL for portal sign-in (`${origin}/?app=heroes&…`)
+  #   and the broker-exchange call (`${origin}/api/auth/broker/exchange`,
+  #   resolved by Firebase rewrite). Same origin as the user's browser, so
+  #   cookies travel without a cross-origin dance.
+  # PUBLIC_PORTAL_ORIGIN: client-side mirror exposed via SvelteKit's
+  #   `$env/static/public` — heroes-web does not actually read it today, it
+  #   stays in the env block as compatibility ballast.
+  # PUBLIC_APP_ORIGIN: this service's own public origin — used by the
+  #   (authed) layout to reconstruct an absolute deep-link before redirecting
+  #   the unauth user to portal sign-in.
   heroes_shared_env = {
     NODE_ENV             = "production"
     PORTAL_BASE_URL      = var.portal_base_url
+    PORTAL_ORIGIN        = var.coms_origin
     PORTAL_APP_SLUG      = "heroes"
-    PUBLIC_PORTAL_ORIGIN = var.portal_base_url
+    PUBLIC_PORTAL_ORIGIN = var.coms_origin
     PUBLIC_APP_ORIGIN    = var.heroes_public_origin
   }
 }

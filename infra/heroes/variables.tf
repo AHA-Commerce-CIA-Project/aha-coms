@@ -80,9 +80,15 @@ variable "portal_base_url" {
 }
 
 variable "heroes_public_origin" {
-  description = "Public origin heroes-web is served at — exposed to the client as PUBLIC_APP_ORIGIN. Used for absolute URL construction in OAuth callbacks etc."
+  description = "Public origin heroes-web is served at — exposed to the client as PUBLIC_APP_ORIGIN. Used for absolute URL construction (deep-link reconstruction in the (authed) layout, OAuth callbacks, etc.). After single-origin migration this is the COMS unified host without a path; heroes-web's SvelteKit base path supplies the `/heroes` segment at request time."
   type        = string
-  default     = "https://coms-heroes-web-45tyczfska-et.a.run.app"
+  default     = "https://aha-coms.web.app"
+}
+
+variable "coms_origin" {
+  description = "Public origin of the unified COMS suite on Firebase Hosting — every app (portal-web, heroes-web, future tenants) is served behind this one host with path-based rewrites. Used by heroes-web's PORTAL_ORIGIN to build browser-redirect URLs (portal sign-in landing) and the server-to-server broker-exchange call (Firebase rewrites `/api/**` → coms-portal-api). The legacy direct Cloud Run URL stays in `portal_base_url` for the audience-aware ID-token paths."
+  type        = string
+  default     = "https://aha-coms.web.app"
 }
 
 variable "heroes_api_public_url" {
