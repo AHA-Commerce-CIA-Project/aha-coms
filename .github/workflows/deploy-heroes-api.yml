@@ -5,6 +5,17 @@ name: Deploy — heroes-api
 # this workflow trusts the merged code passed typecheck/test there and
 # skips re-running them.
 #
+# DB migrations run BEFORE `gcloud run deploy`, so schema changes land
+# before the revision that depends on them. The pattern mirrors
+# `deploy-portal-api.yml` step-for-step (FU-3 closed the same gap for
+# portal); heroes' migration corridor stayed manual through
+# 2026-05-12 because heroes' migrations were less frequent and the
+# manual `bun db:migrate` over Cloud SQL Auth Proxy via `infra/README.md`
+# was within tolerance. The Phase 5 cache cleanup (T45's column add +
+# backfill, T46's table drop) was the second window in seven days that
+# required the manual ritual; the third was no longer worth its weight
+# in operator memory.
+#
 # Repo vars expected:
 #   WIF_PROVIDER_HEROES  — full resource name of the heroes WIF provider
 #   WIF_SA_HEROES        — coms-heroes-deployer-sa@<project>.iam.gserviceaccount.com
@@ -35,6 +46,8 @@ env:
   SERVICE_NAME: coms-heroes-api
   ARTIFACT_REPO: coms-heroes-repo
   RUNTIME_SA: coms-heroes-api-sa@fbi-dev-484410.iam.gserviceaccount.com
+  CLOUD_SQL_INSTANCE: fbi-dev-484410:asia-southeast2:coms-aha-heroes-db
+  CLOUD_SQL_PROXY_VERSION: v2.21.1
 
 jobs:
   deploy:
@@ -50,6 +63,76 @@ jobs:
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache bun install
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            apps/heroes-api/node_modules
+            packages/heroes-shared/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Apply DB migrations
+        # Schema lands before the revision that reads it. Drizzle migrations
+        # in this project are append-only (nullable column adds, non-destructive
+        # UPDATEs); a destructive migration (the T46 `DROP TABLE` is the
+        # exception, not the rule) needs a deploy-pattern fitted to it —
+        # for T46's `user_config_cache` drop, the new revision had to deploy
+        # before the migration ran so the old code stopped writing to the
+        # dropped table. If you find yourself authoring a destructive
+        # migration, stop and reach for an expand → backfill → contract
+        # pattern that the workflow's "migrate then deploy" order doesn't
+        # cover.
+        #
+        # Fail fast: an additive migration is seconds. Five minutes is a
+        # signal something is stuck (Cloud SQL lock contention, proxy
+        # auth-flap, runaway DEFAULT backfill on a huge table) — better to
+        # abort the deploy than burn an entire runner.
+        timeout-minutes: 5
+        run: |
+          curl -sSLf -o cloud-sql-proxy \
+            "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/${CLOUD_SQL_PROXY_VERSION}/cloud-sql-proxy.linux.amd64"
+          chmod +x cloud-sql-proxy
+
+          ./cloud-sql-proxy --port 5433 "${CLOUD_SQL_INSTANCE}" &
+          PROXY_PID=$!
+          trap 'kill ${PROXY_PID} 2>/dev/null || true' EXIT
+
+          # Wait up to 30 seconds for the proxy to start accepting TCP.
+          for i in $(seq 1 60); do
+            if (echo > /dev/tcp/127.0.0.1/5433) 2>/dev/null; then
+              echo "cloud-sql-proxy ready after $((i * 500))ms"
+              break
+            fi
+            if [ "${i}" -eq 60 ]; then
+              echo "cloud-sql-proxy failed to become ready in 30s" >&2
+              exit 1
+            fi
+            sleep 0.5
+          done
+
+          PROD_URL=$(gcloud secrets versions access latest \
+            --secret=coms-aha-heroes-db-url-production \
+            --project="${GCP_PROJECT_ID}")
+          # `coms-aha-heroes-db-url-production` carries a Unix-socket DSN
+          # (postgresql://app:pw@localhost/db?host=/cloudsql/...) because
+          # Cloud Run mounts the SQL proxy via volume. The runner reaches
+          # Cloud SQL through TCP on the proxy port, so we rewrite the host
+          # segment. The portal URL uses `@/db` (no host between @ and /);
+          # heroes' uses `@localhost/db` — the sed differs accordingly.
+          PROXY_URL=$(echo "${PROD_URL}" | sed -E 's#@localhost/#@127.0.0.1:5433/#; s#\?host=.*##')
+
+          DATABASE_URL="${PROXY_URL}" \
+            bun --filter @coms-portal/heroes-api db:migrate
 
       - name: Configure docker for Artifact Registry
         run: gcloud auth configure-docker ${GCP_REGION}-docker.pkg.dev --quiet
