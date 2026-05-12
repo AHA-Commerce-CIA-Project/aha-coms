@@ -61,7 +61,7 @@ Mounted in the same `wellKnownRoutes` Elysia plugin as `/jwks.json` from Spec 01
     "branch"
   ],
 
-  "service_documentation": "https://github.com/mrdoorba/coms-portal/blob/main/docs/architecture/rev2/spec-01-rs256-jwks.md",
+  "service_documentation": "https://github.com/mrdoorba/aha-coms/blob/main/docs/architecture/rev2/spec-01-rs256-jwks.md",
 
   "x-coms-platform-auth-contract-version": 1,
   "x-coms-supported-app-transports": ["same_host_cookie", "portable_token"],
@@ -130,7 +130,7 @@ const discoveryDocument = {
     'portal_role', 'team_ids', 'apps', 'app_role', 'branch',
   ],
   service_documentation:
-    'https://github.com/mrdoorba/coms-portal/blob/main/docs/architecture/rev2/spec-01-rs256-jwks.md',
+    'https://github.com/mrdoorba/aha-coms/blob/main/docs/architecture/rev2/spec-01-rs256-jwks.md',
   'x-coms-platform-auth-contract-version': PLATFORM_AUTH_CONTRACT_VERSION,
   'x-coms-supported-app-transports': ['same_host_cookie', 'portable_token'],
   'x-coms-supported-handoff-modes': ['one_time_code', 'token_exchange'],

@@ -6,7 +6,7 @@
 
 The canonical contribution workflow for the COMS design system — decision tree for where to make changes, local-dev loop with `file:` refs, PR format, versioning rules, reviewer expectations — lives at:
 
-→ **[`coms_portal/DESIGN_SYSTEM.md`](https://github.com/mrdoorba/coms-portal/blob/main/DESIGN_SYSTEM.md)**
+→ **[`aha-coms/DESIGN_SYSTEM.md`](https://github.com/mrdoorba/aha-coms/blob/main/DESIGN_SYSTEM.md)**
 
 Read that first. It covers all three shared design-system repos (this one, `coms-design-tokens`, `coms-account-widget`) and the workflow that spans them.
 

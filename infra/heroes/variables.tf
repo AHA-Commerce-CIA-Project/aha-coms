@@ -29,9 +29,9 @@ variable "github_org" {
 }
 
 variable "github_repo" {
-  description = "GitHub repository name. The monorepo `coms-portal` holds both portal and heroes; heroes deploys originate from here per T17."
+  description = "GitHub repository name. The monorepo `aha-coms` holds both portal and heroes; heroes deploys originate from here per T17. (Repo was renamed from `coms-portal` after T17 to match the local working dir name.)"
   type        = string
-  default     = "coms-portal"
+  default     = "aha-coms"
 }
 
 variable "alert_email" {

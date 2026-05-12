@@ -262,4 +262,4 @@ But default to upstreaming — the variant rarely stays one-off for long.
 
 ---
 
-*Document maintained by the portal team. Last updated: 2026-04-30. PRs welcome — open one against this file in `coms_portal`.*
+*Document maintained by the portal team. Last updated: 2026-04-30. PRs welcome — open one against this file in `aha-coms`.*

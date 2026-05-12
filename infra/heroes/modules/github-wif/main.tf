@@ -1,5 +1,5 @@
 # ── Workload Identity Federation for GitHub Actions ───────────────────────────
-# Allows GitHub Actions in `mrdoorba/coms-portal` (the monorepo holding both
+# Allows GitHub Actions in `mrdoorba/aha-coms` (the monorepo holding both
 # heroes and portal) to authenticate to GCP without long-lived keys. The
 # deployer SA is separate from the Cloud Run runtime SAs (least privilege).
 # T17 returned heroes' deploys to GitHub Actions; this module powers the
