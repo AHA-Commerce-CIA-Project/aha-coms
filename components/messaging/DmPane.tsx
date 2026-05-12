@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, PenSquare, X, Send, Paperclip, Image as ImageIcon, Smile, ChevronLeft, Plus, ClipboardList, Clock, CheckCircle2, Pencil, Trash2, Bookmark } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { ChannelMessageComposer } from '@/components/channels/ChannelMessageComposer';
@@ -276,6 +276,7 @@ function formatDateDivider(dateStr: string) {
 // ?conv=<id> or ?with=<userId>.
 export function DmPane() {
     const { user } = useAuth();
+    const router = useRouter();
     const searchParams = useSearchParams();
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
     const [channelUnreadTotal, setChannelUnreadTotal] = useState(0);
@@ -575,10 +576,17 @@ export function DmPane() {
             <div className="flex-1 min-w-0 min-h-0 flex flex-col">
                 {selected ? (
                     <>
-                        {/* Header */}
-                        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200">
-                            <button onClick={() => setMobileShowThread(false)} className="md:hidden p-1 text-slate-400">
-                                <ChevronLeft className="w-5 h-5" />
+                        {/* Header — singular top-level header for the DM view.
+                            The parent /messages workspace hides its own
+                            right-column header bar while in DM mode, so this
+                            row sits at y=0 of the right column and matches the
+                            standard 52px workspace header height. */}
+                        <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-100 min-h-[52px]">
+                            <button
+                                onClick={() => router.push('/messages')}
+                                className="md:hidden flex items-center gap-1 text-sm text-indigo-600 font-medium mr-1"
+                            >
+                                <ChevronLeft className="w-4 h-4" /> Back
                             </button>
                             <button
                                 type="button"

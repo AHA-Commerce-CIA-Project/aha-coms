@@ -268,46 +268,49 @@ function MessagesWorkspace() {
                 ChatHeader at the top (channel name on the left, member count +
                 actions on the right) then the chat feed + composer below. */}
             <div className={`${showIndexOnMobile ? 'hidden md:flex' : 'flex'} flex-1 min-w-0 min-h-0 flex-col`}>
-                <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100 flex-shrink-0 min-h-[52px]">
-                    {/* Mobile-only back arrow returns to the sidebar/index. */}
-                    {(isChannelMode || isDmMode || isLaterMode) && (
-                        <button
-                            onClick={() => router.push(isLaterMode ? '/messages?later=messages' : '/messages')}
-                            className="md:hidden flex items-center gap-1 text-sm text-indigo-600 font-medium mr-1"
-                        >
-                            <ChevronLeft className="w-4 h-4" /> Back
-                        </button>
-                    )}
-                    {isChannelMode && chatHeader ? (
-                        <div className="flex-1 min-w-0">
-                            <ChannelHeader {...chatHeader} />
-                        </div>
-                    ) : isLaterMode && laterTab ? (
-                        // Lifted Later sub-tabs — sit in the right-column header
-                        // (horizontally aligned with the [Messages][Later] pill
-                        // row in the left column) so the body stays lean.
-                        <div className="flex-1 min-w-0 flex items-center gap-1 -mb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-                            <LaterSubTab
-                                active={laterTab === 'messages'}
-                                icon={MessageSquare}
-                                label="Messages"
-                                count={laterCounts.messages}
-                                onClick={() => goLater('messages')}
-                            />
-                            <LaterSubTab
-                                active={laterTab === 'tasks'}
-                                icon={ListTodo}
-                                label="Tasks"
-                                count={laterCounts.tasks}
-                                onClick={() => goLater('tasks')}
-                            />
-                        </div>
-                    ) : (
-                        <div className="flex-1 min-w-0 text-sm text-slate-400">
-                            {isDmMode ? 'Direct message' : ''}
-                        </div>
-                    )}
-                </div>
+                {/* Right-column header — channel name / Later sub-tabs. DM mode
+                    skips this row entirely; DmPane's own avatar + name + email
+                    bar acts as the singular header for that view. */}
+                {!isDmMode && (
+                    <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100 flex-shrink-0 min-h-[52px]">
+                        {/* Mobile-only back arrow returns to the sidebar/index. */}
+                        {(isChannelMode || isLaterMode) && (
+                            <button
+                                onClick={() => router.push(isLaterMode ? '/messages?later=messages' : '/messages')}
+                                className="md:hidden flex items-center gap-1 text-sm text-indigo-600 font-medium mr-1"
+                            >
+                                <ChevronLeft className="w-4 h-4" /> Back
+                            </button>
+                        )}
+                        {isChannelMode && chatHeader ? (
+                            <div className="flex-1 min-w-0">
+                                <ChannelHeader {...chatHeader} />
+                            </div>
+                        ) : isLaterMode && laterTab ? (
+                            // Lifted Later sub-tabs — sit in the right-column header
+                            // (horizontally aligned with the [Messages][Later] pill
+                            // row in the left column) so the body stays lean.
+                            <div className="flex-1 min-w-0 flex items-center gap-1 -mb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+                                <LaterSubTab
+                                    active={laterTab === 'messages'}
+                                    icon={MessageSquare}
+                                    label="Messages"
+                                    count={laterCounts.messages}
+                                    onClick={() => goLater('messages')}
+                                />
+                                <LaterSubTab
+                                    active={laterTab === 'tasks'}
+                                    icon={ListTodo}
+                                    label="Tasks"
+                                    count={laterCounts.tasks}
+                                    onClick={() => goLater('tasks')}
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex-1 min-w-0" />
+                        )}
+                    </div>
+                )}
 
                 {/* ChannelPane and DmPane stay MOUNTED across mode switches so
                     switching from a channel to a DM (or vice-versa) doesn't
