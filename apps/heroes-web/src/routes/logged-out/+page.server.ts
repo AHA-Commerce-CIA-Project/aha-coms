@@ -1,17 +1,11 @@
-import {
-  PORTAL_SESSION_COOKIE,
-  destroyLocalSessionByToken,
-} from '@coms-portal/heroes-shared/auth/session'
 import type { PageServerLoad } from './$types'
 
-// `cache-control: private, no-store` is mandatory here — Firebase Hosting
-// strips Set-Cookie (including the Max-Age=0 deletion) from any cacheable
-// response. Without this header the cookie would survive the logged-out
-// page render. Same trap as /auth/portal/exchange and /auth/portal/logout.
-export const load: PageServerLoad = async ({ cookies, setHeaders }) => {
-  setHeaders({ 'cache-control': 'private, no-store' })
-  const token = cookies.get(PORTAL_SESSION_COOKIE)
-  if (token) await destroyLocalSessionByToken(token)
-  cookies.delete(PORTAL_SESSION_COOKIE, { path: '/' })
+// Phase 2 (Spec 02 / T33–T35) retired heroes' local session cookie. The
+// portal-initiated logout flow clears its own `__session` cookie on the
+// portal side; heroes has nothing to clean up locally. This route exists
+// as the OIDC RP-initiated `post_logout_redirect_uri` landing page —
+// portal redirects the browser here after clearing the session, the page
+// renders a confirmation, the user can sign in again.
+export const load: PageServerLoad = async () => {
   return {}
 }

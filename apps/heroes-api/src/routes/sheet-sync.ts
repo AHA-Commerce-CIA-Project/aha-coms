@@ -8,19 +8,27 @@ import {
 } from '../services/sheet-sync-scheduler'
 import * as repo from '../repositories/sheet-sync'
 import {
-  getLocalSessionByToken,
-  readSessionCookieFromHeaders,
-} from '@coms-portal/heroes-shared/auth/session'
-import { db } from '@coms-portal/heroes-shared/db'
-import { heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
-import { eq } from 'drizzle-orm'
-import type { UserRole } from '@coms-portal/heroes-shared/constants'
+  loadHeroesAuthUser,
+  PortalSessionDeniedError,
+} from '@coms-portal/heroes-shared/auth/user'
 import type { AuthUser } from '../middleware/auth'
 
 type Ctx = { authUser: AuthUser }
 
+const PORTAL_SESSION_COOKIE = '__session'
+
+function extractSessionCookie(cookieHeader: string): string | null {
+  for (const part of cookieHeader.split(';')) {
+    const [name, ...rest] = part.trim().split('=')
+    if (name === PORTAL_SESSION_COOKIE) return rest.join('=') || null
+  }
+  return null
+}
+
 // ── Public route: callable by Cloud Scheduler (OIDC) or admin (session) ─────
-// Registered outside the auth group. Handles its own authentication.
+// Registered outside the auth group. Handles its own authentication. Mirrors
+// the loadHeroesAuthUser path used by the authPlugin so admin auth here is
+// the same opaque-session → /api/userinfo introspection used everywhere else.
 export const sheetSyncTriggerRoute = new Elysia().post(
   '/sheet-sync-trigger',
   async ({ request, set }) => {
@@ -33,10 +41,10 @@ export const sheetSyncTriggerRoute = new Elysia().post(
       return { success: true, data: job, error: null }
     }
 
-    // Path 2: Admin user with a portal-issued local session cookie.
-    const token = readSessionCookieFromHeaders(request.headers)
-    const session = token ? await getLocalSessionByToken(token) : null
-    if (!session) {
+    // Path 2: Admin user with portal's __session cookie.
+    const cookieHeader = request.headers.get('cookie') ?? ''
+    const token = extractSessionCookie(cookieHeader)
+    if (!token) {
       set.status = 401
       return {
         success: false,
@@ -45,19 +53,36 @@ export const sheetSyncTriggerRoute = new Elysia().post(
       }
     }
 
-    const [appUser] = await db
-      .select({
-        id: heroesProfiles.id,
-        role: heroesProfiles.role,
-      })
-      .from(heroesProfiles)
-      .leftJoin(emailCache, eq(heroesProfiles.id, emailCache.portalSub))
-      .where(eq(emailCache.contactEmail, session.email))
-      .limit(1)
+    const portalOrigin = process.env.PORTAL_ORIGIN
+    if (!portalOrigin) {
+      throw new Error('PORTAL_ORIGIN env var is required for session resolution')
+    }
 
-    const role = appUser?.role as UserRole | undefined
+    let user
+    try {
+      user = await loadHeroesAuthUser(token, portalOrigin)
+    } catch (err) {
+      if (err instanceof PortalSessionDeniedError) {
+        set.status = 403
+        return {
+          success: false,
+          data: null,
+          error: { code: 'FORBIDDEN', message: 'Admin access required' },
+        }
+      }
+      throw err
+    }
 
-    if (!appUser || role !== 'admin') {
+    if (!user) {
+      set.status = 401
+      return {
+        success: false,
+        data: null,
+        error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+      }
+    }
+
+    if (user.role !== 'admin') {
       set.status = 403
       return {
         success: false,
@@ -66,7 +91,7 @@ export const sheetSyncTriggerRoute = new Elysia().post(
       }
     }
 
-    const job = triggerSyncInBackground(appUser.id)
+    const job = triggerSyncInBackground(user.id)
     return { success: true, data: job, error: null }
   },
 )

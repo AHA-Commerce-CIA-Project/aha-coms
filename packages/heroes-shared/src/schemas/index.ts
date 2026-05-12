@@ -104,11 +104,6 @@ import { createInsertSchema, createSelectSchema } from 'drizzle-typebox'
 import type { Static } from '@sinclair/typebox'
 import { Type, type TObject } from '@sinclair/typebox'
 import {
-  session,
-  account,
-  verification,
-} from '../db/schema'
-import {
   heroesProfiles,
   systemSettings,
   pointCategories,
@@ -131,23 +126,8 @@ import {
   deactivatedUserIngestAudit,
 } from '../db/schema'
 
-// --- session ---
-export const sessionSelectSchema: TObject = createSelectSchema(session) as TObject
-export type SessionSelect = Static<typeof sessionSelectSchema>
-export const sessionInsertSchema: TObject = createInsertSchema(session) as TObject
-export type SessionInsert = Static<typeof sessionInsertSchema>
-
-// --- account ---
-export const accountSelectSchema: TObject = createSelectSchema(account) as TObject
-export type AccountSelect = Static<typeof accountSelectSchema>
-export const accountInsertSchema: TObject = createInsertSchema(account) as TObject
-export type AccountInsert = Static<typeof accountInsertSchema>
-
-// --- verification ---
-export const verificationSelectSchema: TObject = createSelectSchema(verification) as TObject
-export type VerificationSelect = Static<typeof verificationSelectSchema>
-export const verificationInsertSchema: TObject = createInsertSchema(verification) as TObject
-export type VerificationInsert = Static<typeof verificationInsertSchema>
+// Session/account/verification typebox schemas retired alongside the
+// underlying tables in migration 0016 (Spec 02 Phase 2 / T35–T36).
 
 // --- heroesProfiles ---
 export const heroesProfilesSelectSchema: TObject = createSelectSchema(heroesProfiles) as TObject

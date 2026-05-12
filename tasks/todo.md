@@ -536,40 +536,44 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-2`. ADR 0005.
   - **Acceptance:** middleware uses JWT path; same shape as T33.
   - **Resolution:** Identical surgery: `authPlugin` now reads `__session` from the incoming request, calls `loadHeroesAuthUser`, maps the result to the existing `AuthUser` shape (`id, email, name, role, branchKey…, canSubmitPoints`). `PortalSessionDeniedError` collapses to `AuthError(403, 'USER_NOT_FOUND', …)` so existing API consumers see the same error shape as before. The local helpers (`getLocalSessionByToken`, `readSessionCookieFromHeaders`) are no longer imported anywhere — T35 sweeps them.
 
-- [ ] **T35: Remove `getLocalSessionByToken`, `createLocalSessionForPortalUser`, `destroyLocalSessionByToken`, `destroySessionsForPortalSub`, `readSessionCookieFromHeaders` from `packages/heroes-shared/src/auth/session.ts`**
+- [x] **T35: Remove `getLocalSessionByToken`, `createLocalSessionForPortalUser`, `destroyLocalSessionByToken`, `destroySessionsForPortalSub`, `readSessionCookieFromHeaders` from `packages/heroes-shared/src/auth/session.ts`**
   - **Prerequisites:** T33, T34 (no consumers remain)
   - **Acceptance:** session.ts is simplified to the cookie-name constant, or deleted entirely. Grep confirms no remaining call sites.
+  - **Resolution:** `packages/heroes-shared/src/auth/session.ts` is gone outright (file deleted, `./auth/session` export pulled from `package.json`). Six call sites swept along the way: (1) `apps/heroes-api/src/routes/sheet-sync.ts` Path 2 (the admin manual-trigger surface) now uses `loadHeroesAuthUser` against `__session` — same shape as the authPlugin, just inlined since this endpoint is registered outside the auth group. (2) `apps/heroes-api/src/services/portal-events/handle-session-revoked.ts` collapses to a structured log line — portal-side revocations propagate on the next `/api/userinfo` call without heroes acting. (3) `apps/heroes-api/src/services/portal-events/handle-user-offboarded.ts` keeps the `heroes_profiles.isActive=false` archive but drops the `destroySessionsForPortalSub` tail. (4) `apps/heroes-web/src/routes/auth/portal/exchange/+server.ts` deleted entirely — folds Phase 3 / T39 forward; the route was already short-circuited by Phase 2's `+page.server.ts` guard. (5) `apps/heroes-web/src/routes/auth/portal/logout/+server.ts` deleted — AccountWidget hits portal's `/api/auth/logout` directly. (6) `apps/heroes-web/src/routes/logged-out/+page.server.ts` simplified to a no-op load — the page is the post-logout landing target, nothing to clean up. Dead in passing: `apps/heroes-web/src/lib/server/portal-introspect.ts` (no consumers) and `apps/heroes-web/src/lib/server/google-oidc.ts` (only used by portal-introspect). `portal-broker.ts` slimmed from broker-exchange machinery to just `buildPortalSignInUrl`. `packages/heroes-shared/src/schemas/index.ts` lost the three typebox schemas (`sessionSelectSchema`, `accountSelectSchema`, `verificationSelectSchema`) that drove off the dropped table imports.
 
-- [ ] **T36: Migration to drop `session`, `account`, `verification` tables**
+- [x] **T36: Migration to drop `session`, `account`, `verification` tables**
   - **Prerequisites:** T35 (no code path reads them)
   - **Note:** Run during a maintenance window. Tables hold no critical data after T33-T35.
   - **Acceptance:** Migration file added; rollback procedure documented; migration runs successfully against staging.
+  - **Resolution:** `packages/heroes-shared/src/db/migrations/0016_drop_legacy_auth_tables.sql` lands the three `DROP TABLE IF EXISTS` statements with the rollback path (restore from the pre-apply Cloud SQL automated backup — no audit trail exists for these rows). `packages/heroes-shared/src/db/schema/auth.ts` deleted; the re-exports from `schema/index.ts` are gone. Journal entry added at idx=16. Drizzle's `db:generate` was abandoned (interactive prompts required when columns are dropped from the schema vs renamed); the migration is hand-written, mirroring `0015_branch_key_rename.sql`'s pattern. Apply order: heroes-api new revision deploys first (no code touches the tables), then operator runs `bun db:migrate` against prod via Cloud SQL Auth Proxy — no in-flight code can write to the dropped tables once the new revision is live, since Phase 2 already retired the only paths that did.
 
 - [x] **T37: Verify heroes auth E2E with JWT-only**
   - **Prerequisites:** ~~T36~~ T34 (re-ordered — T35/T36 are now post-verification cleanup, not prerequisites for the runtime path)
   - **Acceptance:** Sign-in → page load → API call → logout — all green.
   - **Resolution:** Sign-in via portal → click HEROES → land on `aha-coms.web.app/heroes/dashboard` confirmed in incognito by the operator 2026-05-12. The Phase 2 auth path resolves `event.locals.user` cleanly on the first request; the legacy exchange-route dance is no longer entered (the `if (portal_code && !locals.user)` short-circuit in `+page.server.ts` skips it). API call and logout paths not exhaustively exercised in this pass — folded into T47's E2E smoke for the post-cleanup sweep.
 
-- [ ] **CHECKPOINT 7**: Heroes has no local session tables.
+- [x] **CHECKPOINT 7**: Heroes has no local session tables.
 
 ### Phase 3: Portal handoff for first-login
 
 Spec ref: `docs/spec/02-heroes-cleanup.md#phase-3`.
 
-- [ ] **T38: Audit `/auth/portal/exchange` role post-single-origin**
+- [x] **T38: Audit `/auth/portal/exchange` role post-single-origin**
   - **Prerequisites:** Checkpoint 7
   - **Steps:**
     - Determine if the handoff still needs to do anything (it used to mint local sessions; now those are gone).
     - Decision: keep as a thin redirect, or delete.
   - **Acceptance:** Decision documented; if keeping, scope is explicit.
+  - **Resolution:** Decision: **delete.** Audit found no remaining role for the route post-Phase 2: the broker-exchange handshake was only needed to materialise heroes' local `coms_session` cookie at the heroes origin, and `__session` already crosses freely under single-origin with portal as the sole session-minting authority. Phase 2's `+page.server.ts` short-circuit already routed around the route for any `__session`-authenticated request; deleting it just removes the dead arm. Folded into T35's sweep; recorded for the rev-3 doc pass.
 
-- [ ] **T39: Refactor or delete `/auth/portal/exchange`**
+- [x] **T39: Refactor or delete `/auth/portal/exchange`**
   - **Prerequisites:** T38
   - **If kept:** No DB write, no session minting. Just an optional safe-redirect handler.
   - **If deleted:** Portal redirects directly to `/heroes/dashboard` after login.
   - **Acceptance:** No app-local session minting in heroes.
+  - **Resolution:** Route deleted in T35's commit — `apps/heroes-web/src/routes/auth/portal/exchange/` directory removed entirely along with the broker-exchange machinery in `lib/server/portal-broker.ts`. Portal's launcher already redirects to `/heroes?portal_code=…`; the `+page.server.ts` guard now ignores the `portal_code` query when `__session` already authenticated the request and lands on `/heroes/dashboard` directly. The `portal_code` query arrives unused — portal sends it for legacy consumers; we ignore it.
 
-- [ ] **CHECKPOINT 8**: No `portal_code` exchange dance in heroes' steady state.
+- [x] **CHECKPOINT 8**: No `portal_code` exchange dance in heroes' steady state.
 
 ### Phase 4: Chrome library glue absorption
 

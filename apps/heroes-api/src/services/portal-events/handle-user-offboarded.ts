@@ -1,7 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { db } from '@coms-portal/heroes-shared/db'
 import { heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
-import { destroySessionsForPortalSub } from '@coms-portal/heroes-shared/auth/session'
 import type { PortalEventHandler } from './dispatch'
 
 interface UserOffboardedPayload {
@@ -28,8 +27,7 @@ export const handleUserOffboarded: PortalEventHandler = async (body) => {
     .set({ isActive: false, archivedAt, updatedAt: new Date() })
     .where(eq(heroesProfiles.id, portalSub))
 
-  const revoked = await destroySessionsForPortalSub(portalSub)
-  if (revoked > 0) {
-    console.log(`[handle-user-offboarded] revoked ${revoked} session(s) for portalSub=${portalSub}`)
-  }
+  // Phase 2 retired the local heroes session table; session destruction is
+  // portal's responsibility now and propagates the next time the user's
+  // `__session` cookie fails `/api/userinfo` introspection (401).
 }

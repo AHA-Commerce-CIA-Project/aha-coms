@@ -1,11 +1,7 @@
-export {
-  authSession,
-  authSession as session,
-  authAccount,
-  authAccount as account,
-  authVerification,
-  authVerification as verification,
-} from './auth'
+// Spec 02 Phase 2 / T35–T36 retired the local `session` / `account` /
+// `verification` tables. Heroes introspects portal's `__session` opaque
+// cookie via `/api/userinfo`; nothing reads or writes these rows anymore.
+// Migration 0016 drops the tables; the schema file went with them.
 export { userRoleEnum, pointStatusEnum, redemptionStatusEnum } from './enums'
 export { heroesProfiles } from './heroes-profiles'
 export { systemSettings } from './system-settings'
