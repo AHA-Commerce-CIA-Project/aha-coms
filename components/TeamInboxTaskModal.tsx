@@ -1,18 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
     X,
     CheckCircle2,
     Loader2,
     Calendar,
     User as UserIcon,
-    Hash,
     Paperclip,
     Mail,
-    Building2,
-    ExternalLink,
     File as FileIcon,
 } from 'lucide-react';
 import { sanitizeRichText } from '@/lib/sanitize';
@@ -85,7 +81,6 @@ function formatDate(iso: string | null): string {
 }
 
 export function TeamInboxTaskModal({ task, currentUserId, onClose, onChange }: Props) {
-    const router = useRouter();
     const [claiming, setClaiming] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -177,37 +172,12 @@ export function TeamInboxTaskModal({ task, currentUserId, onClose, onChange }: P
                                     </div>
                                 </div>
                             )}
-                            {task.requesterDivision && (
-                                <div className="flex items-start gap-2">
-                                    <Building2 className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                                    <div>
-                                        <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Division</div>
-                                        <div className="font-semibold text-slate-800">{task.requesterDivision}</div>
-                                    </div>
-                                </div>
-                            )}
                             {task.dueDate && (
                                 <div className="flex items-start gap-2">
                                     <Calendar className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                                     <div>
                                         <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Due Date</div>
                                         <div className="font-semibold text-slate-800">{formatDate(task.dueDate)}</div>
-                                    </div>
-                                </div>
-                            )}
-                            {task.targetChannel && (
-                                <div className="flex items-start gap-2">
-                                    <Hash className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                                    <div>
-                                        <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Channel</div>
-                                        <button
-                                            type="button"
-                                            onClick={() => router.push(`/messages?channel=${task.targetChannel?.id}`)}
-                                            className="font-semibold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1"
-                                        >
-                                            {task.targetChannel.name}
-                                            <ExternalLink className="w-3 h-3" />
-                                        </button>
                                     </div>
                                 </div>
                             )}
