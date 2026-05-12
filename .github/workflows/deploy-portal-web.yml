@@ -61,12 +61,27 @@ jobs:
         env:
           IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}
         run: |
+          # VITE_GIP_* are inlined into the portal-web SSR bundle at build time
+          # by Vite (see apps/portal-web/src/lib/firebase.ts + Dockerfile ARGs).
+          # The API key is the same value portal-api reads at runtime — fetch
+          # it from the existing coms-portal-gip-api-key secret rather than
+          # duplicating into a separate one. AUTH_DOMAIN + PROJECT_ID are
+          # public Firebase web config (per Firebase's design); plain values.
+          VITE_GIP_API_KEY=$(gcloud secrets versions access latest \
+            --secret=coms-portal-gip-api-key \
+            --project="${GCP_PROJECT_ID}")
+          VITE_GIP_AUTH_DOMAIN=fbi-dev-484410.firebaseapp.com
+          VITE_GIP_PROJECT_ID="${GCP_PROJECT_ID}"
+
           docker build \
             --file=apps/portal-web/Dockerfile \
             --tag="${IMAGE}:${GITHUB_SHA}" \
             --tag="${IMAGE}:latest" \
             --cache-from="${IMAGE}:latest" \
             --build-arg=BUILDKIT_INLINE_CACHE=1 \
+            --build-arg="VITE_GIP_API_KEY=${VITE_GIP_API_KEY}" \
+            --build-arg="VITE_GIP_AUTH_DOMAIN=${VITE_GIP_AUTH_DOMAIN}" \
+            --build-arg="VITE_GIP_PROJECT_ID=${VITE_GIP_PROJECT_ID}" \
             .
           docker push --all-tags "${IMAGE}"
           gcloud run deploy "${SERVICE_NAME}" \
