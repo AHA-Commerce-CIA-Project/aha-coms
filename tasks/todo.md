@@ -209,6 +209,45 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-4`. Also see integration
 
 - [ ] **CHECKPOINT 3**: Per-service deploys verified independent.
 
+  **Pre-flight state (verified 2026-05-12 against live GCP `fbi-dev-484410`):**
+  - Heroes Tofu plan: `35 to add, 2 to change, 34 to destroy` — destroys the combined `coms-aha-heroes-app` Cloud Run service + the old `coms-aha-heroes-{run-sa,wif-pool,deployer-sa}` resources, creates the new `coms-heroes-{api,web}` services + their per-service runtime SAs + the renamed `coms-heroes-{wif-pool,deployer-sa}`. Brief heroes downtime (~30s–2min for Cloud Run create) until first deploy completes. Run with `-var alert_email=handers.the@ahacommerce.net` (the live value).
+  - Portal Tofu plan: small — `github_repo` change updates the WIF `attribute_condition` from `mrdoorba/coms-portal` → `mrdoorba/aha-coms` to match the renamed repo. Other resources unchanged.
+  - Both WIF pools' `attribute_condition` are currently mismatched against the renamed repo (after `gh repo rename` at `e93a8b3` the runner OIDC token now carries `mrdoorba/aha-coms`, but the live trust still expects `mrdoorba/coms-portal`). Until the apply lands, no GHA workflow can authenticate. Nothing is actively broken because no workflow has fired yet.
+  - Stale GH repo var observed: `SERVICE_URL=https://coms-portal-app-45tyczfska-et.a.run.app` still points at the pre-T16 combined service. After portal apply, update to the new `coms-portal-api-…run.app`.
+  - GCP project number: `908739514002` (used to construct WIF provider full names below).
+
+  **Apply window (operator runs in order):**
+  1. `cd infra/heroes && tofu apply -var alert_email=handers.the@ahacommerce.net` — confirm prompt; this is the big cutover. Brief heroes downtime begins.
+  2. `cd infra && tofu apply` — portal WIF `attribute_condition` flips to the new repo name. Quick.
+  3. Capture new heroes URLs from outputs: `cd infra/heroes && tofu output -raw cloud_run_url_api` and `tofu output -raw cloud_run_url_web`.
+  4. Set the four GHA repo vars:
+     ```
+     gh variable set WIF_PROVIDER_PORTAL --body "projects/908739514002/locations/global/workloadIdentityPools/coms-portal-wif-pool/providers/coms-portal-wif-provider"
+     gh variable set WIF_PROVIDER_HEROES --body "projects/908739514002/locations/global/workloadIdentityPools/coms-heroes-wif-pool/providers/github-oidc"
+     gh variable set WIF_SA_PORTAL       --body "coms-portal-github-actions@fbi-dev-484410.iam.gserviceaccount.com"
+     gh variable set WIF_SA_HEROES       --body "coms-heroes-deployer-sa@fbi-dev-484410.iam.gserviceaccount.com"
+     ```
+  5. Update the stale `SERVICE_URL` GH var to the new portal-api URL surfaced by `cd infra && tofu output -raw cloud_run_url_api` (or whatever the portal output is named — `cloud_run_api_url`).
+  6. First deploy of each service: trigger by pushing the test commits below.
+
+  **Verify path-filter isolation (one no-op commit per service):**
+  For each of the four services, create a no-op change touching ONLY that service's path, push to main, and confirm only the matching workflow fires:
+  ```
+  # Per service (replace <SERVICE> with portal-api | portal-web | heroes-api | heroes-web):
+  echo "" >> apps/<SERVICE>/.deploy-test
+  git add apps/<SERVICE>/.deploy-test
+  git commit -m "Probe — verify <SERVICE> deploy isolation" --no-verify   # short test commit, hook-skipped acceptable
+  git push origin main
+  gh run list --branch main --limit 5
+  # Expect: only `Deploy — <SERVICE>` workflow appears in this push's runs.
+  ```
+  Cleanup after verification: `git rm apps/*/.deploy-test && git commit -m "Clean up Checkpoint 3 probes"`.
+
+  **Acceptance:**
+  - Each `gh run list` after a per-service probe shows exactly one workflow run (the matching service's deploy), with status `completed/success`.
+  - Each Cloud Run service shows a new revision serving 100% of traffic, image tag = the probe commit's SHA.
+  - Heroes downtime measurable as the gap between `coms-aha-heroes-app` destruction and `coms-heroes-api` first revision serving — record the duration as a baseline for future cutovers.
+
 ### Phase 5: Firebase Hosting staging
 
 Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-5`. Also ADR 0004.
