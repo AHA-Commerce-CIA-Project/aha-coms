@@ -14,6 +14,7 @@ interface Message {
   sender: { id: string; name: string; image: string | null };
   reactions: any[];
   savedBy: { id: string }[];
+  isPinned?: boolean;
   createdAt: string;
 }
 
@@ -28,6 +29,7 @@ interface ChannelMessageFeedProps {
   onOpenThread: (message: Message) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onSave: (messageId: string) => void;
+  onPin?: (messageId: string) => void;
   onMessageUpdated: () => void;
   onForward?: (message: Message) => void;
   onDirectAssign?: (message: Message) => void;
@@ -65,6 +67,7 @@ export function ChannelMessageFeed({
   onOpenThread,
   onReaction,
   onSave,
+  onPin,
   onMessageUpdated,
   onForward,
   onDirectAssign,
@@ -248,6 +251,7 @@ export function ChannelMessageFeed({
               onOpenThread={onOpenThread}
               onReaction={onReaction}
               onSave={onSave}
+              onPin={onPin}
               onMessageUpdated={onMessageUpdated}
               onForward={onForward}
               onDirectAssign={onDirectAssign}

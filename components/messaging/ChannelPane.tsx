@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { useAuth } from '@/lib/auth-context';
 import { ChannelMessageFeed } from '@/components/channels/ChannelMessageFeed';
+import { PinnedMessagesBanner } from '@/components/channels/PinnedMessagesBanner';
 import { ChannelMessageComposer, type ChannelMessageComposerHandle } from '@/components/channels/ChannelMessageComposer';
 import { ThreadPanel } from '@/components/channels/ThreadPanel';
 import { CreateChannelModal } from '@/components/channels/CreateChannelModal';
@@ -56,6 +57,7 @@ interface Message {
   sender: { id: string; name: string; image: string | null };
   reactions: any[];
   savedBy: { id: string }[];
+  isPinned?: boolean;
   createdAt: string;
 }
 
@@ -460,6 +462,44 @@ export function ChannelPane() {
     } catch {}
   };
 
+  // Bumped after every successful pin toggle so PinnedMessagesBanner refetches.
+  const [pinTick, setPinTick] = useState(0);
+
+  const handlePin = async (messageId: string) => {
+    if (!selectedChannel) return;
+    // Optimistic flip so the toolbar icon swaps immediately; the banner waits
+    // on the network round-trip to avoid a flash of an empty/wrong list.
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, isPinned: !m.isPinned } : m)),
+    );
+    try {
+      const res = await fetch(`/api/channels/${selectedChannel.id}/messages/${messageId}/pin`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error('pin failed');
+      const data = await res.json();
+      // Reconcile with server truth in case the optimistic flip got out of step.
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, isPinned: data.isPinned } : m)),
+      );
+      setPinTick((t) => t + 1);
+    } catch {
+      // Roll the optimistic flip back if the API rejected.
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, isPinned: !m.isPinned } : m)),
+      );
+    }
+  };
+
+  // Jump to a pinned message inside the feed — reuses the existing highlight
+  // mechanism so the row gets the indigo ring + auto-scroll behavior.
+  const handleJumpToMessage = useCallback((messageId: string) => {
+    setHighlightedMessageId(messageId);
+    const el = document.getElementById(`msg-${messageId}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => setHighlightedMessageId(null), 3000);
+  }, []);
+
   const handleReplyCountChange = (messageId: string, count: number) => {
     setMessages((prev) =>
       prev.map((m) => (m.id === messageId ? { ...m, replyCount: count } : m))
@@ -650,6 +690,11 @@ export function ChannelPane() {
               </div>
             ) : (
               <>
+                <PinnedMessagesBanner
+                  channelId={selectedChannel.id}
+                  refreshTick={pinTick}
+                  onJumpToMessage={handleJumpToMessage}
+                />
                 <ChannelMessageFeed
                   messages={messages}
                   currentUserId={session.user.id}
@@ -665,6 +710,7 @@ export function ChannelPane() {
                   onOpenThread={(msg) => setThreadMessage(msg)}
                   onReaction={handleReaction}
                   onSave={handleSave}
+                  onPin={handlePin}
                   onMessageUpdated={() => fetchMessages(selectedChannel.id)}
                   onForward={async (msg) => {
                     const raw = msg.content || '';

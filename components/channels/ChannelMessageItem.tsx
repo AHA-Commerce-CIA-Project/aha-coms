@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageSquare, Smile, Bookmark, BookmarkCheck, Download, Pencil, Trash2, Check, Forward, UserPlus, UserMinus, Hash } from 'lucide-react';
+import { MessageSquare, Smile, Bookmark, BookmarkCheck, Download, Pencil, Trash2, Check, Forward, UserPlus, UserMinus, Hash, Pin, PinOff } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { ReactionDisplay } from './ReactionDisplay';
 import { MentionTextarea } from './MentionTextarea';
@@ -49,6 +49,7 @@ interface Message {
   reactions: Reaction[];
   savedBy: { id: string }[];
   replies?: { id: string; createdAt: string; sender: { id: string; name: string; image: string | null } }[];
+  isPinned?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -61,6 +62,10 @@ interface ChannelMessageItemProps {
   onOpenThread: (message: Message) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onSave: (messageId: string) => void;
+  /** Toggle the channel-wide pin state on this message. Optional so the
+   *  same item can be reused inside the pinned banner without re-injecting
+   *  pin handlers (the banner has its own unpin affordance). */
+  onPin?: (messageId: string) => void;
   onMessageUpdated: () => void;
   onForward?: (message: Message) => void;
   /** Convert this message into a Direct Assign task. Visible only on the
@@ -252,6 +257,7 @@ export function ChannelMessageItem({
   onOpenThread,
   onReaction,
   onSave,
+  onPin,
   onMessageUpdated,
   onForward,
   onDirectAssign,
@@ -807,7 +813,7 @@ export function ChannelMessageItem({
             <button
               onClick={() => onSave(message.id)}
               className={cn(
-                'p-1.5 transition-colors hover:bg-slate-50 rounded-r-lg',
+                'p-1.5 transition-colors hover:bg-slate-50',
                 isSaved
                   ? 'text-amber-500 hover:text-amber-600'
                   : 'text-slate-400 hover:text-indigo-600'
@@ -820,6 +826,24 @@ export function ChannelMessageItem({
                 <Bookmark className="w-4 h-4" />
               )}
             </button>
+            {onPin && (
+              <button
+                onClick={() => onPin(message.id)}
+                className={cn(
+                  'p-2 sm:p-1.5 transition-colors hover:bg-slate-50',
+                  message.isPinned
+                    ? 'text-indigo-600 hover:text-indigo-700'
+                    : 'text-slate-400 hover:text-indigo-600',
+                )}
+                title={message.isPinned ? 'Unpin from channel' : 'Pin to channel'}
+              >
+                {message.isPinned ? (
+                  <PinOff className="w-4 h-4" />
+                ) : (
+                  <Pin className="w-4 h-4" />
+                )}
+              </button>
+            )}
             {onForward && (
               <button
                 onClick={() => onForward(message)}

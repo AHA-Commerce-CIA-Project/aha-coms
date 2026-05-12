@@ -95,6 +95,10 @@ model User {
   // Workspace custom emojis the user has created.
   customEmojis CustomEmoji[] @relation("CustomEmojiCreator")
 
+  // User-specific channel pins — drives the "pinned channels at top of
+  // sidebar" UX. Each row = one (user, channel) pair.
+  pinnedChannels PinnedChannel[] @relation("UserPinnedChannels")
+
   @@map("user")
 }
 
@@ -525,6 +529,8 @@ model Channel {
   members           ChannelMember[]
   directAssignTasks Task[]              @relation("DirectAssignChannel")
   routineTemplates  RoutineTaskTemplate[] @relation("RoutineTemplateChannel")
+  // Per-user pins (Channel:User many-to-many via PinnedChannel join row).
+  pinnedBy          PinnedChannel[]     @relation("ChannelPinnedBy")
 
   @@map("channels")
 }
@@ -541,6 +547,23 @@ model ChannelMember {
   @@map("channel_members")
 }
 
+// User-specific channel pin. One row per (user, channel) pair the user has
+// pinned to the top of their sidebar. createdAt doubles as the "pinned at"
+// timestamp so the UI can order pins newest-first or restore the original
+// pin order. The unique constraint prevents accidental duplicate pins.
+model PinnedChannel {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation("UserPinnedChannels", fields: [userId], references: [id], onDelete: Cascade)
+  channelId String   @map("channel_id")
+  channel   Channel  @relation("ChannelPinnedBy", fields: [channelId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, channelId])
+  @@index([userId])
+  @@map("pinned_channels")
+}
+
 model ChannelMessage {
   id          String   @id @default(uuid())
   channelId   String   @map("channel_id")
@@ -551,6 +574,10 @@ model ChannelMessage {
   attachments Json     @default("[]")
   mentions    Json     @default("[]")
   replyCount  Int      @default(0) @map("reply_count")
+  // Channel-wide pin (Slack-style): when true the message floats to the top
+  // of the channel view for every member. Distinct from SavedMessage which
+  // is a per-user "save for later" bookmark.
+  isPinned    Boolean  @default(false) @map("is_pinned")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
