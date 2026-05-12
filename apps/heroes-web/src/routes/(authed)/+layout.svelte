@@ -6,6 +6,7 @@
     MobileBottomNav,
     deriveServiceBarServices,
   } from '@coms-portal/ui-svelte/chrome'
+  import { Sheet, SheetContent } from '@coms-portal/ui-svelte/primitives'
   import { AccountWidget } from '@coms-portal/account-widget-svelte'
   import {
     Trophy,
@@ -22,7 +23,6 @@
     Bell,
     Search,
     Menu,
-    X,
     User,
   } from '@lucide/svelte'
   import { page } from '$app/stores'
@@ -61,10 +61,6 @@
 
   function closeMenu() {
     menuOpen = false
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') closeMenu()
   }
 
   // ── chrome data ──────────────────────────────────────────────────────────
@@ -149,8 +145,6 @@
     return $page.url.pathname === href || $page.url.pathname.startsWith(href + '/')
   }
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 <div class="app-bg min-h-screen {uiState.sidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded'}">
   <ServiceBar
@@ -274,20 +268,28 @@
   <CommandPalette bind:open={paletteOpen} role={data.user?.role} />
 </div>
 
-<!-- Slide-over admin menu — admin/HR only, mobile only -->
-{#if isAdminOrHr && menuOpen}
-  <!-- Backdrop -->
-  <button
-    type="button"
-    class="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm md:hidden"
-    onclick={closeMenu}
-    aria-label="Close menu"
-  ></button>
+<!--
+  Slide-over admin menu — admin/HR only, mobile only.
 
-  <!-- Panel -->
-  <div class="fixed inset-y-0 left-0 z-[70] w-72 bg-card shadow-2xl md:hidden animate-slide-in-left flex flex-col">
-    <!-- Panel header -->
-    <div class="flex h-14 items-center justify-between border-b border-border px-4 shrink-0">
+  Spec 02 Phase 4 / T43 decision: this stays heroes-local rather than
+  graduating into the chrome lib as a `<SlideOverNav>` component. Rationale:
+  heroes is the only Svelte app with admin-only mobile nav today (portal-
+  web has no admin mobile surface; aha-fast is React-side and would
+  consume `@coms-portal/ui-react`, not Svelte chrome). One concrete
+  consumer is premature for an abstraction; when a second appears, lift
+  the composition (brand header + nav list + user-info footer) into
+  chrome then. The cross-app pattern that DID earn a place in the chrome
+  corridor is the panel mechanics — backdrop, focus trap, ESC handling,
+  side-anchored slide-in — and the suite already owned those at
+  `packages/ui-svelte/src/primitives/sheet/` (bits-ui-backed). The
+  hand-rolled `<div class="fixed inset-0…">` backdrop + `<svelte:window
+  onkeydown>` ESC handler + manual close-button shim retired in this
+  pass; the Sheet primitive carries the accessibility load.
+-->
+<Sheet bind:open={menuOpen}>
+  <SheetContent side="left" class="md:hidden w-72 sm:max-w-sm p-0 bg-card flex flex-col gap-0">
+    <!-- Panel header — heroes brand mark (Sheet ships its own close button at top-3 right-3) -->
+    <div class="flex h-14 items-center border-b border-border px-4 shrink-0">
       <div class="flex items-center gap-2">
         <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-gold to-gold-light shadow-md">
           <Trophy class="h-3.5 w-3.5 text-gold-dark" />
@@ -296,14 +298,6 @@
           AHA HEROES
         </span>
       </div>
-      <button
-        type="button"
-        onclick={closeMenu}
-        class="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-primary/8 hover:text-foreground transition-colors"
-        aria-label="Close menu"
-      >
-        <X class="h-5 w-5" />
-      </button>
     </div>
 
     <!-- Panel nav -->
@@ -336,5 +330,5 @@
         </div>
       </div>
     </div>
-  </div>
-{/if}
+  </SheetContent>
+</Sheet>
