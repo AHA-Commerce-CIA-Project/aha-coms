@@ -1,6 +1,6 @@
 # Task List: Monorepo Consolidation + Heroes Cleanup
 
-> Last updated: 2026-05-12 (T18 — Firebase Hosting `firebase.json` authored, deploy gated on T19)
+> Last updated: 2026-05-12 (T18 sealed + site renamed `aha-coms-staging` → `aha-coms` — there is no separate staging tier)
 > Sibling: `tasks/plan.md` (read first for context, dependency graph, and session-handoff protocol)
 > Source specs: `docs/spec/01-monorepo-consolidation.md`, `docs/spec/02-heroes-cleanup.md`
 
@@ -262,13 +262,13 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-5`. Also ADR 0004.
     - `/api/**` → portal-api Cloud Run service
     - `/**` → portal-web Cloud Run service
   - **Acceptance:** `firebase.json` syntactically valid; staging site name configured.
-  - **Done:** `firebase.json` at repo root declares `hosting.site = "aha-coms-staging"` and the four rewrites in precedence order (most specific first — Firebase Hosting evaluates top-down, first match wins): `/heroes/api/**` → `coms-heroes-api`, `/heroes/**` → `coms-heroes-web`, `/api/**` → `coms-portal-api`, `**` → `coms-portal-web`, all in `asia-southeast2`. Service IDs match the names Tofu created at CP3 and the names the four GHA deploy workflows push revisions to. `.firebaserc` pins `projects.default = "fbi-dev-484410"` and registers `targets.fbi-dev-484410.hosting.aha-coms-staging` → `["aha-coms-staging"]` so `firebase deploy --only hosting:aha-coms-staging` resolves without ambiguity. `firebase-public/` exists as a `.gitkeep`-only stub because Firebase Hosting requires the `public` field but both `apps/portal-web` (`adapter-node`) and `apps/heroes-web` (`svelte-adapter-bun`) ship as Cloud Run SSR services — every request flows through a rewrite to Cloud Run; no static asset is ever served from the public dir in production. `hosting.ignore` is set explicitly (`firebase.json`, dotfiles, `node_modules/`) so a future stray file in `firebase-public/` doesn't accidentally deploy. Note on the `/heroes/api/**` rewrite: it is wired now but dormant until T26 prefixes the heroes-api Elysia router with `/heroes/api` and T27 updates heroes-web's eden client base — until then, no client hits that path; the rewrite waits. A guard script at `scripts/verify-firebase-json.mjs` (TDD red-then-green) asserts the file parses, the site name matches, and the rewrites appear in the contracted order with the contracted service IDs + region — re-runnable any time the routing layer is edited by hand. `.gitignore` extended for `!/scripts/verify-*.mjs` (the verifier ships in the repo, mirroring the existing `dev-*.sh` exception) and `.firebase/` (the local deploy cache). Verified: `bun scripts/verify-firebase-json.mjs` passes; `bun --filter '*' typecheck` clean across all 12 workspace packages (no regression from a config-only change). Live deploy + curl probes against the staging URL are T19's work; cross-app cookie sharing is T20.
+  - **Done:** `firebase.json` at repo root declares `hosting.site = "aha-coms"` and the four rewrites in precedence order (most specific first — Firebase Hosting evaluates top-down, first match wins): `/heroes/api/**` → `coms-heroes-api`, `/heroes/**` → `coms-heroes-web`, `/api/**` → `coms-portal-api`, `**` → `coms-portal-web`, all in `asia-southeast2`. Service IDs match the names Tofu created at CP3 and the names the four GHA deploy workflows push revisions to. `.firebaserc` pins `projects.default = "fbi-dev-484410"` and registers `targets.fbi-dev-484410.hosting.aha-coms` → `["aha-coms"]` so `firebase deploy --only hosting:aha-coms` resolves without ambiguity. **Naming decision:** the spec's example used `aha-coms-staging` to anticipate a staging/prod split, but the four Cloud Run services are all `environment = "prod"` and there is no separate staging tier — the routing layer fronts prod directly. Dropped the `-staging` suffix so the URL (`aha-coms.web.app`) names what it is, not what it might become. If a real staging tier is wanted later, a second Firebase Hosting site (`aha-coms-staging`) can be created pointing at a parallel set of Cloud Run services labeled `environment = "staging"` — the rename does not foreclose that, it just stops mis-naming the only environment we have today. `firebase-public/` exists as a `.gitkeep`-only stub because Firebase Hosting requires the `public` field but both `apps/portal-web` (`adapter-node`) and `apps/heroes-web` (`svelte-adapter-bun`) ship as Cloud Run SSR services — every request flows through a rewrite to Cloud Run; no static asset is ever served from the public dir in production. `hosting.ignore` is set explicitly (`firebase.json`, dotfiles, `node_modules/`) so a future stray file in `firebase-public/` doesn't accidentally deploy. Note on the `/heroes/api/**` rewrite: it is wired now but dormant until T26 prefixes the heroes-api Elysia router with `/heroes/api` and T27 updates heroes-web's eden client base — until then, no client hits that path; the rewrite waits. A guard script at `scripts/verify-firebase-json.mjs` (TDD red-then-green) asserts the file parses, the site name matches, and the rewrites appear in the contracted order with the contracted service IDs + region — re-runnable any time the routing layer is edited by hand. `.gitignore` extended for `!/scripts/verify-*.mjs` (the verifier ships in the repo, mirroring the existing `dev-*.sh` exception) and `.firebase/` (the local deploy cache). Verified: `bun scripts/verify-firebase-json.mjs` passes; `bun --filter '*' typecheck` clean across all 12 workspace packages (no regression from a config-only change). Live deploy + curl probes against the routing URL are T19's work; cross-app cookie sharing is T20.
 
-- [~] **T19: Deploy to Firebase Hosting staging** *(operator-gated)*
+- [~] **T19: Deploy to Firebase Hosting** *(operator-gated)*
   - **Prerequisites:** T18
-  - **Steps:** `firebase deploy --only hosting:aha-coms-staging --project fbi-dev-484410`.
-  - **Acceptance:** Staging URL responds with content for `/`, `/heroes/dashboard`, `/api/health`.
-  - **Verification:** `curl` against the staging URL for each route OR `bun scripts/verify-staging-routing.mjs <staging-url>`.
+  - **Steps:** `firebase deploy --only hosting:aha-coms --project fbi-dev-484410`.
+  - **Acceptance:** Routing URL (`https://aha-coms.web.app`) responds with content for `/`, `/heroes/dashboard`, `/api/health`.
+  - **Verification:** `curl` against the routing URL for each route OR `bun scripts/verify-routing.mjs https://aha-coms.web.app`.
 
   **Pre-flight (verified before T18 commit `dff71df` landed):**
   - Both `apps/portal-api` (`new Elysia({ prefix: '/api' })` at `index.ts:51`) and `apps/heroes-api` (`.group('/api', ...)` at `index.ts:40`) already serve under `/api/*` natively — Firebase Hosting forwards the full path to Cloud Run unmodified, so `https://<staging>/api/health` arrives at portal-api as `/api/health` (200 expected) without any router rewiring.
@@ -291,22 +291,26 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-5`. Also ADR 0004.
      # (or `firebase login:ci` if running headless)
      firebase projects:list   # confirm fbi-dev-484410 is visible
      ```
-  3. **Create the staging site if it does not exist:**
+  3. **Create the site if it does not exist:**
      ```
      firebase hosting:sites:list --project fbi-dev-484410
-     # If aha-coms-staging is absent:
-     firebase hosting:sites:create aha-coms-staging --project fbi-dev-484410
-     # Site URL will be https://aha-coms-staging.web.app
+     # If aha-coms is absent:
+     firebase hosting:sites:create aha-coms --project fbi-dev-484410
+     # Site URL will be https://aha-coms.web.app
+     # (If the global Firebase Hosting namespace has claimed aha-coms already,
+     # the create will fail — fall back to a project-prefixed name like
+     # aha-coms-fbi-dev or aha-coms-coms, and update firebase.json + .firebaserc
+     # + the verifier expectation to match before retrying.)
      ```
   4. **Deploy the routing layer:**
      ```
      cd "/Users/mac/HT/AHA COMS/aha-coms"
-     firebase deploy --only hosting:aha-coms-staging --project fbi-dev-484410
+     firebase deploy --only hosting:aha-coms --project fbi-dev-484410
      # Capture the "Hosting URL" the CLI prints.
      ```
   5. **Run the probe:**
      ```
-     bun scripts/verify-staging-routing.mjs https://aha-coms-staging.web.app
+     bun scripts/verify-routing.mjs https://aha-coms.web.app
      ```
      Expected outcome: `PASS` on `/` (portal-web title), `/api/health` (portal-api JSON), `/heroes/` (heroes theme-color); `NOTE` on `/heroes/api/health` (dormant pre-T26).
 
@@ -319,13 +323,13 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-5`. Also ADR 0004.
 - [ ] **T20: Verify cross-app cookie sharing** *(operator-gated, follows T19)*
   - **Prerequisites:** T19
   - **Steps:**
-    - Sign in via the staging URL (portal flow). Open `https://aha-coms-staging.web.app/login` (or whatever portal-web's sign-in route is) and complete personal_otp.
-    - Navigate to `https://aha-coms-staging.web.app/heroes/dashboard` (will 404 from heroes-web until T24+T29 land base-path; the cookie check is the goal, not the rendered page).
+    - Sign in via the routing URL (portal flow). Open `https://aha-coms.web.app/login` (or whatever portal-web's sign-in route is) and complete personal_otp.
+    - Navigate to `https://aha-coms.web.app/heroes/dashboard` (will 404 from heroes-web until T24+T29 land base-path; the cookie check is the goal, not the rendered page).
     - DevTools → Network → click the heroes request → Cookies tab → verify the JWT cookie (likely `portal_jwt` or whatever portal-api sets; check the response of the sign-in request) is present in the heroes request.
   - **Acceptance:** Same-origin cookie crosses to heroes paths without re-authentication.
-  - **Pre-flight check before this step:** confirm portal-api sets its JWT cookie WITHOUT a `Domain` attribute (host-only cookies travel to every path on the staging host). Grep for the cookie set call in `apps/portal-api/src/routes/auth.ts` or equivalent; if `Domain=` is set to a Cloud Run hostname, the cookie will not cross to heroes paths and this step blocks until the cookie is reissued host-only.
+  - **Pre-flight check before this step:** confirm portal-api sets its JWT cookie WITHOUT a `Domain` attribute (host-only cookies travel to every path on the routing host). Grep for the cookie set call in `apps/portal-api/src/routes/auth.ts` or equivalent; if `Domain=` is set to a Cloud Run hostname, the cookie will not cross to heroes paths and this step blocks until the cookie is reissued host-only.
 
-- [ ] **CHECKPOINT 4**: Single-origin routing works in staging.
+- [ ] **CHECKPOINT 4**: Single-origin routing works at `aha-coms.web.app`.
   - **Crosses when:** T19 probe lands all PASS markers, T20 confirms the JWT cookie is visible on `/heroes/*` requests in DevTools, no manual re-authentication needed when crossing apps.
 
 ### Phase 6: Archive external repos

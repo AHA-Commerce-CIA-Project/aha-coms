@@ -28,8 +28,8 @@ try {
 
 const hosting = cfg.hosting
 if (!hosting || typeof hosting !== 'object') fail('hosting block missing')
-if (hosting.site !== 'aha-coms-staging') {
-  fail(`hosting.site must be "aha-coms-staging" (got ${JSON.stringify(hosting.site)})`)
+if (hosting.site !== 'aha-coms') {
+  fail(`hosting.site must be "aha-coms" (got ${JSON.stringify(hosting.site)})`)
 }
 
 const expected = [

@@ -5,8 +5,8 @@
   "targets": {
     "fbi-dev-484410": {
       "hosting": {
-        "aha-coms-staging": [
-          "aha-coms-staging"
+        "aha-coms": [
+          "aha-coms"
         ]
       }
     }

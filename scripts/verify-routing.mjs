@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Post-deploy probe for the Firebase Hosting staging routing layer.
+// Post-deploy probe for the Firebase Hosting routing layer.
 //
 // Walks the four paths firebase.json's rewrites cover and reports whether
 // each landed at the expected Cloud Run service. Service identity is read
@@ -10,13 +10,13 @@
 // expectation but does not fail on a 404 there.
 //
 // Usage:
-//   bun scripts/verify-staging-routing.mjs https://aha-coms-staging.web.app
-//   STAGING_URL=https://aha-coms-staging.web.app bun scripts/verify-staging-routing.mjs
+//   bun scripts/verify-routing.mjs https://aha-coms.web.app
+//   ROUTING_URL=https://aha-coms.web.app bun scripts/verify-routing.mjs
 
-const stagingUrl = (process.argv[2] || process.env.STAGING_URL || '').replace(/\/$/, '')
-if (!stagingUrl) {
-  console.error('Usage: bun scripts/verify-staging-routing.mjs <staging-url>')
-  console.error('       e.g. https://aha-coms-staging.web.app')
+const routingUrl = (process.argv[2] || process.env.ROUTING_URL || '').replace(/\/$/, '')
+if (!routingUrl) {
+  console.error('Usage: bun scripts/verify-routing.mjs <routing-url>')
+  console.error('       e.g. https://aha-coms.web.app')
   process.exit(2)
 }
 
@@ -55,7 +55,7 @@ const results = []
 let hardFails = 0
 
 for (const probe of probes) {
-  const url = stagingUrl + probe.path
+  const url = routingUrl + probe.path
   try {
     const res = await fetch(url, { redirect: 'manual' })
     const body = await res.text()
@@ -86,7 +86,7 @@ for (const probe of probes) {
 }
 
 const pad = (s, n) => String(s).padEnd(n)
-console.log(`\nverify-staging-routing — ${stagingUrl}\n`)
+console.log(`\nverify-routing — ${routingUrl}\n`)
 for (const r of results) {
   console.log(`  ${pad(r.verdict, 5)} ${pad(r.path, 22)} ${pad('HTTP ' + r.status, 12)} ${r.description}`)
   console.log(`        expect: ${r.marker}`)
@@ -95,7 +95,7 @@ for (const r of results) {
 }
 
 if (hardFails > 0) {
-  console.error(`verify-staging-routing: ${hardFails} fatal probe(s) failed.`)
+  console.error(`verify-routing: ${hardFails} fatal probe(s) failed.`)
   process.exit(1)
 }
-console.log('verify-staging-routing: routing layer reaches the contracted services.')
+console.log('verify-routing: routing layer reaches the contracted services.')

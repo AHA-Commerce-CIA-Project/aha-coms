@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "aha-coms-staging",
+    "site": "aha-coms",
     "public": "firebase-public",
     "ignore": [
       "firebase.json",
