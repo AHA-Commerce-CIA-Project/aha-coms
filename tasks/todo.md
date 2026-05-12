@@ -1,6 +1,6 @@
 # Task List: Monorepo Consolidation + Heroes Cleanup
 
-> Last updated: 2026-05-12 (Checkpoint 4 crossed; CP4 Findings settled; FU-1 + FU-2 prod-applied + dashboard-verified — HEROES card flipped green at 08:05:23 UTC)
+> Last updated: 2026-05-12 (Checkpoint 4 crossed; CP4 Findings settled; FU-1 + FU-2 prod-applied + dashboard-verified — HEROES card flipped green at 08:05:23 UTC; FU-3 + FU-4 filed for the CI/CD orchestration gap surfaced today; `infra-plan.yml` comment lie corrected)
 > Sibling: `tasks/plan.md` (read first for context, dependency graph, and session-handoff protocol)
 > Source specs: `docs/spec/01-monorepo-consolidation.md`, `docs/spec/02-heroes-cleanup.md`
 
@@ -341,9 +341,9 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-5`. Also ADR 0004.
 
 3. **`__session` carries an opaque UUID, not a JWT.** Portal-api still uses DB-backed sessions — the cookie value is a session ID that looks up a row in the `session` table on every authenticated request. Spec 02 Phase 2 (T31–T37) replaces this with stateless JWT sessions per ADR 0005. CP4 only required the cookie to *cross*, which it does; the verification path through heroes-web's existing `/auth/portal/exchange` (which mints a heroes-local session) is unchanged for now. The cookie name and shape are stable through the JWT transition because both formats are self-contained strings — only the verifier swaps. Recorded so future-self does not re-discover it during Spec 02 Phase 2 kick-off.
 
-### Cross-cutting follow-ups from Phase 5 — not blocking Phase 6
+### Cross-cutting follow-ups — not blocking Phase 6
 
-These are not on the phase track and not gated by any checkpoint. They surfaced during T19/T20 traversal and are worth resolving when convenient — either before Phase 6 begins or interleaved with it.
+These are not on the phase track and not gated by any checkpoint. FU-1 + FU-2 surfaced during T19/T20 traversal; FU-3 + FU-4 surfaced during the FU-1 prod-apply session on 2026-05-12 when the lack of automation forced a five-step manual orchestration (`tofu apply` → `db:migrate` → `register-heroes` → test build → push). Resolve when convenient — either before Phase 6 begins or interleaved with it.
 
 - [x] **FU-1: Diagnose the "Degraded" status on the HEROES dashboard card**
   - **Where it shows:** Portal dashboard at `https://aha-coms.web.app/dashboard`, the HEROES app card displays a yellow "Degraded" indicator.
@@ -364,6 +364,35 @@ These are not on the phase track and not gated by any checkpoint. They surfaced 
   - **Verified 2026-05-12:** `tofu apply -target=google_secret_manager_secret_iam_member.cloud_build_gip_api_key` landed clean; `gcloud builds submit --config apps/portal-web/cloudbuild.yaml --substitutions="COMMIT_SHA=$(git rev-parse HEAD)" .` finished `STATUS: SUCCESS` in 4m38s on the free-tier machine — built the image, fetched the secret, pushed two tags to `coms-portal-registry`, and deployed `coms-portal-web-00008-xzk` carrying the local commit SHA. The hatch works.
   - **Acceptance:** `apps/portal-web/cloudbuild.yaml` no longer references the three orphan secrets ✓; test build succeeds ✓ (build `f313eefb-a1ef-4cfb-b55c-921026b107f2`). FU-2 closed pending the follow-up commit that captures the substitution + SA + machine-type fixes alongside the original.
   - **Related:** `41aeb6e` (workflow fix that surfaced this), `41aeb6e` commit body's Directive section.
+
+- [ ] **FU-3: Wire `db:migrate` into `deploy-portal-api.yml`**
+  - **What's missing:** No workflow runs `bun run --cwd apps/portal-api db:migrate` (or any equivalent). `deploy-portal-api.yml` only does `docker build` + `docker push` + `gcloud run deploy`. Today the FU-1 migration `0035` was applied by hand via `cloud-sql-proxy` → `bun --filter @coms-portal/portal-api db:migrate`; without that manual step ahead of the push, the new portal-api revision would have crash-logged `column "health_check_url" does not exist` every 60 seconds until someone noticed and applied it. This was a footgun saved only by remembering the right order.
+  - **Why it's tractable here:** Drizzle migrations in this project are append-only — looking at `apps/portal-api/src/db/migrations/`, the recent migrations (0017+) are all additive nullable columns or non-destructive UPDATEs (0034 cleared dead config; 0035 added a nullable column). The migration history itself is the safety review. The right pattern (additive nullable column → backfill → tighten in next deploy) is already the project's discipline, so automated `migrate` is low risk for this shape.
+  - **Shape to implement:**
+    1. Add a `migrate` job to `.github/workflows/deploy-portal-api.yml` that runs BEFORE the `deploy` job (use `needs:` or sequential `steps:`). The job auths via WIF (same SA as deploy), starts `cloud-sql-proxy` against `coms-aha-heroes-db` in the background (use `&` with a readiness wait), reads `coms-portal-database-url` from Secret Manager, rewrites the host segment to the proxy port, exports `DATABASE_URL`, and runs `bun --filter @coms-portal/portal-api db:migrate`. On failure, the deploy job does not run.
+    2. WIF SA `coms-portal-github-actions` needs `roles/cloudsql.client` + `roles/secretmanager.secretAccessor` on `coms-portal-database-url` to authenticate the proxy + read the URL. The runtime SA already has both; the deployer SA does not — add Tofu bindings.
+    3. Same pattern should land in `deploy-heroes-api.yml` when heroes' migration story matures (Spec 02 Phase 2 introduces the JWT migration; that's the moment heroes' deploy needs the same step).
+  - **Risks worth noting before implementation:**
+    - Migration that hangs (e.g. waiting for a Cloud SQL lock) blocks the deploy. Set a timeout on the `bun db:migrate` step (10 minutes is the GHA default; 5 minutes is plenty for additive migrations).
+    - Migration that depends on a feature only the new revision can supply (rare; usually a chicken-and-egg sign of a non-additive change). Drizzle's pattern protects against this when discipline holds, but human review on PR is the safety net.
+    - Concurrent deploys (two PRs merge in quick succession) racing the same migration. `__drizzle_migrations` is the journal; idempotent by tag. But two `db:migrate` runs in parallel against the same tag could collide on the proxy port or on a CREATE statement. The `concurrency:` block already in `deploy-portal-api.yml` (`group: deploy-portal-api`, `cancel-in-progress: false`) serializes deploys per service — the migrate job under `needs: [deploy]` inherits that serialization.
+  - **Acceptance:** A push to main that includes a migration file (e.g. `apps/portal-api/src/db/migrations/00XX_*.sql`) results in the migration applied to prod BEFORE the new revision rolls out, with no manual operator action. Verify by intentionally introducing an additive nullable column in a small follow-up PR and watching the workflow run.
+  - **Related:** today's session (commits `2e60f59` + `36f2a41` + `7bc3e0d`), which proved the manual orchestration risk in concrete terms.
+
+- [ ] **FU-4: `tofu apply` via `workflow_dispatch` on main (NOT auto-apply)**
+  - **What's missing:** No `infra-apply.yml` workflow exists. `infra-plan.yml` runs `tofu plan` on PR (the comment lie about auto-apply was corrected 2026-05-12). Today's FU-1/FU-2 tofu apply for `cloud_build_gip_api_key` was a `tofu apply -target=` from a laptop against the shared state bucket — the same shape every infra change has used since the project began.
+  - **Position taken: manual `workflow_dispatch`, NOT auto-apply on merge.** The infra owns one shared GCP project, one Cloud SQL instance with prod data, the IAM that gates production secrets, and the WIF pool that authenticates every deploy SA. A bad code deploy rolls back by re-deploying the previous SHA; a bad `tofu apply` (e.g. drift on `cloud-sql.tf` that triggers DB recreation) has no equivalent. The "Rollback Plan" principle from `agent-skills:ci-cd-and-automation` pulls hard against auto-apply for this resource shape. The team has already demonstrated comfort with manual apply windows (CP3, today's FU-1/FU-2), so the friction is already internalized — what's missing is reproducibility and audit trail, not the apply button itself.
+  - **Shape to implement:**
+    1. New file `.github/workflows/infra-apply.yml` with `on: workflow_dispatch:` only (no push trigger). Inputs: optional `target` (resource address for `-target=` apply) for surgical changes; optional `auto_approve` boolean defaulting to `false`. Runs `tofu init` + `tofu plan` (printed to log) + `tofu apply` against the shared state, authed via WIF under the existing `coms-portal-github-actions` SA. State bucket access already works.
+    2. Add a `concurrency:` block (`group: infra-apply`, `cancel-in-progress: false`) so two operators can't race the same apply.
+    3. Optionally: a status check on push to main that runs `tofu plan` and PR-comments (or writes to the run summary) showing the queued diff. Makes "what's waiting to be applied" visible without applying anything.
+  - **Risks worth noting before implementation:**
+    - WIF deployer SA currently has only the IAM needed for app deploys. Adding `roles/owner` or equivalent to make `tofu apply` actually work means a much broader blast radius for that SA — every push to main carries the latent capability to mutate every resource. Mitigation: scope the WIF binding to `infra-apply.yml` specifically (GitHub OIDC supports per-workflow filtering via the `aud:`/`sub:` claims).
+    - `tofu apply -auto-approve` skips the interactive prompt. The plan output in the run log is the only safety net; the operator reads it before clicking the next workflow_dispatch. If a destructive diff slips into the plan unnoticed, the apply runs it.
+    - State lock contention with laptop applies. Once `infra-apply.yml` exists, the laptop should stop being a parallel apply path — every apply goes through the workflow. Document that in `infra/README.md` (creating one if absent).
+  - **Acceptance:** A trivial infra change (e.g. a label tweak on a non-critical resource) is applied via the workflow, the run log shows `tofu plan` then `tofu apply` succeeding, and the resulting state matches the laptop-applied baseline. Validate the workflow at the same time the comment-lie correction in `infra-plan.yml` is fully retired.
+  - **Future upgrade path:** if the team's risk tolerance shifts and incidents stay rare, swap `workflow_dispatch:` for `push: branches: [main], paths: [infra/**]` to auto-apply. Going looser is one line; going tighter after an incident is awkward — start conservative.
+  - **Related:** the corrected comment in `.github/workflows/infra-plan.yml` (this commit); today's session (manual `tofu apply -target=`); `agent-skills:ci-cd-and-automation` skill's "Rollback Plan" principle.
 
 ### Phase 6: Archive external repos
 
