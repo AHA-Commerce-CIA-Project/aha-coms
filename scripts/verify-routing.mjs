@@ -22,8 +22,8 @@ if (!routingUrl) {
 
 const probes = [
   {
-    path: '/',
-    description: 'root → portal-web',
+    path: '/login',
+    description: '/login → portal-web (real served route, no auth-redirect)',
     expect: (status, body) => status === 200 && body.includes('<title>COMS Portal</title>'),
     marker: '<title>COMS Portal</title>',
     fatal: true,
