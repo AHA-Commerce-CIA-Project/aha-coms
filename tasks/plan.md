@@ -1,7 +1,7 @@
 # Execution Plan: Monorepo Consolidation + Heroes Cleanup
 
-> Last updated: 2026-05-12 (Checkpoint 3 crossed — Phase 4 sealed)
-> Status: Phase 1 sealed at `34fbedd`; Phase 3 sealed and Checkpoint 2 crossed at `33593a9`; T16 lands the portal split + per-service Cloud Build scaffolding at `5935d00`; T16.5 splits `infra/heroes/` at `de68b28`; the per-app-resources + per-app naming principles + GHA-over-Cloud-Build + standard label set principles are the standing rules going forward; T17 returned deploys to GitHub Actions; Checkpoint 3 crossed 2026-05-12 — heroes + portal Tofu applied (T16.5 + T17 cutovers landed in one operator window), four GHA workflows verified end-to-end, path-filter isolation proven by two single-file probe pushes. **Phase 4 sealed.** Next: Phase 5 (Firebase Hosting staging — T18 onward). Findings 1 + 2 from T15 are closed in T16.
+> Last updated: 2026-05-12 (T18 — `firebase.json` authored, Phase 5 opened)
+> Status: Phase 1 sealed at `34fbedd`; Phase 3 sealed and Checkpoint 2 crossed at `33593a9`; T16 lands the portal split + per-service Cloud Build scaffolding at `5935d00`; T16.5 splits `infra/heroes/` at `de68b28`; the per-app-resources + per-app naming principles + GHA-over-Cloud-Build + standard label set principles are the standing rules going forward; T17 returned deploys to GitHub Actions; Checkpoint 3 crossed 2026-05-12 — heroes + portal Tofu applied (T16.5 + T17 cutovers landed in one operator window), four GHA workflows verified end-to-end, path-filter isolation proven by two single-file probe pushes; Phase 4 sealed at `e129cfb`; T18 authors the Firebase Hosting routing layer (`firebase.json` + `.firebaserc` + `firebase-public/` stub + a `scripts/verify-firebase-json.mjs` guard) — all four rewrites and the staging site name in place, deploy gated on T19. **Phase 5 opened.** Findings 1 + 2 from T15 are closed in T16.
 > Source specs: `docs/spec/01-monorepo-consolidation.md`, `docs/spec/02-heroes-cleanup.md`
 
 ## Goal

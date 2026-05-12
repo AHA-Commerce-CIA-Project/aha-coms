@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "fbi-dev-484410"
+  },
+  "targets": {
+    "fbi-dev-484410": {
+      "hosting": {
+        "aha-coms-staging": [
+          "aha-coms-staging"
+        ]
+      }
+    }
+  }
+}

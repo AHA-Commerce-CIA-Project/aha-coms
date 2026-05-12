@@ -68,14 +68,18 @@ my-document/
 
 # Dev scripts (local-only) — anchored to repo root.
 # `apps/*/scripts/` are tracked. The top-level scripts/ folder is local-only
-# except for explicit wrappers that belong in the repo (dev-* and similar).
+# except for explicit wrappers that belong in the repo (dev-* and verify-*).
 # Glob the children rather than the directory so `!` re-inclusion works.
 /scripts/*
 !/scripts/dev-*.sh
+!/scripts/verify-*.mjs
 
 # SvelteKit build output
 apps/portal-web/build/
 apps/heroes-web/build/
+
+# Firebase Hosting deploy cache (local-only, regenerated per deploy).
+.firebase/
 AGENTS.md
 .mcp.json
 .omx/

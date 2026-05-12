@@ -1,6 +1,6 @@
 # Task List: Monorepo Consolidation + Heroes Cleanup
 
-> Last updated: 2026-05-12 (after T17 — GHA workflows + GitHub repo rename to mrdoorba/aha-coms)
+> Last updated: 2026-05-12 (T18 — Firebase Hosting `firebase.json` authored, deploy gated on T19)
 > Sibling: `tasks/plan.md` (read first for context, dependency graph, and session-handoff protocol)
 > Source specs: `docs/spec/01-monorepo-consolidation.md`, `docs/spec/02-heroes-cleanup.md`
 
@@ -254,7 +254,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-4`. Also see integration
 
 Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-5`. Also ADR 0004.
 
-- [ ] **T18: Create `firebase.json` at monorepo root with rewrites**
+- [x] **T18: Create `firebase.json` at monorepo root with rewrites**
   - **Prerequisites:** Checkpoint 3
   - **Rewrites:**
     - `/heroes/api/**` → heroes-api Cloud Run service
@@ -262,6 +262,7 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-5`. Also ADR 0004.
     - `/api/**` → portal-api Cloud Run service
     - `/**` → portal-web Cloud Run service
   - **Acceptance:** `firebase.json` syntactically valid; staging site name configured.
+  - **Done:** `firebase.json` at repo root declares `hosting.site = "aha-coms-staging"` and the four rewrites in precedence order (most specific first — Firebase Hosting evaluates top-down, first match wins): `/heroes/api/**` → `coms-heroes-api`, `/heroes/**` → `coms-heroes-web`, `/api/**` → `coms-portal-api`, `**` → `coms-portal-web`, all in `asia-southeast2`. Service IDs match the names Tofu created at CP3 and the names the four GHA deploy workflows push revisions to. `.firebaserc` pins `projects.default = "fbi-dev-484410"` and registers `targets.fbi-dev-484410.hosting.aha-coms-staging` → `["aha-coms-staging"]` so `firebase deploy --only hosting:aha-coms-staging` resolves without ambiguity. `firebase-public/` exists as a `.gitkeep`-only stub because Firebase Hosting requires the `public` field but both `apps/portal-web` (`adapter-node`) and `apps/heroes-web` (`svelte-adapter-bun`) ship as Cloud Run SSR services — every request flows through a rewrite to Cloud Run; no static asset is ever served from the public dir in production. `hosting.ignore` is set explicitly (`firebase.json`, dotfiles, `node_modules/`) so a future stray file in `firebase-public/` doesn't accidentally deploy. Note on the `/heroes/api/**` rewrite: it is wired now but dormant until T26 prefixes the heroes-api Elysia router with `/heroes/api` and T27 updates heroes-web's eden client base — until then, no client hits that path; the rewrite waits. A guard script at `scripts/verify-firebase-json.mjs` (TDD red-then-green) asserts the file parses, the site name matches, and the rewrites appear in the contracted order with the contracted service IDs + region — re-runnable any time the routing layer is edited by hand. `.gitignore` extended for `!/scripts/verify-*.mjs` (the verifier ships in the repo, mirroring the existing `dev-*.sh` exception) and `.firebase/` (the local deploy cache). Verified: `bun scripts/verify-firebase-json.mjs` passes; `bun --filter '*' typecheck` clean across all 12 workspace packages (no regression from a config-only change). Live deploy + curl probes against the staging URL are T19's work; cross-app cookie sharing is T20.
 
 - [ ] **T19: Deploy to Firebase Hosting staging**
   - **Prerequisites:** T18

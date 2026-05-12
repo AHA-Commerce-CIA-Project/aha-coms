@@ -1,0 +1,41 @@
+{
+  "hosting": {
+    "site": "aha-coms-staging",
+    "public": "firebase-public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/heroes/api/**",
+        "run": {
+          "serviceId": "coms-heroes-api",
+          "region": "asia-southeast2"
+        }
+      },
+      {
+        "source": "/heroes/**",
+        "run": {
+          "serviceId": "coms-heroes-web",
+          "region": "asia-southeast2"
+        }
+      },
+      {
+        "source": "/api/**",
+        "run": {
+          "serviceId": "coms-portal-api",
+          "region": "asia-southeast2"
+        }
+      },
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "coms-portal-web",
+          "region": "asia-southeast2"
+        }
+      }
+    ]
+  }
+}
