@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import { resolveTheme, type ThemePreference } from './resolve-theme'
 
   /**
    * ServiceBar — top suite chrome shared across COMS apps.
@@ -26,11 +27,14 @@
     services?: ServiceItem[]
     /** Slug of the currently-rendered app. Matching service tab gets active styling. */
     currentApp: string
-    theme?: 'light' | 'dark'
+    /** Theme preference; `'system'` collapses internally to `'light'` for the toggle icon. */
+    theme?: ThemePreference
     onToggleTheme?: () => void
     /** Right-slot snippet — host mounts the account widget here. */
     right?: Snippet
   } = $props()
+
+  const resolvedTheme = $derived(resolveTheme(theme))
 
   // Lucide is consumed directly by each app per spec-02 §Out of Scope.
   // The host can compose icons inside the right snippet; the bar itself only
@@ -74,9 +78,9 @@
       type="button"
       onclick={onToggleTheme}
       class="flex h-[26px] w-[26px] items-center justify-center rounded-md text-primary-light/60 hover:text-primary-light hover:bg-white/6 transition-colors"
-      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
     >
-      {#if theme === 'dark'}
+      {#if resolvedTheme === 'dark'}
         <!-- Sun glyph -->
         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4" />

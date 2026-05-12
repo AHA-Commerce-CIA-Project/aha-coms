@@ -69,11 +69,11 @@
 
   // ── chrome data ──────────────────────────────────────────────────────────
 
-  // Narrow uiState.theme ('system' | 'light' | 'dark') to what chrome components accept ('light' | 'dark').
-  // 'system' is treated as 'light' until JS resolves the media query (applyDomClass handles the DOM class).
-  const effectiveTheme = $derived(
-    uiState.theme === 'system' ? 'light' : uiState.theme,
-  ) satisfies 'light' | 'dark'
+  // Theme narrowing now lives in the chrome lib (Spec 02 Phase 4 / T41).
+  // Heroes passes `uiState.theme` ('system' | 'light' | 'dark') straight
+  // through; `ServiceBar` and `MobileTopBar` call `resolveTheme` internally
+  // to pick the toggle icon. The DOM `dark` class continues to be resolved
+  // via `prefers-color-scheme` by uiState's `applyDomClass` step.
 
   // Service bar derived in the chrome lib (Spec 02 Phase 4 / T40). The
   // catalog is the portal hub entry prepended to the rich `apps` array
@@ -161,7 +161,7 @@
   <ServiceBar
     services={serviceBarServices}
     currentApp="heroes"
-    theme={effectiveTheme}
+    theme={uiState.theme}
     onToggleTheme={() => uiState.setTheme(uiState.theme === 'dark' ? 'light' : 'dark')}
   >
     {#snippet right()}
@@ -178,7 +178,7 @@
   </ServiceBar>
 
   <MobileTopBar
-    theme={effectiveTheme}
+    theme={uiState.theme}
     onToggleTheme={() => uiState.setTheme(uiState.theme === 'dark' ? 'light' : 'dark')}
   >
     {#snippet brand()}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import { resolveTheme, type ThemePreference } from './resolve-theme'
 
   /**
    * MobileTopBar — mobile chrome shared across COMS apps. Renamed from
@@ -18,7 +19,8 @@
     trailing,
     right,
   }: {
-    theme?: 'light' | 'dark'
+    /** Theme preference; `'system'` collapses internally to `'light'` for the toggle icon. */
+    theme?: ThemePreference
     onToggleTheme?: () => void
     /** Brand mark + label (host-supplied — portal renders "C / COMS", Heroes renders "trophy / AHA HEROES"). */
     brand?: Snippet
@@ -29,6 +31,8 @@
     /** Right slot — account widget mount. */
     right?: Snippet
   } = $props()
+
+  const resolvedTheme = $derived(resolveTheme(theme))
 </script>
 
 <header
@@ -49,9 +53,9 @@
         type="button"
         onclick={onToggleTheme}
         class="flex h-10 w-10 items-center justify-center rounded-full text-white/60 hover:bg-white/8 hover:text-white transition-colors"
-        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
       >
-        {#if theme === 'dark'}
+        {#if resolvedTheme === 'dark'}
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="4" />
             <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />

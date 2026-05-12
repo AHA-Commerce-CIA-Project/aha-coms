@@ -17,3 +17,8 @@ export {
   type ServiceCatalogEntry,
   type ServiceBarItem,
 } from './derive-services'
+export {
+  resolveTheme,
+  type ThemePreference,
+  type ResolvedTheme,
+} from './resolve-theme'
