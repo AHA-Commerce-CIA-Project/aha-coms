@@ -236,7 +236,7 @@ export function LaterPane({ tabOverride, onTabChange, hideTabs, onCountsChange }
   if (!session) return null;
 
   return (
-    <div className="space-y-4 px-4 sm:px-6 pb-4">
+    <div className={`space-y-6 px-4 sm:px-6 pb-4 ${hideTabs ? 'pt-6' : ''}`}>
       {!hideTabs && (
         <div className="flex items-center gap-1 border-b border-slate-200">
           <button
