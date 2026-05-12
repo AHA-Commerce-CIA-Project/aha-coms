@@ -28,7 +28,11 @@ import { portalWebhooksRoute } from './routes/portal-webhooks'
 import { adminPendingAliasesRoute } from './routes/admin-pending-aliases'
 import { pullTaxonomiesOnBoot } from './services/portal-bootstrap'
 
-const app = new Elysia()
+// Single-origin migration (Spec 02 Phase 1 / T26): all heroes-api routes live
+// under `/heroes/api/*` so Firebase Hosting can rewrite `/heroes/api/**` to
+// this service and preserve the path. The constructor prefix scopes every
+// route below without disturbing the eden treaty traversal shape.
+const app = new Elysia({ prefix: '/heroes' })
   .onError(errorHandler)
   .use(
     cors({

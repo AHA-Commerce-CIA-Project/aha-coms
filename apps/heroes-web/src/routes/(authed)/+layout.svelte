@@ -21,6 +21,7 @@
     User,
   } from 'lucide-svelte'
   import { page } from '$app/stores'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
   import Header from '$lib/components/layout/Header.svelte'
   import PullToRefresh from '$lib/components/PullToRefresh.svelte'
@@ -29,7 +30,7 @@
   import { userState } from '$lib/state/userState.svelte'
 
   let { data, children } = $props()
-  // data contains { user, avatarUrl, unreadCount, portalOrigin }
+  // data contains { user, avatarUrl, unreadCount }
 
   let paletteOpen = $state(false)
   let menuOpen = $state(false)
@@ -69,8 +70,11 @@
     uiState.theme === 'system' ? 'light' : uiState.theme,
   ) satisfies 'light' | 'dark'
 
+  // Path-relative service bar — single-origin lets the browser resolve hrefs
+  // against the current host (aha-coms.web.app). Phase 4 (T40) will lift this
+  // derivation into the chrome lib so apps stop hand-rolling the catalog.
   const serviceBarServices = $derived([
-    { slug: 'portal', label: 'COMS', href: data.portalOrigin },
+    { slug: 'portal', label: 'COMS', href: '/' },
     { slug: 'heroes', label: 'Heroes' }, // current — no link
   ])
 
@@ -84,34 +88,34 @@
   type AnyIcon = any
 
   const mainNavItems = [
-    { href: '/dashboard', label: m.nav_dashboard() as string, icon: LayoutDashboard as AnyIcon },
-    { href: '/points', label: m.nav_points() as string, icon: Award as AnyIcon },
-    { href: '/leaderboard', label: m.nav_leaderboard() as string, icon: Trophy as AnyIcon },
-    { href: '/rewards', label: m.nav_rewards() as string, icon: Gift as AnyIcon },
-    { href: '/redemptions', label: m.nav_redemptions() as string, icon: ShoppingCart as AnyIcon },
+    { href: `${base}/dashboard`, label: m.nav_dashboard() as string, icon: LayoutDashboard as AnyIcon },
+    { href: `${base}/points`, label: m.nav_points() as string, icon: Award as AnyIcon },
+    { href: `${base}/leaderboard`, label: m.nav_leaderboard() as string, icon: Trophy as AnyIcon },
+    { href: `${base}/rewards`, label: m.nav_rewards() as string, icon: Gift as AnyIcon },
+    { href: `${base}/redemptions`, label: m.nav_redemptions() as string, icon: ShoppingCart as AnyIcon },
   ]
 
   const adminNavItems = [
-    { href: '/admin/users', label: m.nav_users() as string, icon: Users as AnyIcon },
-    { href: '/teams', label: m.nav_teams() as string, icon: Building2 as AnyIcon },
-    { href: '/admin/reports', label: m.nav_reports() as string, icon: BarChart3 as AnyIcon },
-    { href: '/admin/audit-log', label: m.nav_audit_log() as string, icon: FileText as AnyIcon },
-    { href: '/admin/sheet-sync', label: m.nav_sheet_sync() as string, icon: RefreshCw as AnyIcon },
-    { href: '/admin/settings', label: m.nav_settings() as string, icon: Settings as AnyIcon },
+    { href: `${base}/admin/users`, label: m.nav_users() as string, icon: Users as AnyIcon },
+    { href: `${base}/teams`, label: m.nav_teams() as string, icon: Building2 as AnyIcon },
+    { href: `${base}/admin/reports`, label: m.nav_reports() as string, icon: BarChart3 as AnyIcon },
+    { href: `${base}/admin/audit-log`, label: m.nav_audit_log() as string, icon: FileText as AnyIcon },
+    { href: `${base}/admin/sheet-sync`, label: m.nav_sheet_sync() as string, icon: RefreshCw as AnyIcon },
+    { href: `${base}/admin/settings`, label: m.nav_settings() as string, icon: Settings as AnyIcon },
   ]
 
   // Slide-over admin menu items (all items, for mobile full-nav panel)
   const slideOverNavItems = [
-    { href: '/dashboard', label: m.nav_dashboard() as string, icon: LayoutDashboard as AnyIcon },
-    { href: '/points', label: m.nav_points() as string, icon: Award as AnyIcon },
-    { href: '/rewards', label: m.nav_rewards() as string, icon: Gift as AnyIcon },
-    { href: '/redemptions', label: m.nav_redemptions() as string, icon: ShoppingCart as AnyIcon },
-    { href: '/admin/users', label: m.nav_users() as string, icon: Users as AnyIcon },
-    { href: '/teams', label: m.nav_teams() as string, icon: Building2 as AnyIcon },
-    { href: '/admin/reports', label: m.nav_reports() as string, icon: BarChart3 as AnyIcon },
-    { href: '/admin/audit-log', label: m.nav_audit_log() as string, icon: FileText as AnyIcon },
-    { href: '/admin/sheet-sync', label: m.nav_sheet_sync() as string, icon: RefreshCw as AnyIcon },
-    { href: '/admin/settings', label: m.nav_settings() as string, icon: Settings as AnyIcon },
+    { href: `${base}/dashboard`, label: m.nav_dashboard() as string, icon: LayoutDashboard as AnyIcon },
+    { href: `${base}/points`, label: m.nav_points() as string, icon: Award as AnyIcon },
+    { href: `${base}/rewards`, label: m.nav_rewards() as string, icon: Gift as AnyIcon },
+    { href: `${base}/redemptions`, label: m.nav_redemptions() as string, icon: ShoppingCart as AnyIcon },
+    { href: `${base}/admin/users`, label: m.nav_users() as string, icon: Users as AnyIcon },
+    { href: `${base}/teams`, label: m.nav_teams() as string, icon: Building2 as AnyIcon },
+    { href: `${base}/admin/reports`, label: m.nav_reports() as string, icon: BarChart3 as AnyIcon },
+    { href: `${base}/admin/audit-log`, label: m.nav_audit_log() as string, icon: FileText as AnyIcon },
+    { href: `${base}/admin/sheet-sync`, label: m.nav_sheet_sync() as string, icon: RefreshCw as AnyIcon },
+    { href: `${base}/admin/settings`, label: m.nav_settings() as string, icon: Settings as AnyIcon },
   ]
 
   const sidebarSections = $derived([
@@ -156,10 +160,10 @@
       {#if widgetUser}
         <AccountWidget
           currentApp="heroes"
-          portalOrigin={data.portalOrigin}
+          portalOrigin=""
           user={widgetUser}
           appSwitcher={widgetAppSwitcher}
-          postLogoutRedirectUri={`${data.heroesOrigin.replace(/\/$/, '')}/logged-out`}
+          postLogoutRedirectUri={`${$page.url.origin}${base}/logged-out`}
         />
       {/if}
     {/snippet}
@@ -201,7 +205,7 @@
 
       <!-- Notifications -->
       <a
-        href="/notifications"
+        href="{base}/notifications"
         class="relative flex h-10 w-10 items-center justify-center rounded-full text-white/60 hover:bg-white/8 hover:text-white transition-colors"
         aria-label={m.nav_notifications()}
       >
@@ -217,10 +221,10 @@
       {#if widgetUser}
         <AccountWidget
           currentApp="heroes"
-          portalOrigin={data.portalOrigin}
+          portalOrigin=""
           user={widgetUser}
           appSwitcher={widgetAppSwitcher}
-          postLogoutRedirectUri={`${data.heroesOrigin.replace(/\/$/, '')}/logged-out`}
+          postLogoutRedirectUri={`${$page.url.origin}${base}/logged-out`}
         />
       {/if}
     {/snippet}
@@ -256,10 +260,10 @@
 
   <MobileBottomNav
     items={[
-      { href: '/dashboard', label: m.nav_dashboard() as string, icon: LayoutDashboard as AnyIcon },
-      { href: '/points', label: m.nav_points() as string, icon: Award as AnyIcon },
-      { href: '/leaderboard', label: m.nav_leaderboard() as string, icon: Trophy as AnyIcon },
-      { href: '/rewards', label: m.nav_rewards() as string, icon: Gift as AnyIcon },
+      { href: `${base}/dashboard`, label: m.nav_dashboard() as string, icon: LayoutDashboard as AnyIcon },
+      { href: `${base}/points`, label: m.nav_points() as string, icon: Award as AnyIcon },
+      { href: `${base}/leaderboard`, label: m.nav_leaderboard() as string, icon: Trophy as AnyIcon },
+      { href: `${base}/rewards`, label: m.nav_rewards() as string, icon: Gift as AnyIcon },
     ]}
     currentPath={$page.url.pathname}
   />

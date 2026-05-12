@@ -8,7 +8,7 @@ variable "cloud_run_service_names" {
 }
 
 variable "cloud_run_url" {
-  description = "Public HTTPS URL of the canary Cloud Run service for uptime checks. Heroes-api owns /api/health; heroes-web does not expose a health endpoint."
+  description = "Public HTTPS URL of the canary Cloud Run service for uptime checks. Heroes-api owns /heroes/api/health; heroes-web does not expose a health endpoint."
   type        = string
 }
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths'
   import CategoryIcon from './CategoryIcon.svelte'
   import StatusBadge from './StatusBadge.svelte'
 
@@ -34,7 +35,7 @@
 </script>
 
 <a
-  href="/points/{id}"
+  href="{base}/points/{id}"
   class="tap-active flex items-center gap-3 rounded-2xl bg-card border border-border px-4 py-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)] group"
 >
   <CategoryIcon code={categoryCode} size="md" />

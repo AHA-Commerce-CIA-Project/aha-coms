@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button, Badge, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@coms-portal/ui-svelte/primitives'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
   import { buildSearchParams } from '$lib/utils'
   import { Shield, Search, ChevronLeft, ChevronRight } from 'lucide-svelte'
@@ -74,7 +75,7 @@
         endDate,
         actorId: actor,
       })
-      const res = await fetch(`/api/v1/audit-logs?${query}`, { credentials: 'include' })
+      const res = await fetch(`${base}/api/v1/audit-logs?${query}`, { credentials: 'include' })
       const json = await res.json()
       logs = (json.data ?? []) as AuditLog[]
       meta = json.meta ?? { total: 0, page: pg, limit: 50 }

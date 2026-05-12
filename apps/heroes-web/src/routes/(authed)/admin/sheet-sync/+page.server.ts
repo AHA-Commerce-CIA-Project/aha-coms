@@ -1,14 +1,15 @@
 import { redirect } from '@sveltejs/kit'
+import { base } from '$app/paths'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ locals, fetch }) => {
   if (locals.user?.role !== 'admin') {
-    redirect(302, '/dashboard')
+    redirect(302, `${base}/dashboard`)
   }
 
   const [statusRes, jobsRes] = await Promise.all([
-    fetch('/api/v1/sheet-sync/status'),
-    fetch('/api/v1/sheet-sync/jobs?limit=20'),
+    fetch(`${base}/api/v1/sheet-sync/status`),
+    fetch(`${base}/api/v1/sheet-sync/jobs?limit=20`),
   ])
 
   const statusJson = await statusRes.json()

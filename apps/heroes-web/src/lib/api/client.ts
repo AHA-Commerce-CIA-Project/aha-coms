@@ -11,10 +11,17 @@ type TreatyError = {
   }
 }
 
-/** Browser-side Eden Treaty client — same origin, cookies sent automatically */
+/**
+ * Browser-side Eden Treaty client — same origin, cookies sent automatically.
+ *
+ * Heroes-api lives under the `/heroes` constructor prefix (Spec 02 Phase 1 /
+ * T26), so the typed App roots every route under a leading `heroes` segment.
+ * Pre-traversing into that segment here keeps call sites tidy: consumers can
+ * still write `api.api.v1.users.get()` instead of `api.heroes.api.v1.users…`.
+ */
 export const api = treaty<App>('', {
   fetch: { credentials: 'include' },
-})
+}).heroes
 
 /** Extract data from an Eden response, throwing on error */
 export function unwrap<T>(

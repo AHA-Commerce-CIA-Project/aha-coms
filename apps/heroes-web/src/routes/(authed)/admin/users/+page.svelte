@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button, Badge, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@coms-portal/ui-svelte/primitives'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
   import { buildSearchParams } from '$lib/utils'
   import { Search, Plus, User, Pencil, Archive, ChevronLeft, ChevronRight } from 'lucide-svelte'
@@ -56,7 +57,7 @@
         role: r,
         isActive: a !== '' ? a : null,
       })
-      const res = await fetch(`/api/v1/users?${query}`, { credentials: 'include' })
+      const res = await fetch(`${base}/api/v1/users?${query}`, { credentials: 'include' })
       const json = await res.json()
       users = (json.data ?? []) as UserRow[]
       meta = json.meta ?? { total: 0, page: p, limit: 20 }
@@ -101,7 +102,7 @@
       </div>
     </div>
     <Button
-      href="/admin/users/new"
+      href="{base}/admin/users/new"
       class="h-9 shrink-0 rounded-xl px-4 font-semibold shadow-[var(--shadow-card)] bg-gradient-to-br from-primary to-sky-blue text-white"
     >
       <Plus class="h-4 w-4" />
@@ -188,7 +189,7 @@
           {#each users as user (user.id)}
             <TableRow class="border-b border-border/50 transition-colors hover:bg-muted/40">
               <TableCell>
-                <a href="/admin/users/{user.id}" class="flex items-center gap-3">
+                <a href="{base}/admin/users/{user.id}" class="flex items-center gap-3">
                   <div
                     class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
                   >
@@ -220,7 +221,7 @@
               <TableCell>
                 <div class="flex items-center gap-1">
                   <a
-                    href="/admin/users/{user.id}"
+                    href="{base}/admin/users/{user.id}"
                     class="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-primary/8 hover:text-primary"
                     aria-label={m.common_edit()}
                   >

@@ -243,7 +243,7 @@ resource "google_cloud_run_v2_service" "coms_heroes_api" {
 
       startup_probe {
         http_get {
-          path = "/api/healthz"
+          path = "/heroes/api/healthz"
         }
         initial_delay_seconds = 0
         period_seconds        = 5
@@ -253,7 +253,7 @@ resource "google_cloud_run_v2_service" "coms_heroes_api" {
 
       liveness_probe {
         http_get {
-          path = "/api/healthz"
+          path = "/heroes/api/healthz"
         }
         period_seconds    = 30
         failure_threshold = 5

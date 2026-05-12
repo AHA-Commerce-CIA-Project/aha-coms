@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
+  import { base } from '$app/paths'
   import { Button, Badge } from '@coms-portal/ui-svelte/primitives'
   import { api } from '$lib/api/client'
   import { getErrorMessage } from '$lib/api/client'
@@ -28,7 +29,7 @@
         return
       }
       success = true
-      setTimeout(() => goto('/redemptions'), 1800)
+      setTimeout(() => goto(`${base}/redemptions`), 1800)
     } catch (e) {
       error = e instanceof Error ? e.message : m.common_something_wrong()
     } finally {
@@ -41,7 +42,7 @@
   <!-- Back nav -->
   <div class="flex items-center gap-2">
     <a
-      href="/rewards"
+      href="{base}/rewards"
       class="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-primary/8 hover:text-primary"
       aria-label={m.common_previous()}
     >
@@ -116,7 +117,7 @@
         {/if}
 
         <div class="flex gap-3">
-          <Button variant="outline" href="/rewards" class="flex-1 rounded-xl">
+          <Button variant="outline" href="{base}/rewards" class="flex-1 rounded-xl">
             {m.common_cancel()}
           </Button>
           <Button

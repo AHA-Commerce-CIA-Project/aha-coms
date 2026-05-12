@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Star, Award, AlertTriangle, ChevronRight } from 'lucide-svelte'
+  import { base } from '$app/paths'
   import { userState } from '$lib/state/userState.svelte'
   import * as m from '$lib/paraglide/messages'
   import SummaryCard from '$lib/components/dashboard/SummaryCard.svelte'
@@ -62,7 +63,7 @@
           value={summary.bintangCount}
           IconComponent={Star}
           variant="gold"
-          href="/points?category=BINTANG"
+          href="{base}/points?category=BINTANG"
         />
       </div>
       <div class="min-w-[140px] snap-start shrink-0 md:min-w-0 md:shrink">
@@ -71,7 +72,7 @@
           value={summary.poinAhaBalance}
           IconComponent={Award}
           variant="blue"
-          href="/points?category=POIN_AHA"
+          href="{base}/points?category=POIN_AHA"
         />
       </div>
       <div class="min-w-[140px] snap-start shrink-0 md:min-w-0 md:shrink">
@@ -80,7 +81,7 @@
           value={summary.penaltiCount}
           IconComponent={AlertTriangle}
           variant="red"
-          href="/points?category=PENALTI"
+          href="{base}/points?category=PENALTI"
         />
       </div>
     </div>
@@ -103,7 +104,7 @@
             {m.dashboard_recent_activity()}
           </h2>
           <a
-            href="/points"
+            href="{base}/points"
             class="text-xs font-semibold text-primary hover:underline flex items-center gap-0.5"
           >
             {m.mini_leaderboard_view_all()}

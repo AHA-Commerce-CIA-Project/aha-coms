@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
+  import { base } from '$app/paths'
   import { toast } from 'svelte-sonner'
   import { api } from '$lib/api/client'
   import { uploadScreenshot } from '$lib/api/uploads'
@@ -73,7 +74,7 @@
         return
       }
       toast.success(m.poin_aha_form_submit())
-      goto('/points')
+      goto(`${base}/points`)
     } catch (err) {
       error = err instanceof Error ? err.message : m.form_error_submission_failed()
     } finally {
@@ -87,7 +88,7 @@
   <div class="bg-primary-dark px-4 pt-5 pb-6">
     <div class="max-w-lg mx-auto">
       <div class="flex items-center gap-1.5 text-white/60 text-xs font-medium mb-3">
-        <a href="/points" class="hover:text-white/80 transition-colors">Poin</a>
+        <a href="{base}/points" class="hover:text-white/80 transition-colors">Poin</a>
         <ChevronRight class="w-3 h-3" />
         <span class="text-white/90">Catat Poin AHA</span>
       </div>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Bell } from 'lucide-svelte'
+  import { base } from '$app/paths'
 
   let { unreadCount = 0 }: { unreadCount?: number } = $props()
 
@@ -7,7 +8,7 @@
 </script>
 
 <a
-  href="/notifications"
+  href="{base}/notifications"
   class="relative flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-primary/8 hover:text-primary transition-colors"
   aria-label="Notifications"
 >

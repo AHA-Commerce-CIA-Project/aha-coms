@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Star, Award, AlertTriangle, Plus, X } from 'lucide-svelte'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
 
   let { role = '' }: { role?: string } = $props()
@@ -20,7 +21,7 @@
 <div class="fixed bottom-20 right-4 z-40 flex flex-col-reverse items-end gap-2 md:hidden">
   {#if open}
     <a
-      href="/points/new/bintang"
+      href="{base}/points/new/bintang"
       onclick={() => (open = false)}
       class="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold shadow-xl min-h-[44px]
         btn-gradient-gold text-gold-dark
@@ -30,7 +31,7 @@
       {m.quick_action_bintang()}
     </a>
     <a
-      href="/points/new/poin-aha"
+      href="{base}/points/new/poin-aha"
       onclick={() => (open = false)}
       class="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold shadow-xl min-h-[44px]
         btn-gradient-blue text-white
@@ -41,7 +42,7 @@
     </a>
     {#if showPenalti}
       <a
-        href="/points/new/penalti"
+        href="{base}/points/new/penalti"
         onclick={() => (open = false)}
         class="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold shadow-xl min-h-[44px]
           btn-gradient-red text-white
@@ -73,7 +74,7 @@
 <!-- Desktop row — hidden on mobile -->
 <div class="hidden md:flex gap-3">
   <a
-    href="/points/new/bintang"
+    href="{base}/points/new/bintang"
     class="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold shadow-sm min-h-[44px] shine-on-hover
       btn-gradient-gold text-gold-dark"
   >
@@ -81,7 +82,7 @@
     {m.quick_action_bintang()}
   </a>
   <a
-    href="/points/new/poin-aha"
+    href="{base}/points/new/poin-aha"
     class="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold shadow-sm min-h-[44px] shine-on-hover
       btn-gradient-blue text-white"
   >
@@ -90,7 +91,7 @@
   </a>
   {#if showPenalti}
     <a
-      href="/points/new/penalti"
+      href="{base}/points/new/penalti"
       class="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold shadow-sm min-h-[44px] shine-on-hover
         btn-gradient-red text-white"
     >

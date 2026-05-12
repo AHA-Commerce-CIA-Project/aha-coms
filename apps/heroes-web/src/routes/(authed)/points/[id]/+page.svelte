@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths'
   import CategoryIcon from '$lib/components/points/CategoryIcon.svelte'
   import StatusBadge from '$lib/components/points/StatusBadge.svelte'
   import PointActions from '$lib/components/points/PointActions.svelte'
@@ -42,7 +43,7 @@
   <div
     class="sticky top-0 z-10 bg-card/90 backdrop-blur-md px-4 py-3 border-b border-border flex items-center gap-3"
   >
-    <a href="/points">
+    <a href="{base}/points">
       <button
         type="button"
         class="h-9 w-9 rounded-full flex items-center justify-center hover:bg-primary/8 hover:text-primary transition-colors"
@@ -55,7 +56,7 @@
       <div
         class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60"
       >
-        <a href="/points" class="hover:text-primary transition-colors">{m.nav_points()}</a>
+        <a href="{base}/points" class="hover:text-primary transition-colors">{m.nav_points()}</a>
         <span>/</span>
         <span>{m.point_detail_title()}</span>
       </div>

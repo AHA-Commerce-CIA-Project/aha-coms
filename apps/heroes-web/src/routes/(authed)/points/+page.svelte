@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
+  import { base } from '$app/paths'
   import { page } from '$app/stores'
   import { userState } from '$lib/state/userState.svelte'
   import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from '@coms-portal/ui-svelte/primitives'
@@ -39,7 +40,7 @@
       },
       $page.url.searchParams,
     )
-    goto(`/points?${query}`)
+    goto(`${base}/points?${query}`)
   }
 
   function handleStatusChange(e: Event) {
@@ -51,7 +52,7 @@
       },
       $page.url.searchParams,
     )
-    goto(`/points?${query}`)
+    goto(`${base}/points?${query}`)
   }
 
   const totalPages = $derived(data.meta ? Math.ceil(data.meta.total / data.meta.limit) : 1)
@@ -136,7 +137,7 @@
         size="sm"
         class="rounded-xl border-border hover:bg-primary/6 hover:text-primary min-h-[36px]"
         disabled={currentPage <= 1}
-        href="/points?page={currentPage - 1}{activeStatus ? `&status=${activeStatus}` : ''}{activeCategory !== 'ALL' ? `&category=${activeCategory}` : ''}"
+        href="{base}/points?page={currentPage - 1}{activeStatus ? `&status=${activeStatus}` : ''}{activeCategory !== 'ALL' ? `&category=${activeCategory}` : ''}"
       >
         {m.common_previous()}
       </Button>
@@ -148,7 +149,7 @@
         size="sm"
         class="rounded-xl border-border hover:bg-primary/6 hover:text-primary min-h-[36px]"
         disabled={currentPage >= totalPages}
-        href="/points?page={currentPage + 1}{activeStatus ? `&status=${activeStatus}` : ''}{activeCategory !== 'ALL' ? `&category=${activeCategory}` : ''}"
+        href="{base}/points?page={currentPage + 1}{activeStatus ? `&status=${activeStatus}` : ''}{activeCategory !== 'ALL' ? `&category=${activeCategory}` : ''}"
       >
         {m.common_next()}
       </Button>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from '@coms-portal/ui-svelte/primitives'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
   import { goto } from '$app/navigation'
   import {
@@ -86,7 +87,7 @@
   async function loadPage(newPage: number) {
     isLoading = true
     try {
-      const res = await fetch(`/api/v1/notifications?page=${newPage}&limit=20`, {
+      const res = await fetch(`${base}/api/v1/notifications?page=${newPage}&limit=20`, {
         credentials: 'include',
       })
       const json = await res.json()
@@ -99,20 +100,20 @@
   }
 
   async function markAllRead() {
-    await fetch('/api/v1/notifications/read-all', { method: 'PATCH', credentials: 'include' })
+    await fetch(`${base}/api/v1/notifications/read-all`, { method: 'PATCH', credentials: 'include' })
     notifications = notifications.map((n) => ({ ...n, isRead: true }))
   }
 
   async function handleItemClick(notif: NotificationRow) {
     if (!notif.isRead) {
-      await fetch(`/api/v1/notifications/${notif.id}/read`, {
+      await fetch(`${base}/api/v1/notifications/${notif.id}/read`, {
         method: 'PATCH',
         credentials: 'include',
       })
       notifications = notifications.map((n) => (n.id === notif.id ? { ...n, isRead: true } : n))
     }
     if (notif.entityType === 'achievement_points' && notif.entityId) {
-      goto(`/points/${notif.entityId}`)
+      goto(`${base}/points/${notif.entityId}`)
     }
   }
 </script>

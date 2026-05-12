@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from '@coms-portal/ui-svelte/primitives'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
   import { Settings, AlertTriangle, Save, Globe, Tag } from 'lucide-svelte'
 
@@ -37,13 +38,13 @@
     saveSuccess = false
     try {
       await Promise.all([
-        fetch('/api/v1/settings', {
+        fetch(`${base}/api/v1/settings`, {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: 'bintang_impact', value: bintangImpact }),
         }),
-        fetch('/api/v1/settings', {
+        fetch(`${base}/api/v1/settings`, {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },

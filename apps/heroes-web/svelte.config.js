@@ -4,6 +4,9 @@ import adapter from 'svelte-adapter-bun'
 const config = {
   kit: {
     adapter: adapter(),
+    paths: {
+      base: '/heroes',
+    },
     alias: {
       '$lib': './src/lib',
       '$lib/*': './src/lib/*',

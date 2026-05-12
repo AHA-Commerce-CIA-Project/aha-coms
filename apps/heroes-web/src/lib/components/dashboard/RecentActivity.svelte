@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
 
   export type ActivityItem = {
@@ -71,7 +72,7 @@
       {@const prefix = item.categoryCode.toUpperCase().includes('PENALTI') ? '-' : '+'}
       <li class="stagger-item" style="animation-delay: {i * 40}ms">
         <a
-          href="/points/{item.id}"
+          href="{base}/points/{item.id}"
           class="tap-active flex items-center gap-3 rounded-2xl bg-card border border-border p-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-card-hover)] group"
         >
           <!-- Avatar -->

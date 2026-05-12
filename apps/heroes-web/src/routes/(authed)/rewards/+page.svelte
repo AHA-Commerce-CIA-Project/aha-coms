@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button, Badge } from '@coms-portal/ui-svelte/primitives'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
   import { userState } from '$lib/state/userState.svelte'
   import { Gift, Coins, Plus } from 'lucide-svelte'
@@ -102,7 +103,7 @@
               </Badge>
               {#if reward.isActive}
                 <Button
-                  href="/rewards/{reward.id}/redeem"
+                  href="{base}/rewards/{reward.id}/redeem"
                   size="sm"
                   class="h-7 rounded-xl px-3 text-xs font-bold"
                 >

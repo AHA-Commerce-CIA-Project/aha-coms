@@ -450,13 +450,13 @@ Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-6`.
 
 Spec ref: `docs/spec/02-heroes-cleanup.md#phase-1`. ADR 0003.
 
-- [ ] **T24: Configure `kit.paths.base: '/heroes'` in heroes-web**
+- [x] **T24: Configure `kit.paths.base: '/heroes'` in heroes-web**
   - **Prerequisites:** Checkpoint 5
   - **File:** `apps/heroes-web/svelte.config.js`
   - **Acceptance:** SvelteKit config sets base path; `bun --filter @coms-portal/heroes-web build` still succeeds.
   - **Carry-over from CP4 Finding 1:** after this and T26 land, re-run `register:heroes` against prod with single-origin URLs so the HEROES card launches stay on `aha-coms.web.app` instead of bouncing to heroes-web's `*.run.app` host. Runbook in the script's JSDoc; the relevant override block is `HEROES_APP_URL=https://aha-coms.web.app/heroes` + `HEROES_WEBHOOK_URL=https://aha-coms.web.app/heroes/api/webhooks/portal` (other env vars unchanged from the 2026-05-12 run). After this update, the `__session` cookie travels on the HEROES card click without needing the multi-origin exchange dance.
 
-- [ ] **T25: Audit heroes-web internal links for base-path compliance**
+- [x] **T25: Audit heroes-web internal links for base-path compliance**
   - **Prerequisites:** T24
   - **Steps:**
     - Grep `href="/[a-z]` and review each match.
@@ -464,26 +464,34 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-1`. ADR 0003.
     - Verify form actions, redirects, asset URLs.
   - **Acceptance:** No literal absolute paths inside heroes-web routes; everything uses framework helpers.
 
-- [ ] **T26: Update heroes-api Elysia router for `/heroes/api` prefix**
+- [x] **T26: Update heroes-api Elysia router for `/heroes/api` prefix**
   - **Prerequisites:** T24
   - **File:** `apps/heroes-api/src/index.ts` (or main entry)
   - **Acceptance:** All routes prefixed; healthcheck reachable at `/heroes/api/healthz`.
+  - **Resolution:** Lifted the prefix onto the Elysia constructor (`new Elysia({ prefix: '/heroes' })`) rather than nesting another `.group('/heroes', …)`. Same routing outcome, identical eden traversal shape, no per-route churn. The dead SvelteKit-handler fallback below the API group is unaffected — heroes-api in production never resolves it (the runtime image has no `apps/heroes-web/build/`), so the `app.all('/*', …)` block now silently bound to `/heroes/*` instead of `/*` doesn't move any bytes.
+  - **Infra carry:** Cloud Run probes for `coms-heroes-api` hit the service URL directly (not through Firebase), so the path migration must reach Tofu before the next deploy or the new revision fails its startup probe and never gets traffic. Updated three places to `/heroes/api/healthz` (probes) + `/heroes/api/health` (uptime check) + the trailing comment: `infra/heroes/cloud-run.tf`, `infra/heroes/modules/monitoring/main.tf`, `infra/heroes/modules/monitoring/variables.tf`, plus the prose touch in `infra/heroes/main.tf`. Apply order at T30: `tofu apply` in `infra/heroes/` BEFORE the GHA deploy lands the new revision.
 
-- [ ] **T27: Update heroes-web eden client config for new API base path**
+- [x] **T27: Update heroes-web eden client config for new API base path**
   - **Prerequisites:** T26
   - **Acceptance:** API calls from heroes-web reach `/heroes/api/*`.
+  - **Resolution:** Elysia's `prefix: '/heroes'` constructor option (T26) wrapped the typed `App.~Routes` with a leading `heroes` segment (Elysia's `CreateEden<BasePath, Routes>` rule). Rather than touching ~16 call sites, `src/lib/api/client.ts` now pre-traverses into that segment: `export const api = treaty<App>('', { fetch: { credentials: 'include' } }).heroes`. Every existing `api.api.v1.*` call site keeps its shape and silently resolves to `/heroes/api/v1/*`. Treaty domain stays `''` for same-origin browser fetches.
 
-- [ ] **T28: Update Firebase Hosting rewrites for `/heroes/api/**`**
+- [x] **T28: Update Firebase Hosting rewrites for `/heroes/api/**`**
   - **Prerequisites:** T26
   - **Acceptance:** `firebase.json` rewrites include the api path.
+  - **Resolution:** No-op edit — the `/heroes/api/**` → `coms-heroes-api` rewrite has lived in `firebase.json` since T18 (CP4); the ordering above the `/heroes/**` → `coms-heroes-web` rule guarantees api requests never fall through to the web service. The probe script's CP4 verification already exercised this path. Confirmed in place; nothing to land.
 
-- [ ] **T29: Update heroes' `(authed)/+layout.svelte`**
+- [x] **T29: Update heroes' `(authed)/+layout.svelte`**
   - **Prerequisites:** T24, T25
   - **Steps:**
     - Remove `data.portalOrigin` and `data.heroesOrigin` usage.
     - `serviceBarServices` derived from `APP_LAUNCHER × user.apps`, path-relative hrefs.
     - `postLogoutRedirectUri` path-relative.
   - **Acceptance:** Layout has no `portalOrigin`/`heroesOrigin` references.
+  - **Notes:**
+    - `serviceBarServices` is hardcoded to `[{ slug: 'portal', label: 'COMS', href: '/' }, { slug: 'heroes', label: 'Heroes' }]` for now. Generalising via `APP_LAUNCHER × user.apps` is Phase 4 / T40 — pulling that derivation into the chrome lib is the goal; doing it app-side here would just move the work I'd later relocate.
+    - `postLogoutRedirectUri` lands at `${$page.url.origin}${base}/logged-out`, not the spec's literal "path-relative `/logged-out`". The portal's `validatePostLogoutRedirectUri` (`apps/portal-api/src/routes/auth.ts:99`) demands a parseable absolute URL whose origin matches an `app_registry.url` entry — a bare path fails the `new URL(uri)` step and the validator returns null ("not allowlisted"). Anchoring on `$page.url.origin` keeps the value origin-correct on both SSR and the client without re-introducing `data.heroesOrigin`. Logged as a Phase 1 spec-drift note for the next rev sweep — the spec assumed portal would accept bare paths, which it does not.
+    - `AccountWidget`'s `portalOrigin: string` prop remains a required interface; passing `""` collapses the widget's nav helper to `'/api/auth/logout'`, which is what we want for same-origin. Removing the prop entirely is widget-side work, slotted alongside T40.
 
 - [ ] **T30: Verify heroes lives at `/heroes/*` end-to-end**
   - **Prerequisites:** T24–T29

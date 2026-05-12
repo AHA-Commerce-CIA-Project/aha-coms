@@ -1,15 +1,16 @@
 import { redirect } from '@sveltejs/kit'
+import { base } from '$app/paths'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ locals, fetch, url }) => {
   if (locals.user?.role !== 'admin') {
-    redirect(302, '/dashboard')
+    redirect(302, `${base}/dashboard`)
   }
 
   const page = url.searchParams.get('page') ?? '1'
   const limit = '50'
 
-  const res = await fetch(`/api/v1/audit-logs?page=${page}&limit=${limit}`)
+  const res = await fetch(`${base}/api/v1/audit-logs?page=${page}&limit=${limit}`)
   const json = await res.json()
 
   return {

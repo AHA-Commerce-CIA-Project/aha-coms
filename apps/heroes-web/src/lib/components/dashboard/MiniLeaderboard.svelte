@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ChevronRight, Crown, Trophy } from 'lucide-svelte'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
 
   type LeaderboardEntry = {
@@ -50,7 +51,7 @@
       <h3 class="text-sm font-bold text-foreground">{m.mini_leaderboard_title()}</h3>
     </div>
     <a
-      href="/leaderboard"
+      href="{base}/leaderboard"
       class="group flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/8 transition-colors"
     >
       {m.mini_leaderboard_view_all()}

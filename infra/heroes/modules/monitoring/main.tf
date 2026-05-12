@@ -22,12 +22,12 @@ resource "google_monitoring_notification_channel" "email" {
 
 resource "google_monitoring_uptime_check_config" "health" {
   project      = var.project_id
-  display_name = "AHA Heroes — /api/health"
+  display_name = "AHA Heroes — /heroes/api/health"
   timeout      = "10s"
   period       = "300s" # every 5 minutes
 
   http_check {
-    path         = "/api/health"
+    path         = "/heroes/api/health"
     port         = 443
     use_ssl      = true
     validate_ssl = true

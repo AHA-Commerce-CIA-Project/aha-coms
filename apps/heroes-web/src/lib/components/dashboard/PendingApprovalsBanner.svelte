@@ -1,12 +1,13 @@
 <script lang="ts">
   import { Clock, ChevronRight } from 'lucide-svelte'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
 
   let { count }: { count: number } = $props()
 </script>
 
 <a
-  href="/points?status=pending"
+  href="{base}/points?status=pending"
   class="group flex items-center justify-between rounded-xl bg-card border border-gold/30 px-4 py-3 shadow-[var(--shadow-glow-gold)] hover:shadow-[var(--shadow-card-hover)] hover:border-gold/60 transition-all duration-200"
 >
   <span class="flex items-center gap-2.5 text-sm font-semibold text-foreground">

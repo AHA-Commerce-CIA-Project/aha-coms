@@ -31,7 +31,7 @@ module "monitoring" {
     google_cloud_run_v2_service.coms_heroes_api.name,
     google_cloud_run_v2_service.coms_heroes_web.name,
   ]
-  # Uptime check targets the api — heroes-web does not expose /api/health.
+  # Uptime check targets the api — heroes-web does not expose /heroes/api/health.
   cloud_run_url           = google_cloud_run_v2_service.coms_heroes_api.uri
   cloud_sql_instance_name = module.cloud_sql.instance_name
   alert_email             = var.alert_email

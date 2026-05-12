@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Badge } from '@coms-portal/ui-svelte/primitives'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
   import { ArrowLeft, User, Star } from 'lucide-svelte'
 
@@ -31,7 +32,7 @@
   <!-- Back + Header -->
   <div class="mb-6 flex items-center gap-3">
     <a
-      href="/admin/users"
+      href="{base}/admin/users"
       class="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-primary/8 hover:text-primary"
     >
       <ArrowLeft class="h-5 w-5" />

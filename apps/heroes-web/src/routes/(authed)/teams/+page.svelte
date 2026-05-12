@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Card, CardHeader, CardTitle, CardContent, Button } from '@coms-portal/ui-svelte/primitives'
+  import { base } from '$app/paths'
   import { userState } from '$lib/state/userState.svelte'
   import * as m from '$lib/paraglide/messages'
   import { Search, Plus, Users, Crown, ChevronDown, ChevronUp, Pencil } from 'lucide-svelte'
@@ -38,7 +39,7 @@
     isLoading = true
     try {
       const q = s ? `?search=${encodeURIComponent(s)}&limit=100` : '?limit=100'
-      const res = await fetch(`/api/v1/teams${q}`, { credentials: 'include' })
+      const res = await fetch(`${base}/api/v1/teams${q}`, { credentials: 'include' })
       const json = await res.json()
       teams = (json.data ?? []) as TeamRow[]
       meta = json.meta ?? { total: 0 }
@@ -61,7 +62,7 @@
     loadingMembers = true
     expandedTeamId = teamId
     try {
-      const res = await fetch(`/api/v1/teams/${teamId}`, { credentials: 'include' })
+      const res = await fetch(`${base}/api/v1/teams/${teamId}`, { credentials: 'include' })
       const json = await res.json()
       expandedMembers = (json.data?.members ?? []) as TeamMember[]
     } finally {

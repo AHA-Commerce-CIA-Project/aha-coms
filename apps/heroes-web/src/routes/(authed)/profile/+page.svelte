@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from '@coms-portal/ui-svelte/primitives'
+  import { base } from '$app/paths'
   import { userState } from '$lib/state/userState.svelte'
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte'
   import * as m from '$lib/paraglide/messages'
@@ -177,7 +178,7 @@
     <!-- Action list -->
     <div class="space-y-2.5">
       <a
-        href="/change-password"
+        href="{base}/change-password"
         class="flex min-h-[52px] w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 text-sm font-semibold text-foreground shadow-card transition-colors hover:bg-primary/4"
       >
         <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">

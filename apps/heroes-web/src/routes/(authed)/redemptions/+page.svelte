@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Badge, Button } from '@coms-portal/ui-svelte/primitives'
+  import { base } from '$app/paths'
   import { userState } from '$lib/state/userState.svelte'
   import { api } from '$lib/api/client'
   import * as m from '$lib/paraglide/messages'
@@ -57,7 +58,7 @@
     isLoading = true
     try {
       const params = tab === 'mine' ? '?mine=true' : '?status=pending'
-      const res = await fetch(`/api/v1/redemptions${params}`, { credentials: 'include' })
+      const res = await fetch(`${base}/api/v1/redemptions${params}`, { credentials: 'include' })
       const json = await res.json()
       redemptions = (json.data ?? []) as RedemptionRow[]
     } finally {

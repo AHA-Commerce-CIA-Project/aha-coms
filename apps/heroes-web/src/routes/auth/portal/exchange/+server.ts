@@ -1,4 +1,5 @@
 import { error, redirect } from '@sveltejs/kit'
+import { base } from '$app/paths'
 import {
   PORTAL_SESSION_COOKIE,
   PortalSessionDeniedError,
@@ -8,7 +9,7 @@ import { PortalBrokerError, exchangePortalCode } from '$lib/server/portal-broker
 import type { RequestHandler } from './$types'
 
 function safeRedirect(raw: string | null | undefined): string {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/dashboard'
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return `${base}/dashboard`
   return raw
 }
 

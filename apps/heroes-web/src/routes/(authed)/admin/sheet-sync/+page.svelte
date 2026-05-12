@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button, Badge, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@coms-portal/ui-svelte/primitives'
+  import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
   import {
     RefreshCw,
@@ -56,8 +57,8 @@
     isLoading = true
     try {
       const [statusRes, jobsRes] = await Promise.all([
-        fetch('/api/v1/sheet-sync/status', { credentials: 'include' }),
-        fetch(`/api/v1/sheet-sync/jobs?limit=20&page=${newPage}`, { credentials: 'include' }),
+        fetch(`${base}/api/v1/sheet-sync/status`, { credentials: 'include' }),
+        fetch(`${base}/api/v1/sheet-sync/jobs?limit=20&page=${newPage}`, { credentials: 'include' }),
       ])
       const statusJson = await statusRes.json()
       const jobsJson = await jobsRes.json()
@@ -75,7 +76,7 @@
     syncSuccess = false
     isTriggeringSync = true
     try {
-      const res = await fetch('/api/v1/sheet-sync/trigger', {
+      const res = await fetch(`${base}/api/v1/sheet-sync/trigger`, {
         method: 'POST',
         credentials: 'include',
       })
@@ -99,7 +100,7 @@
     syncError = null
     isTriggeringResync = true
     try {
-      const res = await fetch('/api/v1/sheet-sync/resync', {
+      const res = await fetch(`${base}/api/v1/sheet-sync/resync`, {
         method: 'POST',
         credentials: 'include',
       })

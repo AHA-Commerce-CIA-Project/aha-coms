@@ -1,12 +1,13 @@
 import { redirect, error } from '@sveltejs/kit'
+import { base } from '$app/paths'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ locals, fetch, params }) => {
   if (locals.user?.role !== 'admin' && locals.user?.role !== 'hr') {
-    redirect(302, '/dashboard')
+    redirect(302, `${base}/dashboard`)
   }
 
-  const res = await fetch(`/api/v1/users/${params.id}`)
+  const res = await fetch(`${base}/api/v1/users/${params.id}`)
 
   if (res.status === 404) {
     error(404, 'User not found')
