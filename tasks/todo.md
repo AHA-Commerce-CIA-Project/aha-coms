@@ -1,6 +1,6 @@
 # Task List: Monorepo Consolidation + Heroes Cleanup
 
-> Last updated: 2026-05-12 (Checkpoint 4 crossed; CP4 Findings settled; FU-1 + FU-2 prod-applied + dashboard-verified — HEROES card flipped green at 08:05:23 UTC; FU-3 closed — db:migrate step proven live in run `25723239066`; FU-4 closed — `infra/README.md` runbook written. All four cross-cutting follow-ups settled. Next: Phase 6 (T21–T23).)
+> Last updated: 2026-05-12 (Phase 6 sealed — T21 + T22 archived all six external repos; T23 rewrote five in-tree `repository.url` fields to point at `mrdoorba/aha-coms` with `directory` qualifiers. Checkpoint 5 crossed; Spec 01 complete. One Phase 6 finding tracked: doc rot in `DESIGN_SYSTEM.md` + package-level READMEs/CONTRIBUTINGs still describes the polyrepo workflow against now-archived repos — surfaced for a follow-up sweep, not blocking Spec 02.)
 > Sibling: `tasks/plan.md` (read first for context, dependency graph, and session-handoff protocol)
 > Source specs: `docs/spec/01-monorepo-consolidation.md`, `docs/spec/02-heroes-cleanup.md`
 
@@ -413,22 +413,32 @@ These are not on the phase track and not gated by any checkpoint. FU-1 + FU-2 su
 
 Spec ref: `docs/spec/01-monorepo-consolidation.md#phase-6`.
 
-- [ ] **T21: Archive the 5 external lib repos on GitHub**
+- [x] **T21: Archive the 5 external lib repos on GitHub**
   - **Prerequisites:** Checkpoint 4
   - **Repos:** coms-sdk, coms-shared, coms-ui, coms-design-tokens, coms-account-widget
   - **Steps:** `gh repo archive mrdoorba/<repo-name>` per repo.
   - **Acceptance:** Each repo shows "archived" banner on GitHub.
+  - **Done 2026-05-12:** Ran `gh repo archive mrdoorba/<repo> --yes` for all five non-interactively. Verified post-archive via `gh api repos/mrdoorba/<repo> --jq .archived` — all five report `true`. The subtree-merged sources remain in-tree under `packages/{sdk,shared,ui-svelte,design-tokens,account-widget-svelte}/`; the archived remotes are now read-only history, exactly the shape Phase 6 prescribed.
 
-- [ ] **T22: Archive `coms_aha_heroes` repo on GitHub**
+- [x] **T22: Archive `coms-aha-heroes` repo on GitHub**
   - **Prerequisites:** Checkpoint 4
-  - **Steps:** `gh repo archive mrdoorba/coms_aha_heroes`.
+  - **Steps:** `gh repo archive mrdoorba/coms-aha-heroes`.
+  - **Naming correction:** The GitHub repo is `coms-aha-heroes` (hyphenated), not `coms_aha_heroes` (underscored) as written everywhere prior. The underscore lives only on the local checkout directory; the remote always used hyphens. The first archive attempt against `mrdoorba/coms_aha_heroes` returned 404, surfaced the mismatch, and the hyphenated form succeeded immediately. Plan + todo updated to use the GitHub-truthful spelling going forward; on-disk dir keeps its underscore to avoid breaking the historical paths in subtree merge commits.
+  - **Done 2026-05-12:** `gh repo archive mrdoorba/coms-aha-heroes --yes` ran clean; `gh api repos/mrdoorba/coms-aha-heroes --jq .archived` returns `true`. The three non-main remote branches (`ci/parallelize-and-harden`, `ci/skip-redundant-build-and-docker-parallel`, `rev3/spec-01-02-adoption`) follow the repo into the archive — all read-only, exactly as agreed pre-T11.
 
-- [ ] **T23: Update `repository.url` in in-tree package.jsons**
+- [x] **T23: Update `repository.url` in in-tree package.jsons**
   - **Prerequisites:** T21, T22
   - **Steps:** Each in-tree package's `repository.url` should point at the aha-coms repo with optional `directory` field.
   - **Acceptance:** Grep returns no references to the archived lib/heroes repo URLs.
+  - **Done 2026-05-12:** Rewrote five `repository.url` fields — `packages/{ui-svelte,shared,design-tokens,sdk,account-widget-svelte}/package.json` — each now points at `https://github.com/mrdoorba/aha-coms.git` with the appropriate `"directory": "packages/<name>"` qualifier, matching the shape that `packages/ui-react` and `packages/account-widget-react` already carried (those two needed no edit — they were authored in-tree from the React stubs and already wore the mono shape). Verified `grep -rn 'mrdoorba/coms-\\(sdk\\|shared\\|ui\\|design-tokens\\|account-widget\\)\\.git' --include=package.json .` returns clean.
+  - **Finding (logged below as Phase 6 Finding 1, not blocking CP5):** the wider tree still carries stale references to the now-archived repo URLs in doc files — `DESIGN_SYSTEM.md` at the root describes the polyrepo workflow (clone-PR-tag-bump); per-package `README.md` / `CONTRIBUTING.md` quote install pins like `bun add git+https://github.com/mrdoorba/coms-ui.git#v1.0.0` and route contributors to PRs against repos that no longer accept PRs; `packages/sdk/MIGRATION.md` + `packages/sdk/examples/web-bundle-smoketest/` reference closed issue `mrdoorba/coms-sdk#1`. These docs pre-date the consolidation; the archived URLs still resolve (archived repos remain readable, just frozen) but the workflow they prescribe is no longer applicable. Out of T23's narrow `repository.url` scope; queued as a Phase 6 follow-up doc-sweep that the rev-3 consolidation effort can absorb when it next touches DESIGN_SYSTEM.md.
 
-- [ ] **CHECKPOINT 5**: Spec 01 complete. Consolidation done.
+- [x] **CHECKPOINT 5**: Spec 01 complete. Consolidation done.
+  - **Crossed 2026-05-12:** Six external repos archived (`coms-sdk`, `coms-shared`, `coms-ui`, `coms-design-tokens`, `coms-account-widget`, `coms-aha-heroes`), five `repository.url` fields rewritten to the mono shape. The polyrepo of seven Git remotes is now a single Bun workspace at `aha-coms/` with all source in-tree; the archived remotes are read-only history. Phase 6 Finding 1 (doc rot in `DESIGN_SYSTEM.md` + per-package READMEs/CONTRIBUTINGs) is real but non-blocking — the install pins it quotes still resolve, just against frozen repos. Spec 01 complete; Spec 02 (heroes integration cleanup) unblocked.
+
+#### Phase 6 Findings — track for follow-up doc-sweep
+
+1. **Doc rot referencing the now-archived polyrepo workflow.** `DESIGN_SYSTEM.md` at the repo root, `packages/{ui-svelte,design-tokens,account-widget-svelte}/CONTRIBUTING.md`, `packages/{ui-svelte,design-tokens,sdk,account-widget-svelte}/README.md`, `packages/sdk/MIGRATION.md`, and the smoketest README/test file in `packages/sdk/examples/web-bundle-smoketest/` all describe the old polyrepo path — clone the per-lib repo, branch, PR back, tag bump, consumer pin update. With those repos archived, the URLs still resolve but the prescribed workflow doesn't. None of this is load-bearing for the build (the install pins quoted in docs are illustrative, not consumed), so it is queued for a follow-up sweep rather than expanded into T23. The natural moment to fold it in is when the rev-3 consolidation effort next touches `DESIGN_SYSTEM.md` or when a new contributor's first PR exposes the rot in practice — at that point the sweep rewrites the workflow as "edit in-tree under `packages/<name>/`, open a PR against `aha-coms`."
 
 ---
 

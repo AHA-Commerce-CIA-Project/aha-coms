@@ -6,7 +6,8 @@
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mrdoorba/coms-design-tokens.git"
+    "url": "https://github.com/mrdoorba/aha-coms.git",
+    "directory": "packages/design-tokens"
   },
   "main": "./src/index.ts",
   "exports": {

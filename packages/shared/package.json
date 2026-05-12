@@ -6,7 +6,8 @@
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mrdoorba/coms-shared.git"
+    "url": "https://github.com/mrdoorba/aha-coms.git",
+    "directory": "packages/shared"
   },
   "files": [
     "src"

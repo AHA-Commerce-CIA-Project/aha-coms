@@ -6,7 +6,8 @@
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mrdoorba/coms-ui.git"
+    "url": "https://github.com/mrdoorba/aha-coms.git",
+    "directory": "packages/ui-svelte"
   },
   "main": "./src/index.ts",
   "exports": {
