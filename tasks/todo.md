@@ -609,7 +609,7 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-4`. ADR 0002.
 
 Spec ref: `docs/spec/02-heroes-cleanup.md#phase-5`.
 
-- [ ] **T44: Map `email_cache` + `userConfigCache` fields → JWT / keep / migrate**
+- [x] **T44: Map `email_cache` + `userConfigCache` fields → JWT / keep / migrate**
   - **Prerequisites:** Checkpoint 9
   - **Steps:**
     - List every field in `email_cache` and `userConfigCache`.
@@ -617,16 +617,52 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-5`.
     - Produce a decision matrix.
   - **Acceptance:** Decision per field documented.
 
-- [ ] **T45: Migrate JWT-eligible data into JWT claims**
-  - **Prerequisites:** T44
-  - **Steps:**
-    - If portal needs to issue new claims: SDK update + portal-api update.
-    - Heroes consumes claims instead of cache.
-  - **Acceptance:** heroes hooks.server.ts and middleware/auth.ts read claims for the migrated fields.
+  **Note on "JWT" terminology:** Spec 02 §22 was written assuming portal-issued JWT claims. T31 (CP6 verification window) established that portal's `__session` is an opaque UUID, not a JWT; the equivalent server-side contract is the `GET /api/userinfo` response shape that `loadHeroesAuthUser` reads (`packages/heroes-shared/src/auth/user.ts:44`). Treat "in JWT" in the rows below as "in the userinfo response heroes already receives, no portal change needed."
 
-- [ ] **T46: Reduce per-request 3-table JOIN to 1**
+  **Audit scope:** every field in the two cache tables plus every key actually read out of `user_config_cache.config` JSONB across `apps/heroes-api/src`, `apps/heroes-web/src`, `packages/heroes-shared/src`. Manifest-declared keys are listed even when no consumer reads them today.
+
+  **Decision matrix:**
+
+  | Field | Origin | Used at every authed request? | Decision | Why |
+  |---|---|---|---|---|
+  | `email_cache.contact_email` | webhook handler + opportunistic upsert in `loadHeroesAuthUser` | **NO** — `loadHeroesAuthUser` reads `info.email` straight from `/api/userinfo`; the table is read only by list-view repositories (audit-logs, leaderboard, redemptions, challenges, appeals, teams, comments, points — 7 list endpoints with `leftJoin(emailCache, …)`) | **KEEP** | Earns its keep as a denorm join target for list views. NOT on the auth path. Dropping it would force portal API calls per list row. |
+  | `email_cache.portal_sub` (PK), `email_cache.cached_at` | (key / audit) | n/a | **KEEP** | required for the column above |
+  | `user_config_cache.config.role` | webhook handler stores per-app config slice | **NO** — only read by two HR-discovery queries: `services/challenges.ts:90` and `services/appeals.ts:77` (`sql\`${userConfigCache.config}->>'role' = 'hr'\``) | **DROP** | Already duplicated in `heroes_profiles.role`, backfilled by migration `0013_colossal_wolfsbane.sql`. The two query sites rewrite to `eq(heroes_profiles.role, 'hr')` and the JOIN through `user_config_cache` disappears with no behavioural change. |
+  | `user_config_cache.config.canSubmitPoints` | webhook handler stores per-app config slice | **YES** — read in `loadHeroesAuthUser:165`, threaded into `AuthUser`, enforced in `services/points.ts:65` | **MIGRATE → `heroes_profiles.can_submit_points` (boolean, default false)** | Heroes-specific knob (only heroes knows what "submit points" means). Belongs on the heroes-owned table, not in portal's userinfo contract. Webhook handlers (`handle-user-provisioned`, `handle-app-config-updated`) write the column instead of `user_config_cache.config`. `loadHeroesAuthUser`'s 2-table JOIN collapses to a 1-table SELECT. |
+  | `user_config_cache.config.leaderboard_eligible` | manifest-declared (`apps/heroes-api/portal-manifest.ts:30`), webhook handler stores it | **NO** — `grep` for `leaderboard_eligible\|leaderboardEligible` across heroes src returns zero matches | **DROP from cache (write-side and read-side)** | Manifest declares it; no consumer reads it. Storing eagerly is dead weight. When a future feature wants it, add a column to `heroes_profiles` then — same pattern as `can_submit_points` migrating now. |
+  | `user_config_cache.config.starting_points` | manifest-declared (same file), webhook handler stores it | **NO** — `grep` for `starting_points\|startingPoints` across heroes src returns zero matches | **DROP from cache (write-side and read-side)** | Same logic as `leaderboard_eligible`. |
+  | `user_config_cache.schema_version`, `user_config_cache.cached_at` | (metadata) | NO | **DROP (with the table)** | trivia |
+
+  **Net outcome of T45 + T46 (sealing the matrix):**
+  - `user_config_cache` table dropped entirely (Spec 02 §22 alignment).
+  - `email_cache` retained — it's a list-view denorm, not an auth-path cache.
+  - `loadHeroesAuthUser` SELECT collapses from a `leftJoin(user_config_cache)` to a single read against `heroes_profiles`.
+  - Per-request auth-path table touches: was 2 (`heroes_profiles` ⋈ `user_config_cache`); becomes 1 (`heroes_profiles`).
+
+  **Two latent cracks surfaced during the audit (carry forward into T45):**
+  - The `userConfigCache.config->>'role' = 'hr'` query sites are stale post-migration `0013` — the role lives on `heroes_profiles.role` and queries should read it directly. This isn't strictly a T45 dependency, but the cache-drop work is the right window to fix it (otherwise the queries fail when the table drops).
+  - Heroes' manifest (`apps/heroes-api/portal-manifest.ts`) declares `leaderboard_eligible` + `starting_points` in its `configSchema`. Neither is read in code today. The manifest can shed both keys once T45 lands; left out of T44 scope to avoid bundling a portal-facing contract change with the heroes-internal cache cleanup.
+
+- [ ] **T45: Migrate `canSubmitPoints` to `heroes_profiles` and retire the user_config_cache reads**
+  - **Prerequisites:** T44 decision matrix above
+  - **Steps:**
+    - Migration: `ALTER TABLE heroes_profiles ADD COLUMN can_submit_points boolean NOT NULL DEFAULT false;`. Backfill from `user_config_cache.config->>'canSubmitPoints'` in the same migration (same shape as `0013_colossal_wolfsbane.sql` did for role).
+    - Update `envelopeToHeroesProfileRow` (`payload-projection.ts`) to project `appConfig?.config.canSubmitPoints` into the heroes_profiles row.
+    - Update `handle-user-provisioned` + `handle-app-config-updated` to upsert `heroes_profiles.can_submit_points` instead of (or alongside, during cutover) `user_config_cache.config`.
+    - Rewrite the two stale HR-lookup queries (`services/challenges.ts:90`, `services/appeals.ts:77`) from `userConfigCache.config->>'role'='hr'` to `eq(heroesProfiles.role, 'hr')`. Drop the `userConfigCache` import from both files.
+    - `loadHeroesAuthUser` (`packages/heroes-shared/src/auth/user.ts`) reads `can_submit_points` from `heroes_profiles` instead of joining `user_config_cache`.
+    - Update `apps/heroes-api/src/repositories/users.ts` (three call sites at :87, :131, :172) to read `heroes_profiles.can_submit_points` and drop the `user_config_cache` leftJoin.
+  - **Acceptance:** No code reads `userConfigCache` anywhere. `loadHeroesAuthUser` reads `can_submit_points` from `heroes_profiles`. Test suite green.
+
+- [ ] **T46: Drop the `user_config_cache` table**
   - **Prerequisites:** T45
-  - **Acceptance:** `loadHeroesAuthUser` queries only `heroes_profiles` on the common path.
+  - **Steps:**
+    - Drop the `userConfigCache` re-export and typebox schemas from `packages/heroes-shared/src/db/schema/index.ts` + `schemas/index.ts`.
+    - Delete `packages/heroes-shared/src/db/schema/user-config-cache.ts`.
+    - Drop the `userConfigCache` row from `packages/heroes-shared/scripts/generate-schemas.ts`.
+    - Hand-written migration `0017_drop_user_config_cache.sql` (`DROP TABLE IF EXISTS user_config_cache;` + rollback note).
+    - Apply order at deploy mirrors T36: heroes-api new revision deploys first (no code touches the table anymore), then operator runs `bun db:migrate`.
+  - **Acceptance:** `user_config_cache` table is gone; `loadHeroesAuthUser` queries only `heroes_profiles` on the common path.
 
 - [ ] **CHECKPOINT 10**: Auth-path query reduced.
 
