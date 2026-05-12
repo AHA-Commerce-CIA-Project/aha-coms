@@ -30,14 +30,22 @@ resource "google_secret_manager_secret_iam_member" "portal_runtime_gip_api_key" 
 # apps/portal-web/cloudbuild.yaml .`) bakes the API key into the portal-web
 # SSR bundle at build time. The hot deploy path is GHA — it authenticates
 # under coms-portal-github-actions and reads the secret as that SA — but the
-# Cloud Build yaml stays in tree as a one-off fallback, and the legacy default
-# Cloud Build SA needs the read grant for that fallback to work. Firebase web
-# config (auth domain, project id) is inlined as substitutions; only the API
-# key is fetched here.
+# Cloud Build yaml stays in tree as a one-off fallback, and the build SA
+# needs the read grant for that fallback to work. Firebase web config (auth
+# domain, project id) is inlined as substitutions; only the API key is
+# fetched here.
+#
+# Cloud Build runs builds under the Compute Engine default SA
+# (`<number>-compute@developer.gserviceaccount.com`) by default for projects
+# created after April 2024, not the legacy `cloudbuild.gserviceaccount.com`.
+# Verified empirically against build 8ee0c2cd: the legacy grant succeeded
+# but the build still failed PermissionDenied — `gcloud builds describe`
+# reported serviceAccount = `…-compute@developer`. The grant follows where
+# Cloud Build actually runs.
 resource "google_secret_manager_secret_iam_member" "cloud_build_gip_api_key" {
   secret_id = google_secret_manager_secret.gip_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
+  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
 }
 
 resource "google_secret_manager_secret_iam_member" "portal_runtime_broker_signing_secret" {
