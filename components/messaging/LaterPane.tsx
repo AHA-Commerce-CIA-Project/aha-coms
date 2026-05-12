@@ -106,9 +106,16 @@ interface LaterPaneProps {
   /** Callback when the user clicks a tab. The unified workspace updates the
    *  URL to ?later=<tab>; the standalone /later page updates to ?tab=<tab>. */
   onTabChange?: (tab: 'messages' | 'tasks') => void;
+  /** Hide the in-body tab row — used when the host already renders the tab
+   *  switcher in its own header (the unified /messages workspace lifts the
+   *  tabs into the right-column header to save vertical space). */
+  hideTabs?: boolean;
+  /** Report current item counts to the host so a lifted tab row can show
+   *  badges without re-fetching the same lists. */
+  onCountsChange?: (counts: { messages: number; tasks: number }) => void;
 }
 
-export function LaterPane({ tabOverride, onTabChange }: LaterPaneProps = {}) {
+export function LaterPane({ tabOverride, onTabChange, hideTabs, onCountsChange }: LaterPaneProps = {}) {
   const router = useRouter();
   const params = useSearchParams();
   const { data: session, isPending } = useSession();
@@ -153,6 +160,12 @@ export function LaterPane({ tabOverride, onTabChange }: LaterPaneProps = {}) {
     if (!session) return;
     fetchAll();
   }, [session]);
+
+  // Surface counts so a host that's rendering its own tab switcher (the
+  // /messages workspace lifts the tab row into its header) can show badges.
+  useEffect(() => {
+    onCountsChange?.({ messages: messages.length, tasks: tasks.length });
+  }, [messages.length, tasks.length, onCountsChange]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -224,37 +237,38 @@ export function LaterPane({ tabOverride, onTabChange }: LaterPaneProps = {}) {
 
   return (
     <div className="space-y-4 px-4 sm:px-6 pb-4">
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-slate-200">
-        <button
-          onClick={() => setTab('messages')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
-            tab === 'messages'
-              ? 'text-indigo-600 border-indigo-600'
-              : 'text-slate-500 border-transparent hover:text-slate-700'
-          }`}
-        >
-          <MessageSquare className="w-4 h-4" />
-          Messages
-          {messages.length > 0 && (
-            <span className="ml-1 px-1.5 py-0.5 text-[11px] bg-indigo-50 text-indigo-600 rounded-full">{messages.length}</span>
-          )}
-        </button>
-        <button
-          onClick={() => setTab('tasks')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
-            tab === 'tasks'
-              ? 'text-indigo-600 border-indigo-600'
-              : 'text-slate-500 border-transparent hover:text-slate-700'
-          }`}
-        >
-          <ListTodo className="w-4 h-4" />
-          Tasks
-          {tasks.length > 0 && (
-            <span className="ml-1 px-1.5 py-0.5 text-[11px] bg-indigo-50 text-indigo-600 rounded-full">{tasks.length}</span>
-          )}
-        </button>
-      </div>
+      {!hideTabs && (
+        <div className="flex items-center gap-1 border-b border-slate-200">
+          <button
+            onClick={() => setTab('messages')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              tab === 'messages'
+                ? 'text-indigo-600 border-indigo-600'
+                : 'text-slate-500 border-transparent hover:text-slate-700'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            Messages
+            {messages.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-[11px] bg-indigo-50 text-indigo-600 rounded-full">{messages.length}</span>
+            )}
+          </button>
+          <button
+            onClick={() => setTab('tasks')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              tab === 'tasks'
+                ? 'text-indigo-600 border-indigo-600'
+                : 'text-slate-500 border-transparent hover:text-slate-700'
+            }`}
+          >
+            <ListTodo className="w-4 h-4" />
+            Tasks
+            {tasks.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-[11px] bg-indigo-50 text-indigo-600 rounded-full">{tasks.length}</span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       {loading ? (

@@ -12,7 +12,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Hash, MessageCircle, ChevronLeft, Bookmark } from 'lucide-react';
+import { Hash, MessageCircle, ChevronLeft, Bookmark, MessageSquare, ListTodo } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { MessagesIndex, IndexChannel, IndexDm } from '@/components/messaging/MessagesIndex';
 import { LaterIndex } from '@/components/messaging/LaterIndex';
@@ -75,6 +75,9 @@ function MessagesWorkspace() {
     const [convos, setConvos] = useState<ConvoRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreateChannel, setShowCreateChannel] = useState(false);
+    // LaterPane reports its saved-item counts so the lifted tab row in the
+    // right-column header can render badges without re-fetching the lists.
+    const [laterCounts, setLaterCounts] = useState<{ messages: number; tasks: number }>({ messages: 0, tasks: 0 });
     // Track which DM is active when ?with=<userId> is set — convos[].id from
     // the matching otherUser, so MessagesIndex can highlight the correct row.
     const activeDmId = useMemo(() => {
@@ -279,6 +282,26 @@ function MessagesWorkspace() {
                         <div className="flex-1 min-w-0">
                             <ChannelHeader {...chatHeader} />
                         </div>
+                    ) : isLaterMode && laterTab ? (
+                        // Lifted Later sub-tabs — sit in the right-column header
+                        // (horizontally aligned with the [Messages][Later] pill
+                        // row in the left column) so the body stays lean.
+                        <div className="flex-1 min-w-0 flex items-center gap-1 -mb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+                            <LaterSubTab
+                                active={laterTab === 'messages'}
+                                icon={MessageSquare}
+                                label="Messages"
+                                count={laterCounts.messages}
+                                onClick={() => goLater('messages')}
+                            />
+                            <LaterSubTab
+                                active={laterTab === 'tasks'}
+                                icon={ListTodo}
+                                label="Tasks"
+                                count={laterCounts.tasks}
+                                onClick={() => goLater('tasks')}
+                            />
+                        </div>
                     ) : (
                         <div className="flex-1 min-w-0 text-sm text-slate-400">
                             {isDmMode ? 'Direct message' : ''}
@@ -311,6 +334,8 @@ function MessagesWorkspace() {
                         <LaterPane
                             tabOverride={laterTab}
                             onTabChange={(t) => router.replace(`/messages?later=${t}`)}
+                            hideTabs
+                            onCountsChange={setLaterCounts}
                         />
                     </div>
                 )}
@@ -344,6 +369,30 @@ function TopTabButton({ active, icon: Icon, label, onClick }: { active: boolean;
         >
             <Icon className="w-4 h-4" />
             <span>{label}</span>
+        </button>
+    );
+}
+
+// Underline-style sub-tab — visually distinct from the indigo TopTabButton
+// pills so the [Messages]/[Later] row and the [Saved msgs]/[Saved tasks] row
+// don't compete for the same "primary nav" semantics.
+function LaterSubTab({ active, icon: Icon, label, count, onClick }: { active: boolean; icon: React.ComponentType<{ className?: string }>; label: string; count: number; onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={cn(
+                'inline-flex items-center gap-2 px-3 py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap',
+                active
+                    ? 'text-indigo-600 border-indigo-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700',
+            )}
+        >
+            <Icon className="w-4 h-4" />
+            <span>{label}</span>
+            {count > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.5 text-[11px] bg-indigo-50 text-indigo-600 rounded-full">{count}</span>
+            )}
         </button>
     );
 }
