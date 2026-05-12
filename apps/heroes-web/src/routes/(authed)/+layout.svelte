@@ -1,7 +1,12 @@
 <script lang="ts">
-  import { ServiceBar, Sidebar, MobileTopBar, MobileBottomNav } from '@coms-portal/ui-svelte/chrome'
+  import {
+    ServiceBar,
+    Sidebar,
+    MobileTopBar,
+    MobileBottomNav,
+    deriveServiceBarServices,
+  } from '@coms-portal/ui-svelte/chrome'
   import { AccountWidget } from '@coms-portal/account-widget-svelte'
-  import { APP_LAUNCHER } from '@coms-portal/sdk/constants/app-launcher'
   import {
     Trophy,
     LayoutDashboard,
@@ -70,13 +75,20 @@
     uiState.theme === 'system' ? 'light' : uiState.theme,
   ) satisfies 'light' | 'dark'
 
-  // Path-relative service bar — single-origin lets the browser resolve hrefs
-  // against the current host (aha-coms.web.app). Phase 4 (T40) will lift this
-  // derivation into the chrome lib so apps stop hand-rolling the catalog.
-  const serviceBarServices = $derived([
-    { slug: 'portal', label: 'COMS', href: '/' },
-    { slug: 'heroes', label: 'Heroes' }, // current — no link
-  ])
+  // Service bar derived in the chrome lib (Spec 02 Phase 4 / T40). The
+  // catalog is the portal hub entry prepended to the rich `apps` array
+  // userinfo returned; `deriveServiceBarServices` collapses each entry's
+  // absolute URL to a same-origin path when it matches `currentOrigin`.
+  const serviceBarServices = $derived(
+    deriveServiceBarServices({
+      catalog: [
+        { slug: 'portal', label: 'COMS', url: `${$page.url.origin}/` },
+        ...(data.appCatalog ?? []),
+      ],
+      currentApp: 'heroes',
+      currentOrigin: $page.url.origin,
+    }),
+  )
 
   const isAdminOrHr = $derived(
     userState.isAdmin || userState.current?.role === 'hr',
@@ -125,14 +137,10 @@
 
   // ── widget data ───────────────────────────────────────────────────────────
 
-  const widgetAppSwitcher = $derived(
-    (data.user?.apps ?? [])
-      .map((slug: string) => {
-        const entry = APP_LAUNCHER[slug]
-        return entry ? { slug, label: entry.label, url: entry.url } : null
-      })
-      .filter((e: { slug: string; label: string; url: string } | null) => e !== null),
-  )
+  // The AccountWidget's launcher list is exactly the rich `apps` array
+  // userinfo returned — no slug→label/url mapping needed app-side now that
+  // T40 has lifted the derivation out of heroes.
+  const widgetAppSwitcher = $derived([...(data.appCatalog ?? [])])
 
   const widgetUser = $derived(data.user ? {
     name: data.user.name,

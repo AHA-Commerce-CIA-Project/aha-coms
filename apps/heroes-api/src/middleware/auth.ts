@@ -40,7 +40,8 @@ export const authPlugin = new Elysia({ name: 'auth' }).derive(
 
     let user
     try {
-      user = await loadHeroesAuthUser(token, portalOrigin)
+      const result = await loadHeroesAuthUser(token, portalOrigin)
+      user = result?.user
     } catch (err) {
       if (err instanceof PortalSessionDeniedError) {
         throw new AuthError(

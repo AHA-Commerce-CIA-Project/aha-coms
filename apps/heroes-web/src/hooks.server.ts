@@ -29,6 +29,7 @@ const auth: Handle = async ({ event, resolve }) => {
   if (!token) {
     event.locals.user = null
     event.locals.session = null
+    event.locals.appCatalog = []
     return resolve(event)
   }
 
@@ -42,12 +43,15 @@ const auth: Handle = async ({ event, resolve }) => {
   }
 
   try {
-    event.locals.user = await loadHeroesAuthUser(token, portalOrigin)
+    const result = await loadHeroesAuthUser(token, portalOrigin)
+    event.locals.user = result?.user ?? null
+    event.locals.appCatalog = result?.appCatalog ?? []
   } catch (err) {
     if (err instanceof PortalSessionDeniedError) {
       // Authenticated portal user without heroes access — surface as a 403
       // upstream rather than bouncing back through portal sign-in.
       event.locals.user = null
+      event.locals.appCatalog = []
     } else {
       throw err
     }

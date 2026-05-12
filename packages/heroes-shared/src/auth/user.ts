@@ -57,6 +57,19 @@ export class PortalSessionDeniedError extends Error {
 }
 
 /**
+ * Result of `loadHeroesAuthUser`: the resolved heroes AuthUser plus the
+ * rich app catalog returned by `/api/userinfo`. The catalog carries the
+ * `{slug, label, url}` triples portal-api joined out of `app_registry`
+ * for the user's apps claim — heroes' chrome derives the ServiceBar and
+ * AccountWidget launcher from it directly (Spec 02 Phase 4 / T40), so
+ * apps no longer hand-roll the slug → label/url mapping client-side.
+ */
+export type HeroesAuthResult = {
+  user: AuthUser
+  appCatalog: readonly { slug: string; label: string; url: string }[]
+}
+
+/**
  * Resolve the heroes AuthUser for an incoming request.
  *
  * `portalSessionCookie` is the raw `__session` cookie value Firebase
@@ -74,7 +87,7 @@ export class PortalSessionDeniedError extends Error {
 export async function loadHeroesAuthUser(
   portalSessionCookie: string,
   portalOrigin: string,
-): Promise<AuthUser | null> {
+): Promise<HeroesAuthResult | null> {
   const res = await fetch(`${portalOrigin}/api/userinfo`, {
     method: 'GET',
     headers: { cookie: `__session=${portalSessionCookie}` },
@@ -90,6 +103,7 @@ export async function loadHeroesAuthUser(
   if (!appsList.includes('heroes')) {
     throw new PortalSessionDeniedError(info.sub)
   }
+  const appCatalog = info.apps
 
   // Upsert the heroes_profiles row so heroes-side joins (branch, team, role)
   // always see a row keyed on portal sub. Idempotent; collapses to a no-op
@@ -139,16 +153,19 @@ export async function loadHeroesAuthUser(
 
   const cfg = row.configJson as Record<string, unknown> | null
   return {
-    id: row.id,
-    email: info.email,
-    name: row.name,
-    role: row.role as UserRole,
-    branchKey: row.branchKey ?? null,
-    branchValueSnapshot: row.branchValueSnapshot ?? null,
-    teamKey: row.teamKey ?? null,
-    teamValueSnapshot: row.teamValueSnapshot ?? null,
-    canSubmitPoints: (cfg?.canSubmitPoints as boolean | undefined) ?? false,
-    portalRole: info.portalRole,
-    apps: appsList,
+    user: {
+      id: row.id,
+      email: info.email,
+      name: row.name,
+      role: row.role as UserRole,
+      branchKey: row.branchKey ?? null,
+      branchValueSnapshot: row.branchValueSnapshot ?? null,
+      teamKey: row.teamKey ?? null,
+      teamValueSnapshot: row.teamValueSnapshot ?? null,
+      canSubmitPoints: (cfg?.canSubmitPoints as boolean | undefined) ?? false,
+      portalRole: info.portalRole,
+      apps: appsList,
+    },
+    appCatalog,
   }
 }

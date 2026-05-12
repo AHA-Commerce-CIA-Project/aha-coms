@@ -9,6 +9,7 @@ declare global {
         userId: string
         expiresAt: Date
       } | null
+      appCatalog: readonly { slug: string; label: string; url: string }[]
     }
     interface PageData {
       user: AuthUser | null

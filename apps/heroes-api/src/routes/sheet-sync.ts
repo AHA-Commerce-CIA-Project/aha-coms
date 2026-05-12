@@ -60,7 +60,8 @@ export const sheetSyncTriggerRoute = new Elysia().post(
 
     let user
     try {
-      user = await loadHeroesAuthUser(token, portalOrigin)
+      const result = await loadHeroesAuthUser(token, portalOrigin)
+      user = result?.user
     } catch (err) {
       if (err instanceof PortalSessionDeniedError) {
         set.status = 403

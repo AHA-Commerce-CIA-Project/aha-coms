@@ -26,5 +26,6 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
     user: actor,
     avatarUrl,
     unreadCount,
+    appCatalog: locals.appCatalog,
   }
 }
