@@ -5,6 +5,12 @@ name: Deploy — portal-api
 # this workflow trusts the merged code passed typecheck/test there and
 # skips re-running them — keeping the deploy path fast.
 #
+# DB migrations run BEFORE `gcloud run deploy`, so schema changes land
+# before the revision that depends on them. This closes the
+# orchestration gap that bit FU-1 on 2026-05-12, when the heroes
+# `healthCheckUrl` column had to be applied by hand under a Cloud SQL
+# Auth Proxy before the new portal-api revision could roll out (FU-3).
+#
 # Repo vars expected:
 #   WIF_PROVIDER_PORTAL  — full resource name of the portal WIF provider
 #   WIF_SA_PORTAL        — coms-portal-github-actions@<project>.iam.gserviceaccount.com
@@ -34,6 +40,8 @@ env:
   SERVICE_NAME: coms-portal-api
   ARTIFACT_REPO: coms-portal-registry
   RUNTIME_SA: coms-portal-run-sa@fbi-dev-484410.iam.gserviceaccount.com
+  CLOUD_SQL_INSTANCE: fbi-dev-484410:asia-southeast2:coms-aha-heroes-db
+  CLOUD_SQL_PROXY_VERSION: v2.21.1
 
 jobs:
   deploy:
@@ -49,6 +57,69 @@ jobs:
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache bun install
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            apps/portal-api/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Apply DB migrations
+        # Schema lands before the revision that reads it. Drizzle migrations
+        # in this project are append-only (nullable column adds, non-destructive
+        # UPDATEs); a destructive migration would need a different pattern
+        # (deploy expand → backfill → deploy contract) that this single
+        # forward-only step cannot safely cover. If you find yourself authoring
+        # a DROP COLUMN or RENAME, stop and reach for a multi-deploy pattern.
+        #
+        # Fail fast: an additive migration is seconds. Five minutes is a
+        # signal something is stuck (Cloud SQL lock contention, proxy
+        # auth-flap, runaway DEFAULT backfill on a huge table) — better to
+        # abort the deploy than burn an entire runner.
+        timeout-minutes: 5
+        run: |
+          curl -sSLf -o cloud-sql-proxy \
+            "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/${CLOUD_SQL_PROXY_VERSION}/cloud-sql-proxy.linux.amd64"
+          chmod +x cloud-sql-proxy
+
+          ./cloud-sql-proxy --port 5433 "${CLOUD_SQL_INSTANCE}" &
+          PROXY_PID=$!
+          trap 'kill ${PROXY_PID} 2>/dev/null || true' EXIT
+
+          # Wait up to 30 seconds for the proxy to start accepting TCP.
+          for i in $(seq 1 60); do
+            if (echo > /dev/tcp/127.0.0.1/5433) 2>/dev/null; then
+              echo "cloud-sql-proxy ready after $((i * 500))ms"
+              break
+            fi
+            if [ "${i}" -eq 60 ]; then
+              echo "cloud-sql-proxy failed to become ready in 30s" >&2
+              exit 1
+            fi
+            sleep 0.5
+          done
+
+          PROD_URL=$(gcloud secrets versions access latest \
+            --secret=coms-portal-database-url \
+            --project="${GCP_PROJECT_ID}")
+          # `coms-portal-database-url` carries a Unix-socket DSN
+          # (postgresql://user:pw@/db?host=/cloudsql/...) because Cloud Run
+          # mounts the SQL proxy via volume. The runner reaches Cloud SQL
+          # through TCP on the proxy port, so we rewrite the host segment.
+          PROXY_URL=$(echo "${PROD_URL}" | sed -E 's#@/#@127.0.0.1:5433/#; s#\?host=.*##')
+
+          DATABASE_URL="${PROXY_URL}" \
+            bun --filter @coms-portal/portal-api db:migrate
 
       - name: Configure docker for Artifact Registry
         run: gcloud auth configure-docker ${GCP_REGION}-docker.pkg.dev --quiet
