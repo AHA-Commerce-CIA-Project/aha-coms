@@ -643,7 +643,7 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-5`.
   - The `userConfigCache.config->>'role' = 'hr'` query sites are stale post-migration `0013` — the role lives on `heroes_profiles.role` and queries should read it directly. This isn't strictly a T45 dependency, but the cache-drop work is the right window to fix it (otherwise the queries fail when the table drops).
   - Heroes' manifest (`apps/heroes-api/portal-manifest.ts`) declares `leaderboard_eligible` + `starting_points` in its `configSchema`. Neither is read in code today. The manifest can shed both keys once T45 lands; left out of T44 scope to avoid bundling a portal-facing contract change with the heroes-internal cache cleanup.
 
-- [ ] **T45: Migrate `canSubmitPoints` to `heroes_profiles` and retire the user_config_cache reads**
+- [x] **T45: Migrate `canSubmitPoints` to `heroes_profiles` and retire the user_config_cache reads**
   - **Prerequisites:** T44 decision matrix above
   - **Steps:**
     - Migration: `ALTER TABLE heroes_profiles ADD COLUMN can_submit_points boolean NOT NULL DEFAULT false;`. Backfill from `user_config_cache.config->>'canSubmitPoints'` in the same migration (same shape as `0013_colossal_wolfsbane.sql` did for role).

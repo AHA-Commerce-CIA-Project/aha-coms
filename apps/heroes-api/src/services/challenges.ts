@@ -1,5 +1,5 @@
-import { eq, and, sql } from 'drizzle-orm'
-import { heroesProfiles, userConfigCache } from '@coms-portal/heroes-shared/db/schema'
+import { eq, and } from 'drizzle-orm'
+import { heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
 import * as challengesRepo from '../repositories/challenges'
 import * as pointsRepo from '../repositories/points'
 import { writeAuditLog } from './audit'
@@ -87,11 +87,10 @@ export async function fileChallenge(
     const hrUsers = await db
       .select({ id: heroesProfiles.id })
       .from(heroesProfiles)
-      .innerJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
       .where(
         and(
           ctx.actor.branchKey !== null ? eq(heroesProfiles.branchKey, ctx.actor.branchKey) : undefined,
-          sql`${userConfigCache.config}->>'role' = 'hr'`,
+          eq(heroesProfiles.role, 'hr'),
           eq(heroesProfiles.isActive, true),
         ),
       )

@@ -63,6 +63,35 @@ describe('envelopeToHeroesProfileRow', () => {
     expect(row.isActive).toBe(true)
     expect(row.id).toBe('00000000-0000-0000-0000-000000000001')
   })
+
+  it('projects canSubmitPoints=true from appConfig.config.canSubmitPoints', () => {
+    const row = envelopeToHeroesProfileRow({
+      ...baseEnvelope,
+      appConfig: { config: { canSubmitPoints: true }, schemaVersion: 2 },
+    })
+    expect(row.canSubmitPoints).toBe(true)
+  })
+
+  it('projects canSubmitPoints=false when appConfig is null (no per-app config slice)', () => {
+    const row = envelopeToHeroesProfileRow({ ...baseEnvelope, appConfig: null })
+    expect(row.canSubmitPoints).toBe(false)
+  })
+
+  it('projects canSubmitPoints=false when the config slice omits the key', () => {
+    const row = envelopeToHeroesProfileRow({
+      ...baseEnvelope,
+      appConfig: { config: { role: 'employee' }, schemaVersion: 2 },
+    })
+    expect(row.canSubmitPoints).toBe(false)
+  })
+
+  it('projects canSubmitPoints=false when the config slice carries an explicit false', () => {
+    const row = envelopeToHeroesProfileRow({
+      ...baseEnvelope,
+      appConfig: { config: { canSubmitPoints: false }, schemaVersion: 2 },
+    })
+    expect(row.canSubmitPoints).toBe(false)
+  })
 })
 
 describe('envelopeToEmailCacheRow', () => {

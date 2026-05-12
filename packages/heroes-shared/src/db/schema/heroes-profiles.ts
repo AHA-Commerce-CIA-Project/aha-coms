@@ -25,6 +25,7 @@ export const heroesProfiles = pgTable(
     phone: varchar('phone', { length: 20 }),
     employmentStatus: varchar('employment_status', { length: 20 }),
     role: varchar('role', { length: 32 }).notNull().default('employee'),
+    canSubmitPoints: boolean('can_submit_points').notNull().default(false),
     talentaId: varchar('talenta_id', { length: 50 }),
     avatarUrl: text('avatar_url'),
     localePref: varchar('locale_pref', { length: 10 }),

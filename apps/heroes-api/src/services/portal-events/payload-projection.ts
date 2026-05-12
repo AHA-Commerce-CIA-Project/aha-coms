@@ -36,6 +36,7 @@ export interface HeroesProfileRow {
   talentaId: string | null
   attendanceName: string | null
   isActive: boolean
+  canSubmitPoints: boolean
 }
 
 export interface EmailCacheRow {
@@ -61,6 +62,7 @@ export function envelopeToHeroesProfileRow(
   envelope: WebhookUserEnvelopeWithRole,
 ): HeroesProfileRow {
   const e = envelope.employment
+  const cfg = envelope.appConfig?.config as Record<string, unknown> | undefined
   return {
     id: envelope.user.portalSub,
     name: envelope.user.name,
@@ -77,6 +79,7 @@ export function envelopeToHeroesProfileRow(
     talentaId: e?.talentaId ?? null,
     attendanceName: e?.attendanceName ?? null,
     isActive: true,
+    canSubmitPoints: cfg?.canSubmitPoints === true,
   }
 }
 

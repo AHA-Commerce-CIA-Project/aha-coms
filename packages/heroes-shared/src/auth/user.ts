@@ -23,15 +23,16 @@
  *     the `__session` cookie attached. Hitting portal-api's `*.run.app` URL
  *     directly would skip Firebase's allowlist but bypasses single-origin.
  *
- * Per-request cost: one HTTP fetch to portal-api + one DB upsert on the
- * heroes_profiles row + one DB read for the heroes-specific fields. The
- * spec's Phase 5 (cache evaluation, T44–T46) is the budget for trimming
- * this down — that work hasn't started yet, so the function deliberately
- * keeps the round-trips visible rather than caching aggressively.
+ * Per-request cost: one HTTP fetch to portal-api + one heroes_profiles
+ * upsert + one heroes_profiles read + one opportunistic email_cache
+ * upsert. The cache JOIN against user_config_cache that Phase 5's
+ * audit (T44) found dead-weight retired in T45 — can_submit_points now
+ * lives on heroes_profiles directly, so the auth-path read touches a
+ * single table.
  */
 import { eq } from 'drizzle-orm'
 import { db } from '../db'
-import { emailCache, heroesProfiles, userConfigCache } from '../db/schema'
+import { emailCache, heroesProfiles } from '../db/schema'
 import type { AuthUser } from '../types'
 import type { UserRole } from '../constants/roles'
 
@@ -135,14 +136,13 @@ export async function loadHeroesAuthUser(
       id: heroesProfiles.id,
       name: heroesProfiles.name,
       role: heroesProfiles.role,
+      canSubmitPoints: heroesProfiles.canSubmitPoints,
       branchKey: heroesProfiles.branchKey,
       branchValueSnapshot: heroesProfiles.branchValueSnapshot,
       teamKey: heroesProfiles.teamKey,
       teamValueSnapshot: heroesProfiles.teamValueSnapshot,
-      configJson: userConfigCache.config,
     })
     .from(heroesProfiles)
-    .leftJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
     .where(eq(heroesProfiles.id, info.sub))
     .limit(1)
 
@@ -151,7 +151,6 @@ export async function loadHeroesAuthUser(
     throw new Error(`heroes_profiles row missing after upsert for sub=${info.sub}`)
   }
 
-  const cfg = row.configJson as Record<string, unknown> | null
   return {
     user: {
       id: row.id,
@@ -162,7 +161,7 @@ export async function loadHeroesAuthUser(
       branchValueSnapshot: row.branchValueSnapshot ?? null,
       teamKey: row.teamKey ?? null,
       teamValueSnapshot: row.teamValueSnapshot ?? null,
-      canSubmitPoints: (cfg?.canSubmitPoints as boolean | undefined) ?? false,
+      canSubmitPoints: row.canSubmitPoints,
       portalRole: info.portalRole,
       apps: appsList,
     },

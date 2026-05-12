@@ -29,6 +29,7 @@ export const handleUserProvisioned: PortalEventHandler = async (body) => {
         phone: profileRow.phone,
         employmentStatus: profileRow.employmentStatus,
         role: profileRow.role,
+        canSubmitPoints: profileRow.canSubmitPoints,
         talentaId: profileRow.talentaId,
         attendanceName: profileRow.attendanceName,
         isActive: profileRow.isActive,

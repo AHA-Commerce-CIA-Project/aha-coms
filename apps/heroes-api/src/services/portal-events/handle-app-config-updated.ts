@@ -1,6 +1,7 @@
+import { eq } from 'drizzle-orm'
 import type { AppConfigEvent } from '@coms-portal/sdk'
 import { db } from '@coms-portal/heroes-shared/db'
-import { userConfigCache } from '@coms-portal/heroes-shared/db/schema'
+import { heroesProfiles, userConfigCache } from '@coms-portal/heroes-shared/db/schema'
 import type { PortalEventHandler } from './dispatch'
 
 export const handleAppConfigUpdated: PortalEventHandler = async (body) => {
@@ -25,4 +26,12 @@ export const handleAppConfigUpdated: PortalEventHandler = async (body) => {
         cachedAt: new Date(),
       },
     })
+
+  await db
+    .update(heroesProfiles)
+    .set({
+      canSubmitPoints: payload.config.canSubmitPoints === true,
+      updatedAt: new Date(),
+    })
+    .where(eq(heroesProfiles.id, payload.portalSub))
 }

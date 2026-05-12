@@ -1,5 +1,5 @@
 import { eq, and, ilike, count } from 'drizzle-orm'
-import { heroesProfiles, emailCache, userConfigCache } from '@coms-portal/heroes-shared/db/schema'
+import { heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
 import type { UserRole } from '@coms-portal/heroes-shared/constants'
@@ -16,7 +16,7 @@ export type UserRow = {
   talentaId: string | null
   isActive: boolean
   archivedAt: Date | null
-  canSubmitPoints: boolean | null
+  canSubmitPoints: boolean
 }
 
 type ListUsersOpts = {
@@ -50,7 +50,7 @@ export async function listUsers(opts: ListUsersOpts, tx?: DbClient) {
         id: heroesProfiles.id,
         name: heroesProfiles.name,
         email: emailCache.contactEmail,
-        configJson: userConfigCache.config,
+        canSubmitPoints: heroesProfiles.canSubmitPoints,
         role: heroesProfiles.role,
         branchKey: heroesProfiles.branchKey,
         teamKey: heroesProfiles.teamKey,
@@ -62,7 +62,6 @@ export async function listUsers(opts: ListUsersOpts, tx?: DbClient) {
       })
       .from(heroesProfiles)
       .leftJoin(emailCache, eq(heroesProfiles.id, emailCache.portalSub))
-      .leftJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
       .where(where)
       .orderBy(heroesProfiles.name)
       .limit(opts.limit)
@@ -70,23 +69,20 @@ export async function listUsers(opts: ListUsersOpts, tx?: DbClient) {
     db.select({ total: count() }).from(heroesProfiles).where(where),
   ])
 
-  const rows: UserRow[] = rawRows.map((r) => {
-    const cfg = r.configJson as Record<string, unknown> | null
-    return {
-      id: r.id,
-      name: r.name,
-      email: r.email ?? null,
-      role: (r.role ?? null) as UserRole | null,
-      branchKey: r.branchKey ?? null,
-      teamKey: r.teamKey ?? null,
-      position: r.position ?? null,
-      avatarUrl: r.avatarUrl ?? null,
-      talentaId: r.talentaId ?? null,
-      isActive: r.isActive,
-      archivedAt: r.archivedAt ?? null,
-      canSubmitPoints: (cfg?.canSubmitPoints ?? null) as boolean | null,
-    }
-  })
+  const rows: UserRow[] = rawRows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    email: r.email ?? null,
+    role: (r.role ?? null) as UserRole | null,
+    branchKey: r.branchKey ?? null,
+    teamKey: r.teamKey ?? null,
+    position: r.position ?? null,
+    avatarUrl: r.avatarUrl ?? null,
+    talentaId: r.talentaId ?? null,
+    isActive: r.isActive,
+    archivedAt: r.archivedAt ?? null,
+    canSubmitPoints: r.canSubmitPoints,
+  }))
 
   return { rows, total }
 }
@@ -98,7 +94,7 @@ export async function getUserById(id: string, tx?: DbClient): Promise<UserRow | 
       id: heroesProfiles.id,
       name: heroesProfiles.name,
       email: emailCache.contactEmail,
-      configJson: userConfigCache.config,
+      canSubmitPoints: heroesProfiles.canSubmitPoints,
       role: heroesProfiles.role,
       branchKey: heroesProfiles.branchKey,
       teamKey: heroesProfiles.teamKey,
@@ -110,12 +106,10 @@ export async function getUserById(id: string, tx?: DbClient): Promise<UserRow | 
     })
     .from(heroesProfiles)
     .leftJoin(emailCache, eq(heroesProfiles.id, emailCache.portalSub))
-    .leftJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
     .where(eq(heroesProfiles.id, id))
     .limit(1)
 
   if (!row) return null
-  const cfg = row.configJson as Record<string, unknown> | null
   return {
     id: row.id,
     name: row.name,
@@ -128,7 +122,7 @@ export async function getUserById(id: string, tx?: DbClient): Promise<UserRow | 
     talentaId: row.talentaId ?? null,
     isActive: row.isActive,
     archivedAt: row.archivedAt ?? null,
-    canSubmitPoints: (cfg?.canSubmitPoints ?? null) as boolean | null,
+    canSubmitPoints: row.canSubmitPoints,
   }
 }
 
@@ -139,7 +133,7 @@ export async function getUserByEmail(email: string, tx?: DbClient): Promise<User
       id: heroesProfiles.id,
       name: heroesProfiles.name,
       email: emailCache.contactEmail,
-      configJson: userConfigCache.config,
+      canSubmitPoints: heroesProfiles.canSubmitPoints,
       role: heroesProfiles.role,
       branchKey: heroesProfiles.branchKey,
       teamKey: heroesProfiles.teamKey,
@@ -151,12 +145,10 @@ export async function getUserByEmail(email: string, tx?: DbClient): Promise<User
     })
     .from(emailCache)
     .innerJoin(heroesProfiles, eq(emailCache.portalSub, heroesProfiles.id))
-    .leftJoin(userConfigCache, eq(heroesProfiles.id, userConfigCache.portalSub))
     .where(eq(emailCache.contactEmail, email))
     .limit(1)
 
   if (!row) return null
-  const cfg = row.configJson as Record<string, unknown> | null
   return {
     id: row.id,
     name: row.name,
@@ -169,7 +161,7 @@ export async function getUserByEmail(email: string, tx?: DbClient): Promise<User
     talentaId: row.talentaId ?? null,
     isActive: row.isActive,
     archivedAt: row.archivedAt ?? null,
-    canSubmitPoints: (cfg?.canSubmitPoints ?? null) as boolean | null,
+    canSubmitPoints: row.canSubmitPoints,
   }
 }
 
