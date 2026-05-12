@@ -22,12 +22,49 @@
  *   HEROES_WEBHOOK_HMAC=dev-heroes-hmac-secret \
  *   bun run --cwd apps/portal-api register:heroes
  *
- * Runbook (prod): swap dev values for the live Cloud Run URLs and a secret
- * fetched from Secret Manager (`aha-heroes-broker-signing-secret` per the FAST
- * naming convention).
+ * Runbook (prod, via Cloud SQL Auth Proxy):
+ *   # 1. Start the proxy in another terminal (Cloud Run uses the same instance
+ *   # via Unix socket; from a laptop we go through the proxy on a TCP port).
+ *   cloud-sql-proxy --port 5432 fbi-dev-484410:asia-southeast2:coms-aha-heroes-db
  *
- * Idempotent: if `slug=heroes` already exists with non-deprecated status, the
- * script logs the existing app id and exits 0 without touching any row.
+ *   # 2. Extract the connection user/password from the live secret. The stored
+ *   # DATABASE_URL points at the Cloud SQL Unix socket; swap the host segment
+ *   # for the local proxy port.
+ *   PROD_URL=$(gcloud secrets versions access latest \
+ *     --secret=coms-portal-database-url --project=fbi-dev-484410)
+ *   # PROD_URL looks like: postgresql://<user>:<pw>@/coms_portal?host=/cloudsql/...
+ *   PROXY_URL=$(echo "$PROD_URL" | sed -E 's#@/#@127.0.0.1:5432/#; s#\?host=.*##')
+ *
+ *   # 3. Run the script — values reflect the post-T16.5 + post-Phase-5 state.
+ *   # HEROES_APP_URL is the launch target (heroes-web, browser-facing).
+ *   # HEROES_WEBHOOK_URL is the portal → heroes-api webhook target (server-to-
+ *   # server). The two were the same host before T16.5 split the combined
+ *   # service into coms-heroes-{api,web}; they live on separate hosts now.
+ *   DATABASE_URL="$PROXY_URL" \
+ *   HEROES_APP_URL=https://coms-heroes-web-45tyczfska-et.a.run.app \
+ *   HEROES_WEBHOOK_URL=https://coms-heroes-api-45tyczfska-et.a.run.app/api/webhooks/portal \
+ *   HEROES_APP_SA=coms-heroes-api-sa@fbi-dev-484410.iam.gserviceaccount.com \
+ *   HEROES_BROKER_ORIGIN=https://aha-coms.web.app \
+ *   HEROES_WEBHOOK_HMAC=$(gcloud secrets versions access latest \
+ *     --secret=aha-heroes-broker-signing-secret --project=fbi-dev-484410 \
+ *     2>/dev/null || echo dev-heroes-hmac-secret) \
+ *   bun run --cwd apps/portal-api register:heroes
+ *
+ *   # After T24 base-paths heroes-web at /heroes/* and T26 base-paths
+ *   # heroes-api at /heroes/api/*, re-run with single-origin URLs:
+ *   #   HEROES_APP_URL=https://aha-coms.web.app/heroes
+ *   #   HEROES_WEBHOOK_URL=https://aha-coms.web.app/heroes/api/webhooks/portal
+ *   # so the launch flow stays same-origin and the __session cookie crosses.
+ *
+ * Upsert semantics: if `slug=heroes` does not exist, the script INSERTs all
+ * three rows (app_registry, app_manifests, app_webhook_endpoints). If it
+ * exists, the script UPDATEs only the drift-prone fields (url,
+ * serviceAccountEmail, brokerOrigin on app_registry; url + secret on
+ * app_webhook_endpoints). Immutable fields (slug, name, description,
+ * basePath, adapterType, transportMode, handoffMode, appRoles) and the
+ * manifest are left alone — change those through a contract revision, not a
+ * re-registration. The script logs the specific fields that drifted, or "no
+ * changes needed" if all values match.
  *
  * Webhook endpoint status is set to `active` because heroes' receiver at
  * `apps/heroes-api/src/routes/portal-webhooks.ts` is live (verifies inbound
@@ -116,18 +153,70 @@ async function main() {
   const heroesSa = requiredEnv('HEROES_APP_SA')
   const brokerOrigin = requiredEnv('HEROES_BROKER_ORIGIN')
   const webhookHmac = requiredEnv('HEROES_WEBHOOK_HMAC')
-  const webhookUrl = `${heroesUrl}/api/webhooks/portal`
+  // Webhook target is independent of the launch URL after T16.5 split the
+  // combined heroes Cloud Run service into coms-heroes-{api,web}. The launch
+  // URL targets heroes-web (browser-facing); the webhook URL targets
+  // heroes-api (server-to-server). Default derives the legacy single-service
+  // shape for backwards compatibility with the original runbook; override via
+  // HEROES_WEBHOOK_URL when the api lives on its own host.
+  const webhookUrl = process.env.HEROES_WEBHOOK_URL?.trim() || `${heroesUrl}/api/webhooks/portal`
 
   await db.transaction(async (tx) => {
     const existing = await tx
-      .select({ id: appRegistry.id, status: appRegistry.status })
+      .select({
+        id: appRegistry.id,
+        status: appRegistry.status,
+        url: appRegistry.url,
+        serviceAccountEmail: appRegistry.serviceAccountEmail,
+        brokerOrigin: appRegistry.brokerOrigin,
+      })
       .from(appRegistry)
       .where(eq(appRegistry.slug, SLUG))
       .limit(1)
 
-    if (existing.length > 0 && existing[0].status !== 'deprecated') {
+    if (existing.length > 0) {
+      const row = existing[0]
+      const drift: string[] = []
+      if (row.url !== heroesUrl) drift.push(`url: ${row.url} → ${heroesUrl}`)
+      if (row.serviceAccountEmail !== heroesSa) {
+        drift.push(`serviceAccountEmail: ${row.serviceAccountEmail} → ${heroesSa}`)
+      }
+      if (row.brokerOrigin !== brokerOrigin) {
+        drift.push(`brokerOrigin: ${row.brokerOrigin} → ${brokerOrigin}`)
+      }
+
+      if (drift.length === 0) {
+        console.log(
+          `[register-heroes] Heroes already registered with matching values (id=${row.id}, status=${row.status}); nothing to do.`,
+        )
+        return
+      }
+
+      // Update path: refresh the three drift-prone fields on app_registry, the
+      // webhook URL on app_webhook_endpoints, and the secret if it changed. The
+      // immutable fields (slug, name, description, basePath, adapterType,
+      // transportMode, handoffMode, appRoles) are left alone — change those
+      // through a manifest/contract revision, not a re-registration.
+      await tx
+        .update(appRegistry)
+        .set({
+          url: heroesUrl,
+          serviceAccountEmail: heroesSa,
+          brokerOrigin,
+        })
+        .where(eq(appRegistry.id, row.id))
+
       console.log(
-        `[register-heroes] Heroes already registered (id=${existing[0].id}, status=${existing[0].status}); nothing to do.`,
+        `[register-heroes] Updated app_registry row id=${row.id}:\n  - ${drift.join('\n  - ')}`,
+      )
+
+      await tx
+        .update(appWebhookEndpoints)
+        .set({ url: webhookUrl, secret: webhookHmac })
+        .where(eq(appWebhookEndpoints.appId, row.id))
+
+      console.log(
+        `[register-heroes] Updated app_webhook_endpoints for appId=${row.id}: url=${webhookUrl}`,
       )
       return
     }
