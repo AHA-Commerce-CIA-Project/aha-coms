@@ -209,7 +209,7 @@ These predate the current plan and outlive it — every future app onboarding (a
 
 ## What's deliberately not in this plan
 
-- **aha-fast onboarding** (Next.js, currently on npm + Better Auth). Future spec, written after aha-fast freezes its in-flight feature work. Outside Spec 01 and Spec 02.
+- **aha-fast onboarding** — Spec 05 authored 2026-05-13 at [`docs/spec/05-fast-onboarding.md`](../docs/spec/05-fast-onboarding.md). Next.js 16 + Better Auth + Prisma → Bun workspace + GIP + (optionally Drizzle, see Spec 05 §Open Question 1) + base-path `/fast/` + React chrome variants. Ten phases, ten checkpoints (CP12 through CP21), with the React chrome packages (`packages/ui-react/` + `packages/account-widget-react/`) named as the load-bearing prerequisite under Phase 1. Execution waits on Spec 02's CP11 (FU-8 operator verification) closing first; the spec itself is now written so the next session can either execute Phase 1 (the heaviest single body of work) or grill the open questions further before code moves. Outside Spec 01 and Spec 02 by design — referenced here so future plan readers can find the through-line from heroes' reference implementation to fast's parallel proof.
 - **Spec 03 (Integration Test Kit)** — stub exists at `docs/spec/03-integration-test-kit.md`. Picked up after Spec 02 lands.
 - **Spec 04 (SDK as Enforcement Layer)** — stub at `docs/spec/04-sdk-as-enforcement-layer.md`. Picked up alongside or after Spec 03.
 - **Platform-owned notifications** (the one contract deviation in heroes). Separate future spec.
