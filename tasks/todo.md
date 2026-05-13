@@ -854,15 +854,258 @@ Spec ref: `docs/spec/05-fast-onboarding.md#phase-1-react-chrome-packages`. Seven
 
 ### Phase 2: Subtree merge fast into the monorepo
 
-Phase 2 tasks (T55–T59) author when Phase 1 nears completion — until the chrome lib exists, the integration step is preparation; fast's eventual mount of the chrome belongs to Phase 6.
+Spec ref: `docs/spec/05-fast-onboarding.md#phase-2-subtree-merge-fast-into-the-monorepo`. Decision: Open Question §3 Option A — unified `apps/fast/`. Fast's API routes stay inside the Next.js App Router; no extraction into separate Elysia/hono service.
 
-### Phase 3: Better Auth removal (staged per §4)
+- [ ] **T55: Coordinate the fast freeze**
+  - **Prerequisites:** CP12
+  - **What:** Confirm `alifm17/aha-fast@main` is frozen — no incoming commits during the merge window. The user has already initiated this (per spec); reconfirm with the operator before the actual subtree command. Capture the SHA of `aha-fast/main` at freeze time so the merge is reproducible if it needs to be redone.
+  - **Acceptance:** operator confirms freeze in writing (in this task's notes or commit body); current `aha-fast` main SHA recorded.
 
-Three sub-phases per Open Question §4 (Option B). Tasks author when Phase 2 nears completion.
+- [ ] **T56: Subtree-merge aha-fast → apps/fast-temp/ → restructure → apps/fast/**
+  - **Prerequisites:** T55
+  - **What:** Run the subtree merge with full history preserved:
+    ```bash
+    cd aha-coms/
+    git remote add fast-source https://github.com/alifm17/aha-fast.git
+    git subtree add --prefix=apps/fast-temp fast-source main --squash=false
+    ```
+    Then restructure `apps/fast-temp/` → `apps/fast/`: move `app/`, `components/`, `lib/`, `prisma/`, `public/`, `scripts/`, `next.config.ts`, `tsconfig.json`, `postcss.config.mjs`, `eslint.config.mjs`. Discard `aha-fast/Dockerfile` and `cloudbuild.yaml` (rewritten in Phase 8); discard `aha-fast/terraform/` (replaced by `infra/fast/` in Phase 8). Discard `aha-fast/supabase-schema.sql` (legacy; out of scope per spec). Discard `aha-fast/proxy.ts` for now — Phase 4 (T68) authors the Next.js middleware replacement.
+  - **Acceptance:** `apps/fast/` contains the restructured tree; `git log --follow apps/fast/app/page.tsx` (or similar) shows the original aha-fast commit history threaded through the subtree merge.
 
-### Phases 4–10
+- [ ] **T57: Rename package to @coms-portal/fast + sweep alias conflicts**
+  - **Prerequisites:** T56
+  - **What:** `apps/fast/package.json` `"name"` field changes from `aha-fast` to `@coms-portal/fast`. Sweep any in-tree imports that conflict with the monorepo's alias conventions — fast uses `@/lib/*` for self-imports (Next.js convention), which doesn't conflict with the monorepo's `~/*` for cross-package portal-api imports. Verify no cross-package import surfaces are broken.
+  - **Acceptance:** `apps/fast/package.json` declares `"name": "@coms-portal/fast"`; `grep -rn "from 'aha-fast'" apps/` returns zero hits; `bun install` at root completes without error (full conversion to `workspace:*` for in-tree deps lands in T58).
 
-Detail tasks added as each near-term phase opens, mirroring the cadence Spec 02 used. The spec itself names the steps; this file holds the per-step task entries when the work is about to start.
+- [ ] **T58: Convert npm → Bun workspace; resolve native-dep quirks**
+  - **Prerequisites:** T57
+  - **What:** Delete `apps/fast/package-lock.json`. Add fast to the root workspace's `packages` array if not already covered by `apps/*`. Run `bun install` at monorepo root — this pulls fast's deps into the unified `bun.lock`. Identify any quirks: peer dep resolution differences vs npm, native bindings (sharp, prisma engines, etc.), or scripts that assumed `npm run` invocation semantics. Update `apps/fast/package.json` `scripts` block: `dev`, `build`, `start` continue to use `next` (Next.js doesn't care about package manager); add `typecheck: "tsc --noEmit"` for parity with portal-web + heroes-web; consider `db:push` script for Prisma's deploy invocation. The plan's risk table flags Prisma native bindings under bun as Medium — pay attention to `@prisma/client` postinstall (`prisma generate`).
+  - **Acceptance:** `bun install --frozen-lockfile` at monorepo root succeeds; `apps/fast/node_modules/` is empty (deps hoisted to root); `bun run --filter @coms-portal/fast typecheck` exits 0; `prisma generate` produces a working `node_modules/.prisma/client`.
+
+- [ ] **T59: Verify fast builds + runs in the monorepo**
+  - **Prerequisites:** T58
+  - **What:** Smoke-test the in-tree fast: `bun run --filter @coms-portal/fast dev` starts the dev server on its default port; visit a few pages locally; `bun run --filter @coms-portal/fast build` produces a Next.js production build (`apps/fast/.next/`); existing fast tests (if any — check for `*.test.ts`/`*.spec.ts` patterns) run via the package's existing test command. Document any regressions (likely none structural; might be local env-var issues from the path change). Update `apps/fast/.env.example` if any env vars need renaming.
+  - **Acceptance:** dev server starts without errors; production build completes; the 35+ product components mentioned in PROJECT_CONTEXT.md render without runtime errors at landing pages. Document any surfaces that broke (likely none; this is the safety net).
+
+- [ ] **CHECKPOINT 13: Fast lives in-tree at `apps/fast/`.** The monorepo's workspace install + build + dev commands work for fast. Cross-package imports (eventually `@coms-portal/ui-react`, `@coms-portal/account-widget-react`, `@coms-portal/sdk`) resolve via `workspace:*`. After CP13, Phase 3 (Better Auth removal) opens.
+
+### Phase 3: Better Auth removal — staged in 3 sub-phases
+
+Spec ref: `docs/spec/05-fast-onboarding.md#phase-3-better-auth-removal--staged-per-open-question-4`. Decision: Open Question §4 Option B — three sub-phases ((a) loadFastAuthUser alongside Better Auth, (b) flip 127 `requireAuth()` call sites, (c) delete surfaces + Prisma migration). The 137 grep hits surveyed quantify the scope; the staged cadence makes a missed call site fail in (b) rather than after (c).
+
+- [ ] **T60: Sub-phase (a) — Author `lib/auth/load-fast-auth-user.ts` + add nullable `portal_sub` to User + backfill**
+  - **Prerequisites:** CP13
+  - **What:** Mirror `packages/heroes-shared/src/auth/user.ts`'s shape (170 lines, the canonical pattern). Read the portal `__session` cookie via Next.js's `cookies()` helper from `next/headers`; fetch `https://aha-coms.web.app/api/userinfo` with the cookie forwarded; introspect the response; upsert `User.portal_sub` keyed on the portal UUID; return the React/Next.js-shaped `AuthUser`. Next.js Server Components consume via a Server Component wrapper; API routes consume via a replacement helper that returns the same shape `requireAuth()` does today (smoothing the T61 flip). Add `portal_sub String? @unique` column to the Prisma `User` model (nullable). Backfill via a one-off script that joins on `email_normalized` against portal's `identity_users` table. Run the backfill in a dev-then-prod cycle; any user without a portal_sub becomes a deferral case (operator outreach) but doesn't block the migration as long as the population is small.
+  - **Acceptance:** `loadFastAuthUser` exists and returns `AuthUser` for a valid `__session` cookie; throws `PortalSessionDeniedError` (or fast-equivalent) for invalid; `User.portal_sub` column added; backfill script run with output showing N rows updated / M rows still null; remaining nulls documented.
+
+- [ ] **T61: Sub-phase (b) — Flip all 127 `requireAuth()` call sites to `loadFastAuthUser`**
+  - **Prerequisites:** T60
+  - **What:** Grep `requireAuth\|getServerSession\|useAuth` across `app/`, `lib/`, `components/` — 137 hits surveyed. Each call site flips to the new helper. Same return shape; same authorization checks (`user.role === 'leader'` etc. stay — that's fast-internal RBAC, contract-orthogonal). The `lib/auth-context.tsx` `useAuth()` hook becomes a Server Component pattern (session lives server-side, not in client React state). `app/api/*/route.ts` routes call `loadFastAuthUser` directly at the top; client-side components that need user info either receive it as a prop from a Server Component parent or fetch their own subset via a new `/api/auth/me`-style route fast adds (fast-internal, doesn't touch portal-api).
+  - **Acceptance:** `grep -rn "requireAuth\b\|getServerSession\b\|useAuth\b" apps/fast/app apps/fast/lib apps/fast/components` returns zero hits OUTSIDE the old auth lib files (which still exist in this sub-phase). Every `app/api/*/route.ts` calls `loadFastAuthUser` (or a Server Component pattern). The fast dev server still serves requests; `bun run --filter @coms-portal/fast build` green.
+
+- [ ] **T62: Sub-phase (b cont.) — Delete the 5 credential routes**
+  - **Prerequisites:** T61
+  - **What:** Remove `apps/fast/app/{login,register,forgot-password,activate,complete}/` directories entirely. Public routes (`/request`, `/track`, `/api/employees`) stay — they're unauthenticated by design, separate from the credential-route surface. Any user landing on a previously-credential URL gets the eventual Next.js 404; Phase 4's middleware (T68) replaces this with a redirect-to-portal-sign-in shape.
+  - **Acceptance:** the 5 directories don't exist; `bun run --filter @coms-portal/fast build` green; the dev server returns 404 for `/login` etc.
+
+- [ ] **T63: Sub-phase (c) — Delete the 4 auth lib files + proxy.ts**
+  - **Prerequisites:** T62
+  - **What:** Remove `apps/fast/lib/auth.ts`, `apps/fast/lib/auth-client.ts`, `apps/fast/lib/auth-server.ts`, `apps/fast/lib/auth-context.tsx`, and `apps/fast/proxy.ts`. None of these should have any remaining importers after T61–T62. Verify with grep; if any import survives, fix the consumer before deleting (likely a leftover in tests, scripts, or a less-common component).
+  - **Acceptance:** none of the 5 files exist; `bun run --filter @coms-portal/fast build` green; `grep -rn "from '.*auth/auth\|from '.*auth-client\|from '.*auth-server\|from '.*auth-context'" apps/fast/` returns zero hits.
+
+- [ ] **T64: Sub-phase (c cont.) — Drop Session/Account/Verification models; promote `portal_sub` to PK**
+  - **Prerequisites:** T63 + every active user has non-null `portal_sub`
+  - **What:** The destructive migration. Author a Prisma schema change that:
+    1. Drops the `Session` model entirely.
+    2. Drops the `Account` model entirely.
+    3. Drops the `Verification` model entirely.
+    4. Drops `User.emailVerified` column.
+    5. Promotes `User.portal_sub` to the new primary key (or renames `User` → `fast_profiles` per integration contract §2's `<app>_profiles` convention — decide based on whether the cascading rename through Prisma relations is worth the cleaner naming). The 38 product models that reference `User.id` cascade through the rename.
+    Run `prisma db push` against dev → staging → prod in sequence. Deploy ordering is **deploy-first-then-migrate** (the destructive shape T46's `DROP TABLE user_config_cache` followed) — the new fast revision must NOT touch the dropped tables before the migration runs. Workflow comment (T81 authors the deploy-fast.yml) names the destructive-migration caveat.
+  - **Acceptance:** Prisma schema has no `Session`/`Account`/`Verification` models; `User.emailVerified` gone; primary key is `portal_sub` (or `User` renamed to `fast_profiles` with `portal_sub` as PK). `prisma db push` applies cleanly against the canonical environments. The 38 product models' foreign keys still resolve.
+
+- [ ] **CHECKPOINT 14: Fast has no Better Auth surfaces.** Every auth path runs through `loadFastAuthUser`. No `Session`, `Account`, `Verification` tables. The `User` table's primary key is the portal UUID. After CP14, Phase 4 (single-origin /fast/) opens.
+
+### Phase 4: Single-origin migration (mount fast at /fast/)
+
+Spec ref: `docs/spec/05-fast-onboarding.md#phase-4-single-origin-migration-mount-fast-at-fast`. Mirrors heroes T24–T29 + portal-web FU-10, adapted for Next.js's `basePath` config. The risk table flags the absolute-path sweep at High.
+
+- [ ] **T65: Configure `basePath: '/fast'` in apps/fast/next.config.ts + `assetPrefix`**
+  - **Prerequisites:** CP14
+  - **What:** Edit `next.config.ts` to set `basePath: '/fast'` and `assetPrefix: '/fast'` so chunk loading honours the prefix. Verify the dev server now serves at `/fast/*` paths.
+  - **Acceptance:** `bun run --filter @coms-portal/fast dev` serves the dashboard at `/fast/` rather than `/`; assets load from `/fast/_next/*`.
+
+- [ ] **T66: Sweep absolute paths through basePath — `href`, `router.push`, `fetch`**
+  - **Prerequisites:** T65
+  - **What:** Next.js auto-prefixes `<Link href="/...">` when basePath is set, but NOT `<a href>`, `router.push('/...')`, or `fetch('/api/...')`. Run the three audits: `grep -rn 'href="/[a-z]' apps/fast/`, `grep -rn "router.push('/[a-z]" apps/fast/`, `grep -rn "fetch('/[a-z]" apps/fast/`. Each result reviewed: relative paths stay relative; absolute internal paths either get `basePath` prepended (via a helper) or convert to `<Link>` where the JSX context allows. For `/api/*` fetches that target fast's own API (which is now at `/fast/api/*`), introduce a small `fetchApi('/path')` wrapper that prepends `process.env.NEXT_PUBLIC_BASE_PATH` (set to `/fast`) so every fast-internal API call routes correctly. Fetches to portal's `/api/userinfo` etc. stay unchanged (portal-api still at `/api/**`).
+  - **Acceptance:** all three grep audits return zero unreviewed hits; navigation within fast works at the new base path; fast's own API routes are reachable from the client (e.g., the dashboard data still loads).
+
+- [ ] **T67: Register Google Calendar OAuth redirect URI for /fast/ in Google Cloud Console**
+  - **Prerequisites:** T66, **operator-only** (Google Cloud Console UI)
+  - **What:** Add `https://aha-coms.web.app/fast/api/google-calendar/callback` (or whatever the new callback path resolves to post-basePath) to the OAuth 2.0 client's authorized redirect URIs in Google Cloud Console. **Keep the old URI registered through one rollback window** — if the post-Phase-4 deploy needs reverting, the old callback still works. Update `apps/fast/.env.example` to document the new `GOOGLE_REDIRECT_URI`; operator updates the Cloud Run env var separately.
+  - **Acceptance:** Google Cloud Console shows both old + new redirect URIs registered; `.env.example` updated. Acceptance is operator-confirmed; the task body records the screenshot or list output as proof.
+
+- [ ] **T68: Author `apps/fast/middleware.ts` — public-route allowlist + redirect-to-portal for unauthed**
+  - **Prerequisites:** T66
+  - **What:** Author Next.js middleware (replacement for the deleted `proxy.ts`) that runs at the edge. Logic: (a) let public routes through (`/request`, `/track`, `/api/employees`, plus the OAuth callback path); (b) for non-public routes, check `__session` cookie presence — if missing, redirect to `https://aha-coms.web.app/portal?app=fast&redirect_to=/fast/<original-path>` (post-FU-10 portal sign-in URL shape). The full auth derivation runs in the page/route after the middleware; the middleware is a cheap unauthenticated-block, not an auth oracle.
+  - **Acceptance:** unauthed request to `/fast/dashboard` redirects to portal sign-in with proper query params; unauthed request to `/fast/track` (public) renders normally; the middleware doesn't introduce a per-request DB or HTTP roundtrip (it only reads cookie presence).
+
+- [ ] **T69: Update firebase.json — add `/fast/api/**` + `/fast/**` rewrites in order**
+  - **Prerequisites:** T65, T68
+  - **What:** `firebase.json` gains two rewrites: `/fast/api/**` → `coms-fast-web` (single Cloud Run service per Open Question §3 Option A — fast's API lives inside Next.js, not a separate service) ahead of `/fast/**` → `coms-fast-web`. Update `scripts/verify-firebase-json.mjs` to assert the new rewrites are present in the right precedence order. The redirect block doesn't change (FU-10's `/ → /portal` 301 stays). The fallback `**` → `coms-portal-web` stays as the catch-all for anything unmatched.
+  - **Acceptance:** `bun scripts/verify-firebase-json.mjs` passes with the updated expectations; firebase emulator (or `firebase deploy --only hosting`) routes `/fast/*` to the right Cloud Run service in a feature-branch deploy.
+
+- [ ] **T70: Verify end-to-end via feature-branch deploy + cross-app navigation**
+  - **Prerequisites:** T67, T68, T69, T81 (deploy workflow must exist)
+  - **What:** Push to a feature branch that triggers `deploy-fast.yml`; firebase deploy lands the new rewrites. Verify the full chain: visit `https://aha-coms.web.app/fast/` → middleware redirects unauthed user to portal sign-in → sign in → land back at `/fast/dashboard` → navigate between fast pages → click portal in the launcher → land on `/portal/dashboard` → click heroes → land on `/heroes/dashboard` → return to fast. Verify `__session` crosses paths automatically (Firebase Hosting forwards it). Verify Google Calendar OAuth still works post-redirect-URI registration.
+  - **Acceptance:** all cross-app navigation paths green; `__session` cookie survives every transition; OAuth callback lands correctly at the new redirect URI; fast's middleware doesn't catch authed requests in a redirect loop.
+
+- [ ] **CHECKPOINT 15: Fast lives at `aha-coms.web.app/fast/*`.** Same origin as portal + heroes. `__session` crosses paths automatically. After CP15, Phase 6 opens (Phase 5's Drizzle migration is skipped per ADR 0011).
+
+### Phase 5: Prisma → Drizzle migration — SKIPPED
+
+Spec ref: `docs/spec/05-fast-onboarding.md#phase-5-optional-prisma--drizzle-migration`. Per ADR 0011, this phase is intentionally skipped; the reopen criteria live in the ADR.
+
+- [ ] **T71: Reference ADR 0011 from Phase 5 + close marker**
+  - **Prerequisites:** CP15
+  - **What:** Light bookkeeping — confirm `docs/adr/0011-fast-keeps-prisma.md` exists (it does, authored 2026-05-13) and that the `apps/fast/README.md` (authored in T89) carries a one-line reference to the ADR's reopen criteria. No code change in Phase 5; the task exists so the phase has a closeable artifact rather than `[ ]` indefinitely.
+  - **Acceptance:** T89's README content includes the ADR 0011 reference; this task closes `[x]`.
+
+  **No CP16.** The spec named CP16 conditional on Phase 5 being pursued. Skipped phase, skipped checkpoint. CP17 is the next gate.
+
+### Phase 6: Chrome mounting in fast
+
+Spec ref: `docs/spec/05-fast-onboarding.md#phase-6-chrome-mounting`. Replace fast's local AppShell/Sidebar/Header with the React chrome packages CP12 produced. The brand mark renders into the `brand` slot; theme tokens flow through `@coms-portal/design-tokens/css`.
+
+- [ ] **T72: Delete fast's local chrome — `components/AppShell.tsx` + `components/layout/Sidebar.tsx` + `components/layout/Header.tsx`**
+  - **Prerequisites:** CP15 + CP12
+  - **What:** Remove the three local chrome files. Their consumers (likely `app/layout.tsx` or per-page wrappers) get rewritten in T73 to use the React chrome packages. Don't delete the files until T73 is ready to replace them in the same commit — otherwise the dev server breaks. Better: T72 + T73 land in one commit titled "Mount platform chrome in fast" with the local deletion + React chrome adoption together.
+  - **Acceptance:** the three files don't exist; the layout/page importers updated to consume from `@coms-portal/ui-react/chrome` + `@coms-portal/account-widget-react`.
+
+- [ ] **T73: Mount React chrome — ServiceBar, Sidebar, MobileTopBar, MobileBottomNav, SlideOverNav, AccountWidget**
+  - **Prerequisites:** T72 (delete + replace in one commit)
+  - **What:** Author `apps/fast/app/(authed)/layout.tsx` (or wherever Next.js's app-layout convention places the authed wrapper) that mounts the React chrome. ServiceBar (top), Sidebar (desktop side), MobileTopBar + MobileBottomNav (mobile), SlideOverNav (admin/leader nav for the gating shape heroes uses), AccountWidget from `@coms-portal/account-widget-react`. The chrome receives data via props: `services`, `currentApp="fast"`, `theme`, `onToggleTheme`. The Account widget gets the user object + `appSwitcher` array.
+  - **Acceptance:** fast renders the same chrome corridor as heroes + portal; visual diff against heroes (T54's screenshot baseline) shows no unexplained divergence.
+
+- [ ] **T74: Wire `data.appCatalog` from /api/userinfo**
+  - **Prerequisites:** T73
+  - **What:** Fast's Server Component (or root layout) calls `loadFastAuthUser` (T60) and projects the response's `apps` array into the chrome's `services` prop + the AccountWidget's `appSwitcher` prop. T47 Finding 5's lesson stands — the portal-hub prepend lives in `apps/portal-api/src/routes/userinfo.ts`, NOT in fast's layout. Fast reads `data.appCatalog` and iterates; no special-casing for portal.
+  - **Acceptance:** signed-in fast user sees portal as the first entry in both the ServiceBar tab strip + the AccountWidget app launcher dropdown; heroes appears alongside fast; new apps appearing in `app_registry` surface in fast automatically without code change.
+
+- [ ] **T75: Brand the chrome + visual parity check against heroes + portal**
+  - **Prerequisites:** T74
+  - **What:** Render fast's brand mark (existing "F" or app-icon shape, consistent with the gradient-square + letter pattern heroes uses for "H" and portal uses for "C") into the `brand` slot of MobileTopBar + SlideOverNav. Drop fast's `theme_color` + `background_color` from the existing manifest into the chrome's theme config. Capture side-by-side screenshots at desktop + mobile + light + dark; compare against T54's heroes baseline. Any unintentional divergence gets fixed; intentional fast-specific elements (e.g., the activity-log indicator if it stays) get documented inline.
+  - **Acceptance:** the four side-by-side screenshot grids show fast's chrome at visual parity with heroes + portal at every breakpoint+theme combo. Documented divergence list (if any) lives in `apps/fast/README.md` (authored in T89).
+
+- [ ] **CHECKPOINT 17: Fast renders the platform chrome.** Contract §3 satisfied. Heroes + fast + portal share visually identical chrome corridors. After CP17, Phase 7 opens.
+
+### Phase 7: App registry + webhooks
+
+Spec ref: `docs/spec/05-fast-onboarding.md#phase-7-app-registry--webhooks`. Mirrors heroes Phase 1's app_registry registration + webhook consumer pattern. The `spec07-register-fast.ts` script already exists; reuse it.
+
+- [ ] **T76: Rerun `spec07-register-fast.ts` with post-Phase-4 URLs**
+  - **Prerequisites:** CP17
+  - **What:** Run the existing `apps/portal-api/scripts/spec07-register-fast.ts` with the new single-origin URLs: `FAST_APP_URL=https://aha-coms.web.app/fast`, `FAST_WEBHOOK_URL=https://aha-coms.web.app/fast/api/webhooks/portal`, `FAST_HEALTH_CHECK_URL=https://aha-coms.web.app/fast/api/health`, `FAST_APP_SA=coms-fast-web-sa@fbi-dev-484410.iam.gserviceaccount.com`, `FAST_BROKER_ORIGIN=https://aha-coms.web.app`, `FAST_WEBHOOK_HMAC=$(gcloud secrets versions access latest --secret=aha-fast-broker-signing-secret 2>/dev/null || echo dev-fast-hmac)`. The script detects drift and upserts; first run is INSERT into `app_registry`, `app_manifests`, `app_webhook_endpoints`.
+  - **Acceptance:** `app_registry` has a row with `slug='fast'`, `status='active'`, `url='https://aha-coms.web.app/fast'`; `app_manifests` has fast's manifest; `app_webhook_endpoints` has the webhook target. The portal dashboard's HEROES card analog now shows fast.
+
+- [ ] **T77: Author fast's webhook consumer at `app/api/webhooks/portal/route.ts`**
+  - **Prerequisites:** T76
+  - **What:** Author the Next.js Route Handler that receives portal-issued webhooks at `POST /fast/api/webhooks/portal`. Verify inbound requests via Google ID-token validation against `PORTAL_SERVICE_ACCOUNT_EMAIL` (the same pattern heroes uses at `apps/heroes-api/src/routes/portal-webhooks.ts`). Subscribed events: `user.provisioned`, `user.updated`, `employment.updated`, `user.offboarded`, `taxonomy.upserted`, `taxonomy.deleted`. Plus fast-specific `app_config.updated` if fast actually reads any app_config (the `role` claim is likely the only one). Idempotent on `event_id` via the `portal_webhook_events` dedup table (fast adds this table via a Prisma migration in the same change). The handlers update fast's `User` (or `fast_profiles`) per integration contract §11.
+  - **Acceptance:** `POST /fast/api/webhooks/portal` returns 200 for a properly-signed test event; the dedup table prevents double-processing; a `user.provisioned` event creates a `User` row in fast's DB; `user.offboarded` marks the row inactive (or whatever fast's offboarding semantics dictate).
+
+- [ ] **T78: Taxonomy projection — `taxonomy_cache` table + initial sync**
+  - **Prerequisites:** T77
+  - **What:** If fast consumes any portal-owned taxonomies (branches, teams, departments — survey fast's existing schema to see which), project them into a `taxonomy_cache` table mirroring heroes' Phase 5 shape (`packages/heroes-shared/src/db/schema/taxonomy-cache.ts`). Initial sync runs against portal-api's `/api/v1/taxonomies/:id/entries` endpoint at fast's startup or registration; webhook-driven updates after via `taxonomy.upserted` + `taxonomy.deleted`.
+  - **Acceptance:** `taxonomy_cache` table exists in fast's DB; initial sync populates entries; a `taxonomy.upserted` webhook updates the projection.
+
+- [ ] **T79: Health check endpoint — `GET /fast/api/health`**
+  - **Prerequisites:** T76
+  - **What:** Author `apps/fast/app/api/health/route.ts` returning 200 + a small JSON body (e.g., `{ status: 'ok', dbReachable: true, webhookSubscriptionActive: true }`) when fast's DB is reachable and the webhook subscription is registered. The endpoint serves two consumers: portal's dashboard probe (60-second polling) and Cloud Run's startup probe (`infra/fast/cloud-run.tf` startup_probe block).
+  - **Acceptance:** `curl https://aha-coms.web.app/fast/api/health` returns 200; portal's dashboard card for fast flips to "healthy" within 60s; Cloud Run's startup probe succeeds.
+
+- [ ] **CHECKPOINT 18: Fast is in `app_registry`.** Cross-app navigation surfaces fast everywhere. Webhooks deliver and process correctly. Fast's profile shape stays in sync with portal's identity. After CP18, Phase 8 opens.
+
+### Phase 8: Per-service IaC + deploy workflows
+
+Spec ref: `docs/spec/05-fast-onboarding.md#phase-8-per-service-iac--deploy-workflows`. Per-app principle: fast gets its own Tofu state bucket, runtime SAs, monitoring filters, Artifact Registry repo. Mirrors `infra/heroes/`'s shape exactly.
+
+- [ ] **T80: Author `infra/fast/` mirroring `infra/heroes/`**
+  - **Prerequisites:** CP18 (or parallel after CP15)
+  - **What:** Create `infra/fast/` with: per-app Tofu state bucket (`gs://coms-fast-tofu-state-XXXX`), `cloud-run.tf` defining `coms-fast-web` (unified per Option A — no separate `coms-fast-api`), `iam-fast-runtime.tf` declaring runtime SAs (`coms-fast-web-sa`), Artifact Registry repo (`coms-fast-registry`), monitoring filters + uptime check on `/fast/api/health`, the standard label set (`app="fast"`, `service="fast-web"`, `environment="prod"`, `managed-by="opentofu"` per standing principle 4). The existing `aha-fast/terraform/` is REFERENCE MATERIAL — the new IaC follows the `coms-<app>-<resource>` naming from standing principle 2, not aha-fast's legacy `aha-fast-*` shapes. Don't copy-paste; reauthor against the standing principles.
+  - **Acceptance:** `cd infra/fast && tofu init` succeeds; `tofu plan -var alert_email=...` shows the new resources; no resource references `aha-fast-*` legacy names.
+
+- [ ] **T81: Author `.github/workflows/deploy-fast.yml` — path-filtered + WIF + db:push step**
+  - **Prerequisites:** T80
+  - **What:** Mirror `.github/workflows/deploy-heroes-api.yml` and `deploy-heroes-web.yml`'s shape, combined into one workflow since fast is unified. Path filters on `apps/fast/**` (excluding test-only paths if any). WIF auth via fast's WIF deployer SA (`coms-fast-deployer-sa`). The `db:push` step (using Prisma's `prisma db push --skip-generate` since fast doesn't carry a migrations folder) runs BEFORE the docker build, mirroring portal-api's FU-3 + heroes-api's FU-5 ordering. The workflow comment NAMES the destructive-migration caveat — T64's `DROP TABLE` shape needs deploy-first-then-migrate ordering and that doesn't fit the migrate-first-then-deploy default; operator handles destructive migrations manually outside the workflow.
+  - **Acceptance:** `gh workflow view deploy-fast.yml` shows the file is registered; a probe push touching `apps/fast/README.md` triggers ONLY the fast workflow (path filter isolation proven).
+
+- [ ] **T82: Register fast's WIF deployer SA — `coms-fast-deployer-sa` + IAM bindings**
+  - **Prerequisites:** T80
+  - **What:** IaC declaration of the WIF deployer SA + workload-identity-pool + provider, bound to the GitHub repo + ref pattern matching `mrdoorba/aha-coms`. Per-service runtime SA (`coms-fast-web-sa`) is separate from the deployer (per-app principle 5's runtime-SA distinction). Grant the runtime SA: Cloud SQL Client (for the Cloud SQL Postgres connection), Secret Manager Secret Accessor (for DATABASE_URL + any other secrets), Cloud Storage Object Viewer (if fast reads from a GCS bucket — survey fast's existing terraform for the binding shape).
+  - **Acceptance:** `gcloud iam service-accounts list --project=fbi-dev-484410 | grep coms-fast` shows both `coms-fast-deployer-sa` + `coms-fast-web-sa`; the WIF provider is bound to the GitHub repo.
+
+- [ ] **T83: First IaC apply window — `tofu apply` in infra/fast/**
+  - **Prerequisites:** T80, T81, T82, **operator-only**
+  - **What:** Operator runs `cd infra/fast && tofu init && tofu plan -var alert_email=... && tofu apply` per the laptop-CLI runbook (`infra/README.md`). New Cloud Run service `coms-fast-web` comes up with a bootstrap image (hello-world). First GHA deploy via `deploy-fast.yml` lands fast at the new infra.
+  - **Acceptance:** `gcloud run services list --project=fbi-dev-484410 | grep coms-fast` shows the new service; the GHA deploy completes green; `curl https://coms-fast-web-XXX.run.app/fast/api/health` returns 200.
+
+- [ ] **CHECKPOINT 19: `coms-fast-web` Cloud Run service live.** Deploy workflows run end-to-end. Path-filter isolation proven by a single-file probe push. After CP19, Phase 9 opens.
+
+### Phase 9: PWA installability + service worker
+
+Spec ref: `docs/spec/05-fast-onboarding.md#phase-9-pwa-installability--service-worker`. The third PWA on the shared origin. Per FU-10's structural fix, scope-overlap collisions are prevented at the manifest layer — fast's `start_url`/`scope`/`id` all at `/fast/` are disjoint from portal's `/portal/` and heroes' `/heroes/`.
+
+- [ ] **T84: Author `apps/fast/public/manifest.webmanifest` — start_url + scope + id all `/fast/`**
+  - **Prerequisites:** CP19
+  - **What:** Author the manifest with `name: "AHA Fast"`, `short_name: "Fast"`, `start_url: "/fast/"`, `scope: "/fast/"`, `id: "/fast/"`, `display: "standalone"`, `theme_color` + `background_color` matching fast's brand (indigo/purple gradient — survey existing brand colors), `icons` declared at 192×192 + 512×512 sizes pointing at `/fast/icons/icon-{192,512}.png`. Generate the icons via the same ImageMagick pattern FU-6 used for portal-web + heroes-web — fast-branded variant (indigo gradient `#XXXX → #YYYY` + bold "F" letter). Reference the manifest from `apps/fast/app/layout.tsx`'s `<head>` (Next.js metadata API).
+  - **Acceptance:** the manifest file exists at the right path; icons exist at the declared paths; `curl https://aha-coms.web.app/fast/manifest.webmanifest` returns the JSON; Lighthouse PWA audit's "manifest" check passes.
+
+- [ ] **T85: Author `apps/fast/public/service-worker.js` mirroring portal-web's pattern**
+  - **Prerequisites:** T84
+  - **What:** Author the SW: cache `[build, files]` on install, prune stale caches on activate, cache-or-network on fetch with API skip-guard reshaped for `/fast/api/*` (so authenticated API calls never serve stale). The FU-10 lesson stands: SW scope is automatically `/fast/` (from the manifest scope) so heroes/portal fetches don't transit fast's worker. Register the SW from `app/layout.tsx` (client-side `useEffect` or a small client component).
+  - **Acceptance:** the SW file exists; `curl https://aha-coms.web.app/fast/service-worker.js` returns the JS; visiting `/fast/` registers the SW; Chrome DevTools → Application → Service Workers shows the worker at `/fast/` scope.
+
+- [ ] **T86: Lighthouse PWA audit + on-device install verification**
+  - **Prerequisites:** T85, **operator-only** (mobile device)
+  - **What:** Run Lighthouse PWA audit against `https://aha-coms.web.app/fast/` — installability, manifest, service-worker categories all pass. Fix whatever the audit flags. Operator on-device verification on Chrome mobile + Brave mobile: install fast as PWA from the browser → home-screen tile renders with the fast icon → open from home screen → splash + standalone chrome render correctly. **Crucially, install all three PWAs (portal, heroes, fast) on the same device** — confirm each appears as a distinct tile with its own icon + scope (closes the multi-app PWA model FU-10 unlocked).
+  - **Acceptance:** Lighthouse PWA audit passes all three categories; mobile install succeeds; three distinct tiles on the home screen render correctly when launched.
+
+- [ ] **CHECKPOINT 20: Fast is installable as a distinct PWA from portal-web and heroes-web.** Three install registrations live on the shared origin, scoped by start_url. After CP20, Phase 10 opens.
+
+### Phase 10: Verification + documentation
+
+Spec ref: `docs/spec/05-fast-onboarding.md#phase-10-verification--documentation`. The closing checklist before CP21 seals Spec 05.
+
+- [ ] **T87: End-to-end smoke (mirrors T47's checklist for heroes)**
+  - **Prerequisites:** CP20, **operator-led**
+  - **What:** Execute the full smoke checklist against prod:
+    - Sign in via portal → land on fast (when portal launcher links to fast).
+    - Navigate within fast (dashboard, channels, tasks, analytics, orbit, etc.).
+    - Cross-app navigation: portal → fast, heroes → fast, fast → portal, fast → heroes — every direction.
+    - Logout from one app → verify logged out everywhere (cross-app session invalidation).
+    - Mobile chrome: install PWA from a clean device, log in, verify chrome looks identical to portal's + heroes'.
+    - Admin operations: fast's leader-only views (analytics, user control panel) work post-cutover; the gating logic in T73's SlideOverNav prop respects the `user.role === 'leader'` check.
+    - Public surfaces: `/fast/request` + `/fast/track` + `/fast/api/employees` reachable without authentication (middleware T68 doesn't gate them).
+    - Google Calendar OAuth: connect a calendar, list events, create a meeting — all green after the redirect-URI update (T67).
+    - Slack webhook: submit a request, confirm Slack delivery (app-internal, unchanged by the migration).
+  - **Acceptance:** every checklist item passes; any regressions documented as Findings (mirror T47's Finding-N pattern). Findings that block CP21 get mended same-session; cosmetic findings can land as separate follow-ups.
+
+- [ ] **T88: Performance check — p50/p95 against pre-migration baseline**
+  - **Prerequisites:** T87, **operator-led**
+  - **What:** Capture cold + warm p50/p95 for the fast dashboard load (sign-in → /fast/dashboard render). Compare against a pre-migration baseline captured before T56's subtree merge (if no baseline exists, T87's measurement IS the baseline going forward). Expectation per the integration contract: flat-or-faster vs Better Auth's session-row lookup since `__session` introspection is approximately the same wire cost as the previous DB roundtrip.
+  - **Acceptance:** post-migration p50/p95 within ±15% of baseline (or faster). Outside that band, the gap gets diagnosed — per-route breakdown identifies whether the regression lives in `loadFastAuthUser`'s `/api/userinfo` introspection, the React chrome SSR overhead, or fast-internal query changes.
+
+- [ ] **T89: Author `apps/fast/README.md` as the React-side reference doc**
+  - **Prerequisites:** CP20
+  - **What:** Mirror `apps/heroes-web/README.md`'s structure verbatim adjusted for fast's specifics. Opening paragraph naming fast as the React-side reference implementation; the `loadFastAuthUser` narrative; the integration-contract cross-reference table mapping each § (§§ 1–9 + 11–14) to fast's concrete file:line anchor; a section listing fast's deliberate anti-patterns (no `Session`/`Account`/`Verification` tables, no `/login`/`/register`/`/forgot-password` routes, no Better Auth surfaces, no `useAuth()` client-side hook); the ADR 0011 reference (T71's bookkeeping); a "future React/Next.js app onboarding" coda — the next React app reads fast's README the way the next Svelte app reads heroes'. Pair it with a short `apps/fast/scripts/README.md` if fast carries any internal scripts worth surfacing (likely yes given the 21 entries in fast's `scripts/` directory).
+  - **Acceptance:** the README exists; the cross-reference table covers every § with a concrete anchor; no `[ ] TODO` lines, no broken cross-refs, no stale `Better Auth` / `useAuth` references.
+
+- [ ] **T90: Update `docs/integration-contract.md` to reference fast alongside heroes**
+  - **Prerequisites:** T89
+  - **What:** Wherever `docs/integration-contract.md` names heroes as the reference implementation, add fast as the React-side parallel. Update §§ 1–9 + 11–14's "see also" or "reference implementation" annotations. Keep the §10 (notifications) deviation noted for both apps — both retain app-local notifications until the platform-notifications spec lands. Add ADR 0002 (cross-framework UI fork) reference now that the React port is proved in code.
+  - **Acceptance:** the contract document names both apps as worked examples; no §  references heroes alone (except where genuinely Svelte-specific); the §10 deviation lists both apps.
+
+- [ ] **CHECKPOINT 21 — Spec 05 complete:** Fast is the React-side reference implementation. Heroes + fast together prove framework parity in code. The monorepo holds two production apps end-to-end on the contract. `packages/ui-react/` + `packages/account-widget-react/` are production-validated. The integration contract has its second worked example.
 
 ---
 

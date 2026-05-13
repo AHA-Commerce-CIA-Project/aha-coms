@@ -135,6 +135,84 @@ Spec 02 Phase 6: verification + docs
    update heroes' README to point at integration contract
         ↓
    CHECKPOINT 11: heroes is the reference implementation
+        ↓
+Spec 05 Phase 1: React chrome packages
+   audit Svelte chrome surface (T50)
+   port 5 chrome + 1 widget + Sheet primitive to React (T51, T52)
+   author stub consumer (T53)
+   visual parity check at desktop/mobile/light/dark (T54)
+        ↓
+   CHECKPOINT 12: React chrome at visual parity with Svelte
+        ↓
+Spec 05 Phase 2: subtree merge fast into the monorepo
+   confirm freeze (T55)
+   subtree-merge → restructure → rename package (T56, T57)
+   npm → Bun workspace conversion (T58)
+   verify install/build/dev/test (T59)
+        ↓
+   CHECKPOINT 13: fast lives in-tree at apps/fast/
+        ↓
+Spec 05 Phase 3: Better Auth removal (3-staged per ADR 0011's decision)
+   (a) author loadFastAuthUser; add portal_sub column, backfill (T60)
+   (b) flip 127 requireAuth call sites to loadFastAuthUser (T61)
+   (b) delete 5 credential routes (T62)
+   (c) delete 4 auth lib files + proxy.ts (T63)
+   (c) drop Session/Account/Verification models; promote portal_sub PK (T64)
+        ↓
+   CHECKPOINT 14: fast has no Better Auth surfaces
+        ↓
+Spec 05 Phase 4: single-origin migration (mount fast at /fast/)
+   basePath: '/fast' in next.config.ts (T65)
+   audit + sweep internal links + fetches through basePath (T66)
+   register Google Calendar OAuth redirect URI for /fast/ (T67)
+   author middleware.ts (replacement for proxy.ts) (T68)
+   firebase.json: /fast/api/** + /fast/** rewrites in order (T69)
+   verify against feature-branch deploy (T70)
+        ↓
+   CHECKPOINT 15: fast lives at aha-coms.web.app/fast/*
+        ↓
+Spec 05 Phase 5: Prisma → Drizzle migration (skipped per ADR 0011)
+   ADR 0011 reference + Phase 5 skip marker (T71)
+   [no checkpoint — phase is intentional no-op]
+        ↓
+Spec 05 Phase 6: chrome mounting in fast
+   delete fast's local AppShell/Sidebar/Header (T72)
+   mount React chrome from @coms-portal/ui-react (T73)
+   wire data.appCatalog from /api/userinfo (T74)
+   brand the chrome + visual parity check (T75)
+        ↓
+   CHECKPOINT 17: fast renders the platform chrome
+        ↓
+Spec 05 Phase 7: app registry + webhooks
+   rerun register-fast script with post-Phase-4 URLs (T76)
+   author webhook consumer (T77)
+   taxonomy projection (T78)
+   health check endpoint (T79)
+        ↓
+   CHECKPOINT 18: fast in app_registry; webhooks deliver
+        ↓
+Spec 05 Phase 8: per-service IaC + deploy workflows
+   author infra/fast/ mirroring infra/heroes/ (T80)
+   author deploy-fast.yml workflow (T81)
+   register fast WIF deployer SA (T82)
+   first IaC apply window (T83)
+        ↓
+   CHECKPOINT 19: coms-fast-web Cloud Run service live
+        ↓
+Spec 05 Phase 9: PWA installability
+   author manifest.webmanifest at /fast/ scope (T84)
+   author service-worker.js mirroring portal-web pattern (T85)
+   Lighthouse PWA audit + on-device install verify (T86)
+        ↓
+   CHECKPOINT 20: fast installable as distinct PWA
+        ↓
+Spec 05 Phase 10: verification + documentation
+   E2E smoke (sign-in cross-app + chrome + admin + public surfaces + OAuth) (T87)
+   performance check (p50/p95 flat-or-faster vs pre-migration) (T88)
+   author apps/fast/README.md as React-side reference (T89)
+   update docs/integration-contract.md to reference fast alongside heroes (T90)
+        ↓
+   CHECKPOINT 21: Spec 05 complete — fast is the React-side reference
 ```
 
 ## Vertical slicing approach
@@ -181,11 +259,19 @@ When a fresh Claude session picks up this plan:
 |---|---|---|---|
 | SDK `0.1.1` → current gap in `apps/api` hides breaking changes | Phase 1 (T08) | High | Surface immediately. Reserve a half-day for porting whatever diverged between issuer-side and verifier-side SDK code. |
 | Heroes' base-path migration breaks scattered absolute links | Phase 1 Spec 02 (T25) | High | Audit `grep -rn 'href="/[a-z]'` thoroughly. Run heroes against base-path-prefixed staging URL before any production cutover. |
-| `bun install` quirks on native deps (sharp, lightningcss, Prisma) | Spec 02 onwards (only when aha-fast onboards) | Medium | Deferred. Not a blocker for Spec 01 or Spec 02. |
+| `bun install` quirks on native deps (sharp, lightningcss, Prisma) | Spec 05 Phase 2 (T58) | Medium | Survey fast's deps before merge; identify any native-binary deps; spike bun install against a copy of fast's package.json before the workspace merge. |
 | Heroes' app-side glue won't fully absorb into chrome lib | Phase 4 Spec 02 (T40-T43) | Medium | Some patterns may stay app-local. Document the judgment calls when they arise. |
 | Webhook consumer relied on session staleness | Phase 2 Spec 02 (T36) | Low | Audit `portal_webhook_events` consumers for assumptions about session lifetime before drop-table migration. |
 | Heroes freeze window not coordinated | Phase 3 Spec 01 (T10) | Medium | T10 is explicitly a coordination task; do not skip. |
 | Firebase Hosting passthrough quirks (cookies, streaming SSR) | Phase 5 Spec 01 (T19-T20) | Medium | Pre-spike with one app behind Firebase Hosting before committing the architecture. |
+| React chrome port produces visual or behavioural divergence from Svelte parity | Spec 05 Phase 1 (T50–T54) | High | Pixel-level comparison at every breakpoint + theme. The Svelte version is the authority; React mirrors. Stub consumer (T53) validates prop shapes before fast adopts in Phase 6. |
+| Better Auth removal misses a `requireAuth()` call site → 401 in prod | Spec 05 Phase 3 (T61) | High | 137 grep hits across `app/lib/components` quantify the surface. Sub-phase (b) is verified by re-grep returning zero matches before sub-phase (c) drops the implementation. Three-stage cadence (ADR 0011 §4 Option B) makes any miss fail in (b) not after (c). |
+| Next.js `basePath: '/fast'` breaks scattered absolute paths | Spec 05 Phase 4 (T66) | High | Audit pattern proven on heroes T25 + portal FU-10. Run `grep -rn 'href="/[a-z]'` + `grep -rn 'fetch("/[a-z]'` + `grep -rn "router.push('/'" ` before flipping basePath. |
+| Google Calendar OAuth redirect URI mismatch after base-path change | Spec 05 Phase 4 (T67) | Medium | Register the new `/fast/` redirect URI in Google Cloud Console BEFORE the deploy that flips basePath. Old URI stays registered through one rollback window. |
+| Prisma `User` PK shape change (cuid → portal-UUID) breaks 30+ relations | Spec 05 Phase 3 (T64) | High | Staged migration: `portal_sub` column adds nullable first, backfills via email_normalized join against portal's identity_users, code flips to read it, schema migration constrains it only after every active user has a value. Mirrors heroes' `can_submit_points` shape. |
+| Two-PWA-per-origin scope collision (already mitigated by FU-10) extends to three | Spec 05 Phase 9 (T84) | Low | FU-10 closed the structural issue at the manifest level — portal/`portal`, heroes/`/heroes/`, and fast/`/fast/` are scope-disjoint. Verify start_url + scope + id all `/fast/`; Lighthouse audit catches scope misconfiguration. |
+| 30+ alifm17 product surfaces introduce things this spec didn't audit | Spec 05 all phases | Medium | Re-audit after T56 subtree merge. PROJECT_CONTEXT.md last updated 2026-03-31; the tree shape evolved. T59's verification step is the first signal something broke. |
+| Webhook consumer's idempotency fails under retry storms during cutover | Spec 05 Phase 7 (T77) | Low | `portal_webhook_events` dedup table follows heroes' pattern. Pre-deploy: confirm table exists + unique-key constraint enforced. |
 
 ## Standing principles for IaC across all apps
 
@@ -219,10 +305,12 @@ These predate the current plan and outlive it — every future app onboarding (a
 
 | Aspect | Confidence | Notes |
 |---|---|---|
-| Phase ordering | High | Dependency graph reflects real dependencies. |
-| Vertical slicing | High | Each task delivers a working state. |
-| Acceptance criteria | Medium | Verification steps are specific but may need refinement when actual code is touched. |
-| Effort estimates | Not provided | Deliberately. The user will estimate as tasks are picked up. |
-| Coordination assumptions | Low | "Heroes freeze window" (T10) assumes a process the plan author doesn't know the shape of. May need adjustment. |
+| Phase ordering (Spec 01 + 02) | High | Dependency graph reflects real dependencies; proven by Spec 01 + Spec 02 executing through to CP11 without reordering. |
+| Phase ordering (Spec 05) | High | Mirrors Spec 02's vertical-slice cadence; Open Question §1–§4 decisions resolved + recorded before phase tasks landed. |
+| Vertical slicing | High | Each task delivers a working state; the Phase 3 sub-phase shape (T60→T64) makes the Better Auth removal incrementally verifiable rather than atomic. |
+| Acceptance criteria | Medium | Concrete file paths + grep patterns + verification commands named. Some Phase 6/7 specifics (fast's brand mark, taxonomy projection scope) sharpen when execution hits the relevant code. |
+| Effort estimates | Not provided | Deliberately. The user estimates as tasks are picked up. Phase 1 (chrome port) is signalled as the heaviest single body; Phase 3 (Better Auth removal, 127 call sites) is second. |
+| Coordination assumptions | Low | "Fast freeze window" (T55) mirrors heroes T10's shape; the operator confirmed initiation before T55 opens. |
+| Spec 05 codebase audit | High | aha-fast surveyed 2026-05-13: 127 API routes, 137 grep hits on `requireAuth\|getServerSession\|useAuth`, 42 Prisma models (4 auth-shaped), 5 credential routes. The task acceptance criteria reference these specific numbers. |
 
 Adjustments to this plan are expected as execution surfaces information. The plan is a living document; update it alongside `todo.md` as decisions evolve.
