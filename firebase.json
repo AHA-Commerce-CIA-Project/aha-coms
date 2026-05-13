@@ -37,6 +37,27 @@
         }
       },
       {
+        "source": "/fast/api/**",
+        "run": {
+          "serviceId": "coms-fast-web",
+          "region": "asia-southeast2"
+        }
+      },
+      {
+        "source": "/fast",
+        "run": {
+          "serviceId": "coms-fast-web",
+          "region": "asia-southeast2"
+        }
+      },
+      {
+        "source": "/fast/**",
+        "run": {
+          "serviceId": "coms-fast-web",
+          "region": "asia-southeast2"
+        }
+      },
+      {
         "source": "/api/**",
         "run": {
           "serviceId": "coms-portal-api",
