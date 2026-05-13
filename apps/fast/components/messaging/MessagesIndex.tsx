@@ -439,7 +439,7 @@ function SectionGroup({ label, sectionKey, collapsed, onToggle, onAdd, addTitle,
 
 interface SectionMenuProps {
     open: boolean;
-    anchorRef: React.RefObject<HTMLElement>;
+    anchorRef: React.RefObject<HTMLElement | null>;
     onClose: () => void;
     prefs: SectionPrefs;
     onChange: (patch: Partial<SectionPrefs>) => void;

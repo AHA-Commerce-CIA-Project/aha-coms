@@ -95,7 +95,6 @@ const EMOJI_KEYWORDS: Record<string, string[]> = {
     '🆒': ['cool'],
     '🆙': ['up', 'level'],
     '🔝': ['top'],
-    '🔥': ['fire', 'hot', 'lit', 'flame'],
 };
 
 const EMOJI_CATEGORIES = [

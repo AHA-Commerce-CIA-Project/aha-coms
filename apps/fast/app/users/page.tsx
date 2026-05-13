@@ -16,7 +16,7 @@ interface UserRow {
     email: string;
     name: string;
     avatar_url: string | null;
-    role: 'leader' | 'member';
+    role: 'admin' | 'leader' | 'member';
     team_id: string | null;
     created_at: string;
     teams?: { name: string } | null;
@@ -75,7 +75,7 @@ function UserManagementInner() {
     const [formName, setFormName] = useState('');
     const [formEmail, setFormEmail] = useState('');
     const [formPassword, setFormPassword] = useState('');
-    const [formRole, setFormRole] = useState<'leader' | 'member'>('member');
+    const [formRole, setFormRole] = useState<'admin' | 'leader' | 'member'>('member');
     const [formTeamId, setFormTeamId] = useState<string>('');
 
     useEffect(() => {

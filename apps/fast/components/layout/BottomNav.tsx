@@ -78,7 +78,7 @@ export function BottomNav() {
 
     const isActive = (paths: string[]) => paths.some(p => pathname === p || pathname.startsWith(p + '/'));
 
-    const moreItems: MoreItem[] = [
+    const moreItems: MoreItem[] = ([
         { href: '/request', icon: FileText, label: 'Submit Request' },
         { href: '/analytics', icon: BarChart3, label: 'Analytics', requireLeader: true },
         { href: '/activity-log', icon: Activity, label: 'Activity Log', requireLeader: true },
@@ -87,7 +87,7 @@ export function BottomNav() {
         { href: '/users?tab=roles', icon: Shield, label: 'Roles', requireLeader: true },
         { href: '/changelog', icon: Sparkles, label: 'Changelog', badgeKey: 'changelog' },
         { onClick: () => { signOut(); setMoreOpen(false); }, icon: LogOut, label: 'Sign out' },
-    ].filter(it => !it.requireLeader || isLeader);
+    ] satisfies MoreItem[]).filter(it => !it.requireLeader || isLeader);
 
     const moreActive = !PRIMARY_TABS.some(t => isActive(t.activePaths));
     const totalMoreBadge = badges.changelog;

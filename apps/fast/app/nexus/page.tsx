@@ -51,7 +51,7 @@ interface TicketRow {
     completed_by: string | null;
     completed_by_id?: string | null;
     image_url: string | null;
-    custom_fields?: { fileUrls?: string[]; referenceUrls?: string[] };
+    custom_fields?: { fileUrls?: string[]; referenceUrls?: string[]; assessment_edited_at?: string };
     assignee?: { name: string } | null;
     reviews?: { id: string; reviewer_type: string; rating: number; comment: string | null; reviewer_name: string | null; created_at: string }[];
     needs_help?: boolean;
@@ -1914,11 +1914,11 @@ function NexusContent() {
                                     )}
 
                                     {/* Attached Files */}
-                                    {viewTicket.custom_fields?.fileUrls?.length > 0 && (
+                                    {(viewTicket.custom_fields?.fileUrls?.length ?? 0) > 0 && (
                                         <div>
                                             <p className="text-sm font-medium text-indigo-600 mb-1.5">Attached Files</p>
                                             <div className="space-y-1.5">
-                                                {viewTicket.custom_fields.fileUrls.map((url: string, i: number) => (
+                                                {viewTicket.custom_fields?.fileUrls?.map((url: string, i: number) => (
                                                     <a key={i} href={url} target="_blank" rel="noopener noreferrer"
                                                         className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-colors">
                                                         <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
@@ -1930,11 +1930,11 @@ function NexusContent() {
                                     )}
 
                                     {/* Reference URLs */}
-                                    {viewTicket.custom_fields?.referenceUrls?.length > 0 && (
+                                    {(viewTicket.custom_fields?.referenceUrls?.length ?? 0) > 0 && (
                                         <div>
                                             <p className="text-sm font-medium text-indigo-600 mb-1.5">Reference Links</p>
                                             <div className="space-y-1.5">
-                                                {viewTicket.custom_fields.referenceUrls.map((url: string, i: number) => (
+                                                {viewTicket.custom_fields?.referenceUrls?.map((url: string, i: number) => (
                                                     <a key={i} href={url} target="_blank" rel="noopener noreferrer"
                                                         className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-600 hover:bg-indigo-100 transition-colors">
                                                         <ExternalLink className="w-4 h-4 text-indigo-400 flex-shrink-0" />

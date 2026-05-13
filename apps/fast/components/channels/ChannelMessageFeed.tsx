@@ -16,6 +16,7 @@ interface Message {
   savedBy: { id: string }[];
   isPinned?: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface ChannelMessageFeedProps {
