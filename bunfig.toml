@@ -1,2 +1,23 @@
+# Test runner config.
+#
+# CANONICAL INVOCATION: `bun run test` (from monorepo root) or
+# `bun run --filter @coms-portal/portal-api test` (direct). Both delegate
+# to apps/portal-api/package.json's `test` script, which fans out via
+# `xargs -P 4` and runs each `.test.ts` file in its own bun process.
+#
+# DO NOT run bare `bun test`. Bun's mock.module() is process-global; when
+# every test file shares one process, the first file to import the real
+# `src/index.ts` (route-compose.test.ts) poisons the module cache for
+# every subsequent file's mock.module(...) call. The mocks silently
+# no-op, real auth/db modules load, and ~196 tests fail with 401s and
+# 500s that look like genuine regressions. They are not — every one of
+# them passes in isolation. See `apps/portal-api/src/test-helpers/
+# schema-barrel-mock.ts` and `.codebase-memory/adr.md` §7 for the
+# canonical pattern history.
+#
+# The `root` line below scopes default discovery to portal-api when
+# someone does run bare `bun test`; the contamination is unavoidable
+# given bun's runner shape, but the scope at least keeps unrelated
+# packages out of the blast radius.
 [test]
 root = "apps/portal-api/src"
