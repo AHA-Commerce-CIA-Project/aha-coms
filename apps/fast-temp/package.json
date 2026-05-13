@@ -1,0 +1,49 @@
+{
+  "name": "aha-smart-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@google-cloud/storage": "^7.19.0",
+    "@prisma/client": "^5.21.1",
+    "@types/sanitize-html": "^2.16.1",
+    "better-auth": "^1.5.6",
+    "clsx": "^2.1.1",
+    "googleapis": "^171.4.0",
+    "lightningcss": "^1.32.0",
+    "lightningcss-darwin-arm64": "^1.32.0",
+    "lucide-react": "^0.562.0",
+    "next": "16.1.4",
+    "nodemailer": "^8.0.5",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "resend": "^6.10.0",
+    "sanitize-html": "^2.17.3",
+    "sharp": "^0.34.5",
+    "tailwind-merge": "^3.4.0",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.10"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/nodemailer": "^8.0.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.3.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.4",
+    "prisma": "^5.21.1",
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}

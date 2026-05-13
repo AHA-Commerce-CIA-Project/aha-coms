@@ -1,0 +1,53 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--build-arg'
+      - 'DATABASE_URL=${_DATABASE_URL}'
+      - '--build-arg'
+      - 'BETTER_AUTH_SECRET=${_BETTER_AUTH_SECRET}'
+      - '--build-arg'
+      - 'BETTER_AUTH_URL=${_BETTER_AUTH_URL}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_APP_URL=${_NEXT_PUBLIC_APP_URL}'
+      - '--build-arg'
+      - 'RESEND_API_KEY=${_RESEND_API_KEY}'
+      - '-t'
+      - 'gcr.io/fbi-dev-484410/aha-fast-app:latest'
+      - '.'
+
+  # Push the freshly-built image to the registry BEFORE deploying.
+  # The declarative `images:` block at the bottom only pushes after all steps
+  # finish, which would cause the deploy step below to pull the previous
+  # build's image. So we push explicitly here.
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/fbi-dev-484410/aha-fast-app:latest'
+
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'aha-fast-app'
+      - '--image=gcr.io/fbi-dev-484410/aha-fast-app:latest'
+      - '--region=asia-southeast2'
+      - '--platform=managed'
+      - '--quiet'
+
+# Non-secret defaults — overridable via --substitutions at build time
+substitutions:
+  _BETTER_AUTH_URL: 'https://aha-fast-app-908739514002.asia-southeast2.run.app'
+  _NEXT_PUBLIC_APP_URL: 'https://aha-fast-app-908739514002.asia-southeast2.run.app'
+  # Secrets below have no default — must be passed via --substitutions on every build.
+  # TODO (option A): move to Secret Manager via availableSecrets block.
+  _DATABASE_URL: ''
+  _BETTER_AUTH_SECRET: ''
+  _RESEND_API_KEY: ''
+
+options:
+  substitution_option: 'ALLOW_LOOSE'
+
+images:
+  - 'gcr.io/fbi-dev-484410/aha-fast-app:latest'
+timeout: '1200s'

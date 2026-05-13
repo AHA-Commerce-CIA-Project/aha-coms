@@ -1,0 +1,288 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #f8fafc;
+  --foreground: #161B67;
+  --card: #ffffff;
+  --card-border: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --sidebar-bg: #ffffff;
+  --header-bg: #ffffff;
+}
+
+.dark {
+  --background: #0a0e1f;
+  --foreground: #e2e8f0;
+  --card: #151b2e;
+  --card-border: #1e2640;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --sidebar-bg: #0f1424;
+  --header-bg: #0f1424;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-manrope);
+  --font-mono: var(--font-geist-mono);
+
+  /* Brand Blue Scale (Mapped to Slate for UI elements) */
+  --color-slate-950: #0a0c33;
+  --color-slate-900: #161B67;
+  --color-slate-800: #161B67;
+  --color-slate-700: #1d2382;
+  --color-slate-600: #2e38b3;
+  --color-slate-500: #424dd4;
+  --color-slate-400: #646cde;
+  --color-slate-300: #b5bcf4;
+  --color-slate-200: #daddf9;
+  --color-slate-100: #f0f1fc;
+
+  /* Brand Accents */
+  --color-indigo-600: #161B67;
+  --color-indigo-500: #161B67;
+  --color-indigo-400: #161B67;
+  --color-indigo-300: #646cde;
+
+  --color-purple-500: #6D50B8;
+  --color-purple-600: #4a3482;
+
+  --color-amber-400: #F4C144;
+  --color-amber-500: #d6a32d;
+  
+  --color-white: #FFFFFF;
+}
+
+body {
+  background: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-manrope), 'Manrope', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Dark mode overrides for common Tailwind classes */
+.dark .bg-white { background-color: #151b2e !important; }
+.dark .bg-slate-50 { background-color: #1a2138 !important; }
+.dark .bg-slate-100 { background-color: #1e2640 !important; }
+.dark .bg-slate-200 { background-color: #2a3450 !important; }
+.dark .bg-slate-50\/80 { background-color: rgba(26, 33, 56, 0.8) !important; }
+.dark .bg-slate-50\/50 { background-color: rgba(26, 33, 56, 0.5) !important; }
+
+/* Text slate overrides */
+.dark .text-slate-900 { color: #f1f5f9 !important; }
+.dark .text-slate-800 { color: #e2e8f0 !important; }
+.dark .text-slate-700 { color: #cbd5e1 !important; }
+.dark .text-slate-600 { color: #94a3b8 !important; }
+.dark .text-slate-500 { color: #94a3b8 !important; }
+.dark .text-slate-400 { color: #64748b !important; }
+.dark .text-slate-300 { color: #475569 !important; }
+
+/* Brand indigo colors remapped to dark blue — override for dark mode */
+.dark .text-indigo-600 { color: #818cf8 !important; }
+.dark .text-indigo-500 { color: #a5b4fc !important; }
+.dark .text-indigo-400 { color: #a5b4fc !important; }
+.dark .text-indigo-700 { color: #818cf8 !important; }
+
+/* Hardcoded brand dark blue #0F0E7F / #161B67 — invisible on dark bg */
+.dark .text-\[\#0F0E7F\] { color: #a5b4fc !important; }
+.dark .text-\[\#161B67\] { color: #a5b4fc !important; }
+
+/* Black text */
+.dark .text-black { color: #f1f5f9 !important; }
+
+/* Borders */
+.dark .border-slate-200 { border-color: #1e2640 !important; }
+.dark .border-slate-100 { border-color: #1a2138 !important; }
+.dark .border-slate-300 { border-color: #2a3450 !important; }
+.dark .divide-slate-100 > * + * { border-color: #1a2138 !important; }
+.dark .divide-slate-200 > * + * { border-color: #1e2640 !important; }
+
+/* Hover states */
+.dark .hover\:bg-slate-50:hover { background-color: #1a2138 !important; }
+.dark .hover\:bg-slate-100:hover { background-color: #1e2640 !important; }
+.dark .hover\:bg-slate-200:hover { background-color: #2a3450 !important; }
+
+/* Input/form backgrounds */
+.dark input, .dark textarea, .dark select {
+  background-color: #1a2138 !important;
+  color: #f1f5f9 !important;
+  border-color: #2a3450 !important;
+}
+.dark input::placeholder, .dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Placeholder colors */
+.dark .placeholder-slate-400::placeholder { color: #64748b !important; }
+.dark .placeholder-slate-500::placeholder { color: #64748b !important; }
+
+/* Note card colored backgrounds — make darker in dark mode */
+.dark .bg-amber-50 { background-color: #422006 !important; }
+.dark .bg-emerald-50 { background-color: #052e16 !important; }
+.dark .bg-blue-50 { background-color: #0c1836 !important; }
+.dark .bg-purple-50 { background-color: #1e0a3a !important; }
+.dark .bg-pink-50 { background-color: #330a1e !important; }
+.dark .bg-rose-50 { background-color: #330a14 !important; }
+.dark .bg-orange-50 { background-color: #3b1506 !important; }
+.dark .bg-indigo-50 { background-color: #1a1642 !important; }
+
+/* Note card colored borders — brighter in dark mode */
+.dark .border-amber-200 { border-color: #92400e !important; }
+.dark .border-emerald-200 { border-color: #065f46 !important; }
+.dark .border-blue-200 { border-color: #1e3a5f !important; }
+.dark .border-purple-200 { border-color: #4c1d95 !important; }
+.dark .border-pink-200 { border-color: #831843 !important; }
+.dark .border-rose-200 { border-color: #881337 !important; }
+.dark .border-orange-200 { border-color: #9a3412 !important; }
+.dark .border-indigo-200 { border-color: #3730a3 !important; }
+
+/* Calendar event text — make visible in dark mode */
+.dark .text-slate-800 span,
+.dark .text-indigo-700,
+.dark .text-emerald-700,
+.dark .text-amber-700,
+.dark .text-purple-700,
+.dark .text-teal-700,
+.dark .text-pink-700,
+.dark .text-rose-700,
+.dark .text-cyan-700,
+.dark .text-orange-700,
+.dark .text-fuchsia-700,
+.dark .text-blue-700 {
+  color: #e2e8f0 !important;
+}
+
+/* Emerald connected badge */
+.dark .bg-emerald-50 .text-emerald-700,
+.dark .text-emerald-700 { color: #6ee7b7 !important; }
+.dark .border-emerald-200 { border-color: #065f46 !important; }
+
+/* contentEditable placeholder */
+.dark [contenteditable][data-placeholder]:empty::before { color: #475569 !important; }
+.dark [contenteditable] { color: #e2e8f0 !important; }
+
+/* List markers (bullet dots and numbers) — visible in dark mode */
+.dark ul, .dark ol { color: #e2e8f0 !important; }
+.dark li { color: #e2e8f0 !important; }
+.dark li::marker { color: #94a3b8 !important; }
+
+/* Ensure list markers are not clipped */
+ul, ol { list-style-position: outside !important; }
+li::marker { font-size: 1em; }
+
+/* Note card text in colored backgrounds — force light text */
+.dark .bg-amber-50 *, .dark .bg-emerald-50 *, .dark .bg-blue-50 *,
+.dark .bg-purple-50 *, .dark .bg-pink-50 *, .dark .bg-rose-50 *,
+.dark .bg-orange-50 *, .dark .bg-indigo-50 * {
+  color: #e2e8f0 !important;
+}
+.dark .bg-amber-50 .text-slate-400, .dark .bg-emerald-50 .text-slate-400,
+.dark .bg-blue-50 .text-slate-400, .dark .bg-purple-50 .text-slate-400,
+.dark .bg-pink-50 .text-slate-400, .dark .bg-rose-50 .text-slate-400,
+.dark .bg-orange-50 .text-slate-400, .dark .bg-indigo-50 .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+/* Calendar event text — ALL event text must be light */
+.dark .text-slate-500 span.font-semibold { color: #e2e8f0 !important; }
+.dark span.font-semibold.text-slate-800 { color: #e2e8f0 !important; }
+
+/* Calendar day numbers */
+.dark .text-slate-600 { color: #cbd5e1 !important; }
+.dark .text-slate-700 { color: #e2e8f0 !important; }
+
+/* Calendar legend text */
+.dark .text-xs.text-slate-500 { color: #94a3b8 !important; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Smooth transitions */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(29, 56, 139, 0.5); /* #1D388B */
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(150, 173, 245, 0.15); /* #96ADF5 */
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #818cf8 0%, #a78bfa 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effects */
+.glow-indigo {
+  box-shadow: 0 0 40px -10px rgba(99, 102, 241, 0.4);
+}
+
+.glow-purple {
+  box-shadow: 0 0 40px -10px rgba(168, 85, 247, 0.4);
+}
+
+/* Animation keyframes */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
