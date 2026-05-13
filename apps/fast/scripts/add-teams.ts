@@ -1,12 +1,26 @@
+/**
+ * One-off seed: insert HR, CS, Logistics into fast's Team table.
+ *
+ * Reads DATABASE_URL from process.env (mirroring backfill-portal-sub.ts).
+ * The operator opens a Cloud SQL Auth Proxy (or points directly at the fast
+ * instance's public IP) and exports DATABASE_URL before invoking:
+ *
+ *   export DATABASE_URL='postgres://aha-fast-admin:<pw>@<host>:5432/aha-fast-db'
+ *   bun run apps/fast/scripts/add-teams.ts
+ *
+ * The password lives in Secret Manager (`aha-fast-db-url`); fetch via
+ * `gcloud secrets versions access latest --secret=aha-fast-db-url` or
+ * read it out of `infra/fast/` once T80 authors that surface.
+ */
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: `postgresql://aha-fast-admin:${encodeURIComponent('***REMOVED-FU-19-DB-PW***')}@34.101.176.36:5432/aha-fast-db?schema=public`
-    }
-  }
-});
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL must be set in the environment before running this script.');
+  console.error('See the file header for the operator runbook.');
+  process.exit(1);
+}
+
+const prisma = new PrismaClient();
 
 async function main() {
   const newTeams = [

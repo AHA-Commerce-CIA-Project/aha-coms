@@ -1,12 +1,16 @@
+/**
+ * Destructive: clears team assignments + teams table, then reseeds canonical
+ * team list. Reads DATABASE_URL from process.env. Operator runbook lives in
+ * add-teams.ts's header — the same shape applies here.
+ */
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: `postgresql://aha-fast-admin:${encodeURIComponent('***REMOVED-FU-19-DB-PW***')}@34.101.176.36:5432/aha-fast-db?schema=public`
-    }
-  }
-});
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL must be set in the environment before running this script.');
+  process.exit(1);
+}
+
+const prisma = new PrismaClient();
 
 async function main() {
   console.log('Resetting user team assignments...');

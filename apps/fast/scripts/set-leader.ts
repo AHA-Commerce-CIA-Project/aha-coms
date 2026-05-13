@@ -1,12 +1,17 @@
+/**
+ * One-off: promote named users to role=leader. Lists all users afterwards.
+ *
+ * Reads DATABASE_URL from process.env. Operator runbook lives in
+ * add-teams.ts's header — the same shape applies here.
+ */
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: `postgresql://aha-fast-admin:${encodeURIComponent('***REMOVED-FU-19-DB-PW***')}@34.101.176.36:5432/aha-fast-db?schema=public`
-    }
-  }
-});
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL must be set in the environment before running this script.');
+  process.exit(1);
+}
+
+const prisma = new PrismaClient();
 
 async function main() {
   // Update admin@gmail.com and alifmasyhur22@gmail.com roles to 'leader'
