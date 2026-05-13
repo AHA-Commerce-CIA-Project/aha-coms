@@ -44,6 +44,9 @@ interface InboxTask {
     pendedFromStatus?: string | null;
     needsHelp?: boolean;
     checklist?: { total: number; completed: number };
+    // Non-null when this task was spawned by the AHABOT routine scheduler.
+    // Drives the Routine Reminders tab + the "AHABOT" requester label.
+    routineTemplate?: { id: string; name: string } | null;
 }
 
 const PENDING_TAGS: { value: string; label: string }[] = [
@@ -138,6 +141,10 @@ export default function TeamInboxPage() {
     const isMaster = profile?.role === 'admin';
 
     const [tasks, setTasks] = useState<InboxTask[]>([]);
+    // Pill-tab switcher: 'standard' shows direct-assigned tasks; 'routine'
+    // shows AHABOT-spawned routine reminders. Filters everything downstream
+    // (stats strip + kanban buckets) so the two surfaces stay clean.
+    const [activeTab, setActiveTab] = useState<'standard' | 'routine'>('standard');
     const [loading, setLoading] = useState(true);
     const [teams, setTeams] = useState<Team[]>([]);
     const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
@@ -690,6 +697,42 @@ export default function TeamInboxPage() {
                 Tasks posted into this team&apos;s Assign Task channels. Click a card to open the task and claim it.
             </p>
 
+            {/* Pill switcher — same pattern as /nexus Open Queue / Direct
+                Requests. Splits the inbox so routine reminders don't clutter
+                the standard direct-assigned cards. */}
+            {(() => {
+                const standardCount = tasks.filter(t => !t.routineTemplate).length;
+                const routineCount = tasks.filter(t => !!t.routineTemplate).length;
+                return (
+                    <div className="flex justify-center">
+                        <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex gap-1">
+                            <button
+                                onClick={() => setActiveTab('standard')}
+                                className={`px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${activeTab === 'standard' ? 'bg-white shadow-md text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                Standard Tasks
+                                {standardCount > 0 && (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${activeTab === 'standard' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
+                                        {standardCount}
+                                    </span>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('routine')}
+                                className={`px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${activeTab === 'routine' ? 'bg-white shadow-md text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                Routine Reminders
+                                {routineCount > 0 && (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${activeTab === 'routine' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
+                                        {routineCount}
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                );
+            })()}
+
             {loading && (
                 <div className="flex items-center justify-center py-16">
                     <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
@@ -703,6 +746,14 @@ export default function TeamInboxPage() {
             )}
 
             {!loading && !error && (() => {
+                // Filter by the active pill before doing anything else so the
+                // stats strip, empty state, and kanban all reflect the selected
+                // tab. Routine reminders are detected via the routineTemplate
+                // relation surfaced by /api/team-inbox.
+                const visibleTasks = tasks.filter(t =>
+                    activeTab === 'routine' ? !!t.routineTemplate : !t.routineTemplate,
+                );
+
                 // Bucket tasks into 4 mutually-exclusive columns. Overdue takes
                 // precedence over the regular status — a P1 that's past its
                 // due date lands in the Overdue column, not "In Progress",
@@ -712,7 +763,7 @@ export default function TeamInboxPage() {
                 const now = Date.now();
                 const buckets = { unclaimed: [] as InboxTask[], inProgress: [] as InboxTask[], overdue: [] as InboxTask[], completed: [] as InboxTask[] };
                 let pendingCount = 0;
-                for (const t of tasks) {
+                for (const t of visibleTasks) {
                     const isDone = t.status === 'done';
                     const isPending = t.status === 'pending';
                     if (isPending) pendingCount += 1;
@@ -729,16 +780,23 @@ export default function TeamInboxPage() {
                     else if (t.status === 'todo' && !t.assignee) buckets.unclaimed.push(t);
                     else buckets.inProgress.push(t);
                 }
-                const total = tasks.length;
+                const total = visibleTasks.length;
 
                 if (total === 0) {
+                    const isRoutineTab = activeTab === 'routine';
                     return (
                         <div className="rounded-2xl bg-white border border-slate-200 px-6 py-12 text-center">
                             <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mx-auto mb-3">
                                 <Inbox className="w-6 h-6 text-indigo-400" />
                             </div>
-                            <h3 className="text-base font-bold text-slate-700 mb-1">Inbox is empty</h3>
-                            <p className="text-sm text-slate-400">Direct-assigned tasks for your team will appear here as cards.</p>
+                            <h3 className="text-base font-bold text-slate-700 mb-1">
+                                {isRoutineTab ? 'No routine reminders' : 'Inbox is empty'}
+                            </h3>
+                            <p className="text-sm text-slate-400">
+                                {isRoutineTab
+                                    ? 'AHABOT will post routine reminders here when scheduled templates fire.'
+                                    : 'Direct-assigned tasks for your team will appear here as cards.'}
+                            </p>
                         </div>
                     );
                 }
@@ -841,7 +899,15 @@ export default function TeamInboxPage() {
                                                 // pending cards: the "overdue" framing is irrelevant
                                                 // while the task is paused.
                                                 const deadline = (col.key === 'completed' || isPaused) ? null : deadlineState(t.dueDate);
-                                                const previewText = t.description ? htmlToPlainText(t.description).slice(0, 140) : '';
+                                                // Routine-spawned tasks usually have an empty description
+                                                // (the template name lives in t.title). Fall back to the
+                                                // routine name so the card reads as something useful
+                                                // instead of "No description".
+                                                const isRoutine = !!t.routineTemplate;
+                                                const descPreview = t.description ? htmlToPlainText(t.description).slice(0, 140) : '';
+                                                const previewText = descPreview || (isRoutine ? t.routineTemplate?.name ?? '' : '');
+                                                // Routine reminders come from AHABOT, not a human requester.
+                                                const requesterLabel = isRoutine ? 'AHABOT' : (t.requesterName || 'Someone');
                                                 const attachmentCount = Array.isArray(t.attachments) ? t.attachments.length : 0;
                                                 const isOverdueCard = col.key === 'overdue';
                                                 const isPending = pendingId === t.id;
@@ -897,7 +963,7 @@ export default function TeamInboxPage() {
                                                         {/* Top row — assigner + relative time + 3-dot menu */}
                                                         <div className="flex items-center justify-between gap-2 mb-1.5">
                                                             <span className="text-xs font-semibold text-slate-700 truncate">
-                                                                {t.requesterName || 'Someone'}
+                                                                {requesterLabel}
                                                             </span>
                                                             <div className="flex items-center gap-1.5 flex-shrink-0">
                                                                 <span className="text-[10px] text-slate-400">{formatRelative(t.createdAt)}</span>

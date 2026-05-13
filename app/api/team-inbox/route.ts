@@ -54,6 +54,10 @@ export async function GET(request: NextRequest) {
             assignee: { select: { id: true, name: true, image: true } },
             assignedTeam: { select: { id: true, name: true } },
             targetChannel: { select: { id: true, name: true } },
+            // Surface the routine template (when present) so the inbox can
+            // split routine reminders into their own tab and render AHABOT
+            // as the requester instead of the empty "Someone" fallback.
+            routineTemplate: { select: { id: true, name: true } },
             // Pull just the viewer's archive marker — used to hide their own
             // personally-archived tasks from the Completed column.
             personalArchives: {
@@ -93,6 +97,7 @@ export async function GET(request: NextRequest) {
         targetChannel: t.targetChannel,
         assignee: t.assignee,
         assignedTeam: t.assignedTeam,
+        routineTemplate: t.routineTemplate,
         archivedByMe: t.personalArchives.length > 0,
         pendingReason: t.pendingReason,
         pendingTag: t.pendingTag,
