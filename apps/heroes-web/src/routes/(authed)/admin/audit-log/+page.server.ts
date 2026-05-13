@@ -2,27 +2,15 @@ import { redirect } from '@sveltejs/kit'
 import { base } from '$app/paths'
 import type { PageServerLoad } from './$types'
 
-export const load: PageServerLoad = async ({ locals, fetch, url }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
   if (locals.user?.role !== 'admin') {
     redirect(302, `${base}/dashboard`)
   }
+  const actor = locals.user!
+  const page = Number(url.searchParams.get('page') ?? '1')
+  const limit = 50
 
-  const page = url.searchParams.get('page') ?? '1'
-  const limit = '50'
-
-  const res = await fetch(`${base}/api/v1/audit-logs?page=${page}&limit=${limit}`)
-  const json = await res.json()
-
-  return {
-    logs: (json.data ?? []) as Array<{
-      id: string
-      actorId: string
-      actorName: string | null
-      action: string
-      entityType: string
-      entityId: string | null
-      createdAt: string
-    }>,
-    meta: json.meta ?? { total: 0, page: Number(page), limit: Number(limit) },
-  }
+  const auditLogsService = await import('@coms-portal/heroes-api/services/audit-logs')
+  const result = await auditLogsService.listAuditLogs({ page, limit }, { actor })
+  return { logs: result.logs, meta: result.meta }
 }

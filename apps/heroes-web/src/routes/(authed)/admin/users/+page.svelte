@@ -16,7 +16,7 @@
     isActive: boolean
   }
 
-  let users = $derived((data.users as UserRow[]) ?? [])
+  let users = $derived((data.users as unknown as UserRow[]) ?? [])
   let meta = $derived(data.meta ?? { total: 0, page: 1, limit: 100 })
   let search = $state('')
   let roleFilter = $state('')

@@ -17,7 +17,7 @@
     actorName: string | null
   }
 
-  let logs = $derived((data.logs ?? []) as AuditLog[])
+  let logs = $derived((data.logs ?? []) as unknown as AuditLog[])
   let meta = $derived(data.meta ?? { total: 0, page: 1, limit: 50 })
   let isLoading = $state(false)
 

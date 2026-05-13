@@ -6,7 +6,21 @@
 
   let { data } = $props()
 
-  const { user } = $derived(data)
+  type UserDetail = {
+    id: string
+    name: string
+    email: string | null
+    role: string
+    teamId: string | null
+    teamName: string | null
+    department: string | null
+    position: string | null
+    branchKey: string | null
+    isActive: boolean
+    createdAt: string
+  }
+
+  const user = $derived(data.user as unknown as UserDetail)
 
   const ROLE_BADGE: Record<string, string> = {
     admin: 'bg-gradient-to-br from-primary/15 to-sky-blue/10 text-primary border-primary/25 dark:text-sky-blue',

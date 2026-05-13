@@ -26,8 +26,8 @@
     schedule: string
   }
 
-  let status = $derived<SyncStatus | null>((data.status as SyncStatus | null) ?? null)
-  let jobs = $derived<SyncJob[]>((data.jobs as SyncJob[]) ?? [])
+  let status = $derived<SyncStatus | null>((data.status as unknown as SyncStatus | null) ?? null)
+  let jobs = $derived<SyncJob[]>((data.jobs as unknown as SyncJob[]) ?? [])
   let meta = $derived(data.meta ?? { total: 0, page: 1, limit: 20, totalPages: 1 })
   let page = $derived(data.meta?.page ?? 1)
   let isLoading = $state(false)

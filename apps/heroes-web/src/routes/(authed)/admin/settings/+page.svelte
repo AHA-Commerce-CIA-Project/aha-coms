@@ -8,7 +8,7 @@
 
   type Setting = { key: string; value: string; description: string | null; updatedAt: string }
 
-  const settings = $derived((data.settings ?? []) as Setting[])
+  const settings = $derived((data.settings ?? []) as unknown as Setting[])
 
   function findValue(key: string, fallback: number): number {
     const entry = settings.find((s) => s.key === key)
