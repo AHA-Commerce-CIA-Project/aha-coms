@@ -18,6 +18,9 @@ type SyncConfig = {
   branchKey: string
 }
 
+const MISSING_CONFIG_MESSAGE =
+  'Sheet sync is not configured: GOOGLE_SHEET_ID_POINTS / GOOGLE_SHEET_ID_EMPLOYEES env vars are not set on the Cloud Run revision. Apply the heroes IaC change that wires these env vars, then redeploy.'
+
 let isSyncing = false
 
 const STALE_JOB_MINUTES = 30
@@ -69,6 +72,46 @@ function buildConfigFromEnv(): Omit<SyncConfig, 'branchKey'> {
   }
 }
 
+// Surfaces config gaps at the route boundary so the trigger UI receives a 4xx
+// with a real message instead of a deceptive `{ started: true }`. Mirrors the
+// inner validation in triggerManualSync but synchronous + observable, so
+// route handlers can convert it to HTTP status before fire-and-forget runs.
+export function getSyncConfigError(): string | null {
+  const config = buildConfigFromEnv()
+  if (!config.sheetIds.points || !config.sheetIds.employees) {
+    return MISSING_CONFIG_MESSAGE
+  }
+  return null
+}
+
+// Writes a `failed` row to sheet_sync_jobs so unexpected throws inside the
+// fire-and-forget path surface in Sync History instead of dying silently in
+// Cloud Run logs. Wrapped in its own try/catch — a failure to record the
+// failure must not crash the scheduler.
+async function recordFailedJob(
+  direction: 'import' | 'resync',
+  error: unknown,
+  startedBy?: string,
+): Promise<void> {
+  try {
+    const now = new Date()
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    await db.insert(sheetSyncJobs).values({
+      direction,
+      sheetId: 'unknown',
+      status: 'failed',
+      rowsProcessed: 0,
+      rowsFailed: 0,
+      errorLog: [{ tab: 'scheduler', row: 0, name: '', error: errorMessage }],
+      startedBy: startedBy ?? null,
+      startedAt: now,
+      completedAt: now,
+    })
+  } catch (recordErr) {
+    console.error('[sheet-sync] failed to record failed job:', recordErr)
+  }
+}
+
 export async function isSyncRunning(): Promise<boolean> {
   if (isSyncing) return true
 
@@ -91,8 +134,8 @@ export async function triggerManualSync(startedBy?: string) {
     const config = buildConfigFromEnv()
     const branchKey = await getDefaultBranchKey()
     if (!branchKey) throw new Error('No branch found')
-    if (!config.sheetIds.points && !config.sheetIds.employees) {
-      throw new Error('GOOGLE_SHEET_ID_POINTS/EMPLOYEES env vars not set')
+    if (!config.sheetIds.points || !config.sheetIds.employees) {
+      throw new Error(MISSING_CONFIG_MESSAGE)
     }
     return await runFullSync(config.sheetIds, config.tabNames, branchKey, startedBy)
   } catch (err) {
@@ -105,7 +148,7 @@ export async function triggerManualSync(startedBy?: string) {
 
 export function triggerSyncInBackground(startedBy?: string) {
   if (isSyncing) return { started: false, reason: 'Sync already in progress' }
-  void triggerManualSync(startedBy).catch(() => {})
+  void triggerManualSync(startedBy).catch((err) => recordFailedJob('import', err, startedBy))
   return { started: true }
 }
 
@@ -120,12 +163,13 @@ export function triggerResyncInBackground(startedBy?: string) {
       const config = buildConfigFromEnv()
       const branchKey = await getDefaultBranchKey()
       if (!branchKey) throw new Error('No branch found')
-      if (!config.sheetIds.points && !config.sheetIds.employees) {
-        throw new Error('GOOGLE_SHEET_ID_POINTS/EMPLOYEES env vars not set')
+      if (!config.sheetIds.points || !config.sheetIds.employees) {
+        throw new Error(MISSING_CONFIG_MESSAGE)
       }
       await runFullResync(config.sheetIds, config.tabNames, branchKey, startedBy)
     } catch (err) {
       console.error('[sheet-sync] resync error:', err)
+      await recordFailedJob('resync', err, startedBy)
     } finally {
       isSyncing = false
     }

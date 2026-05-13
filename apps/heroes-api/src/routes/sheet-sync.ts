@@ -5,6 +5,7 @@ import {
   triggerResyncInBackground,
   isSyncRunning,
   cleanupStaleJobs,
+  getSyncConfigError,
 } from '../services/sheet-sync-scheduler'
 import * as repo from '../repositories/sheet-sync'
 import {
@@ -37,6 +38,15 @@ export const sheetSyncTriggerRoute = new Elysia().post(
     // If we got here with a Bearer token, the caller is authorized.
     const authHeader = request.headers.get('authorization')
     if (authHeader?.startsWith('Bearer ')) {
+      const configError = getSyncConfigError()
+      if (configError) {
+        set.status = 503
+        return {
+          success: false,
+          data: null,
+          error: { code: 'SYNC_NOT_CONFIGURED', message: configError },
+        }
+      }
       const job = triggerSyncInBackground()
       return { success: true, data: job, error: null }
     }
@@ -92,6 +102,16 @@ export const sheetSyncTriggerRoute = new Elysia().post(
       }
     }
 
+    const configError = getSyncConfigError()
+    if (configError) {
+      set.status = 503
+      return {
+        success: false,
+        data: null,
+        error: { code: 'SYNC_NOT_CONFIGURED', message: configError },
+      }
+    }
+
     const job = triggerSyncInBackground(user.id)
     return { success: true, data: job, error: null }
   },
@@ -113,6 +133,16 @@ export const sheetSyncRoute = new Elysia({ prefix: '/sheet-sync' })
       }
     }
 
+    const configError = getSyncConfigError()
+    if (configError) {
+      set.status = 503
+      return {
+        success: false,
+        data: null,
+        error: { code: 'SYNC_NOT_CONFIGURED', message: configError },
+      }
+    }
+
     const job = triggerSyncInBackground(actor.id)
     return { success: true, data: job, error: null }
   })
@@ -127,6 +157,16 @@ export const sheetSyncRoute = new Elysia({ prefix: '/sheet-sync' })
         success: false,
         data: null,
         error: { code: 'FORBIDDEN', message: 'Admin access required' },
+      }
+    }
+
+    const configError = getSyncConfigError()
+    if (configError) {
+      set.status = 503
+      return {
+        success: false,
+        data: null,
+        error: { code: 'SYNC_NOT_CONFIGURED', message: configError },
       }
     }
 

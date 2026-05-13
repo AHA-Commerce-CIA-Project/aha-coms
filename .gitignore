@@ -58,6 +58,11 @@ infra/**/*.tfstate
 infra/**/*.tfstate.backup
 infra/**/*.tfvars
 !infra/**/*.tfvars.example
+# infra/heroes/terraform.tfvars holds the Google Sheet IDs (per FU-9 ops
+# decision 2026-05-13: not secret enough to warrant Secret Manager,
+# environment-specific enough that variables.tf defaults can't carry them).
+# Tracked so `tofu apply` works without operator-passed vars.
+!infra/heroes/terraform.tfvars
 
 # Service account keys — never commit, regardless of location
 *.sa-key.json

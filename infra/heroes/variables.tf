@@ -40,15 +40,23 @@ variable "alert_email" {
 }
 
 variable "sheet_id_points" {
-  description = "Google Spreadsheet ID for points and redeem tabs"
+  description = "Google Spreadsheet ID for points and redeem tabs. Required — set in terraform.tfvars. Not secret per FU-9 ops decision; identifying the canonical spreadsheet is no leakier than the Drive sharing model."
   type        = string
-  default     = ""
+
+  validation {
+    condition     = length(var.sheet_id_points) > 0
+    error_message = "sheet_id_points must be set (see infra/heroes/terraform.tfvars). FU-9: empty defaults silently dropped the Cloud Run env vars on every apply."
+  }
 }
 
 variable "sheet_id_employees" {
-  description = "Google Spreadsheet ID for employee list tab"
+  description = "Google Spreadsheet ID for employee list tab. Required — set in terraform.tfvars."
   type        = string
-  default     = ""
+
+  validation {
+    condition     = length(var.sheet_id_employees) > 0
+    error_message = "sheet_id_employees must be set (see infra/heroes/terraform.tfvars)."
+  }
 }
 
 variable "app_image" {

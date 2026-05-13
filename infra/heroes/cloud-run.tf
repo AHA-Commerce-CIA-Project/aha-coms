@@ -241,20 +241,25 @@ resource "google_cloud_run_v2_service" "coms_heroes_api" {
         }
       }
 
-      dynamic "env" {
-        for_each = var.sheet_id_points != "" ? {
-          GOOGLE_SHEET_ID_POINTS    = var.sheet_id_points
-          GOOGLE_SHEET_ID_EMPLOYEES = var.sheet_id_employees
-          SHEET_TAB_EMPLOYEES       = "HEROES - Fulltime Staff"
-          SHEET_TAB_BINTANG         = "Poin Bintang"
-          SHEET_TAB_PENALTI         = "Poin Penalti"
-          SHEET_TAB_POIN_AHA        = "Poin AHA"
-          SHEET_TAB_REDEEM          = "Redeem Poin AHA"
-        } : {}
-        content {
-          name  = env.key
-          value = env.value
-        }
+      # Sheet IDs are set unconditionally. Values come from terraform.tfvars
+      # (committed; not secret per ops decision 2026-05-13). SHEET_TAB_* env
+      # vars are intentionally not set here — the app's buildConfigFromEnv()
+      # falls back to the canonical tab names, keeping a single source of
+      # truth in apps/heroes-api/src/services/sheet-sync-scheduler.ts.
+      #
+      # FU-9 lesson (recorded in tasks/todo.md): the prior `dynamic "env"`
+      # gating on `var.sheet_id_points != ""` collapsed silently when the
+      # tfvars file didn't exist, dropping the env vars on every apply since
+      # the variables landed. Gating IaC on the presence of a variable is a
+      # silent-failure shape; prefer required values + tfvars.
+      env {
+        name  = "GOOGLE_SHEET_ID_POINTS"
+        value = var.sheet_id_points
+      }
+
+      env {
+        name  = "GOOGLE_SHEET_ID_EMPLOYEES"
+        value = var.sheet_id_employees
       }
 
       startup_probe {

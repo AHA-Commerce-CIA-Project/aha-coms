@@ -64,14 +64,22 @@ The placeholders never reach a real resource — they only satisfy the variable
 resolver. Real values land via the CI plan job's repo-level GH variables when
 those specific resources are being changed.
 
-`infra/heroes/` has no tfvars file; its variables either default sensibly
-(see `heroes/variables.tf`) or are operator-passed. The one required var
-without a default is `alert_email`:
+`infra/heroes/` carries a committed `terraform.tfvars` with the Google
+Sheet IDs the sheet-sync service reads (per FU-9: sheet IDs are not
+secret enough to warrant Secret Manager, but they are environment-
+specific enough that an empty default silently dropped them on every
+apply — Tofu validation now forces them to be set). The one remaining
+operator-passed var is `alert_email`:
 
 ```bash
 cd infra/heroes
 tofu plan -var alert_email=ops@ahacommerce.net
 ```
+
+If you ever clone the repo onto a fresh laptop, confirm `infra/heroes/
+terraform.tfvars` exists before applying — `tofu plan` will fail loudly
+on the variable validation, but the failure is louder if you read this
+first.
 
 ## Normal apply
 
