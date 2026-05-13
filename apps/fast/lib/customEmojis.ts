@@ -39,7 +39,7 @@ export async function fetchCustomEmojis(force = false): Promise<CustomEmoji[]> {
     const now = Date.now();
     if (!force && now - lastFetched < TTL_MS) return cache;
     if (inFlight) return inFlight;
-    inFlight = fetch('/api/emojis/custom')
+    inFlight = fetch('/fast/api/emojis/custom')
         .then((r) => (r.ok ? r.json() : []))
         .then((list: CustomEmoji[]) => {
             cache = Array.isArray(list) ? list : [];

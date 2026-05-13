@@ -88,7 +88,7 @@ export function MessageInput({ otherUserName, onSend, disabled }: MessageInputPr
                 const formData = new FormData();
                 formData.append('file', file);
 
-                const res = await fetch('/api/chat/upload', {
+                const res = await fetch('/fast/api/chat/upload', {
                     method: 'POST',
                     body: formData,
                 });

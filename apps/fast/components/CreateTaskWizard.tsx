@@ -118,14 +118,14 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
         setUploadError(null);
         setError(null);
 
-        fetch('/api/users')
+        fetch('/fast/api/users')
             .then((r) => (r.ok ? r.json() : []))
             .then((list: any[]) => {
                 setMembers((list || []).map((u) => ({ id: u.id, name: u.name })));
             })
             .catch(() => setMembers([]));
 
-        fetch('/api/brand-codes').then((r) => (r.ok ? r.json() : [])).then(setBrandCodes).catch(() => {});
+        fetch('/fast/api/brand-codes').then((r) => (r.ok ? r.json() : [])).then(setBrandCodes).catch(() => {});
     }, [open]);
 
     useEffect(() => {
@@ -144,7 +144,7 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
         try {
             const fd = new FormData();
             fd.append('file', file);
-            const res = await fetch('/api/upload', { method: 'POST', body: fd });
+            const res = await fetch('/fast/api/upload', { method: 'POST', body: fd });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Upload failed');
             setImages((prev) => [...prev, { url: data.url, preview: localPreview }]);
@@ -252,7 +252,7 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
                 ...formData.fileUrls,
             ];
 
-            const res = await fetch('/api/tasks', {
+            const res = await fetch('/fast/api/tasks', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -644,7 +644,7 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
                                             const fd = new FormData();
                                             fd.append('file', file);
                                             try {
-                                                const res = await fetch('/api/upload', { method: 'POST', body: fd });
+                                                const res = await fetch('/fast/api/upload', { method: 'POST', body: fd });
                                                 if (res.ok) {
                                                     const data = await res.json();
                                                     setFormData((prev) => ({ ...prev, fileUrls: [...prev.fileUrls, data.url] }));

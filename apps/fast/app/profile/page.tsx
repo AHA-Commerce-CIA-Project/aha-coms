@@ -60,7 +60,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!isPending && !session) {
-      router.push('/login');
+      window.location.href = '/portal?app=fast';
     }
   }, [session, isPending, router]);
 
@@ -71,7 +71,7 @@ export default function ProfilePage() {
 
   const fetchProfile = async () => {
     try {
-      const res = await fetch('/api/profile');
+      const res = await fetch('/fast/api/profile');
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
@@ -90,7 +90,7 @@ export default function ProfilePage() {
     setProfileSuccess('');
 
     try {
-      const res = await fetch('/api/profile', {
+      const res = await fetch('/fast/api/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: editName, status: editStatus }),
@@ -127,7 +127,7 @@ export default function ProfilePage() {
 
     setSavingPassword(true);
     try {
-      const res = await fetch('/api/profile/password', {
+      const res = await fetch('/fast/api/profile/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword }),
@@ -170,7 +170,7 @@ export default function ProfilePage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch('/api/profile/avatar', {
+      const res = await fetch('/fast/api/profile/avatar', {
         method: 'POST',
         body: formData,
       });

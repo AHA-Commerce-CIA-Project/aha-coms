@@ -94,7 +94,7 @@ function UserManagementInner() {
 
     const fetchPending = async () => {
         try {
-            const res = await fetch('/api/auth/pending');
+            const res = await fetch('/fast/api/auth/pending');
             if (res.ok) setPendingUsers(await res.json());
         } catch {}
     };
@@ -102,7 +102,7 @@ function UserManagementInner() {
     const handleApproval = async (userId: string, action: 'approve' | 'reject') => {
         setApprovingId(userId);
         try {
-            await fetch(`/api/auth/approve/${userId}`, {
+            await fetch(`/fast/api/auth/approve/${userId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action }),
@@ -115,7 +115,7 @@ function UserManagementInner() {
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/users');
+            const res = await fetch('/fast/api/users');
             if (res.ok) {
                 const data = await res.json();
                 setUsers(data);
@@ -129,7 +129,7 @@ function UserManagementInner() {
 
     const fetchTeams = async () => {
         try {
-            const res = await fetch('/api/teams');
+            const res = await fetch('/fast/api/teams');
             if (res.ok) {
                 const data = await res.json();
                 setTeams(data as TeamRow[]);
@@ -176,7 +176,7 @@ function UserManagementInner() {
         setFormError(null);
 
         try {
-            const res = await fetch('/api/users', {
+            const res = await fetch('/fast/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -208,7 +208,7 @@ function UserManagementInner() {
         setFormError(null);
 
         try {
-            const res = await fetch(`/api/users/${editingUser.id}`, {
+            const res = await fetch(`/fast/api/users/${editingUser.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -236,7 +236,7 @@ function UserManagementInner() {
         setFormLoading(true);
 
         try {
-            const res = await fetch(`/api/users/${deleteUser.id}`, {
+            const res = await fetch(`/fast/api/users/${deleteUser.id}`, {
                 method: 'DELETE',
             });
 
@@ -255,7 +255,7 @@ function UserManagementInner() {
 
     const handleConfirmEmail = async (user: UserRow) => {
         try {
-            const res = await fetch(`/api/users/${user.id}/confirm`, {
+            const res = await fetch(`/fast/api/users/${user.id}/confirm`, {
                 method: 'POST',
             });
             const data = await res.json();
@@ -271,7 +271,7 @@ function UserManagementInner() {
         setSyncing(true);
         setSyncResult(null);
         try {
-            const res = await fetch('/api/admin/sync-hr', { method: 'POST' });
+            const res = await fetch('/fast/api/admin/sync-hr', { method: 'POST' });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Sync failed');
             setSyncResult(data);

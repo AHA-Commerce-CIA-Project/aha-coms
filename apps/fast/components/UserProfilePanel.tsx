@@ -69,7 +69,7 @@ export function UserProfilePanel({ user, currentUserId, onClose, showAddToConver
     }
     let cancelled = false;
     setRecentLoading(true);
-    fetch('/api/chat/conversations')
+    fetch('/fast/api/chat/conversations')
       .then((r) => (r.ok ? r.json() : []))
       .then((list: Array<{ id: string; otherUser: { id: string } | null; lastMessage: RecentDm['lastMessage']; unreadCount: number }>) => {
         if (cancelled) return;

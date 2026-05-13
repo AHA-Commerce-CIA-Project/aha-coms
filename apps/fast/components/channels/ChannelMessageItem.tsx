@@ -291,7 +291,7 @@ export function ChannelMessageItem({
   const handleMentionClick = async (userId: string) => {
     setProfileLoading(true);
     try {
-      const res = await fetch(`/api/users/${userId}`);
+      const res = await fetch(`/fast/api/users/${userId}`);
       if (res.ok) {
         const user = await res.json();
         // Single source of truth in the store — overwrites any previously-open
@@ -308,7 +308,7 @@ export function ChannelMessageItem({
     if (!editContent.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/channels/${channelId}/messages/${message.id}`, {
+      const res = await fetch(`/fast/api/channels/${channelId}/messages/${message.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: editContent }),
@@ -323,7 +323,7 @@ export function ChannelMessageItem({
   const handleDelete = () => setDeleteOpen(true);
   const performDelete = async () => {
     try {
-      await fetch(`/api/channels/${channelId}/messages/${message.id}`, { method: 'DELETE' });
+      await fetch(`/fast/api/channels/${channelId}/messages/${message.id}`, { method: 'DELETE' });
       onMessageUpdated();
     } catch {}
   };

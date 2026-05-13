@@ -41,7 +41,7 @@ export function AddChannelMembersModal({
     setSelected(new Set());
     setSearch('');
     setError(null);
-    fetch('/api/chat/users')
+    fetch('/fast/api/chat/users')
       .then(r => r.ok ? r.json() : [])
       .then((list: User[]) => setUsers(list))
       .catch(() => setUsers([]));
@@ -79,7 +79,7 @@ export function AddChannelMembersModal({
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch(`/api/channels/${channelId}/members`, {
+      const res = await fetch(`/fast/api/channels/${channelId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userIds: Array.from(selected) }),

@@ -138,7 +138,7 @@ export function LaterPane({ tabOverride, onTabChange, hideTabs, onCountsChange }
 
   useEffect(() => {
     if (!isPending && !session) {
-      router.push('/login');
+      window.location.href = '/portal?app=fast';
     }
   }, [session, isPending, router]);
 
@@ -171,8 +171,8 @@ export function LaterPane({ tabOverride, onTabChange, hideTabs, onCountsChange }
     setLoading(true);
     try {
       const [mRes, tRes] = await Promise.all([
-        fetch('/api/channels/saved'),
-        fetch('/api/tasks/saved'),
+        fetch('/fast/api/channels/saved'),
+        fetch('/fast/api/tasks/saved'),
       ]);
       if (mRes.ok) setMessages(await mRes.json());
       if (tRes.ok) setTasks(await tRes.json());
@@ -184,7 +184,7 @@ export function LaterPane({ tabOverride, onTabChange, hideTabs, onCountsChange }
     const channelId = item.message.channel.id;
     const messageId = item.message.id;
     const replyId = item.reply?.id || null;
-    await fetch(`/api/channels/${channelId}/${messageId}/save`, {
+    await fetch(`/fast/api/channels/${channelId}/${messageId}/save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ replyId }),
@@ -194,7 +194,7 @@ export function LaterPane({ tabOverride, onTabChange, hideTabs, onCountsChange }
 
   const handleUnsaveTask = async (item: SavedTaskItem) => {
     if (!item.task) return;
-    await fetch(`/api/tasks/${item.task.id}/save`, { method: 'POST' });
+    await fetch(`/fast/api/tasks/${item.task.id}/save`, { method: 'POST' });
     setTasks((prev) => prev.filter((s) => s.id !== item.id));
   };
 

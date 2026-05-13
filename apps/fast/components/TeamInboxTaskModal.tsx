@@ -101,7 +101,7 @@ export function TeamInboxTaskModal({ task, currentUserId, onClose, onChange }: P
         setClaiming(true);
         setError(null);
         try {
-            const res = await fetch(`/api/tasks/${task.id}/claim`, { method: 'POST' });
+            const res = await fetch(`/fast/api/tasks/${task.id}/claim`, { method: 'POST' });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                 setError(data?.error || 'Failed to claim task');

@@ -329,7 +329,7 @@ export default function TeamInboxPage() {
         setPendingModalSubmitting(true);
         setActionError(null);
         try {
-            const res = await fetch(`/api/tasks/${pendingModalTask.id}/pending`, {
+            const res = await fetch(`/fast/api/tasks/${pendingModalTask.id}/pending`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -366,7 +366,7 @@ export default function TeamInboxPage() {
             pendedFromStatus: null,
         } : t)));
         try {
-            const res = await fetch(`/api/tasks/${task.id}/pending`, { method: 'DELETE' });
+            const res = await fetch(`/fast/api/tasks/${task.id}/pending`, { method: 'DELETE' });
             if (!res.ok) {
                 const body = await res.json().catch(() => null);
                 throw new Error(body?.error || 'Failed to resume task');
@@ -396,7 +396,7 @@ export default function TeamInboxPage() {
             setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, archivedByMe: true } : t)));
         }
         try {
-            const res = await fetch(`/api/tasks/${task.id}/personal-archive`, { method: 'POST' });
+            const res = await fetch(`/fast/api/tasks/${task.id}/personal-archive`, { method: 'POST' });
             if (!res.ok) {
                 const body = await res.json().catch(() => null);
                 throw new Error(body?.error || 'Failed to archive task');
@@ -417,7 +417,7 @@ export default function TeamInboxPage() {
         const snapshot = tasks;
         setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, archivedByMe: false } : t)));
         try {
-            const res = await fetch(`/api/tasks/${task.id}/personal-archive`, { method: 'DELETE' });
+            const res = await fetch(`/fast/api/tasks/${task.id}/personal-archive`, { method: 'DELETE' });
             if (!res.ok) {
                 const body = await res.json().catch(() => null);
                 throw new Error(body?.error || 'Failed to restore task');
@@ -439,7 +439,7 @@ export default function TeamInboxPage() {
         setPendingId(task.id);
         setActionError(null);
         try {
-            const res = await fetch(`/api/tasks/${task.id}/save`, { method: 'POST' });
+            const res = await fetch(`/fast/api/tasks/${task.id}/save`, { method: 'POST' });
             if (!res.ok) {
                 const body = await res.json().catch(() => null);
                 throw new Error(body?.error || 'Failed to save');
@@ -466,7 +466,7 @@ export default function TeamInboxPage() {
         setPendingId(task.id);
         setActionError(null);
         try {
-            const res = await fetch(`/api/tasks/${task.id}/request-help`, {
+            const res = await fetch(`/fast/api/tasks/${task.id}/request-help`, {
                 method: next ? 'POST' : 'DELETE',
             });
             if (!res.ok) {
@@ -497,7 +497,7 @@ export default function TeamInboxPage() {
             assignee: { id: userId, name: pickerMembers.find(m => m.id === userId)?.name || '...', image: pickerMembers.find(m => m.id === userId)?.image || null },
         } : t)));
         try {
-            const res = await fetch(`/api/tasks/${task.id}/claim`, {
+            const res = await fetch(`/fast/api/tasks/${task.id}/claim`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reassignTo: userId }),
@@ -525,7 +525,7 @@ export default function TeamInboxPage() {
         if (pickerMembers.length > 0 || pickerLoading) return;
         setPickerLoading(true);
         try {
-            const res = await fetch('/api/chat/users');
+            const res = await fetch('/fast/api/chat/users');
             const data = await res.json().catch(() => null);
             if (Array.isArray(data)) {
                 setPickerMembers(data.map((u: any) => ({ id: u.id, name: u.name, image: u.image || null })));
@@ -649,7 +649,7 @@ export default function TeamInboxPage() {
     // Master can switch teams
     useEffect(() => {
         if (!isMaster) return;
-        fetch('/api/teams').then(r => r.ok ? r.json() : []).then(setTeams).catch(() => setTeams([]));
+        fetch('/fast/api/teams').then(r => r.ok ? r.json() : []).then(setTeams).catch(() => setTeams([]));
     }, [isMaster]);
 
     return (

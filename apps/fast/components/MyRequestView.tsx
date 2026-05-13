@@ -67,7 +67,7 @@ export function MyRequestView() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isPending && !session) router.push('/login');
+    if (!isPending && !session) window.location.href = '/portal?app=fast';
   }, [session, isPending, router]);
 
   useEffect(() => {
@@ -75,7 +75,7 @@ export function MyRequestView() {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch('/api/tasks/posted-cards');
+        const res = await fetch('/fast/api/tasks/posted-cards');
         if (res.ok) setCards(await res.json());
       } catch {}
       setLoading(false);

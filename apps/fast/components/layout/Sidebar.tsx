@@ -157,10 +157,10 @@ export function Sidebar() {
         const fetchBadges = async () => {
             try {
                 const [channelRes, orbitRes, changelogRes, dmRes] = await Promise.all([
-                    fetch('/api/channels/unread'),
-                    fetch('/api/orbit/unclaimed'),
-                    fetch('/api/changelog'),
-                    fetch('/api/chat/unread'),
+                    fetch('/fast/api/channels/unread'),
+                    fetch('/fast/api/orbit/unclaimed'),
+                    fetch('/fast/api/changelog'),
+                    fetch('/fast/api/chat/unread'),
                 ]);
                 if (channelRes.ok) {
                     const data = await channelRes.json();
@@ -191,7 +191,7 @@ export function Sidebar() {
         if (!user) return;
         const fetchStorage = async () => {
             try {
-                const res = await fetch('/api/storage');
+                const res = await fetch('/fast/api/storage');
                 if (res.ok) {
                     const data = await res.json();
                     setStorageInfo(data.database);

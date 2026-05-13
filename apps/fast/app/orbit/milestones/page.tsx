@@ -51,7 +51,7 @@ export default function MilestonesPage() {
     const [formError, setFormError] = useState('');
 
     useEffect(() => {
-        if (!isPending && !session) router.push('/login');
+        if (!isPending && !session) window.location.href = '/portal?app=fast';
     }, [session, isPending, router]);
 
     useEffect(() => {
@@ -60,7 +60,7 @@ export default function MilestonesPage() {
 
     const fetchMilestones = async () => {
         try {
-            const res = await fetch('/api/orbit/milestones');
+            const res = await fetch('/fast/api/orbit/milestones');
             if (res.ok) {
                 const data = await res.json();
                 setMilestones(data.milestones || []);
@@ -136,7 +136,7 @@ export default function MilestonesPage() {
     const handleDelete = async (m: Milestone) => {
         if (!confirm(`Delete the "${m.rewardLabel}" milestone? This cannot be undone.`)) return;
         try {
-            const res = await fetch(`/api/orbit/milestones/${m.id}`, { method: 'DELETE' });
+            const res = await fetch(`/fast/api/orbit/milestones/${m.id}`, { method: 'DELETE' });
             if (res.ok) await fetchMilestones();
         } catch {}
     };

@@ -183,13 +183,13 @@ export function MessagesIndex({
             if (k === 'dms') {
                 const targets = dms.filter((d) => (d.unreadCount ?? 0) > 0);
                 await Promise.all(targets.map((d) =>
-                    fetch(`/api/chat/conversations/${d.id}/read`, { method: 'PUT' }).catch(() => {})
+                    fetch(`/fast/api/chat/conversations/${d.id}/read`, { method: 'PUT' }).catch(() => {})
                 ));
             } else {
                 const purpose = k === 'assign_task' ? 'assign_task' : 'discussion';
                 const targets = channels.filter((c) => (c.unreadCount ?? 0) > 0 && (c.purpose || 'discussion') === purpose);
                 await Promise.all(targets.map((c) =>
-                    fetch(`/api/channels/${c.id}/read`, { method: 'PUT' }).catch(() => {})
+                    fetch(`/fast/api/channels/${c.id}/read`, { method: 'PUT' }).catch(() => {})
                 ));
             }
         } finally {

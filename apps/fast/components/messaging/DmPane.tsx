@@ -308,7 +308,7 @@ export function DmPane() {
 
     const openProfileForUser = useCallback(async (userId: string) => {
         try {
-            const res = await fetch(`/api/users/${userId}`);
+            const res = await fetch(`/fast/api/users/${userId}`);
             if (res.ok) {
                 const profile = await res.json();
                 // If the clicked user is the partner of the currently-open DM,
@@ -322,7 +322,7 @@ export function DmPane() {
 
     const fetchConversations = useCallback(async () => {
         try {
-            const res = await fetch('/api/chat/conversations');
+            const res = await fetch('/fast/api/chat/conversations');
             if (res.ok) {
                 const data = await res.json();
                 setConversations(data);
@@ -334,7 +334,7 @@ export function DmPane() {
     const fetchMessages = useCallback(async (convoId: string) => {
         setLoadingMessages(true);
         try {
-            const res = await fetch(`/api/chat/conversations/${convoId}/messages`);
+            const res = await fetch(`/fast/api/chat/conversations/${convoId}/messages`);
             if (res.ok) {
                 const data = await res.json();
                 // API returns newest-first for pagination; reverse so render is chronological
@@ -343,7 +343,7 @@ export function DmPane() {
                 setMessages(Array.isArray(list) ? [...list].reverse() : []);
                 // Mark as read — also clears dm_message notifications for this
                 // conversation server-side so the bell badge syncs immediately.
-                fetch(`/api/chat/conversations/${convoId}/read`, { method: 'PUT' }).catch(() => {});
+                fetch(`/fast/api/chat/conversations/${convoId}/read`, { method: 'PUT' }).catch(() => {});
             }
         } catch {} finally { setLoadingMessages(false); }
     }, []);
@@ -351,7 +351,7 @@ export function DmPane() {
     useEffect(() => {
         if (!user) return;
         fetchConversations();
-        fetch('/api/chat/users').then(r => r.ok ? r.json() : []).then(setAllUsers).catch(() => {});
+        fetch('/fast/api/chat/users').then(r => r.ok ? r.json() : []).then(setAllUsers).catch(() => {});
     }, [user, fetchConversations]);
 
     // Poll channel unread total for the Channels tab badge
@@ -359,7 +359,7 @@ export function DmPane() {
         if (!user) return;
         const fetchChannelUnread = async () => {
             try {
-                const res = await fetch('/api/channels/unread');
+                const res = await fetch('/fast/api/channels/unread');
                 if (res.ok) {
                     const data = await res.json();
                     setChannelUnreadTotal(data.unreadCount || 0);
@@ -414,7 +414,7 @@ export function DmPane() {
                     const unique = newMsgs.filter(m => !ids.has(m.id));
                     if (unique.length > 0) {
                         // Mark as read
-                        fetch(`/api/chat/conversations/${selected.id}/read`, { method: 'PUT' }).catch(() => {});
+                        fetch(`/fast/api/chat/conversations/${selected.id}/read`, { method: 'PUT' }).catch(() => {});
                         return [...prev, ...unique];
                     }
                     return prev;
@@ -464,7 +464,7 @@ export function DmPane() {
 
     const startConversation = async (otherUserId: string) => {
         try {
-            const res = await fetch('/api/chat/conversations', {
+            const res = await fetch('/fast/api/chat/conversations', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ otherUserId }),
@@ -483,7 +483,7 @@ export function DmPane() {
         if (!msgInput.trim() || !selected || sending) return;
         setSending(true);
         try {
-            const res = await fetch(`/api/chat/conversations/${selected.id}/messages`, {
+            const res = await fetch(`/fast/api/chat/conversations/${selected.id}/messages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ content: msgInput.trim() }),
@@ -500,11 +500,11 @@ export function DmPane() {
         try {
             const fd = new FormData();
             fd.append('file', file);
-            const uploadRes = await fetch('/api/chat/upload', { method: 'POST', body: fd });
+            const uploadRes = await fetch('/fast/api/chat/upload', { method: 'POST', body: fd });
             if (!uploadRes.ok) return;
             const uploadData = await uploadRes.json();
 
-            await fetch(`/api/chat/conversations/${selected!.id}/messages`, {
+            await fetch(`/fast/api/chat/conversations/${selected!.id}/messages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -531,7 +531,7 @@ export function DmPane() {
 
     const handleReaction = async (msgId: string, emoji: string) => {
         if (!selected) return;
-        await fetch(`/api/chat/conversations/${selected.id}/messages/${msgId}/reactions`, {
+        await fetch(`/fast/api/chat/conversations/${selected.id}/messages/${msgId}/reactions`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }),
         });
         fetchMessages(selected.id);
@@ -539,7 +539,7 @@ export function DmPane() {
 
     const handleEditMsg = async (msgId: string, content: string) => {
         if (!selected) return;
-        await fetch(`/api/chat/conversations/${selected.id}/messages/${msgId}`, {
+        await fetch(`/fast/api/chat/conversations/${selected.id}/messages/${msgId}`, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }),
         });
         fetchMessages(selected.id);
@@ -547,7 +547,7 @@ export function DmPane() {
 
     const handleDeleteMsg = async (msgId: string) => {
         if (!selected || !confirm('Delete this message?')) return;
-        await fetch(`/api/chat/conversations/${selected.id}/messages/${msgId}`, { method: 'DELETE' });
+        await fetch(`/fast/api/chat/conversations/${selected.id}/messages/${msgId}`, { method: 'DELETE' });
         fetchMessages(selected.id);
     };
 
@@ -775,7 +775,7 @@ export function DmPane() {
                                 users={[]}
                                 onSend={async (content, attachments) => {
                                     try {
-                                        await fetch(`/api/chat/conversations/${selected.id}/messages`, {
+                                        await fetch(`/fast/api/chat/conversations/${selected.id}/messages`, {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({ content, attachments }),

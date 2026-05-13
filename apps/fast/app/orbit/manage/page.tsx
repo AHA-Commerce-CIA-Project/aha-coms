@@ -58,7 +58,7 @@ export default function ManageOrbitPage() {
   const [lastRun, setLastRun] = useState<Record<string, { status: string; taskId?: string; messageId?: string; error?: string }>>({});
 
   useEffect(() => {
-    if (!isPending && !session) router.push('/login');
+    if (!isPending && !session) window.location.href = '/portal?app=fast';
     if (!isPending && session && !isLeader) router.push('/orbit');
   }, [session, isPending, isLeader, router]);
 
@@ -71,14 +71,14 @@ export default function ManageOrbitPage() {
 
   const fetchTemplates = async () => {
     try {
-      const res = await fetch('/api/orbit/templates');
+      const res = await fetch('/fast/api/orbit/templates');
       if (res.ok) setTemplates(await res.json());
     } catch {} finally { setLoading(false); }
   };
 
   const fetchTeams = async () => {
     try {
-      const res = await fetch('/api/teams');
+      const res = await fetch('/fast/api/teams');
       if (res.ok) {
         const data = await res.json();
         setTeams(data.map((t: any) => ({ id: t.id, name: t.name })));
@@ -116,7 +116,7 @@ export default function ManageOrbitPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Deactivate this routine task template?')) return;
-    await fetch(`/api/orbit/templates/${id}`, { method: 'DELETE' });
+    await fetch(`/fast/api/orbit/templates/${id}`, { method: 'DELETE' });
     fetchTemplates();
   };
 
@@ -132,7 +132,7 @@ export default function ManageOrbitPage() {
     }
     setRunning(t.id);
     try {
-      const res = await fetch(`/api/orbit/templates/${t.id}/run-now`, { method: 'POST' });
+      const res = await fetch(`/fast/api/orbit/templates/${t.id}/run-now`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setLastRun((prev) => ({ ...prev, [t.id]: { status: 'error', error: data?.error || `HTTP ${res.status}` } }));

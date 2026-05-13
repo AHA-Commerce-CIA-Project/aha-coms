@@ -91,14 +91,14 @@ export default function OrbitPage() {
   const [teamWideNote, setTeamWideNote] = useState('');
 
   useEffect(() => {
-    if (!isPending && !session) router.push('/login');
+    if (!isPending && !session) window.location.href = '/portal?app=fast';
   }, [session, isPending, router]);
 
   const fetchData = useCallback(async () => {
     try {
       const [tRes, dRes] = await Promise.all([
-        fetch('/api/orbit/templates'),
-        fetch('/api/orbit/delegations'),
+        fetch('/fast/api/orbit/templates'),
+        fetch('/fast/api/orbit/delegations'),
       ]);
       if (tRes.ok) setTemplates(await tRes.json());
       if (dRes.ok) setDelegations(await dRes.json());
@@ -108,15 +108,15 @@ export default function OrbitPage() {
         const weeklyPeriod = getCurrentPeriod('weekly');
         const monthlyPeriod = getCurrentPeriod('monthly');
         const [wRes, mRes] = await Promise.all([
-          fetch(`/api/orbit/claims?frequency=weekly&period=${weeklyPeriod}`),
-          fetch(`/api/orbit/claims?frequency=monthly&period=${monthlyPeriod}`),
+          fetch(`/fast/api/orbit/claims?frequency=weekly&period=${weeklyPeriod}`),
+          fetch(`/fast/api/orbit/claims?frequency=monthly&period=${monthlyPeriod}`),
         ]);
         const wClaims = wRes.ok ? await wRes.json() : [];
         const mClaims = mRes.ok ? await mRes.json() : [];
         setClaims([...wClaims, ...mClaims]);
       } else {
         const period = getCurrentPeriod(activeTab);
-        const cRes = await fetch(`/api/orbit/claims?frequency=${activeTab}&period=${period}`);
+        const cRes = await fetch(`/fast/api/orbit/claims?frequency=${activeTab}&period=${period}`);
         if (cRes.ok) setClaims(await cRes.json());
       }
     } catch {} finally { setLoading(false); }
@@ -129,7 +129,7 @@ export default function OrbitPage() {
   // Fetch team members for delegation modal
   useEffect(() => {
     if (!delegateClaimId) return;
-    fetch('/api/chat/users')
+    fetch('/fast/api/chat/users')
       .then((r) => r.ok ? r.json() : [])
       .then(setTeamMembers)
       .catch(() => {});
@@ -140,7 +140,7 @@ export default function OrbitPage() {
     const teamWideTemplates = templates.filter((t) => t.isTeamWide);
     if (teamWideTemplates.length === 0) return;
 
-    fetch('/api/teams?include=members')
+    fetch('/fast/api/teams?include=members')
       .then((r) => r.ok ? r.json() : [])
       .then((teamsData: any[]) => {
         const membersByTemplate: Record<string, TeamMember[]> = {};
@@ -176,7 +176,7 @@ export default function OrbitPage() {
   const handleClaim = async (templateId: string) => {
     setActionLoading(templateId);
     try {
-      const res = await fetch('/api/orbit/claims', {
+      const res = await fetch('/fast/api/orbit/claims', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ templateId }),
@@ -193,7 +193,7 @@ export default function OrbitPage() {
     if (!completeClaimId) return;
     setActionLoading(completeClaimId);
     try {
-      const res = await fetch(`/api/orbit/claims/${completeClaimId}/complete`, {
+      const res = await fetch(`/fast/api/orbit/claims/${completeClaimId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: completionNote }),
@@ -210,7 +210,7 @@ export default function OrbitPage() {
   const handleTeamWideClaim = async (templateId: string) => {
     setActionLoading(templateId);
     try {
-      const res = await fetch('/api/orbit/claims', {
+      const res = await fetch('/fast/api/orbit/claims', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ templateId }),
@@ -228,7 +228,7 @@ export default function OrbitPage() {
   const handleTeamWideMarkComplete = async (claimId: string) => {
     setActionLoading(claimId);
     try {
-      const res = await fetch(`/api/orbit/claims/${claimId}/complete`, {
+      const res = await fetch(`/fast/api/orbit/claims/${claimId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: teamWideNote }),
@@ -245,7 +245,7 @@ export default function OrbitPage() {
     if (!delegateClaimId || !selectedMember) return;
     setActionLoading(delegateClaimId);
     try {
-      const res = await fetch('/api/orbit/delegations', {
+      const res = await fetch('/fast/api/orbit/delegations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ claimId: delegateClaimId, toUserId: selectedMember }),
@@ -264,7 +264,7 @@ export default function OrbitPage() {
   const handleDelegationResponse = async (delegationId: string, action: 'accept' | 'decline') => {
     setActionLoading(delegationId);
     try {
-      await fetch(`/api/orbit/delegations/${delegationId}`, {
+      await fetch(`/fast/api/orbit/delegations/${delegationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),

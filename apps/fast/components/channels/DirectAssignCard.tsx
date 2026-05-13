@@ -58,7 +58,7 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
 
   const fetchSnapshot = useCallback(async () => {
     try {
-      const res = await fetch(`/api/tasks/${taskId}/card`);
+      const res = await fetch(`/fast/api/tasks/${taskId}/card`);
       if (res.ok) setSnapshot(await res.json());
       else if (res.status === 404) setSnapshot(null);
     } catch {
@@ -78,7 +78,7 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
     setClaiming(true);
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/claim`, { method: 'POST' });
+      const res = await fetch(`/fast/api/tasks/${taskId}/claim`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data?.error || 'Failed to claim task');

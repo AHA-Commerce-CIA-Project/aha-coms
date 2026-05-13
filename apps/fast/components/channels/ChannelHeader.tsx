@@ -89,7 +89,7 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
     setShowMembers(true);
     setLoadingMembers(true);
     try {
-      const res = await fetch(`/api/channels/${channelId}/members`);
+      const res = await fetch(`/fast/api/channels/${channelId}/members`);
       if (res.ok) {
         const data = await res.json();
         setMembers(data);
@@ -109,7 +109,7 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
     if (!channelId) return;
     if (!confirm(`Remove ${memberName} from this channel?`)) return;
     try {
-      const res = await fetch(`/api/channels/${channelId}/members`, {
+      const res = await fetch(`/fast/api/channels/${channelId}/members`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: memberId }),
@@ -367,7 +367,7 @@ export function ChannelHeader({ name, description, isPrivate, memberCount, chann
         onAdded={() => {
           // Refresh member list after adding so the new people show up.
           if (channelId) {
-            fetch(`/api/channels/${channelId}/members`)
+            fetch(`/fast/api/channels/${channelId}/members`)
               .then((r) => (r.ok ? r.json() : null))
               .then((data) => { if (data) setMembers(data); });
           }

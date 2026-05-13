@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const fetchSession = async () => {
         try {
-            const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+            const res = await fetch('/fast/api/auth/me', { credentials: 'same-origin' });
             if (!res.ok) {
                 setProfile(null);
                 return;

@@ -109,7 +109,7 @@ export function CalendarMeetingSection() {
 
     const checkGcalStatus = async () => {
         try {
-            const res = await fetch('/api/google-calendar');
+            const res = await fetch('/fast/api/google-calendar');
             if (res.ok) {
                 const json = await res.json();
                 const connected = json.data?.connected ?? json.connected;
@@ -184,7 +184,7 @@ export function CalendarMeetingSection() {
 
     const fetchMembers = async () => {
         try {
-            const res = await fetch('/api/teammates');
+            const res = await fetch('/fast/api/teammates');
             if (res.ok) {
                 const data = await res.json();
                 setTeamMembers(data.map((u: any) => ({ id: u.id, name: u.name })));
@@ -195,7 +195,7 @@ export function CalendarMeetingSection() {
     const handleAddMeeting = async () => {
         if (!form.title || !form.meetingDate || !form.startTime || !form.endTime) return;
         try {
-            const res = await fetch('/api/meetings', {
+            const res = await fetch('/fast/api/meetings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -221,7 +221,7 @@ export function CalendarMeetingSection() {
     const handleConnectGoogleCalendar = async () => {
         setGcalConnecting(true);
         try {
-            const res = await fetch('/api/auth/google');
+            const res = await fetch('/fast/api/auth/google');
             if (res.ok) {
                 const data = await res.json();
                 if (data.url) {
@@ -241,7 +241,7 @@ export function CalendarMeetingSection() {
         setShowDisconnectModal(false);
         setGcalDisconnecting(true);
         try {
-            const res = await fetch('/api/auth/google/disconnect', { method: 'POST' });
+            const res = await fetch('/fast/api/auth/google/disconnect', { method: 'POST' });
             if (res.ok) {
                 setGcalConnected(false);
                 setGcalEvents([]);
@@ -255,7 +255,7 @@ export function CalendarMeetingSection() {
 
     const handleDeleteMeeting = async (id: string) => {
         try {
-            await fetch(`/api/meetings/${id}`, { method: 'DELETE' });
+            await fetch(`/fast/api/meetings/${id}`, { method: 'DELETE' });
             await fetchMeetings();
         } catch (err) {
             console.error('Error deleting meeting:', err);
@@ -264,7 +264,7 @@ export function CalendarMeetingSection() {
 
     const handleApproveMeeting = async (id: string) => {
         try {
-            await fetch(`/api/meetings/${id}`, {
+            await fetch(`/fast/api/meetings/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'confirmed' }),
@@ -304,7 +304,7 @@ export function CalendarMeetingSection() {
         if (!detailMeeting) return;
         setSavingEdit(true);
         try {
-            const res = await fetch(`/api/meetings/${detailMeeting.id}`, {
+            const res = await fetch(`/fast/api/meetings/${detailMeeting.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(editForm),
@@ -323,7 +323,7 @@ export function CalendarMeetingSection() {
     const handleAddGuest = async () => {
         if (!detailMeeting || !addGuestId) return;
         try {
-            await fetch(`/api/meetings/${detailMeeting.id}/guests`, {
+            await fetch(`/fast/api/meetings/${detailMeeting.id}/guests`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: addGuestId }),
@@ -343,7 +343,7 @@ export function CalendarMeetingSection() {
     const handleRemoveGuest = async (guestUserId: string) => {
         if (!detailMeeting) return;
         try {
-            await fetch(`/api/meetings/${detailMeeting.id}/guests?userId=${guestUserId}`, {
+            await fetch(`/fast/api/meetings/${detailMeeting.id}/guests?userId=${guestUserId}`, {
                 method: 'DELETE',
             });
             await fetchMeetings();
@@ -356,7 +356,7 @@ export function CalendarMeetingSection() {
     const handleSetNotification = async (minutes: number) => {
         if (!detailMeeting) return;
         try {
-            await fetch(`/api/meetings/${detailMeeting.id}`, {
+            await fetch(`/fast/api/meetings/${detailMeeting.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ notifyBefore: minutes }),

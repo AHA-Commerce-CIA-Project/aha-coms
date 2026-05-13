@@ -210,9 +210,9 @@ function MyTasksContent() {
             // I'm an approved helper. Concat then dedupe by id (a user could appear in multiple
             // lists if the state ever crosses over).
             const [nexusRes, directRes, helpingRes] = await Promise.all([
-                fetch('/api/nexus'),
-                fetch('/api/tasks/my-direct-requests'),
-                fetch('/api/tasks/helping'),
+                fetch('/fast/api/nexus'),
+                fetch('/fast/api/tasks/my-direct-requests'),
+                fetch('/fast/api/tasks/helping'),
             ]);
             const map = new Map<string, any>();
             if (nexusRes.ok) {
@@ -239,7 +239,7 @@ function MyTasksContent() {
 
     const fetchTaskComments = async (taskId: string) => {
         try {
-            const res = await fetch(`/api/tasks/${taskId}/comments`);
+            const res = await fetch(`/fast/api/tasks/${taskId}/comments`);
             if (res.ok) setTaskComments(await res.json());
         } catch {}
     };
@@ -248,7 +248,7 @@ function MyTasksContent() {
         if (!commentText.trim() || !viewTask) return;
         setCommentSending(true);
         try {
-            const res = await fetch(`/api/tasks/${viewTask.id}/comments`, {
+            const res = await fetch(`/fast/api/tasks/${viewTask.id}/comments`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: commentText.trim() }),
@@ -263,7 +263,7 @@ function MyTasksContent() {
 
     const fetchTeamMembers = async () => {
         try {
-            const res = await fetch('/api/teammates');
+            const res = await fetch('/fast/api/teammates');
             if (res.ok) {
                 const data = await res.json();
                 setTeamMembers(data.map((u: any) => ({ id: u.id, name: u.name })));
@@ -293,7 +293,7 @@ function MyTasksContent() {
         if (!pendingModalTask || !pendingModalReason.trim() || pendingModalSubmitting) return;
         setPendingModalSubmitting(true);
         try {
-            const res = await fetch(`/api/tasks/${pendingModalTask.id}/pending`, {
+            const res = await fetch(`/fast/api/tasks/${pendingModalTask.id}/pending`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -329,7 +329,7 @@ function MyTasksContent() {
         if (pendingActionTaskId) return;
         setPendingActionTaskId(task.id);
         try {
-            const res = await fetch(`/api/tasks/${task.id}/pending`, { method: 'DELETE' });
+            const res = await fetch(`/fast/api/tasks/${task.id}/pending`, { method: 'DELETE' });
             if (!res.ok) {
                 const body = await res.json().catch(() => null);
                 alert(body?.error || 'Failed to resume task');
@@ -356,7 +356,7 @@ function MyTasksContent() {
         if (!viewTask) return;
         setActionLoading(true);
         try {
-            const res = await fetch(`/api/tasks/${viewTask.id}/complete`, {
+            const res = await fetch(`/fast/api/tasks/${viewTask.id}/complete`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -381,7 +381,7 @@ function MyTasksContent() {
         if (!viewTask || !reassignTo) return;
         setActionLoading(true);
         try {
-            const res = await fetch(`/api/tasks/${viewTask.id}/claim`, {
+            const res = await fetch(`/fast/api/tasks/${viewTask.id}/claim`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reassignTo }),
@@ -418,7 +418,7 @@ function MyTasksContent() {
 
     const fetchNotes = async () => {
         try {
-            const res = await fetch('/api/notes');
+            const res = await fetch('/fast/api/notes');
             if (res.ok) {
                 const data = await res.json();
                 setNotes(data);
@@ -435,7 +435,7 @@ function MyTasksContent() {
         if (creatingNote) return;
         setCreatingNote(true);
         try {
-            const res = await fetch('/api/notes', {
+            const res = await fetch('/fast/api/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: '', content: '', color: 'default' }),
@@ -453,7 +453,7 @@ function MyTasksContent() {
 
     const handleUpdateNote = async (note: any) => {
         try {
-            const res = await fetch('/api/notes', {
+            const res = await fetch('/fast/api/notes', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: note.id, title: note.title, content: note.content, color: note.color, pinned: note.pinned }),
@@ -483,7 +483,7 @@ function MyTasksContent() {
         if (!note?.id) return;
         setNoteSaveStatus('saving');
         try {
-            const res = await fetch('/api/notes', {
+            const res = await fetch('/fast/api/notes', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: note.id, title: note.title, content: note.content, color: note.color, pinned: note.pinned }),
@@ -541,7 +541,7 @@ function MyTasksContent() {
         const plainContent = (note?.content || '').replace(/<[^>]*>/g, '').trim();
         const isBlank = !(note?.title || '').trim() && !plainContent;
         if (note?.id && isBlank) {
-            await fetch('/api/notes', {
+            await fetch('/fast/api/notes', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: note.id }),
@@ -555,7 +555,7 @@ function MyTasksContent() {
 
     const handleDeleteNote = async (id: string) => {
         try {
-            const res = await fetch('/api/notes', {
+            const res = await fetch('/fast/api/notes', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id }),
@@ -571,7 +571,7 @@ function MyTasksContent() {
 
     const handlePinNote = async (note: any) => {
         try {
-            const res = await fetch('/api/notes', {
+            const res = await fetch('/fast/api/notes', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: note.id, pinned: !note.pinned }),
@@ -624,7 +624,7 @@ function MyTasksContent() {
 
     const handlePersonalArchive = async (taskId: string, archive: boolean) => {
         try {
-            const res = await fetch(`/api/tasks/${taskId}/personal-archive`, {
+            const res = await fetch(`/fast/api/tasks/${taskId}/personal-archive`, {
                 method: archive ? 'POST' : 'DELETE',
             });
             if (res.ok) await fetchClaimedTasks({ silent: true });
@@ -1254,7 +1254,7 @@ function MyTasksContent() {
                                     // Refetch the task from the server and reconcile the modal's copy
                                     // so the needs_help flag + helper chips reflect the latest state.
                                     try {
-                                        const res = await fetch('/api/nexus');
+                                        const res = await fetch('/fast/api/nexus');
                                         if (res.ok) {
                                             const list: ClaimedTask[] = await res.json();
                                             const fresh = list.find(t => t.id === viewTask.id);

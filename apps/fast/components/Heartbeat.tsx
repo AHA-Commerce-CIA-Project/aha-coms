@@ -15,7 +15,7 @@ export function Heartbeat() {
 
         const sendHeartbeat = () => {
             if (!isVisibleRef.current) return;
-            fetch('/api/heartbeat', { method: 'POST' }).catch(() => {});
+            fetch('/fast/api/heartbeat', { method: 'POST' }).catch(() => {});
         };
 
         // Send immediately on mount

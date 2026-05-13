@@ -28,7 +28,7 @@ export function SavedMessagesView({ onClose, onNavigate }: SavedMessagesViewProp
   useEffect(() => {
     const fetchSaved = async () => {
       try {
-        const res = await fetch('/api/channels/saved');
+        const res = await fetch('/fast/api/channels/saved');
         if (res.ok) {
           const data = await res.json();
           setSaved(data);
@@ -42,7 +42,7 @@ export function SavedMessagesView({ onClose, onNavigate }: SavedMessagesViewProp
   }, []);
 
   const handleUnsave = async (messageId: string, channelId: string) => {
-    await fetch(`/api/channels/${channelId}/${messageId}/save`, { method: 'POST' });
+    await fetch(`/fast/api/channels/${channelId}/${messageId}/save`, { method: 'POST' });
     setSaved((prev) => prev.filter((s) => s.message.id !== messageId));
   };
 

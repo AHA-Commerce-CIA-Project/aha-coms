@@ -179,7 +179,7 @@ export function TopNav() {
         let cancelled = false;
         (async () => {
             try {
-                const res = await fetch('/api/notifications');
+                const res = await fetch('/fast/api/notifications');
                 if (!res.ok || cancelled) return;
                 const fetched: NotifItem[] = await res.json();
                 setNotifications(fetched);
@@ -238,7 +238,7 @@ export function TopNav() {
 
     const markAllRead = async () => {
         try {
-            await fetch('/api/notifications', {
+            await fetch('/fast/api/notifications', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 // When sitting on the DMs tab, only mark DM notifications as
@@ -267,7 +267,7 @@ export function TopNav() {
 
     const markOneRead = async (id: string) => {
         try {
-            await fetch('/api/notifications', {
+            await fetch('/fast/api/notifications', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id }),
@@ -323,9 +323,9 @@ export function TopNav() {
     return (
         <header className="h-16 bg-[#0F0E7F] flex items-center px-4 sticky top-0 z-40 shadow-md">
             {/* Logo — clicking goes to default module */}
-            <Link href="/fast" className="flex items-center gap-2.5 pr-6 shrink-0">
+            <Link href="/" className="flex items-center gap-2.5 pr-6 shrink-0">
                 <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center p-1">
-                    <img src="/aha-logo.png?v=2" alt="AHA" className="w-full h-full object-contain" />
+                    <img src="/fast/aha-logo.png?v=2" alt="AHA" className="w-full h-full object-contain" />
                 </div>
                 <div className="hidden sm:flex items-baseline">
                     <span className="text-xl font-extrabold text-white tracking-tight">AHA</span>
@@ -590,13 +590,13 @@ export function TopNav() {
                                     </button>
                                 </>
                             ) : (
-                                <Link
-                                    href="/login"
+                                <a
+                                    href="/portal?app=fast"
                                     className="block px-4 py-3 text-sm text-slate-600 hover:bg-slate-50"
                                     onClick={() => setShowDropdown(false)}
                                 >
                                     Sign in
-                                </Link>
+                                </a>
                             )}
                         </div>
                     )}

@@ -37,8 +37,8 @@ export function ShareNoteModal({ open, onClose, note }: Props) {
         setError(null);
         setLoading(true);
         Promise.all([
-            fetch('/api/channels').then(r => r.ok ? r.json() : []).catch(() => []),
-            fetch('/api/chat/users').then(r => r.ok ? r.json() : []).catch(() => []),
+            fetch('/fast/api/channels').then(r => r.ok ? r.json() : []).catch(() => []),
+            fetch('/fast/api/chat/users').then(r => r.ok ? r.json() : []).catch(() => []),
         ]).then(([ch, us]) => {
             setChannels(Array.isArray(ch) ? ch : []);
             setUsers(Array.isArray(us) ? us : []);
@@ -65,13 +65,13 @@ export function ShareNoteModal({ open, onClose, note }: Props) {
             const content = buildMessageContent();
             let res: Response;
             if (tab === 'channels' && selectedChannel) {
-                res = await fetch(`/api/channels/${selectedChannel.id}/messages`, {
+                res = await fetch(`/fast/api/channels/${selectedChannel.id}/messages`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content, attachments: [], mentions: [] }),
                 });
             } else if (tab === 'people' && selectedUser) {
-                const convRes = await fetch('/api/chat/conversations', {
+                const convRes = await fetch('/fast/api/chat/conversations', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ otherUserId: selectedUser.id }),
@@ -82,7 +82,7 @@ export function ShareNoteModal({ open, onClose, note }: Props) {
                     return;
                 }
                 const conv = await convRes.json();
-                res = await fetch(`/api/chat/conversations/${conv.id}/messages`, {
+                res = await fetch(`/fast/api/chat/conversations/${conv.id}/messages`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content, attachments: [] }),

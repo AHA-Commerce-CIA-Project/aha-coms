@@ -73,7 +73,7 @@ export default function RequestPage() {
     const [brandSearchOpen, setBrandSearchOpen] = useState(false);
     const [showPriorityInfo, setShowPriorityInfo] = useState(false);
     useEffect(() => {
-        fetch('/api/brand-codes').then(r => r.ok ? r.json() : []).then(setBrandCodes).catch(() => {});
+        fetch('/fast/api/brand-codes').then(r => r.ok ? r.json() : []).then(setBrandCodes).catch(() => {});
     }, []);
 
 
@@ -91,7 +91,7 @@ export default function RequestPage() {
     // Fetch employees when division changes
     useEffect(() => {
         if (formData.requesterDivision) {
-            fetch(`/api/employees?division=${encodeURIComponent(formData.requesterDivision)}`)
+            fetch(`/fast/api/employees?division=${encodeURIComponent(formData.requesterDivision)}`)
                 .then(r => r.ok ? r.json() : [])
                 .then(data => setAllEmployees(data))
                 .catch(() => setAllEmployees([]));
@@ -107,7 +107,7 @@ export default function RequestPage() {
     useEffect(() => {
         if (formData.isDirectRequest && fbiMembers.length === 0) {
             setLoadingFbi(true);
-            fetch('/api/users/public')
+            fetch('/fast/api/users/public')
                 .then(r => r.ok ? r.json() : [])
                 .then((data: { id: string; name: string; role: string; teams?: { name: string } }[]) => {
                     const members = data
@@ -228,7 +228,7 @@ export default function RequestPage() {
     // Fetch employees when meeting division changes
     useEffect(() => {
         if (meetingForm.requesterDivision) {
-            fetch(`/api/employees?division=${encodeURIComponent(meetingForm.requesterDivision)}`)
+            fetch(`/fast/api/employees?division=${encodeURIComponent(meetingForm.requesterDivision)}`)
                 .then(r => r.ok ? r.json() : [])
                 .then(data => setMeetingEmployees(data))
                 .catch(() => setMeetingEmployees([]));
@@ -269,7 +269,7 @@ export default function RequestPage() {
     // Fetch users for the multi-select dropdown
     useEffect(() => {
         if (activeTab === 'meeting') {
-            fetch('/api/users/public')
+            fetch('/fast/api/users/public')
                 .then(r => r.ok ? r.json() : [])
                 .then(data => setAllUsers(data))
                 .catch(() => {});
@@ -291,7 +291,7 @@ export default function RequestPage() {
             const typeLabel = MEETING_TYPES.find(t => t.value === meetingForm.meetingType)?.label || '';
             const fullTitle = `[${typeLabel}] ${meetingForm.title}`;
 
-            const res = await fetch('/api/request-meeting', {
+            const res = await fetch('/fast/api/request-meeting', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -336,7 +336,7 @@ export default function RequestPage() {
             const fd = new FormData();
             fd.append('file', file);
 
-            const res = await fetch('/api/upload', { method: 'POST', body: fd });
+            const res = await fetch('/fast/api/upload', { method: 'POST', body: fd });
             const data = await res.json();
 
             if (!res.ok) throw new Error(data.error || 'Upload failed');
@@ -402,7 +402,7 @@ export default function RequestPage() {
         setError(null);
 
         try {
-            const res = await fetch('/api/request', {
+            const res = await fetch('/fast/api/request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -509,7 +509,7 @@ export default function RequestPage() {
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                            <img src="/aha-logo.png?v=2" alt="AHA Logo" className="w-full h-full object-contain" />
+                            <img src="/fast/aha-logo.png?v=2" alt="AHA Logo" className="w-full h-full object-contain" />
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold text-slate-900">FAST Request Form</h1>
@@ -1053,7 +1053,7 @@ export default function RequestPage() {
                                                 const fd = new FormData();
                                                 fd.append('file', file);
                                                 try {
-                                                    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+                                                    const res = await fetch('/fast/api/upload', { method: 'POST', body: fd });
                                                     if (res.ok) {
                                                         const data = await res.json();
                                                         setFormData(prev => ({ ...prev, fileUrls: [...((prev.fileUrls as string[]) || []), data.url] }));

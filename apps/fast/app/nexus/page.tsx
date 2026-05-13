@@ -156,7 +156,7 @@ function NexusContent() {
     const [teams, setTeams] = useState<{ id: string; name: string }[]>([]);
     useEffect(() => {
         if (!isLeader) return;
-        fetch('/api/teams').then(r => r.ok ? r.json() : []).then(setTeams).catch(() => {});
+        fetch('/fast/api/teams').then(r => r.ok ? r.json() : []).then(setTeams).catch(() => {});
     }, [isLeader]);
 
     // View Modal
@@ -185,7 +185,7 @@ function NexusContent() {
         if (!pendingModalTask || !pendingModalReason.trim() || pendingModalSubmitting) return;
         setPendingModalSubmitting(true);
         try {
-            const res = await fetch(`/api/tasks/${pendingModalTask.id}/pending`, {
+            const res = await fetch(`/fast/api/tasks/${pendingModalTask.id}/pending`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -222,7 +222,7 @@ function NexusContent() {
         if (pendingActionTaskId) return;
         setPendingActionTaskId(ticket.id);
         try {
-            const res = await fetch(`/api/tasks/${ticket.id}/pending`, { method: 'DELETE' });
+            const res = await fetch(`/fast/api/tasks/${ticket.id}/pending`, { method: 'DELETE' });
             if (!res.ok) {
                 const body = await res.json().catch(() => null);
                 alert(body?.error || 'Failed to resume task');
@@ -246,7 +246,7 @@ function NexusContent() {
 
     const fetchTaskComments = async (taskId: string) => {
         try {
-            const res = await fetch(`/api/tasks/${taskId}/comments`);
+            const res = await fetch(`/fast/api/tasks/${taskId}/comments`);
             if (res.ok) setTaskComments(await res.json());
         } catch {}
     };
@@ -255,7 +255,7 @@ function NexusContent() {
         if (!commentText.trim() || !viewTicket) return;
         setCommentSending(true);
         try {
-            const res = await fetch(`/api/tasks/${viewTicket.id}/comments`, {
+            const res = await fetch(`/fast/api/tasks/${viewTicket.id}/comments`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: commentText.trim() }),
@@ -405,7 +405,7 @@ function NexusContent() {
         if (!opts?.silent) setLoading(true);
         if (!opts?.silent) setLoadError(null);
         try {
-            const res = await fetch('/api/nexus');
+            const res = await fetch('/fast/api/nexus');
             // Parse safely — a 5xx body may be empty/HTML, which would throw
             // on .json() and pop the cryptic "Unexpected end of JSON input".
             const rawText = await res.text();
@@ -427,7 +427,7 @@ function NexusContent() {
 
     const fetchTeamMembers = async () => {
         try {
-            const res = await fetch('/api/users');
+            const res = await fetch('/fast/api/users');
             if (res.ok) {
                 const data = await res.json();
                 setTeamMembers(data.map((u: any) => ({ id: u.id, name: u.name })));
@@ -438,7 +438,7 @@ function NexusContent() {
     const fetchDirectRequests = async (opts?: { silent?: boolean }) => {
         if (!opts?.silent) setDirectLoading(true);
         try {
-            const res = await fetch('/api/tasks/direct-requests-all');
+            const res = await fetch('/fast/api/tasks/direct-requests-all');
             if (res.ok) {
                 setDirectRequests(await res.json());
             }
@@ -450,7 +450,7 @@ function NexusContent() {
 
     const handleArchive = async (ticketId: string) => {
         try {
-            const res = await fetch(`/api/tasks/${ticketId}/archive`, { method: 'PUT' });
+            const res = await fetch(`/fast/api/tasks/${ticketId}/archive`, { method: 'PUT' });
             if (res.ok) {
                 await fetchTickets();
                 setStatusFilter('archived');
@@ -463,7 +463,7 @@ function NexusContent() {
 
     const handleDelete = async (ticketId: string) => {
         try {
-            const res = await fetch(`/api/tasks/${ticketId}`, { method: 'DELETE' });
+            const res = await fetch(`/fast/api/tasks/${ticketId}`, { method: 'DELETE' });
             if (res.ok) {
                 setDeleteConfirmId(null);
                 await fetchTickets();
@@ -479,7 +479,7 @@ function NexusContent() {
     const handleRouteToTeam = async (ticketId: string, teamId: string) => {
         setRoutingId(ticketId);
         try {
-            const res = await fetch(`/api/tasks/${ticketId}/route-team`, {
+            const res = await fetch(`/fast/api/tasks/${ticketId}/route-team`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ teamId }),
@@ -500,7 +500,7 @@ function NexusContent() {
 
     const handleClaim = async (ticket: TicketRow) => {
         try {
-            const res = await fetch(`/api/tasks/${ticket.id}/claim`, { method: 'POST' });
+            const res = await fetch(`/fast/api/tasks/${ticket.id}/claim`, { method: 'POST' });
             if (res.ok) {
                 await fetchTickets();
                 setViewTicket(null);
@@ -512,7 +512,7 @@ function NexusContent() {
 
     const handleAssign = async (ticket: TicketRow, userId: string) => {
         try {
-            const res = await fetch(`/api/tasks/${ticket.id}/claim`, {
+            const res = await fetch(`/fast/api/tasks/${ticket.id}/claim`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reassignTo: userId }),
@@ -630,7 +630,7 @@ function NexusContent() {
         if (!viewTicket) return;
         setSaving(true);
         try {
-            const res = await fetch(`/api/tasks/${viewTicket.id}`, {
+            const res = await fetch(`/fast/api/tasks/${viewTicket.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(editForm),
@@ -656,7 +656,7 @@ function NexusContent() {
         if (!completeTicket) return;
         setCompleting(true);
         try {
-            const res = await fetch(`/api/tasks/${completeTicket.id}/complete`, {
+            const res = await fetch(`/fast/api/tasks/${completeTicket.id}/complete`, {
                 method: editingCompletion ? 'PATCH' : 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1736,7 +1736,7 @@ function NexusContent() {
                                         onClick={async () => {
                                             if (!confirm('Archive this direct request?')) return;
                                             try {
-                                                await fetch(`/api/tasks/${viewDirectTicket.id}/archive`, { method: 'PUT' });
+                                                await fetch(`/fast/api/tasks/${viewDirectTicket.id}/archive`, { method: 'PUT' });
                                                 setViewDirectTicket(null);
                                                 fetchDirectRequests();
                                             } catch {}
@@ -1752,7 +1752,7 @@ function NexusContent() {
                                         onClick={async () => {
                                             if (!confirm('Delete this direct request permanently?')) return;
                                             try {
-                                                await fetch(`/api/tasks/${viewDirectTicket.id}`, { method: 'DELETE' });
+                                                await fetch(`/fast/api/tasks/${viewDirectTicket.id}`, { method: 'DELETE' });
                                                 setViewDirectTicket(null);
                                                 fetchDirectRequests();
                                             } catch {}
@@ -2087,7 +2087,7 @@ function NexusContent() {
                                         onTaskUpdated={async () => {
                                             // Refetch the list, then reconcile the modal's copy so the button state updates in place.
                                             try {
-                                                const res = await fetch('/api/nexus');
+                                                const res = await fetch('/fast/api/nexus');
                                                 if (res.ok) {
                                                     const list: TicketRow[] = await res.json();
                                                     setTickets(list);

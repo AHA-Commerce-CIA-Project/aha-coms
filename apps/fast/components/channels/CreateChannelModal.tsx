@@ -56,11 +56,11 @@ export function CreateChannelModal({ open, onClose, onCreated, purpose = 'discus
       setSelectedMembers(preselectedMemberIds);
       setIsPrivate(true);
     }
-    fetch('/api/chat/users')
+    fetch('/fast/api/chat/users')
       .then((res) => (res.ok ? res.json() : []))
       .then(setUsers)
       .catch(() => {});
-    fetch('/api/teams')
+    fetch('/fast/api/teams')
       .then((res) => (res.ok ? res.json() : []))
       .then((data: Team[]) => {
         setTeams(data);
@@ -128,7 +128,7 @@ export function CreateChannelModal({ open, onClose, onCreated, purpose = 'discus
     setError(null);
 
     try {
-      const res = await fetch('/api/channels', {
+      const res = await fetch('/fast/api/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

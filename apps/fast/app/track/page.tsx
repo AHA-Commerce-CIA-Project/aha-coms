@@ -170,7 +170,7 @@ function TrackContent() {
 
     const fetchComments = async (taskId: string, taskToken: string) => {
         try {
-            const res = await fetch(`/api/tasks/${taskId}/comments?token=${taskToken}`);
+            const res = await fetch(`/fast/api/tasks/${taskId}/comments?token=${taskToken}`);
             if (res.ok) setComments(await res.json());
         } catch {}
     };
@@ -179,7 +179,7 @@ function TrackContent() {
         if (!commentText.trim() || !task) return;
         setCommentSubmitting(true);
         try {
-            const res = await fetch(`/api/tasks/${task.id}/comments`, {
+            const res = await fetch(`/fast/api/tasks/${task.id}/comments`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -230,7 +230,7 @@ function TrackContent() {
         setReviewSuccess(false);
 
         try {
-            const res = await fetch(`/api/request?token=${encodeURIComponent(searchToken)}`);
+            const res = await fetch(`/fast/api/request?token=${encodeURIComponent(searchToken)}`);
             const json = await res.json();
             if (json.status !== 'success') throw new Error(json.message || 'Request not found');
             setTask(json.data);
@@ -255,7 +255,7 @@ function TrackContent() {
         setDisputeSubmitting(true);
         setDisputeError(null);
         try {
-            const res = await fetch('/api/request/dispute-pause', {
+            const res = await fetch('/fast/api/request/dispute-pause', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -296,7 +296,7 @@ function TrackContent() {
         setReviewError(null);
 
         try {
-            const res = await fetch(`/api/tasks/${task.id}/review`, {
+            const res = await fetch(`/fast/api/tasks/${task.id}/review`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -339,7 +339,7 @@ function TrackContent() {
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                            <img src="/aha-logo.png?v=2" alt="AHA Logo" className="w-full h-full object-contain" />
+                            <img src="/fast/aha-logo.png?v=2" alt="AHA Logo" className="w-full h-full object-contain" />
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold text-slate-900">Check Your Request Status</h1>
@@ -350,9 +350,9 @@ function TrackContent() {
                         <Link href="/request" className="text-sm font-medium text-indigo-500 hover:text-indigo-600 transition-colors">
                             Submit Request
                         </Link>
-                        <Link href="/login" className="text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors">
+                        <a href="/portal?app=fast" className="text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors">
                             FAST Login &rarr;
-                        </Link>
+                        </a>
                     </div>
                 </div>
 

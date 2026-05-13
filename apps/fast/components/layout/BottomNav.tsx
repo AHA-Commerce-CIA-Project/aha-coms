@@ -55,9 +55,9 @@ export function BottomNav() {
         const tick = async () => {
             try {
                 const [channelRes, dmRes, changelogRes] = await Promise.all([
-                    fetch('/api/channels/unread'),
-                    fetch('/api/chat/unread'),
-                    fetch('/api/changelog'),
+                    fetch('/fast/api/channels/unread'),
+                    fetch('/fast/api/chat/unread'),
+                    fetch('/fast/api/changelog'),
                 ]);
                 const next = { ...badges };
                 const channelUnread = channelRes.ok ? ((await channelRes.json()).unreadCount || 0) : 0;

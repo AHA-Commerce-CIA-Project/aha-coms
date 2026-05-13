@@ -100,8 +100,8 @@ function MessagesWorkspace() {
     const fetchChannels = useCallback(async () => {
         try {
             const [d, a] = await Promise.all([
-                fetch('/api/channels?purpose=discussion').then((r) => (r.ok ? r.json() : [])),
-                fetch('/api/channels?purpose=assign_task').then((r) => (r.ok ? r.json() : [])),
+                fetch('/fast/api/channels?purpose=discussion').then((r) => (r.ok ? r.json() : [])),
+                fetch('/fast/api/channels?purpose=assign_task').then((r) => (r.ok ? r.json() : [])),
             ]);
             const tagged = [
                 ...d.map((c: ChannelRow) => ({ ...c, purpose: 'discussion' as const })),
@@ -113,14 +113,14 @@ function MessagesWorkspace() {
 
     const fetchConvos = useCallback(async () => {
         try {
-            const res = await fetch('/api/chat/conversations');
+            const res = await fetch('/fast/api/chat/conversations');
             if (res.ok) setConvos(await res.json());
         } catch {}
     }, []);
 
     const fetchUnread = useCallback(async () => {
         try {
-            const res = await fetch('/api/channels/unread');
+            const res = await fetch('/fast/api/channels/unread');
             if (res.ok) {
                 const data = await res.json();
                 setPerChannelUnread(data.perChannel || {});

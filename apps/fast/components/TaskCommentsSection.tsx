@@ -388,7 +388,7 @@ export function TaskCommentsSection({
         if (!/\s/.test(charBefore) && at !== 0) { setMentionQuery(null); return; }
 
         if (mentionUsers.length === 0) {
-            fetch('/api/chat/users').then(r => r.ok ? r.json() : []).then(setMentionUsers).catch(() => {});
+            fetch('/fast/api/chat/users').then(r => r.ok ? r.json() : []).then(setMentionUsers).catch(() => {});
         }
         setMentionAnchor(at);
         setMentionQuery(head);

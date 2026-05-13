@@ -109,7 +109,7 @@ export default function ActivityLogPage() {
   const [actionFilter, setActionFilter] = useState('');
 
   useEffect(() => {
-    if (!isPending && !session) router.push('/login');
+    if (!isPending && !session) window.location.href = '/portal?app=fast';
     if (!isPending && session && !isLeader) router.push('/');
   }, [session, isPending, isLeader, router]);
 
@@ -122,7 +122,7 @@ export default function ActivityLogPage() {
       if (actionFilter) params.set('action', actionFilter);
       if (searchQuery) params.set('search', searchQuery);
 
-      const res = await fetch(`/api/activity-log?${params}`);
+      const res = await fetch(`/fast/api/activity-log?${params}`);
       if (res.ok) {
         const data = await res.json();
         setLogs(data.logs);

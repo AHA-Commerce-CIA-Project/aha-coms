@@ -47,7 +47,7 @@ export default function ChangelogPage() {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/changelog');
+            const res = await fetch('/fast/api/changelog');
             if (res.ok) {
                 const data = await res.json();
                 setEntries(data.entries || []);
@@ -64,7 +64,7 @@ export default function ChangelogPage() {
     // Mark as seen when the user lands on this page (after entries load)
     useEffect(() => {
         if (!loading) {
-            fetch('/api/changelog/mark-seen', { method: 'POST' }).catch(() => {});
+            fetch('/fast/api/changelog/mark-seen', { method: 'POST' }).catch(() => {});
         }
     }, [loading]);
 
@@ -118,7 +118,7 @@ export default function ChangelogPage() {
 
     const deleteEntry = async (e: Entry) => {
         if (!confirm(`Delete "${e.title}"?`)) return;
-        const res = await fetch(`/api/changelog/${e.id}`, { method: 'DELETE' });
+        const res = await fetch(`/fast/api/changelog/${e.id}`, { method: 'DELETE' });
         if (res.ok) await load();
     };
 

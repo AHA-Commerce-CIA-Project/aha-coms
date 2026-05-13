@@ -464,7 +464,7 @@ export default function AnalyticsPage() {
             if (from) params.set('from', from);
             if (to) params.set('to', to);
 
-            const res = await fetch(`/api/analytics?${params.toString()}`);
+            const res = await fetch(`/fast/api/analytics?${params.toString()}`);
             const json = await res.json();
             if (json.status === 'success') {
                 setData(json.data);
@@ -1037,7 +1037,7 @@ function OrbitAnalyticsSection() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetch('/api/orbit/analytics')
+        fetch('/fast/api/orbit/analytics')
             .then((r) => r.ok ? r.json() : null)
             .then(setData)
             .catch(() => {})

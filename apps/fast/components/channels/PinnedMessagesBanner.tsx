@@ -34,7 +34,7 @@ export function PinnedMessagesBanner({ channelId, refreshTick, onJumpToMessage }
         let cancelled = false;
         (async () => {
             try {
-                const res = await fetch(`/api/channels/${channelId}/messages/pinned`);
+                const res = await fetch(`/fast/api/channels/${channelId}/messages/pinned`);
                 if (!res.ok || cancelled) return;
                 const data = await res.json();
                 setPinned(data.pinned || []);

@@ -94,7 +94,7 @@ export function ThreadPanel({
 
   const fetchReplies = useCallback(async () => {
     try {
-      const res = await fetch(`/api/channels/${channelId}/${message.id}/replies`);
+      const res = await fetch(`/fast/api/channels/${channelId}/${message.id}/replies`);
       if (res.ok) {
         const data = await res.json();
         setReplies(data);
@@ -124,7 +124,7 @@ export function ThreadPanel({
 
   const handleSend = async (content: string, attachments: Attachment[], mentions: string[]) => {
     try {
-      const res = await fetch(`/api/channels/${channelId}/${message.id}/replies`, {
+      const res = await fetch(`/fast/api/channels/${channelId}/${message.id}/replies`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, attachments, mentions }),
@@ -146,7 +146,7 @@ export function ThreadPanel({
 
   const handleReaction = async (replyId: string, emoji: string) => {
     try {
-      await fetch(`/api/channels/${channelId}/${message.id}/reactions`, {
+      await fetch(`/fast/api/channels/${channelId}/${message.id}/reactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emoji, replyId }),
@@ -309,7 +309,7 @@ function ThreadReplyItem({
 
   const handleSave = async () => {
     try {
-      const res = await fetch(`/api/channels/${channelId}/${messageId}/save`, {
+      const res = await fetch(`/fast/api/channels/${channelId}/${messageId}/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ replyId: reply.id }),
@@ -325,7 +325,7 @@ function ThreadReplyItem({
     if (!editContent.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/channels/${channelId}/${messageId}/replies/${reply.id}`, {
+      const res = await fetch(`/fast/api/channels/${channelId}/${messageId}/replies/${reply.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: editContent }),
@@ -340,7 +340,7 @@ function ThreadReplyItem({
   const handleDelete = () => setDeleteOpen(true);
   const performDelete = async () => {
     try {
-      await fetch(`/api/channels/${channelId}/${messageId}/replies/${reply.id}`, { method: 'DELETE' });
+      await fetch(`/fast/api/channels/${channelId}/${messageId}/replies/${reply.id}`, { method: 'DELETE' });
       onReplyUpdated();
     } catch {}
   };

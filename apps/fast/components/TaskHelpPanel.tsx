@@ -75,14 +75,14 @@ export function TaskHelpPanel({ taskId, assigneeId, currentUserId, needsHelp, on
 
     const fetchCollaborators = useCallback(async () => {
         try {
-            const res = await fetch(`/api/tasks/${taskId}/collaborators`);
+            const res = await fetch(`/fast/api/tasks/${taskId}/collaborators`);
             if (res.ok) setCollaborators(await res.json());
         } catch {}
     }, [taskId]);
 
     const fetchActivity = useCallback(async () => {
         try {
-            const res = await fetch(`/api/tasks/${taskId}/activity`);
+            const res = await fetch(`/fast/api/tasks/${taskId}/activity`);
             if (res.ok) setActivity(await res.json());
         } catch {}
     }, [taskId]);
@@ -122,12 +122,12 @@ export function TaskHelpPanel({ taskId, assigneeId, currentUserId, needsHelp, on
     };
 
     const toggleHelpRequest = () => runAction(() =>
-        fetch(`/api/tasks/${taskId}/request-help`, { method: needsHelp ? 'DELETE' : 'POST' }),
+        fetch(`/fast/api/tasks/${taskId}/request-help`, { method: needsHelp ? 'DELETE' : 'POST' }),
     );
-    const requestToHelp = () => runAction(() => fetch(`/api/tasks/${taskId}/collaborators`, { method: 'POST' }));
-    const leave = () => runAction(() => fetch(`/api/tasks/${taskId}/collaborators`, { method: 'DELETE' }));
+    const requestToHelp = () => runAction(() => fetch(`/fast/api/tasks/${taskId}/collaborators`, { method: 'POST' }));
+    const leave = () => runAction(() => fetch(`/fast/api/tasks/${taskId}/collaborators`, { method: 'DELETE' }));
     const decide = (collabId: string, action: 'approve' | 'deny') => runAction(() =>
-        fetch(`/api/tasks/${taskId}/collaborators/${collabId}`, {
+        fetch(`/fast/api/tasks/${taskId}/collaborators/${collabId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action }),

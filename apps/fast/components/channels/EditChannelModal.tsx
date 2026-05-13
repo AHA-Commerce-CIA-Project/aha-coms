@@ -63,7 +63,7 @@ export function EditChannelModal({ open, onClose, onUpdated, channel }: EditChan
   // Fetch teams list
   useEffect(() => {
     if (!open) return;
-    fetch('/api/teams')
+    fetch('/fast/api/teams')
       .then((res) => (res.ok ? res.json() : []))
       .then(setTeams)
       .catch(() => {});
@@ -110,7 +110,7 @@ export function EditChannelModal({ open, onClose, onUpdated, channel }: EditChan
     setError(null);
 
     try {
-      const res = await fetch(`/api/channels/${channel.id}`, {
+      const res = await fetch(`/fast/api/channels/${channel.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

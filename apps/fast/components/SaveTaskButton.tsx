@@ -15,7 +15,7 @@ export function SaveTaskButton({ taskId, className }: Props) {
   useEffect(() => {
     let cancelled = false;
     setSaved(null);
-    fetch(`/api/tasks/${taskId}/save`)
+    fetch(`/fast/api/tasks/${taskId}/save`)
       .then((r) => (r.ok ? r.json() : { saved: false }))
       .then((d) => { if (!cancelled) setSaved(!!d.saved); })
       .catch(() => { if (!cancelled) setSaved(false); });
@@ -28,7 +28,7 @@ export function SaveTaskButton({ taskId, className }: Props) {
     const optimistic = !saved;
     setSaved(optimistic);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/save`, { method: 'POST' });
+      const res = await fetch(`/fast/api/tasks/${taskId}/save`, { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         setSaved(data.action === 'saved');

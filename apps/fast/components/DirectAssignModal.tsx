@@ -153,7 +153,7 @@ export function DirectAssignModal({
         setUploadError(null);
         setError(null);
 
-        fetch('/api/channels?purpose=assign_task')
+        fetch('/fast/api/channels?purpose=assign_task')
             .then((r) => (r.ok ? r.json() : []))
             .then((list: ChannelOption[]) => {
                 const active = list.filter((c) => !c.isArchived);
@@ -166,7 +166,7 @@ export function DirectAssignModal({
             })
             .catch(() => setChannels([]));
 
-        fetch('/api/brand-codes').then((r) => (r.ok ? r.json() : [])).then(setBrandCodes).catch(() => {});
+        fetch('/fast/api/brand-codes').then((r) => (r.ok ? r.json() : [])).then(setBrandCodes).catch(() => {});
     // defaultDescription/defaultImages/defaultFileUrls/sourceMessageId are read at open-time only;
     // changing them mid-open shouldn't blow away the user's edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -199,7 +199,7 @@ export function DirectAssignModal({
         try {
             const fd = new FormData();
             fd.append('file', file);
-            const res = await fetch('/api/upload', { method: 'POST', body: fd });
+            const res = await fetch('/fast/api/upload', { method: 'POST', body: fd });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Upload failed');
             setImages((prev) => [...prev, { url: data.url, preview: localPreview }]);
@@ -741,7 +741,7 @@ export function DirectAssignModal({
                                             const fd = new FormData();
                                             fd.append('file', file);
                                             try {
-                                                const res = await fetch('/api/upload', { method: 'POST', body: fd });
+                                                const res = await fetch('/fast/api/upload', { method: 'POST', body: fd });
                                                 if (res.ok) {
                                                     const data = await res.json();
                                                     setFormData((prev) => ({ ...prev, fileUrls: [...prev.fileUrls, data.url] }));

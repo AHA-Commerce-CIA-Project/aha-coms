@@ -71,8 +71,8 @@ export function ForwardToChannelModal({
             setTab('channel');
             sendingRef.current = false;
             Promise.all([
-                fetch('/api/channels').then(r => r.ok ? r.json() : []).catch(() => []),
-                fetch('/api/chat/users').then(r => r.ok ? r.json() : []).catch(() => []),
+                fetch('/fast/api/channels').then(r => r.ok ? r.json() : []).catch(() => []),
+                fetch('/fast/api/chat/users').then(r => r.ok ? r.json() : []).catch(() => []),
             ])
                 .then(([chs, us]) => {
                     setChannels(chs);
@@ -127,7 +127,7 @@ export function ForwardToChannelModal({
         try {
             let res: Response;
             if (selected.kind === 'channel') {
-                res = await fetch(`/api/channels/${selected.channel.id}/messages`, {
+                res = await fetch(`/fast/api/channels/${selected.channel.id}/messages`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -138,7 +138,7 @@ export function ForwardToChannelModal({
                 });
             } else {
                 // DM: ensure (or create) the 1-on-1 conversation, then post a message.
-                const convRes = await fetch('/api/chat/conversations', {
+                const convRes = await fetch('/fast/api/chat/conversations', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ otherUserId: selected.user.id }),
@@ -151,7 +151,7 @@ export function ForwardToChannelModal({
                     return;
                 }
                 const conv = await convRes.json();
-                res = await fetch(`/api/chat/conversations/${conv.id}/messages`, {
+                res = await fetch(`/fast/api/chat/conversations/${conv.id}/messages`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

@@ -66,7 +66,7 @@ export function Breadcrumb() {
       className="px-6 pt-3 pb-0 flex items-center gap-1.5 text-sm w-fit"
     >
       <Link
-        href="/fast"
+        href="/"
         className="text-slate-400 hover:text-indigo-600 transition-colors flex-shrink-0 inline-flex items-center"
         aria-label="Home"
       >

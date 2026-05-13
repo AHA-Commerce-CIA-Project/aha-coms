@@ -35,7 +35,7 @@ export function TaskChecklistSection({ taskId, canEdit = true, onChange }: Props
 
     const fetchItems = useCallback(async () => {
         try {
-            const res = await fetch(`/api/tasks/${taskId}/checklist`);
+            const res = await fetch(`/fast/api/tasks/${taskId}/checklist`);
             if (res.ok) setItems(await res.json());
         } finally {
             setLoading(false);
@@ -49,7 +49,7 @@ export function TaskChecklistSection({ taskId, canEdit = true, onChange }: Props
         if (!title || adding) return;
         setAdding(true);
         try {
-            const res = await fetch(`/api/tasks/${taskId}/checklist`, {
+            const res = await fetch(`/fast/api/tasks/${taskId}/checklist`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title }),
@@ -70,7 +70,7 @@ export function TaskChecklistSection({ taskId, canEdit = true, onChange }: Props
         const next = !item.isCompleted;
         setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, isCompleted: next } : i)));
         try {
-            const res = await fetch(`/api/tasks/${taskId}/checklist/${item.id}`, {
+            const res = await fetch(`/fast/api/tasks/${taskId}/checklist/${item.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ isCompleted: next }),
@@ -104,7 +104,7 @@ export function TaskChecklistSection({ taskId, canEdit = true, onChange }: Props
         setItems((prev) => prev.map((i) => (i.id === editingId ? { ...i, title: trimmed } : i)));
         setEditingId(null);
         try {
-            const res = await fetch(`/api/tasks/${taskId}/checklist/${item.id}`, {
+            const res = await fetch(`/fast/api/tasks/${taskId}/checklist/${item.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: trimmed }),
@@ -125,7 +125,7 @@ export function TaskChecklistSection({ taskId, canEdit = true, onChange }: Props
         const snapshot = items;
         setItems((prev) => prev.filter((i) => i.id !== itemId));
         try {
-            const res = await fetch(`/api/tasks/${taskId}/checklist/${itemId}`, { method: 'DELETE' });
+            const res = await fetch(`/fast/api/tasks/${taskId}/checklist/${itemId}`, { method: 'DELETE' });
             if (!res.ok) throw new Error('failed');
             onChange?.();
         } catch {

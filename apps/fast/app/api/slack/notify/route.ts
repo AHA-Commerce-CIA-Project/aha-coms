@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
                                 text: '👀 View in Dashboard',
                                 emoji: true,
                             },
-                            url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/nexus?task=${body.taskId}`,
+                            url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/fast/nexus?task=${body.taskId}`,
                             action_id: 'view_task',
                         },
                     ],

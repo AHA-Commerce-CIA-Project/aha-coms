@@ -33,9 +33,9 @@ export function RoutineTemplateModal({
     let cancelled = false;
     setLoading(true);
     Promise.all([
-      fetch('/api/channels?purpose=discussion').then((r) => (r.ok ? r.json() : [])).catch(() => []),
-      fetch('/api/channels?purpose=assign_task').then((r) => (r.ok ? r.json() : [])).catch(() => []),
-      fetch('/api/users').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch('/fast/api/channels?purpose=discussion').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch('/fast/api/channels?purpose=assign_task').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch('/fast/api/users').then((r) => (r.ok ? r.json() : [])).catch(() => []),
     ])
       .then(([d, a, u]) => {
         if (cancelled) return;

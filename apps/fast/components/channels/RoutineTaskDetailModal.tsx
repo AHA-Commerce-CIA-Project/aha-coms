@@ -100,7 +100,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
   const fetchSnapshot = useCallback(async () => {
     if (!taskId) return;
     try {
-      const res = await fetch(`/api/tasks/${taskId}/card`);
+      const res = await fetch(`/fast/api/tasks/${taskId}/card`);
       if (res.ok) setSnapshot(await res.json());
     } catch {
       // preview-only fallback handled by parent
@@ -142,7 +142,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     setBusy('task');
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/claim`, { method: 'POST' });
+      const res = await fetch(`/fast/api/tasks/${taskId}/claim`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setError(data?.error || 'Failed to claim task');
       await fetchSnapshot();
@@ -156,7 +156,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     setBusy(itemId);
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/checklist/${itemId}/claim`, { method: 'POST' });
+      const res = await fetch(`/fast/api/tasks/${taskId}/checklist/${itemId}/claim`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setError(data?.error || 'Failed to claim item');
       await fetchSnapshot();
@@ -170,7 +170,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     setBusy(itemId);
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/checklist/${itemId}`, {
+      const res = await fetch(`/fast/api/tasks/${taskId}/checklist/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isCompleted: next }),
@@ -192,7 +192,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     setBusy('reassign');
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/claim`, {
+      const res = await fetch(`/fast/api/tasks/${taskId}/claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reassignTo: userId }),
@@ -214,7 +214,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     if (pickerMembers.length > 0 || pickerLoading) return;
     setPickerLoading(true);
     try {
-      const res = await fetch('/api/chat/users');
+      const res = await fetch('/fast/api/chat/users');
       const data = await res.json().catch(() => null);
       if (Array.isArray(data)) {
         setPickerMembers(
@@ -250,7 +250,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     setBusy('complete');
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/complete`, {
+      const res = await fetch(`/fast/api/tasks/${taskId}/complete`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
@@ -273,7 +273,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     setBusy('add-item');
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/checklist`, {
+      const res = await fetch(`/fast/api/tasks/${taskId}/checklist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title }),
@@ -300,7 +300,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     setBusy(itemId);
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/checklist/${itemId}`, {
+      const res = await fetch(`/fast/api/tasks/${taskId}/checklist/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title }),
@@ -323,7 +323,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     setBusy(itemId);
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/checklist/${itemId}`, {
+      const res = await fetch(`/fast/api/tasks/${taskId}/checklist/${itemId}`, {
         method: 'DELETE',
       });
       const data = await res.json().catch(() => ({}));
@@ -350,7 +350,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     }
     setRepliesLoading(true);
     try {
-      const res = await fetch(`/api/channels/${channelId}/${channelMessageId}/replies`);
+      const res = await fetch(`/fast/api/channels/${channelId}/${channelMessageId}/replies`);
       if (res.ok) {
         const data = await res.json();
         setReplies(Array.isArray(data) ? data : []);
@@ -378,7 +378,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     setPostingReply(true);
     setError(null);
     try {
-      const res = await fetch(`/api/channels/${channelId}/${channelMessageId}/replies`, {
+      const res = await fetch(`/fast/api/channels/${channelId}/${channelMessageId}/replies`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, attachments: [], mentions: [] }),

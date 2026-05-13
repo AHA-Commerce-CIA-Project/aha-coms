@@ -95,7 +95,7 @@ export default function OrbitAnalyticsPage() {
             const params = new URLSearchParams();
             if (from) params.set('from', from);
             if (to) params.set('to', to);
-            const res = await fetch(`/api/orbit/analytics?${params.toString()}`);
+            const res = await fetch(`/fast/api/orbit/analytics?${params.toString()}`);
             if (res.ok) setData(await res.json());
         } catch {} finally {
             setLoading(false);

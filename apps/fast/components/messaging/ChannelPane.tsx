@@ -116,7 +116,7 @@ export function ChannelPane() {
   const [taskDetail, setTaskDetail] = useState<TeamInboxTask | null>(null);
   const openTaskDetail = useCallback(async (taskId: string) => {
     try {
-      const res = await fetch(`/api/tasks/${taskId}/full`);
+      const res = await fetch(`/fast/api/tasks/${taskId}/full`);
       if (!res.ok) return;
       const data = await res.json();
       setTaskDetail(data);
@@ -142,18 +142,18 @@ export function ChannelPane() {
   // Redirect if not authenticated
   useEffect(() => {
     if (!isPending && !session) {
-      router.push('/login');
+      window.location.href = '/portal?app=fast';
     }
   }, [session, isPending, router]);
 
   // Fetch users + teams for @mentions
   useEffect(() => {
     if (!session) return;
-    fetch('/api/chat/users')
+    fetch('/fast/api/chat/users')
       .then((res) => res.ok ? res.json() : [])
       .then(setUsers)
       .catch(() => {});
-    fetch('/api/teams')
+    fetch('/fast/api/teams')
       .then((res) => res.ok ? res.json() : [])
       .then((list: { id: string; name: string; mentionHandle: string | null }[]) => {
         // Only teams with a mention handle are usable in @-completion.
@@ -165,7 +165,7 @@ export function ChannelPane() {
   // Fetch channels — scoped by the active purpose toggle.
   const fetchChannels = useCallback(async () => {
     try {
-      const res = await fetch(`/api/channels?purpose=${encodeURIComponent(purpose)}`);
+      const res = await fetch(`/fast/api/channels?purpose=${encodeURIComponent(purpose)}`);
       if (res.ok) {
         const data = await res.json();
         setChannels(data);
@@ -276,8 +276,8 @@ export function ChannelPane() {
     const fetchUnread = async () => {
       try {
         const [chRes, dmRes] = await Promise.all([
-          fetch('/api/channels/unread'),
-          fetch('/api/chat/unread'),
+          fetch('/fast/api/channels/unread'),
+          fetch('/fast/api/chat/unread'),
         ]);
         if (chRes.ok) {
           const data = await chRes.json();
@@ -410,7 +410,7 @@ export function ChannelPane() {
   // Mark as read
   const markAsRead = useCallback(async (channelId: string) => {
     try {
-      await fetch(`/api/channels/${channelId}/read`, { method: 'PUT' });
+      await fetch(`/fast/api/channels/${channelId}/read`, { method: 'PUT' });
     } catch {}
   }, []);
 
@@ -428,7 +428,7 @@ export function ChannelPane() {
   const handleSendMessage = async (content: string, attachments: Attachment[], mentions: string[]) => {
     if (!selectedChannel) return;
     try {
-      const res = await fetch(`/api/channels/${selectedChannel.id}/messages`, {
+      const res = await fetch(`/fast/api/channels/${selectedChannel.id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, attachments, mentions }),
@@ -444,7 +444,7 @@ export function ChannelPane() {
   const handleReaction = async (messageId: string, emoji: string) => {
     if (!selectedChannel) return;
     try {
-      await fetch(`/api/channels/${selectedChannel.id}/${messageId}/reactions`, {
+      await fetch(`/fast/api/channels/${selectedChannel.id}/${messageId}/reactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emoji }),
@@ -457,7 +457,7 @@ export function ChannelPane() {
   const handleSave = async (messageId: string) => {
     if (!selectedChannel) return;
     try {
-      await fetch(`/api/channels/${selectedChannel.id}/${messageId}/save`, {
+      await fetch(`/fast/api/channels/${selectedChannel.id}/${messageId}/save`, {
         method: 'POST',
       });
       fetchMessages(selectedChannel.id);
@@ -475,7 +475,7 @@ export function ChannelPane() {
       prev.map((m) => (m.id === messageId ? { ...m, isPinned: !m.isPinned } : m)),
     );
     try {
-      const res = await fetch(`/api/channels/${selectedChannel.id}/messages/${messageId}/pin`, {
+      const res = await fetch(`/fast/api/channels/${selectedChannel.id}/messages/${messageId}/pin`, {
         method: 'POST',
       });
       if (!res.ok) throw new Error('pin failed');
@@ -513,7 +513,7 @@ export function ChannelPane() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      const res = await fetch(`/api/channels/${selectedChannel.id}`, { method: 'DELETE' });
+      const res = await fetch(`/fast/api/channels/${selectedChannel.id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setDeleteError(data.error || 'Failed to delete channel');
@@ -559,7 +559,7 @@ export function ChannelPane() {
       prev.map((c) => (c.id === selectedChannel.id ? { ...c, isPinned: !previous } : c)),
     );
     try {
-      const res = await fetch(`/api/channels/${selectedChannel.id}/pin`, { method: 'POST' });
+      const res = await fetch(`/fast/api/channels/${selectedChannel.id}/pin`, { method: 'POST' });
       if (!res.ok) throw new Error('pin failed');
       const data = await res.json();
       // Reconcile both snapshots with server truth in case the optimistic
@@ -761,7 +761,7 @@ export function ChannelPane() {
                     let taskToken: string | undefined;
                     if (taskId) {
                       try {
-                        const r = await fetch(`/api/tasks/${taskId}/card`);
+                        const r = await fetch(`/fast/api/tasks/${taskId}/card`);
                         if (r.ok) {
                           const data = await r.json();
                           taskToken = data.task_token || undefined;

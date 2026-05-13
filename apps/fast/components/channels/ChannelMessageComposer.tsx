@@ -88,7 +88,7 @@ export const ChannelMessageComposer = forwardRef<ChannelMessageComposerHandle, C
     const now = Date.now();
     if (now - lastTypingSent.current < 2000) return;
     lastTypingSent.current = now;
-    fetch(`/api/channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
+    fetch(`/fast/api/channels/${channelId}/typing`, { method: 'POST' }).catch(() => {});
   }, [channelId]);
 
   // Poll typing status
@@ -98,7 +98,7 @@ export const ChannelMessageComposer = forwardRef<ChannelMessageComposerHandle, C
 
     const poll = async () => {
       try {
-        const res = await fetch(`/api/channels/${channelId}/typing`);
+        const res = await fetch(`/fast/api/channels/${channelId}/typing`);
         if (res.ok && active) {
           const data = await res.json();
           onTypingUsersChange?.(data.typing || []);
@@ -733,7 +733,7 @@ export const ChannelMessageComposer = forwardRef<ChannelMessageComposerHandle, C
       for (const file of Array.from(files)) {
         const formData = new FormData();
         formData.append('file', file);
-        const res = await fetch('/api/chat/upload', {
+        const res = await fetch('/fast/api/chat/upload', {
           method: 'POST',
           body: formData,
         });

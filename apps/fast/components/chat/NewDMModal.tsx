@@ -34,7 +34,7 @@ export function NewDMModal({ open, onClose, onSelectUser }: NewDMModalProps) {
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/chat/users');
+            const res = await fetch('/fast/api/chat/users');
             if (res.ok) {
                 setUsers(await res.json());
             }

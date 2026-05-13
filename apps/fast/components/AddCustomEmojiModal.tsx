@@ -58,7 +58,7 @@ export function AddCustomEmojiModal({ open, onClose, onCreated }: Props) {
         try {
             const fd = new FormData();
             fd.append('file', file);
-            const res = await fetch('/api/upload', { method: 'POST', body: fd });
+            const res = await fetch('/fast/api/upload', { method: 'POST', body: fd });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || 'Upload failed');
             setImageUrl(data.url);
@@ -83,7 +83,7 @@ export function AddCustomEmojiModal({ open, onClose, onCreated }: Props) {
         setSubmitting(true);
         setError(null);
         try {
-            const res = await fetch('/api/emojis/custom', {
+            const res = await fetch('/fast/api/emojis/custom', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, imageUrl }),

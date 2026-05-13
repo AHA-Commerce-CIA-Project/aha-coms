@@ -62,7 +62,7 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
 
   const fetchSnapshot = useCallback(async () => {
     try {
-      const res = await fetch(`/api/tasks/${taskId}/card`);
+      const res = await fetch(`/fast/api/tasks/${taskId}/card`);
       if (res.ok) setSnapshot(await res.json());
     } catch {
       // preview-only fallback
@@ -83,7 +83,7 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
     setBusy('task');
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/claim`, { method: 'POST' });
+      const res = await fetch(`/fast/api/tasks/${taskId}/claim`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setError(data?.error || 'Failed to claim task');
       await fetchSnapshot();
@@ -96,7 +96,7 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
     setBusy(itemId);
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/checklist/${itemId}/claim`, { method: 'POST' });
+      const res = await fetch(`/fast/api/tasks/${taskId}/checklist/${itemId}/claim`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setError(data?.error || 'Failed to claim item');
       await fetchSnapshot();
@@ -109,7 +109,7 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
     setBusy(itemId);
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/checklist/${itemId}`, {
+      const res = await fetch(`/fast/api/tasks/${taskId}/checklist/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isCompleted: next }),
@@ -131,7 +131,7 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
     setBusy('complete');
     setError(null);
     try {
-      const res = await fetch(`/api/tasks/${taskId}/complete`, {
+      const res = await fetch(`/fast/api/tasks/${taskId}/complete`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
