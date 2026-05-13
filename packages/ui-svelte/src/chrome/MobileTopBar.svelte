@@ -36,7 +36,7 @@
 </script>
 
 <header
-  class="fixed top-9 left-0 right-0 z-50 flex h-14 items-center justify-between px-4 md:hidden bg-[#0d1229]/85 backdrop-blur-xl border-b border-white/10"
+  class="fixed top-0 left-0 right-0 z-50 flex h-14 items-center justify-between px-4 md:hidden bg-[#0d1229]/85 backdrop-blur-xl border-b border-white/10"
 >
   <div class="flex items-center gap-2">
     {#if leading}

@@ -246,7 +246,7 @@
     <!-- footer snippet intentionally omitted: widget owns avatar/sign-out -->
   </Sidebar>
 
-  <div class="pt-9 md:ml-[var(--sidebar-width)] transition-[margin-left] duration-200">
+  <div class="pt-0 md:pt-9 md:ml-[var(--sidebar-width)] transition-[margin-left] duration-200">
     <Header unreadCount={data.unreadCount} onOpenPalette={() => (paletteOpen = true)} />
     <PullToRefresh>
       <main class="page-transition pt-14 pb-24 md:pt-0 md:pb-8 px-4 md:px-6 max-w-5xl mx-auto">

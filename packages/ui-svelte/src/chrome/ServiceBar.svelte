@@ -42,7 +42,7 @@
 </script>
 
 <div
-  class="fixed top-0 left-0 right-0 z-[70] h-9 flex items-center bg-gradient-to-r from-deep-navy to-primary-dark border-b border-white/8 px-3 gap-1"
+  class="fixed top-0 left-0 right-0 z-[70] h-9 hidden md:flex items-center bg-gradient-to-r from-deep-navy to-primary-dark border-b border-white/8 px-3 gap-1"
 >
   {#each services as svc (svc.slug)}
     {@const isActive = svc.slug === currentApp}
