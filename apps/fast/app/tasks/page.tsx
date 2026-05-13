@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useSearchParams } from 'next/navigation';
 import { PageTabs } from '@/components/PageTabs';
 import { useAppStore } from '@/lib/store';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { useCommentDraftTaskIds } from '@/lib/use-comment-drafts';
 import { RichEditor } from '@/components/RichEditor';
 import { DueCountdown } from '@/components/DueCountdown';

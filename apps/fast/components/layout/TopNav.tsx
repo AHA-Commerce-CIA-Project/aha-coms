@@ -26,7 +26,7 @@ import {
     ClipboardList,
     X,
 } from 'lucide-react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { useTheme } from '@/lib/theme-context';
 import { cn } from '@/lib/utils';
 import { htmlToPlainText } from '@/lib/sanitize';

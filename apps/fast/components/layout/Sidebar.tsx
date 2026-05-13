@@ -27,7 +27,7 @@ import {
     Trophy,
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { cn } from '@/lib/utils';
 
 interface SubItem {

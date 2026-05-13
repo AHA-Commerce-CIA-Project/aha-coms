@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from '@/lib/auth-client';
-import { useAuth } from '@/lib/auth-context';
+import { useSession } from '@/lib/auth/use-auth';
+import { useAuth } from '@/lib/auth/use-auth';
 import {
   User, Camera, Lock, Eye, EyeOff, Check, AlertCircle,
   Circle, Clock, MinusCircle, XCircle,

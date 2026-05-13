@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 

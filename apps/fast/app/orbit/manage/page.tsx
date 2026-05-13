@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from '@/lib/auth-client';
-import { useAuth } from '@/lib/auth-context';
+import { useSession } from '@/lib/auth/use-auth';
+import { useAuth } from '@/lib/auth/use-auth';
 import { RotateCcw, Plus, Pencil, Trash2, ArrowLeft, User as UserIcon, Users, Hash, Zap, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';

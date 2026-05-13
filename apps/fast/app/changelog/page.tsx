@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { Sparkles, Wrench, Bug, AlertTriangle, Pin, Plus, X, Edit3, Trash2 } from 'lucide-react';
 

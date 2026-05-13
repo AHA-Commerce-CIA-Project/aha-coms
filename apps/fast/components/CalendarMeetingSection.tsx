@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { sanitizeMeetingDescription } from '@/lib/sanitize';
 import { RichEditor } from '@/components/RichEditor';
 import {

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks, Eye, ExternalLink } from 'lucide-react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { htmlToPlainText } from '@/lib/sanitize';
 import { PageTabs } from '@/components/PageTabs';
 import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';

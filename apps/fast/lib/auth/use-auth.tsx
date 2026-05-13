@@ -5,17 +5,22 @@ import { createContext, useContext, useEffect, useState } from 'react';
 /**
  * useAuth — client-side identity hook.
  *
- * Spec 05 Phase 3 / T61 — sub-phase (b). The hook's external surface
- * (returned fields, signOut shape) stays identical to the Better Auth
- * era so the 26 client-side consumers (TopNav, Sidebar, ChannelPane,
- * DmPane, …) require no edits. Internally it now reads from
- * `/api/auth/me` (portal-rooted) instead of `authClient.getSession()`.
+ * Spec 05 Phase 3 / T63 — sub-phase (c). Relocated from the deleted
+ * `lib/auth-context.tsx` into the surviving `lib/auth/` subdirectory
+ * so the 26 consumer files only need an import-path rewrite, not a
+ * behavioural one. External surface unchanged.
  *
- * `signOut()` redirects to portal's sign-out endpoint via top-level
- * navigation — same posture heroes' AccountWidget holds. Better Auth's
- * `authClient.signOut()` writes to /api/auth/sign-out (Better Auth's
- * own route), which the T62 + T63 cuts retire. The portal endpoint
- * clears the `__session` cookie origin-wide.
+ * Also exports `useSession`, a shim mirroring Better Auth's
+ * `authClient.useSession()` shape (`{ data: { user } | null, isPending }`)
+ * so the 8 useSession consumers (orbit pages, profile, activity-log,
+ * MyRequestView, LaterPane, ChannelPane) can swap their import path
+ * without touching the `data.user.id` access pattern they already
+ * read.
+ *
+ * The underlying data substrate is now `/api/auth/me`, which runs
+ * `requireFastAuth` server-side. Better Auth's client surface
+ * (`createAuthClient`, `authClient.getSession`, `authClient.signOut`)
+ * retires with the deletion of `lib/auth-client.ts` in this commit.
  */
 
 interface UserProfile {
@@ -96,10 +101,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleSignOut = async () => {
-        // Portal owns sign-out: redirect to its end-session endpoint with a
-        // returnTo back to fast's root. The endpoint clears the __session
-        // cookie origin-wide; Better Auth's local /api/auth/sign-out route
-        // retires alongside the lib/auth-server.ts deletion in T63.
         setProfile(null);
         const portalOrigin =
             process.env.NEXT_PUBLIC_PORTAL_ORIGIN ||
@@ -128,3 +129,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+
+/**
+ * useSession — Better Auth-shaped shim over useAuth.
+ *
+ * Returns `{ data: { user } | null, isPending }` so the 8 useSession
+ * consumers continue reading `data?.user.id` after the credential-lib
+ * cut. The `user` shape is the minimal Better Auth surface those
+ * callers already access: `{ id, email, name, image, role }`.
+ */
+export function useSession() {
+    const { user, loading } = useAuth();
+    return {
+        data: user
+            ? {
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    image: user.image,
+                    role: user.role,
+                },
+            }
+            : null,
+        isPending: loading,
+    };
+}

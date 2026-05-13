@@ -7,7 +7,7 @@ import {
     LayoutDashboard, CheckSquare, Hash, MessageCircle, Menu,
     BarChart3, Activity, Bookmark, FileText, Users, Sparkles, Shield, LogOut, X,
 } from 'lucide-react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { cn } from '@/lib/utils';
 
 interface TabDef {

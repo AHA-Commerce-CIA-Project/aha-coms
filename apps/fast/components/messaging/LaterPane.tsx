@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from '@/lib/auth-client';
+import { useSession } from '@/lib/auth/use-auth';
 import { Bookmark, Hash, MessageSquare, Download, Trash2, ExternalLink, ListTodo, Inbox } from 'lucide-react';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { linkifyHtml, linkifyText } from '@/lib/linkify';

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireFastAuth } from '@/lib/auth/require-fast-auth';
-import { auth } from '@/lib/auth';
-import { logActivity } from '@/lib/activity-log';
 
 async function verifyLeader() {
     const session = await requireFastAuth();
@@ -61,66 +59,22 @@ export async function GET() {
     return NextResponse.json(data);
 }
 
-// POST — Create a new user (Master/Admin only)
-export async function POST(request: NextRequest) {
+// POST — Disabled. User creation moved to portal-side identity
+// management in the Spec 05 Phase 3 cascade (T63). Portal owns
+// credential issuance via identity_users + identity_user_emails; fast
+// upserts its own User row on first signed-in hit via loadFastAuthUser.
+// The admin "create user" UI in fast surfaces this 410 directly so
+// the operator knows where to go.
+export async function POST(_request: NextRequest) {
     const session = await verifyAdmin();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized — Master access required' }, { status: 403 });
     }
-
-    const body = await request.json();
-    const { email, password, name, role, team_id } = body;
-
-    if (!email || !password || !name) {
-        return NextResponse.json({ error: 'Email, password, and name are required' }, { status: 400 });
-    }
-
-    if (!email.toLowerCase().endsWith('@ahacommerce.net')) {
-        return NextResponse.json({ error: 'Only @ahacommerce.net email addresses are allowed.' }, { status: 400 });
-    }
-
-    try {
-        // Use Better Auth to create the user with email/password
-        const ctx = await auth.api.signUpEmail({
-            body: {
-                email,
-                password,
-                name,
-            },
-        });
-
-        if (!ctx?.user) {
-            return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
-        }
-
-        // Update role and team
-        const updatedUser = await prisma.user.update({
-            where: { id: ctx.user.id },
-            data: {
-                role: role || 'member',
-                teamId: team_id || null,
-                emailVerified: true,
-            },
-        });
-
-        const roleLabel = (r: string) => r === 'admin' ? 'Master' : r === 'leader' ? 'Leader' : 'Member';
-        logActivity(
-            session.user.id,
-            'user_created',
-            `${session.user.name} created new account: ${name} (${email}) as ${roleLabel(updatedUser.role)}`,
-            'user',
-            updatedUser.id,
-        );
-
-        return NextResponse.json({
-            id: updatedUser.id,
-            email: updatedUser.email,
-            name: updatedUser.name,
-            role: updatedUser.role,
-            team_id: updatedUser.teamId,
-            created_at: updatedUser.createdAt.toISOString(),
-        }, { status: 201 });
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message || 'Failed to create user' }, { status: 400 });
-    }
+    return NextResponse.json(
+        {
+            error: 'User creation moved to portal',
+            detail: 'Create users via the portal admin surface; fast auto-provisions on the user\'s first signed-in hit.',
+        },
+        { status: 410 },
+    );
 }

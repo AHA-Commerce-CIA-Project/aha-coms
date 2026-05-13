@@ -13,7 +13,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Hash, MessageCircle, ChevronLeft, Bookmark, MessageSquare, ListTodo } from 'lucide-react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { MessagesIndex, IndexChannel, IndexDm } from '@/components/messaging/MessagesIndex';
 import { LaterIndex } from '@/components/messaging/LaterIndex';
 import { ChannelPane } from '@/components/messaging/ChannelPane';

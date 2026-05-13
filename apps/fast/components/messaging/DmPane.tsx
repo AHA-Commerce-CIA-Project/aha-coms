@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, PenSquare, X, Send, Paperclip, Image as ImageIcon, Smile, ChevronLeft, Plus, ClipboardList, Clock, CheckCircle2, Pencil, Trash2, Bookmark } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';

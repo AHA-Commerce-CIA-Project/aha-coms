@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from '@/lib/auth-client';
-import { useAuth } from '@/lib/auth-context';
+import { useSession } from '@/lib/auth/use-auth';
+import { useAuth } from '@/lib/auth/use-auth';
 import {
   Activity, Search, CheckCircle2, MessageSquare, RotateCcw,
   FileText, User, Clock, ChevronLeft, ChevronRight,

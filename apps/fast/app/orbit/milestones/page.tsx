@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useSession } from '@/lib/auth-client';
-import { useAuth } from '@/lib/auth-context';
+import { useSession } from '@/lib/auth/use-auth';
+import { useAuth } from '@/lib/auth/use-auth';
 import {
     Trophy, Award, Plus, Pencil, Trash2, X, ArrowLeft,
     CheckCircle2, Repeat, Crown, Lock,

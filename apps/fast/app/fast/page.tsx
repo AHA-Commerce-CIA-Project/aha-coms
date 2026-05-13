@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { CountdownTimer } from '@/components/CountdownTimer';
 import { CalendarMeetingSection } from '@/components/CalendarMeetingSection';
 import { TeamInboxTaskModal, type TeamInboxTask } from '@/components/TeamInboxTaskModal';

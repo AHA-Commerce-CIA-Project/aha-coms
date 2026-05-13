@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { BarChart3, Clock, CheckCircle2, TrendingUp, Star, Users, PieChart, Calendar, Filter, ShieldAlert, RotateCcw, Flame, Trophy, Award } from 'lucide-react';
 
 interface AnalyticsData {

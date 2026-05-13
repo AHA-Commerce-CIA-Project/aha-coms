@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Hash, Lock, Search, Check, Users as UsersIcon, ChevronDown, Globe, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 
 interface User {
   id: string;

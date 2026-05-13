@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { useCommentDraftTaskIds } from '@/lib/use-comment-drafts';
 import { CountdownTimer } from '@/components/CountdownTimer';
 import { DueCountdown } from '@/components/DueCountdown';

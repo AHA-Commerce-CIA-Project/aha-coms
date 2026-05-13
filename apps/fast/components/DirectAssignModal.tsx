@@ -6,7 +6,7 @@ import {
     ChevronLeft, ChevronRight, Pencil, ImagePlus, FileText, ExternalLink, Paperclip, Smile,
 } from 'lucide-react';
 import Image from 'next/image';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth/use-auth';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/RichTextEditor';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { ImageLightbox } from '@/components/ImageLightbox';

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireFastAuth } from '@/lib/auth/require-fast-auth';
-import { auth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity-log';
 
 export async function GET() {

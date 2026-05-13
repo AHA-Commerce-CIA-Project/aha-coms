@@ -1,6 +1,6 @@
 'use client';
 
-import { AuthProvider } from '@/lib/auth-context';
+import { AuthProvider } from '@/lib/auth/use-auth';
 import { ThemeProvider } from '@/lib/theme-context';
 import { PWAInstaller } from './PWAInstaller';
 import { Heartbeat } from './Heartbeat';

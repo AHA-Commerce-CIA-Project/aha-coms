@@ -10,8 +10,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from '@/lib/auth-client';
-import { useAuth } from '@/lib/auth-context';
+import { useSession } from '@/lib/auth/use-auth';
+import { useAuth } from '@/lib/auth/use-auth';
 import { ChannelMessageFeed } from '@/components/channels/ChannelMessageFeed';
 import { PinnedMessagesBanner } from '@/components/channels/PinnedMessagesBanner';
 import { ChannelMessageComposer, type ChannelMessageComposerHandle } from '@/components/channels/ChannelMessageComposer';

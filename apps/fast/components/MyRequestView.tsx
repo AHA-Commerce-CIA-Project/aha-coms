@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from '@/lib/auth-client';
+import { useSession } from '@/lib/auth/use-auth';
 import { Send, Hash, Inbox, ExternalLink, Lock, CheckCircle2, Clock, PauseCircle } from 'lucide-react';
 
 interface PostedCardItem {
