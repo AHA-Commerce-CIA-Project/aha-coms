@@ -2,27 +2,18 @@ import { redirect } from '@sveltejs/kit'
 import { base } from '$app/paths'
 import type { PageServerLoad } from './$types'
 
-export const load: PageServerLoad = async ({ locals, fetch }) => {
+export const load: PageServerLoad = async ({ locals }) => {
   if (locals.user?.role !== 'admin' && locals.user?.role !== 'hr') {
     redirect(302, `${base}/dashboard`)
   }
-
+  const actor = locals.user!
   const today = new Date().toISOString().slice(0, 10)
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
-  const res = await fetch(
-    `${base}/api/v1/reports?startDate=${thirtyDaysAgo}&endDate=${today}`,
+  const reportsService = await import('@coms-portal/heroes-api/services/reports')
+  const reports = await reportsService.getDashboardStats(
+    { startDate: thirtyDaysAgo, endDate: today },
+    { actor },
   )
-  const json = await res.json()
-
-  return {
-    reports: (json.data ?? json) as {
-      totalSubmissions: number
-      byCategory: Array<{ name: string; count: number }>
-      byTeam: Array<{ name: string; total: number }>
-      overTime: Array<{ date: string; count: number }>
-    },
-    defaultStart: thirtyDaysAgo,
-    defaultEnd: today,
-  }
+  return { reports, defaultStart: thirtyDaysAgo, defaultEnd: today }
 }
