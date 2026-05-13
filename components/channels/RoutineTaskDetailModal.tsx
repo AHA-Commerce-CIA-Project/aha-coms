@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Check,
   CheckCircle2,
@@ -12,9 +12,11 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Search,
   Send,
   Trash2,
   User as UserIcon,
+  UserCog,
   Users,
   X,
 } from 'lucide-react';
@@ -84,6 +86,16 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
   const [repliesLoading, setRepliesLoading] = useState(false);
   const [draftReply, setDraftReply] = useState('');
   const [postingReply, setPostingReply] = useState(false);
+
+  // Reassign picker — lazy-loads the workspace member list the first time the
+  // user opens it. Same pattern + endpoint the team-inbox card uses, so the
+  // permission rules (leaders can reassign any task; members can reassign
+  // tasks they currently own) are enforced once on the server side.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerMembers, setPickerMembers] = useState<AssigneeMini[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   const fetchSnapshot = useCallback(async () => {
     if (!taskId) return;
@@ -170,6 +182,65 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
       setBusy(null);
     }
   };
+
+  // Reassign — calls /api/tasks/[id]/claim with a reassignTo body. Auth
+  // is enforced server-side: leaders/admins can reassign any task;
+  // members can only reassign tasks currently assigned to them. The
+  // routine card is a regular Task record, so the same endpoint applies.
+  const reassignTask = async (userId: string) => {
+    if (!taskId) return;
+    setBusy('reassign');
+    setError(null);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reassignTo: userId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setError(data?.error || 'Failed to reassign task');
+      setPickerOpen(false);
+      setPickerSearch('');
+      await fetchSnapshot();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Lazy-load the assignable member list the first time the picker opens.
+  // /api/chat/users is open to any authenticated user; the actual auth
+  // gate is on the reassign endpoint above.
+  const ensurePickerMembers = useCallback(async () => {
+    if (pickerMembers.length > 0 || pickerLoading) return;
+    setPickerLoading(true);
+    try {
+      const res = await fetch('/api/chat/users');
+      const data = await res.json().catch(() => null);
+      if (Array.isArray(data)) {
+        setPickerMembers(
+          data.map((u: { id: string; name: string; image?: string | null }) => ({
+            id: u.id,
+            name: u.name,
+            image: u.image ?? null,
+          })),
+        );
+      }
+    } finally {
+      setPickerLoading(false);
+    }
+  }, [pickerMembers.length, pickerLoading]);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handle = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+        setPickerSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [pickerOpen]);
 
   // Mark the whole task done — same endpoint and rationale as the in-card
   // button. INDIVIDUAL claimers had no way to actually finish the task
@@ -451,6 +522,81 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
                       </div>
                       {!claimedByMe && !isDone && <Lock className="w-3.5 h-3.5 text-slate-400" />}
                       {isDone && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                      {/* Reassign — visible only while the task is active. The
+                          server enforces the actual permission (leader OR
+                          current assignee), so we show the affordance broadly
+                          and let the API return 403 for non-eligible callers. */}
+                      {!isDone && (
+                        <div className="relative" ref={pickerRef}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!pickerOpen) ensurePickerMembers();
+                              setPickerOpen((v) => !v);
+                            }}
+                            disabled={!!busy}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                            title="Reassign to another member"
+                          >
+                            {busy === 'reassign' ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <UserCog className="w-3.5 h-3.5" />
+                            )}
+                            Reassign
+                          </button>
+                          {pickerOpen && (
+                            <div className="absolute right-0 top-full mt-1 w-[260px] bg-white border border-slate-200 rounded-xl shadow-lg z-30 overflow-hidden">
+                              <div className="relative border-b border-slate-100">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                <input
+                                  type="text"
+                                  value={pickerSearch}
+                                  onChange={(e) => setPickerSearch(e.target.value)}
+                                  placeholder="Search members…"
+                                  className="w-full pl-8 pr-2 py-2 text-xs bg-white focus:outline-none"
+                                  autoFocus
+                                />
+                              </div>
+                              <div className="max-h-60 overflow-y-auto">
+                                {pickerLoading ? (
+                                  <div className="px-3 py-3 text-xs text-slate-500 inline-flex items-center gap-2">
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading members…
+                                  </div>
+                                ) : (() => {
+                                  const q = pickerSearch.trim().toLowerCase();
+                                  // Exclude the current assignee so the picker
+                                  // never shows "reassign to the same person".
+                                  const filtered = pickerMembers
+                                    .filter((m) => m.id !== snapshot?.assignee?.id)
+                                    .filter((m) => !q || m.name.toLowerCase().includes(q));
+                                  if (filtered.length === 0) {
+                                    return <div className="px-3 py-3 text-xs text-slate-500">No matching members</div>;
+                                  }
+                                  return filtered.map((m) => (
+                                    <button
+                                      key={m.id}
+                                      type="button"
+                                      onClick={() => reassignTask(m.id)}
+                                      disabled={!!busy}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left disabled:opacity-50"
+                                    >
+                                      {m.image ? (
+                                        <img src={m.image} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                                          {m.name.charAt(0).toUpperCase()}
+                                        </div>
+                                      )}
+                                      <span className="truncate">{m.name}</span>
+                                    </button>
+                                  ));
+                                })()}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
