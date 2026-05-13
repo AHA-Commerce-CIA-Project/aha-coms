@@ -23,6 +23,13 @@ model User {
   createdAt     DateTime
   updatedAt     DateTime
 
+  // Portal-side identity bridge (Spec 05 Phase 3 / T60). Nullable in
+  // sub-phase (a) so the column lands without breaking existing rows;
+  // backfilled by `apps/fast/scripts/backfill-portal-sub.ts` against
+  // portal's identity_user_emails table. T64 (sub-phase c) promotes
+  // this to NOT NULL + primary key once every active user is migrated.
+  portal_sub String? @unique
+
   // Custom AHA Smart Tracker Fields
   role                String    @default("member") // 'leader' or 'member'
   status              String    @default("active") @db.VarChar(20) // 'active', 'away', 'busy', 'offline'
