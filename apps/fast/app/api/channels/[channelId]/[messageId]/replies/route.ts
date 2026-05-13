@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { htmlToPlainText } from '@/lib/sanitize';
 import { mirrorReplyToComment } from '@/lib/syncCommentReply';
 
@@ -9,7 +9,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ channelId: string; messageId: string }> }
 ) {
-  const session = await requireAuth();
+  const session = await requireFastAuth();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -35,7 +35,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ channelId: string; messageId: string }> }
 ) {
-  const session = await requireAuth();
+  const session = await requireFastAuth();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

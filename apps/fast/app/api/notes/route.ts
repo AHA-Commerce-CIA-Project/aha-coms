@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET — Fetch user's notes
 export async function GET() {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const notes = await prisma.note.findMany({
@@ -17,7 +17,7 @@ export async function GET() {
 
 // POST — Create a new note
 export async function POST(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { title, content, color } = await request.json();
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
 // PUT — Update a note
 export async function PUT(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id, title, content, color, pinned, archived } = await request.json();
@@ -64,7 +64,7 @@ export async function PUT(request: NextRequest) {
 
 // DELETE — Delete a note
 export async function DELETE(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await request.json();

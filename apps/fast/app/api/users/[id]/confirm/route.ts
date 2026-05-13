@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { logActivity } from '@/lib/activity-log';
 
 // POST — Confirm a user's email (Leader only)
@@ -8,7 +8,7 @@ export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

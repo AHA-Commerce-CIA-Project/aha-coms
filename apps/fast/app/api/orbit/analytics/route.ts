@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { getCurrentPeriod } from '@/lib/orbit-utils';
 
 export async function GET(request: NextRequest) {
-  const session = await requireAuth();
+  const session = await requireFastAuth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   if (session.user.role !== 'leader' && session.user.role !== 'admin') {

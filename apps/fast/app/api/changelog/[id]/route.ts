@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { sanitizeRichText } from '@/lib/sanitize';
 
 const CATEGORIES = ['feature', 'improvement', 'fix', 'breaking'] as const;
@@ -15,7 +15,7 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (!(await requireMaster(session.user.id))) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -41,7 +41,7 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (!(await requireMaster(session.user.id))) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

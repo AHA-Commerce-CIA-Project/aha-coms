@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { successResponse, errorResponse, withErrorHandler } from '@/lib/api-response';
 
 // GET — Fetch all tasks for analytics (requires auth)
 export const GET = withErrorHandler(async (request: NextRequest) => {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return errorResponse('Not authenticated', 401);
     }

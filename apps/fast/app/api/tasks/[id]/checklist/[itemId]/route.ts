@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // PATCH — toggle isCompleted and/or rename the title.
 //
@@ -12,7 +12,7 @@ export async function PATCH(
     req: NextRequest,
     { params }: { params: Promise<{ id: string; itemId: string }> },
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const { id, itemId } = await params;
@@ -111,7 +111,7 @@ export async function DELETE(
     _req: NextRequest,
     { params }: { params: Promise<{ id: string; itemId: string }> },
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const { id, itemId } = await params;

@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // SSE — pushes new notifications to the client as they're created. Replaces the
 // 30s polling loop in TopNav so toast popups arrive in (sub-)second time. Same
 // pattern as /api/chat/stream and /api/channels/stream.
 export async function GET(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return new Response('Unauthorized', { status: 401 });
 
     const userId = session.user.id;

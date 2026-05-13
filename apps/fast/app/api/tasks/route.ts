@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { logActivity } from '@/lib/activity-log';
 import { sanitizeRichText } from '@/lib/sanitize';
 import crypto from 'crypto';
 
 // POST /api/tasks — Leader creates a task directly and assigns it to a team member
 export async function POST(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

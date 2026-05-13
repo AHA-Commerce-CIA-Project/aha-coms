@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { mirrorReactionFromComment } from '@/lib/syncCommentReply';
 
 // POST /api/tasks/[id]/comments/[commentId]/reactions - Toggle reaction
@@ -10,7 +10,7 @@ export async function POST(
     request: Request,
     { params }: { params: Promise<{ id: string; commentId: string }> }
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

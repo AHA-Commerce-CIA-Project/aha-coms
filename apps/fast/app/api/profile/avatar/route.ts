@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { logActivity } from '@/lib/activity-log';
 import { Storage } from '@google-cloud/storage';
 import sharp from 'sharp';
@@ -28,7 +28,7 @@ async function uploadToGCS(buffer: Buffer, filename: string, contentType: string
 }
 
 export async function POST(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { successResponse, errorResponse, withErrorHandler } from '@/lib/api-response';
 
 // POST — Dismiss the Team Inbox "Overdue" bucket for a single task. The task
@@ -13,7 +13,7 @@ export const POST = withErrorHandler(async (
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) => {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return errorResponse('Unauthorized', 401);
 
     const { id } = await params;

@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { isGoogleCalendarConnected, getCalendarEvents } from '@/lib/google-calendar';
 import { successResponse, errorResponse, withErrorHandler } from '@/lib/api-response';
 
 // GET — Check connection status & optionally fetch Google Calendar events
 export const GET = withErrorHandler(async (request: NextRequest) => {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return errorResponse('Unauthorized', 401);
 
     const userId = session.user.id;

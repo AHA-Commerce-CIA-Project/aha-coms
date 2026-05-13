@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET — Tasks where the current user is an approved helper.
 // Shape matches /api/nexus so the /tasks page can concat both lists and render uniformly.
 export async function GET() {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const personalArchived = await prisma.userArchivedTask.findMany({

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET /api/channels/[channelId]/messages/pinned — list every message in
 // this channel that has isPinned=true. Powers the small banner that sits
@@ -11,7 +11,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ channelId: string }> }
 ) {
-  const session = await requireAuth();
+  const session = await requireFastAuth();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

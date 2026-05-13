@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOAuth2Client } from '@/lib/google-calendar';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 export async function GET(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

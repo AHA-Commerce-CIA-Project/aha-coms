@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { successResponse, errorResponse, withErrorHandler } from '@/lib/api-response';
 
 // GET — List all milestones with progress for the current user.
 // Anyone authenticated can read; only leaders can create/update/delete.
 export const GET = withErrorHandler(async () => {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return errorResponse('Unauthorized', 401);
 
     const [milestones, doneCount] = await Promise.all([
@@ -57,7 +57,7 @@ export const GET = withErrorHandler(async () => {
 
 // POST — Create a new milestone (leader-only).
 export const POST = withErrorHandler(async (request: NextRequest) => {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return errorResponse('Unauthorized', 401);
     if (session.user.role !== 'leader' && session.user.role !== 'admin') {
         return errorResponse('Forbidden', 403);

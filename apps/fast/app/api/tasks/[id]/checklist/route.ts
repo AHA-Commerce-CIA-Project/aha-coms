@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET — list checklist items for a task. Open to any authed user; the task
 // itself is the access boundary (anyone who can see the task can see / edit
 // its checklist, matching how comments work).
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const { id } = await params;
@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // POST — append a new item. Position is set to (max position + 1) so order is
 // preserved without the client needing to send it.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const { id } = await params;

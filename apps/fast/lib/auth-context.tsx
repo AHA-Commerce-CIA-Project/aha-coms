@@ -1,8 +1,22 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { authClient } from '@/lib/auth-client';
+
+/**
+ * useAuth — client-side identity hook.
+ *
+ * Spec 05 Phase 3 / T61 — sub-phase (b). The hook's external surface
+ * (returned fields, signOut shape) stays identical to the Better Auth
+ * era so the 26 client-side consumers (TopNav, Sidebar, ChannelPane,
+ * DmPane, …) require no edits. Internally it now reads from
+ * `/api/auth/me` (portal-rooted) instead of `authClient.getSession()`.
+ *
+ * `signOut()` redirects to portal's sign-out endpoint via top-level
+ * navigation — same posture heroes' AccountWidget holds. Better Auth's
+ * `authClient.signOut()` writes to /api/auth/sign-out (Better Auth's
+ * own route), which the T62 + T63 cuts retire. The portal endpoint
+ * clears the `__session` cookie origin-wide.
+ */
 
 interface UserProfile {
     id: string;
@@ -36,7 +50,6 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
-    const router = useRouter();
 
     useEffect(() => {
         fetchSession();
@@ -44,41 +57,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const fetchSession = async () => {
         try {
-            const { data: session } = await authClient.getSession();
-            if (session?.user) {
-                let role = (session.user as any).role || 'member';
-                let name = session.user.name || 'User';
-                let teamId = (session.user as any).teamId || null;
-                let teamName: string | null = null;
-                let avatarUrl: string | null = session.user.image ?? null;
-
-                // Supplement with profile API for custom fields
-                try {
-                    const profileRes = await fetch('/api/profile');
-                    if (profileRes.ok) {
-                        const profileData = await profileRes.json();
-                        if (profileData.name) name = profileData.name;
-                        if (profileData.role) role = profileData.role;
-                        if (profileData.team_id) teamId = profileData.team_id;
-                        if (profileData.team_name) teamName = profileData.team_name;
-                        if (profileData.avatar_url) avatarUrl = profileData.avatar_url;
-                    }
-                } catch { }
-
-                const userProfile: UserProfile = {
-                    id: session.user.id,
-                    email: session.user.email,
-                    name,
-                    image: avatarUrl,
-                    avatar_url: avatarUrl,
-                    role,
-                    teamId,
-                    teamName,
-                };
-                setProfile(userProfile);
-            } else {
+            const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+            if (!res.ok) {
                 setProfile(null);
+                return;
             }
+            const payload = (await res.json()) as {
+                user: {
+                    id: string;
+                    email: string;
+                    name: string;
+                    image: string | null;
+                    role: string;
+                    teamId: string | null;
+                };
+                profile: {
+                    team_id: string | null;
+                    team_name: string | null;
+                    avatar_url: string | null;
+                };
+            };
+            setProfile({
+                id: payload.user.id,
+                email: payload.user.email,
+                name: payload.user.name,
+                image: payload.profile.avatar_url ?? payload.user.image,
+                avatar_url: payload.profile.avatar_url ?? payload.user.image,
+                role: payload.user.role,
+                teamId: payload.profile.team_id ?? payload.user.teamId,
+                teamName: payload.profile.team_name,
+            });
         } catch (error) {
             console.error('Error fetching session:', error);
             setProfile(null);
@@ -88,9 +96,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleSignOut = async () => {
-        await authClient.signOut();
+        // Portal owns sign-out: redirect to its end-session endpoint with a
+        // returnTo back to fast's root. The endpoint clears the __session
+        // cookie origin-wide; Better Auth's local /api/auth/sign-out route
+        // retires alongside the lib/auth-server.ts deletion in T63.
         setProfile(null);
-        window.location.href = '/login';
+        const portalOrigin =
+            process.env.NEXT_PUBLIC_PORTAL_ORIGIN ||
+            (typeof window !== 'undefined' ? window.location.origin : '');
+        const returnTo =
+            typeof window !== 'undefined' ? `${window.location.origin}/` : '/';
+        window.location.assign(
+            `${portalOrigin}/api/auth/sign-out?returnTo=${encodeURIComponent(returnTo)}`,
+        );
     };
 
     return (

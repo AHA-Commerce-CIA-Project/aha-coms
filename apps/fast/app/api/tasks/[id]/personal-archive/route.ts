@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // POST — Personal-archive a completed task for the current user. Doesn't change
 // the task's global status; only hides it from the user's My Tasks / Team Inbox
@@ -10,7 +10,7 @@ export async function POST(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
@@ -37,7 +37,7 @@ export async function DELETE(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;

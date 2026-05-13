@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { auth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity-log';
 
 async function verifyLeader() {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return null;
 
     const user = await prisma.user.findUnique({
@@ -18,7 +18,7 @@ async function verifyLeader() {
 }
 
 async function verifyAdmin() {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return null;
 
     const user = await prisma.user.findUnique({

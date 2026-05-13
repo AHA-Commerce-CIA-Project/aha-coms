@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET — Members of a team. When ?channelId is given, filter to only those who
 // can see the channel (matches the channel-visibility rules used elsewhere).
@@ -8,7 +8,7 @@ export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;

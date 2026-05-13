@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 const HEARTBEAT_SECONDS = 30;
 
 // POST — Update user's lastSeenAt and accumulate active seconds for today (WIB)
 export async function POST() {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ ok: false }, { status: 401 });
 
     // Compute today's date in WIB (UTC+7)

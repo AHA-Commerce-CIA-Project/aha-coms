@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET /api/search?q=… — global omnibar search.
 // Returns up to 8 channels and 8 tasks matching the query. Channel access
@@ -10,7 +10,7 @@ import { requireAuth } from '@/lib/auth-server';
 // Empty / single-char queries return empty arrays so the client doesn't fire
 // a request before the user has typed anything meaningful.
 export async function GET(request: Request) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }

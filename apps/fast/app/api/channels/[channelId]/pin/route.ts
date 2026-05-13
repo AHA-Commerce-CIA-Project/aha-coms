@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // POST /api/channels/[channelId]/pin — toggle the *user-specific* pin for
 // this channel. Each row in pinned_channels represents one (user, channel)
@@ -12,7 +12,7 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ channelId: string }> }
 ) {
-  const session = await requireAuth();
+  const session = await requireFastAuth();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

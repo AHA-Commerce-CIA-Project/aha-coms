@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { logActivity } from '@/lib/activity-log';
 
 // POST /api/profile/password - Change password
 export async function POST(request: Request) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }

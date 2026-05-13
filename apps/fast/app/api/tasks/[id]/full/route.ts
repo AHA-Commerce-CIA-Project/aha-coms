@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET /api/tasks/[id]/full
 // Returns the full task payload used by the Team Inbox detail modal.
@@ -10,7 +10,7 @@ export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

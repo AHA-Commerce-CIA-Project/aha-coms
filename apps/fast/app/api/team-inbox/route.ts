@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET /api/team-inbox — direct-assigned tasks targeting the viewer's team.
 //
@@ -10,7 +10,7 @@ import { requireAuth } from '@/lib/auth-server';
 //   - Tasks with no assignedTeamId stay hidden from the inbox by design — they
 //     fall through to the existing Task Queue.
 export async function GET(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }

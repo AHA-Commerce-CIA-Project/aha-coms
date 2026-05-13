@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { getServerSession } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { successResponse, errorResponse, withErrorHandler } from '@/lib/api-response';
 import { taskReviewSchema, validate } from '@/lib/validations';
 
@@ -79,7 +79,7 @@ export const POST = withErrorHandler(async (
 
     } else if (reviewerType === 'completer') {
         // Completer reviews require authentication
-        const session = await getServerSession();
+        const session = await requireFastAuth();
         if (!session) {
             return errorResponse('Authentication required', 401);
         }

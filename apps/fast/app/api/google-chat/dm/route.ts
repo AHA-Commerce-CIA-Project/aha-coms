@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { getChatClient } from '@/lib/google-chat';
 
 // POST — Create or find a DM space with a user by email
 export async function POST(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { email } = await request.json();

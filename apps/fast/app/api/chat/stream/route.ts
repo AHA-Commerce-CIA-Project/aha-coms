@@ -1,10 +1,10 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // SSE endpoint for real-time DM updates
 export async function GET(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return new Response('Unauthorized', { status: 401 });
 
     const conversationId = request.nextUrl.searchParams.get('conversationId');

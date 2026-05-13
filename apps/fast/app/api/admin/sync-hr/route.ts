@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { fetchHRSheetData, SheetEmployee } from '@/lib/google-sheets';
 
 // Normalize names for fuzzy matching (lowercase, trim extra spaces)
@@ -34,7 +34,7 @@ function resolveTeamName(sheetTeamName: string): string {
 // POST — Sync HR data from Google Sheets
 export async function POST() {
     // Verify leader/admin access
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }

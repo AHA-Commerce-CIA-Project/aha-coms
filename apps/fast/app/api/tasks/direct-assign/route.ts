@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { logActivity } from '@/lib/activity-log';
 import { sanitizeRichText, htmlToPlainText } from '@/lib/sanitize';
 
 // POST — Direct Assign. Creates a task targeted at a team channel and posts
 // a special "direct_assign" card into that channel so any channel member can claim.
 export async function POST(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

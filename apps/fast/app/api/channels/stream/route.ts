@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // SSE endpoint: streams new channel messages + unread counts in real time.
 // Client opens ONE EventSource per session; server checks DB every 500ms.
 export async function GET(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return new Response('Unauthorized', { status: 401 });
     }

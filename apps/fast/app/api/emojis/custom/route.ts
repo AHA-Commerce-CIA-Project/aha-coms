@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 const NAME_RE = /^[a-z][a-z0-9_-]{1,31}$/;
 
 // GET — list all workspace custom emojis. Open to any authed user; the picker
 // loads the full list once per session and caches it on the client.
 export async function GET() {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
@@ -40,7 +40,7 @@ export async function GET() {
 // itself is uploaded separately via /api/upload (which returns a URL); we
 // just persist the resulting URL plus the shortcode name.
 export async function POST(request: Request) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }

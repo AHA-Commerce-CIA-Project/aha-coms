@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // In-memory typing status: channelId -> Map<userId, { name, timestamp }>
 const typingUsers = new Map<string, Map<string, { name: string; timestamp: number }>>();
@@ -23,7 +23,7 @@ export async function POST(
     _request: NextRequest,
     { params }: { params: Promise<{ channelId: string }> }
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { channelId } = await params;
@@ -43,7 +43,7 @@ export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ channelId: string }> }
 ) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { channelId } = await params;

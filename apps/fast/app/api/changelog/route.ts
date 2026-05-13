@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { sanitizeRichText } from '@/lib/sanitize';
 
 const CATEGORIES = ['feature', 'improvement', 'fix', 'breaking'] as const;
 
 // GET — list all entries (any authenticated user) + unseen count
 export async function GET() {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const [entries, user] = await Promise.all([
@@ -42,7 +42,7 @@ export async function GET() {
 
 // POST — create entry (master only)
 export async function POST(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const caller = await prisma.user.findUnique({

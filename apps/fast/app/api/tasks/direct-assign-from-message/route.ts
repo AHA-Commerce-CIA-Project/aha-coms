@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { logActivity } from '@/lib/activity-log';
 import { sanitizeRichText, htmlToPlainText } from '@/lib/sanitize';
 
@@ -11,7 +11,7 @@ import { sanitizeRichText, htmlToPlainText } from '@/lib/sanitize';
 // at that same message, giving us a hard link source-message ↔ task without a
 // schema change.
 export async function POST(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

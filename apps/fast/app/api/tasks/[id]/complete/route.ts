@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { notifyLeaders } from '@/lib/notify-leaders';
 import { sendTaskCompletedEmail } from '@/lib/email';
 import { logActivity } from '@/lib/activity-log';
@@ -12,7 +12,7 @@ export const PUT = withErrorHandler(async (
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) => {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return errorResponse('Unauthorized', 401);
     }
@@ -100,7 +100,7 @@ export const PATCH = withErrorHandler(async (
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) => {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) return errorResponse('Unauthorized', 401);
 
     const { id } = await params;

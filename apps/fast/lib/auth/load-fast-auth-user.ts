@@ -62,7 +62,7 @@ export class PortalSessionDeniedError extends Error {
 }
 
 /**
- * Resolved fast AuthUser. Carries the fields ~127 `requireAuth()` call
+ * Resolved fast AuthUser. Carries the fields ~127 `requireFastAuth()` call
  * sites read today — `id`, `email`, `name`, `role`, `teamId`, `image`
  * — plus the portal-side claims (`portalRole`, `apps`) so RBAC-shaped
  * surfaces no longer need to round-trip to `/api/profile` or any

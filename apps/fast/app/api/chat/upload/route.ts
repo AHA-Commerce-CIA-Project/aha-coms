@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { prisma } from '@/lib/db';
 import { Storage } from '@google-cloud/storage';
 
@@ -44,7 +44,7 @@ async function uploadToGCS(buffer: Buffer, filename: string, contentType: string
 
 export async function POST(request: NextRequest) {
     // Auth: either a valid session OR a (taskToken, taskId) pair matching a task.
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         const token = request.nextUrl.searchParams.get('token');
         const taskId = request.nextUrl.searchParams.get('taskId');

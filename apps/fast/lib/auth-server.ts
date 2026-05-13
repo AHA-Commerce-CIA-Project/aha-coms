@@ -16,7 +16,7 @@ export async function getServerSession() {
  * Require authentication - throws/returns 401 if not authenticated.
  * Use in API routes for convenience.
  */
-export async function requireAuth() {
+export async function requireFastAuth() {
     const session = await getServerSession();
     if (!session) {
         return null;

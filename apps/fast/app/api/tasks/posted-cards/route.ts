@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET /api/tasks/posted-cards
 // All Direct Assign card tasks the current user posted into a channel,
 // regardless of who eventually claimed/completed them. Used by /later → Posted
 // Cards tab to give the poster a single tracking view across channels.
 export async function GET() {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

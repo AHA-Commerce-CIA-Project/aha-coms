@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { sanitizeRichText, isHtml, htmlToPlainText } from '@/lib/sanitize';
 import { mirrorCommentEdit, mirrorCommentDelete } from '@/lib/syncCommentReply';
 
@@ -53,7 +53,7 @@ export async function PATCH(
             }
         }
     } else {
-        const session = await requireAuth();
+        const session = await requireFastAuth();
         if (!session) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -130,7 +130,7 @@ export async function DELETE(
             }
         }
     } else {
-        const session = await requireAuth();
+        const session = await requireFastAuth();
         if (!session) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 import { createCalendarEvent, deleteCalendarEvent, isGoogleCalendarConnected } from '@/lib/google-calendar';
 import { createMeetingSchema, validate } from '@/lib/validations';
 
 // GET — Fetch meetings
 export async function GET(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
 
 // POST — Create meeting (+ sync to Google Calendar)
 export async function POST(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
 
 // DELETE — Delete meeting (+ sync to Google Calendar)
 export async function DELETE(request: NextRequest) {
-    const session = await requireAuth();
+    const session = await requireFastAuth();
     if (!session) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

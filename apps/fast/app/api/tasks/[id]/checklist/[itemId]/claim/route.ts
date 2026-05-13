@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth-server';
+import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // POST — Claim a single checklist item on a TEAM-type routine task.
 // Body (optional): { release: true } to drop a claim the caller already holds.
@@ -15,7 +15,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> },
 ) {
-  const session = await requireAuth();
+  const session = await requireFastAuth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id, itemId } = await params;
