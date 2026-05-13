@@ -1,4 +1,5 @@
 import type { Handle, HandleServerError } from '@sveltejs/kit'
+import { base } from '$app/paths'
 import { SESSION_COOKIE_NAME } from '@coms-portal/shared'
 import { validateSession } from '@coms-portal/portal-api/services/auth'
 import { logger } from '$lib/logger'
@@ -6,10 +7,17 @@ import { logger } from '$lib/logger'
 const AUTHED_PREFIX = '/(authed)'
 const AUTH_TIMEOUT_MS = 3_000
 
-function redirectToLogin(): Response {
+// FU-10: portal-web mounts at /portal/ (svelte.config.js paths.base), so the
+// login URL is /portal/login. The Response is constructed outside SvelteKit's
+// routing helpers, so `$app/paths` `base` is interpolated explicitly. The
+// caller's intended URL is forwarded via `?redirect=` so post-sign-in lands
+// them where they tried to go.
+function redirectToLogin(intendedUrl: URL): Response {
+  const intended = intendedUrl.pathname + intendedUrl.search
+  const target = `${base}/login?redirect=${encodeURIComponent(intended)}`
   return new Response(null, {
     status: 303,
-    headers: { location: '/login' },
+    headers: { location: target },
   })
 }
 
@@ -19,7 +27,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (isAuthedRoute) {
     const sessionCookie = event.cookies.get(SESSION_COOKIE_NAME)
     if (!sessionCookie) {
-      return redirectToLogin()
+      return redirectToLogin(event.url)
     }
 
     // Validate the session via a direct in-process function call (no loopback
@@ -37,12 +45,12 @@ export const handle: Handle = async ({ event, resolve }) => {
       ])
 
       if (!user) {
-        return redirectToLogin()
+        return redirectToLogin(event.url)
       }
 
       event.locals.user = user
     } catch {
-      return redirectToLogin()
+      return redirectToLogin(event.url)
     }
   }
 
