@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Sheet, SheetContent } from '../primitives/sheet';
+import { Sheet, SheetContent, SheetTitle } from '../primitives/sheet';
 import type { NavItem } from './Sidebar';
 
 export interface SlideOverNavProps {
@@ -11,6 +11,8 @@ export interface SlideOverNavProps {
   currentPath?: string;
   brand?: React.ReactNode;
   footer?: React.ReactNode;
+  /** Accessible label for the dialog. Rendered screen-reader-only; defaults to "Application navigation". */
+  title?: string;
 }
 
 function isActive(href: string, currentPath: string): boolean {
@@ -25,6 +27,7 @@ export function SlideOverNav({
   currentPath = '',
   brand,
   footer,
+  title = 'Application navigation',
 }: SlideOverNavProps) {
   const closeMenu = () => onOpenChange?.(false);
 
@@ -35,6 +38,7 @@ export function SlideOverNav({
         showCloseButton={false}
         className="md:hidden w-72 sm:max-w-sm p-0 bg-card flex flex-col gap-0"
       >
+        <SheetTitle className="sr-only">{title}</SheetTitle>
         {brand && (
           <div className="flex h-14 items-center border-b border-border px-4 shrink-0">
             {brand}
