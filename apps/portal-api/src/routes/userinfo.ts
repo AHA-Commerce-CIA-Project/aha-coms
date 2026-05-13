@@ -55,7 +55,17 @@ export const userinfoRoutes = new Elysia()
       // Build the launcher list by joining the user's resolved apps claim with
       // app_registry. Apps the user does not have access to are filtered out
       // server-side; the widget receives only what it can show.
-      let launcherApps: Array<{ slug: string; label: string; url: string }> = []
+      //
+      // The synthetic `portal` entry is prepended unconditionally: portal is
+      // the hub every authenticated user reaches, but it does not live in
+      // `app_registry` (it IS the registry's owner). Consuming apps used to
+      // hand-roll this prepend in their own layouts (heroes had it in two
+      // places — ServiceBar catalog + AccountWidget appSwitcher). T47 lifts
+      // that knowledge into the canonical source so future apps inherit it
+      // without each one having to remember to special-case the hub.
+      const launcherApps: Array<{ slug: string; label: string; url: string }> = [
+        { slug: 'portal', label: 'COMS', url: '/' },
+      ]
       if (authUser.apps.length > 0) {
         const rows = await db
           .select({
@@ -65,7 +75,9 @@ export const userinfoRoutes = new Elysia()
           })
           .from(appRegistry)
           .where(inArray(appRegistry.slug, authUser.apps))
-        launcherApps = rows.map((r) => ({ slug: r.slug, label: r.name, url: r.url }))
+        for (const r of rows) {
+          launcherApps.push({ slug: r.slug, label: r.name, url: r.url })
+        }
       }
 
       // Q8b: full email entries array, with row ids so the profile UI can

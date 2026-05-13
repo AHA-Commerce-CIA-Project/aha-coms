@@ -269,17 +269,24 @@ describe('GET /api/userinfo', () => {
     expect(Array.isArray(body.emails)).toBe(true)
     expect(body.portalRole).toBe('employee')
     expect(body.avatar_url).toBeNull()
+    // The COMS hub entry is prepended unconditionally by the userinfo route
+    // (T47 follow-up: consuming apps no longer hand-roll the hub prepend in
+    // their own layouts; the canonical source is the registry-walking
+    // userinfo response itself).
     expect(body.apps).toEqual([
+      { slug: 'portal', label: 'COMS', url: '/' },
       { slug: 'heroes', label: 'Heroes', url: 'https://heroes.ahacommerce.net' },
     ])
   })
 
-  test('returns empty apps list when user has no app access', async () => {
+  test('returns only the COMS hub entry when user has no registered app access', async () => {
     setMockUser({ ...mockUser!, apps: [] })
     const res = await app.handle(authedRequest('GET', '/api/userinfo'))
     expect(res.status).toBe(200)
     const body = (await res.json()) as Record<string, unknown>
-    expect(body.apps).toEqual([])
+    // Every authenticated user reaches portal; an empty `apps` list on the
+    // user reduces to a launcher that carries only the hub.
+    expect(body.apps).toEqual([{ slug: 'portal', label: 'COMS', url: '/' }])
   })
 })
 

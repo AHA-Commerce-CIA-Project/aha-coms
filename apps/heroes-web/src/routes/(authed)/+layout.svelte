@@ -68,15 +68,13 @@
   // via `prefers-color-scheme` by uiState's `applyDomClass` step.
 
   // Service bar derived in the chrome lib (Spec 02 Phase 4 / T40). The
-  // catalog is the portal hub entry prepended to the rich `apps` array
-  // userinfo returned; `deriveServiceBarServices` collapses each entry's
-  // absolute URL to a same-origin path when it matches `currentOrigin`.
+  // catalog comes straight from `data.appCatalog` now that portal-api's
+  // /api/userinfo includes the COMS hub entry as a synthetic first item
+  // (T47 follow-up to Findings 2 + 3). `deriveServiceBarServices` collapses
+  // each entry's URL to a same-origin path when it matches `currentOrigin`.
   const serviceBarServices = $derived(
     deriveServiceBarServices({
-      catalog: [
-        { slug: 'portal', label: 'COMS', url: `${$page.url.origin}/` },
-        ...(data.appCatalog ?? []),
-      ],
+      catalog: data.appCatalog ?? [],
       currentApp: 'heroes',
       currentOrigin: $page.url.origin,
     }),
@@ -126,17 +124,10 @@
 
   // The AccountWidget's launcher list is exactly the rich `apps` array
   // userinfo returned — no slug→label/url mapping needed app-side now that
-  // T40 has lifted the derivation out of heroes.
-  //
-  // The `COMS` entry is prepended same as `serviceBarServices` does for the
-  // desktop tab strip (line 78–87 above). On mobile the ServiceBar is
-  // hidden (T47 Finding 2), so the AccountWidget dropdown is the only
-  // cross-app surface — without this prepend, heroes users have no path
-  // back to portal except typing the URL.
-  const widgetAppSwitcher = $derived([
-    { slug: 'portal', label: 'COMS', url: `${$page.url.origin}/` },
-    ...(data.appCatalog ?? []),
-  ])
+  // T40 has lifted the derivation out of heroes, and no portal-hub prepend
+  // needed app-side now that portal-api's /api/userinfo includes the COMS
+  // entry directly (T47 follow-up to Findings 2 + 3).
+  const widgetAppSwitcher = $derived([...(data.appCatalog ?? [])])
 
   const widgetUser = $derived(data.user ? {
     name: data.user.name,
