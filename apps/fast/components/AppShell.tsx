@@ -10,7 +10,7 @@ import { Breadcrumb } from '@/components/Breadcrumb';
 import { UserProfilePanel } from '@/components/UserProfilePanel';
 import { useAuth } from '@/lib/auth/use-auth';
 
-const PUBLIC_ROUTES = ['/login', '/register', '/request', '/track', '/activate', '/complete', '/forgot-password', '/reset-password'];
+const PUBLIC_ROUTES = ['/request', '/track'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
     const {
