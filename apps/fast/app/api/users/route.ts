@@ -52,7 +52,7 @@ export async function GET() {
         team_id: u.teamId,
         created_at: u.createdAt.toISOString(),
         teams: u.team ? { name: u.team.name } : null,
-        email_confirmed_at: u.emailVerified ? u.createdAt.toISOString() : null,
+        email_confirmed_at: u.accountStatus === 'active' ? u.createdAt.toISOString() : null,
         accountStatus: u.accountStatus,
     }));
 

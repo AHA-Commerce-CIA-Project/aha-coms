@@ -34,12 +34,11 @@ export async function getOrCreateSystemBot() {
       id: SYSTEM_BOT_ID,
       name: SYSTEM_BOT_NAME,
       email: SYSTEM_BOT_EMAIL,
-      // emailVerified=true skirts any "must verify" gates that may exist on
-      // the rest of the app; the bot has no inbox to verify against.
-      emailVerified: true,
       role: 'member',
-      // accountStatus=active so audit/lookup queries don't filter it out;
-      // this is fine because the bot can't sign in (no Account/Session rows).
+      // accountStatus=active so audit/lookup queries don't filter the bot
+      // out; the bot has no portal_sub and never resolves via
+      // loadFastAuthUser — it exists purely as the author-of-record for
+      // system-emitted messages and audit log lines.
       accountStatus: 'active',
       status: 'offline',
       createdAt: now,

@@ -11,23 +11,24 @@ datasource db {
 }
 
 // ==========================================
-// BETTER AUTH REQUIRED MODELS
+// IDENTITY / USER (portal-bridged via portal_sub since Phase 3 / T64)
 // ==========================================
 
 model User {
-  id            String   @id
-  name          String
-  email         String   @unique
-  emailVerified Boolean
-  image         String?
-  createdAt     DateTime
-  updatedAt     DateTime
+  id        String   @id
+  name      String
+  email     String   @unique
+  image     String?
+  createdAt DateTime
+  updatedAt DateTime
 
-  // Portal-side identity bridge (Spec 05 Phase 3 / T60). Nullable in
-  // sub-phase (a) so the column lands without breaking existing rows;
-  // backfilled by `apps/fast/scripts/backfill-portal-sub.ts` against
-  // portal's identity_user_emails table. T64 (sub-phase c) promotes
-  // this to NOT NULL + primary key once every active user is migrated.
+  // Portal-side identity bridge (Spec 05 Phase 3 / T60). Nullable
+  // through this phase so users provisioned before the cascade
+  // survive the column add; auto-populated on every signed-in hit by
+  // loadFastAuthUser's upsert. Promotion to NOT NULL + primary key
+  // waits for the operator backfill to confirm zero active users
+  // still hold a null value (T64 PK promotion sub-step, deferred to
+  // the operator window per the destructive-migration ordering rule).
   portal_sub String? @unique
 
   // Custom AHA Smart Tracker Fields
@@ -43,8 +44,6 @@ model User {
   team                Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   // Relations
-  sessions         Session[]
-  accounts         Account[]
   tasks            Task[]         @relation("AssigneeTasks")
   completedTasks   Task[]         @relation("CompletedByTasks")
   notifications    Notification[]
@@ -109,49 +108,12 @@ model User {
   @@map("user")
 }
 
-model Session {
-  id        String   @id
-  expiresAt DateTime
-  token     String   @unique
-  createdAt DateTime
-  updatedAt DateTime
-  ipAddress String?
-  userAgent String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("session")
-}
-
-model Account {
-  id                    String    @id
-  accountId             String
-  providerId            String
-  userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accessToken           String?
-  refreshToken          String?
-  idToken               String?
-  accessTokenExpiresAt  DateTime?
-  refreshTokenExpiresAt DateTime?
-  scope                 String?
-  password              String?
-  createdAt             DateTime
-  updatedAt             DateTime
-
-  @@map("account")
-}
-
-model Verification {
-  id         String    @id
-  identifier String
-  value      String
-  expiresAt  DateTime
-  createdAt  DateTime?
-  updatedAt  DateTime?
-
-  @@map("verification")
-}
+// Session / Account / Verification — retired with Better Auth in
+// Spec 05 Phase 3 / T64. Portal owns sessions (auth_sessions table on
+// the portal side); fast introspects via /api/userinfo. The DROP
+// against prod runs from prisma/sql/0002_drop_better_auth_tables.sql
+// (deploy-first-then-migrate ordering — schema change deploys first
+// so no code touches the dropped tables before the SQL runs).
 
 // ==========================================
 // AHA SMART TRACKER MODELS (Migrated from Supabase)

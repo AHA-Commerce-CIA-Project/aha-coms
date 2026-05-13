@@ -26,15 +26,19 @@ export async function POST(
     const { id } = await params;
 
     try {
+        // Post-Phase-3: portal owns email verification; this admin
+        // confirm action flips accountStatus to 'active' instead of
+        // setting the deleted emailVerified column. The user-facing
+        // intent ("approve this pending account") is unchanged.
         const user = await prisma.user.update({
             where: { id },
-            data: { emailVerified: true },
+            data: { accountStatus: 'active' },
         });
 
         logActivity(
             session.user.id,
             'user_confirmed',
-            `${session.user.name} confirmed email for ${user.name} (${user.email})`,
+            `${session.user.name} confirmed account for ${user.name} (${user.email})`,
             'user',
             id,
         );

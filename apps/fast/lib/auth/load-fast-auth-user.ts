@@ -132,7 +132,6 @@ export async function loadFastAuthUser(
       id: info.sub,
       portal_sub: info.sub,
       email: info.email,
-      emailVerified: true,
       name: info.name,
       image: info.avatar_url,
       role: 'member',
