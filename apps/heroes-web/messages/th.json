@@ -237,6 +237,7 @@
   "settings_penalti_impact": "ผลกระทบบทลงโทษต่อคะแนน AHA",
   "settings_impact_warning": "การเปลี่ยนค่าเหล่านี้จะมีผลย้อนหลังต่อยอดคงเหลือทั้งหมด",
   "settings_saved": "บันทึกการตั้งค่าสำเร็จ",
+  "sheet_sync_triggered": "เริ่มซิงค์แล้ว แถวใหม่จะปรากฏที่นี่เมื่อเสร็จ",
   "settings_save_failed": "บันทึกการตั้งค่าไม่สำเร็จ",
   "settings_saving": "กำลังบันทึก…",
   "settings_branch_management": "จัดการสาขา",

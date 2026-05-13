@@ -241,6 +241,7 @@
   "settings_penalti_impact": "Dampak Penalti terhadap Poin AHA",
   "settings_impact_warning": "Mengubah nilai ini akan mempengaruhi semua saldo historis secara retroaktif.",
   "settings_saved": "Pengaturan berhasil disimpan.",
+  "sheet_sync_triggered": "Sinkronisasi dimulai. Baris baru akan muncul di sini setelah selesai.",
   "settings_save_failed": "Gagal menyimpan pengaturan",
   "settings_saving": "Menyimpan…",
   "settings_branch_management": "Manajemen Cabang",

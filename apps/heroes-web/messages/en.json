@@ -241,6 +241,7 @@
   "settings_penalti_impact": "Penalty impact on AHA Points",
   "settings_impact_warning": "Changing these values retroactively affects all historical balances.",
   "settings_saved": "Settings saved successfully.",
+  "sheet_sync_triggered": "Sync started. New rows appear here when it finishes.",
   "settings_save_failed": "Failed to save settings",
   "settings_saving": "Saving…",
   "settings_branch_management": "Branch Management",

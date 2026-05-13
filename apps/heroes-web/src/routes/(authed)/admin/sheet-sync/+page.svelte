@@ -213,7 +213,7 @@
           <p class="max-w-xs text-right text-xs text-destructive">{syncError}</p>
         {/if}
         {#if syncSuccess}
-          <p class="text-xs text-status-approved">{m.settings_saved()}</p>
+          <p class="text-xs text-status-approved">{m.sheet_sync_triggered()}</p>
         {/if}
       </div>
     </div>
