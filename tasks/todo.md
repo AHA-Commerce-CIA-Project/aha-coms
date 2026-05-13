@@ -730,13 +730,12 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-6`.
     - Compare to pre-cleanup baseline.
   - **Acceptance:** Flat or faster.
 
-- [ ] **T49: Update heroes' README to point at integration contract**
-  - **Prerequisites:** T47
-  - **Steps:**
-    - Remove documentation about local session tables.
-    - Document the cleaned auth flow as "this is the reference pattern."
-    - Cross-reference `docs/integration-contract.md` and relevant ADRs.
-  - **Acceptance:** README accurate to post-cleanup state; no stale local-session references.
+- [x] **T49: Heroes documented as the reference implementation — two new READMEs**
+  - **Done 2026-05-13:** the original `coms_aha_heroes` repo carried `CONTEXT.md`, `DESIGN_SYSTEM.md`, and `TODOS.md` at the top level but no `README.md` — those domain docs were dropped during the T12 restructure (`d8a5ff4`). T49 isn't rewriting an existing README; it's authoring the canonical pair from scratch.
+    1. **`apps/heroes-web/README.md`** — the primary doc. Opens with the "reference implementation of §§ 1–9 + 11–14" framing; carries the full `loadHeroesAuthUser` auth-flow narrative (portal owns the session via `__session`, heroes introspects via `GET /api/userinfo`, heroes upserts its own `heroes_profiles` row); names every anti-pattern heroes deliberately does NOT carry (no `session/account/verification` tables — dropped at T36; no `/auth/portal/exchange` — deleted at T39; no `/login` `/register` `/forgot-password` `/verify-email` routes; no `password` `email_verified` `provider_id` columns; no `coms_session` cookie writes; no hardcoded app catalog — derived from `data.appCatalog` per T47 Finding 5); includes the §"ADR 0005 vs reality" note explaining T31's finding that `__session` is opaque, not a JWT, while the ADR's stateless-on-the-app-side guarantees still hold verbatim; an integration-contract cross-reference table mapping each § to its concrete file:line anchor in heroes-web; and a "when the next app onboards" coda pointing future onboarders at this app as the worked example. The pattern signposts the parallel implementation path: SvelteKit (or Next.js) with `paths.base = '/<app>'`, mirror `loadHeroesAuthUser` in the new app's shared package, chrome from `@coms-portal/ui-svelte/chrome` (or React variant), register via `apps/portal-api/scripts/register-<app>.ts`, read `data.appCatalog` for cross-app links.
+    2. **`apps/heroes-api/README.md`** — short companion. Mirrors `apps/portal-api/README.md`'s shape (dev / migrations / surfaces / tests). Names the canonical invocations, the `deploy-heroes-api.yml` migrate-step (FU-5), the package's `./services/*` + `./repositories/*` exports (the surface T47 Finding 1's fix relies on for heroes-web's direct service imports), and points back at heroes-web's README for the full auth narrative rather than duplicating it.
+  - **No stale local-session prose to remove:** by the time T49 ran, T35 + T36 had already retired every `getLocalSessionByToken`-shaped code path and table. The two READMEs were authored cleanly against the current state, not by editing legacy docs.
+  - **Acceptance met:** post-cleanup auth flow documented as the reference pattern; integration-contract sections cross-referenced with concrete file:line anchors; relevant ADRs (0003 single-origin PWA, 0005 stateless JWT — with the reality-check note, 0006 GIP-only auth) and ADR 0004 (Firebase Hosting routing) linked from the body; the §10 notifications deviation called out explicitly. No `[ ] TODO` lines, no broken cross-refs, no stale `Better Auth` / `authUser` / `verification` references anywhere in the new prose.
 
 - [ ] **CHECKPOINT 11**: Heroes is the reference implementation for the COMS integration contract — for §§ 1–9 and §§ 11–14. Notifications (§10) remain the documented deviation, awaiting the platform-notifications spec.
 
