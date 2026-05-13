@@ -1,7 +1,7 @@
 {
   "name": "@coms-portal/account-widget-react",
-  "version": "0.0.0",
-  "description": "React variant of the COMS account widget — empty stub. Populated when aha-fast onboards (post-Spec 02).",
+  "version": "0.1.0",
+  "description": "React variant of the COMS account widget — avatar + popover (profile, app switcher, RP-initiated sign-out). Mirrors @coms-portal/account-widget-svelte's contract.",
   "private": true,
   "type": "module",
   "license": "UNLICENSED",
@@ -11,13 +11,23 @@
     "directory": "packages/account-widget-react"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./sign-out": "./src/sign-out.ts",
+    "./styles.css": "./src/styles.css"
   },
   "files": ["src"],
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
   "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "typescript": "^5.5.0"
   }
 }

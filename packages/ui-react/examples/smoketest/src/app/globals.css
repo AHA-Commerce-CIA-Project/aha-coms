@@ -1,0 +1,66 @@
+@import "tailwindcss";
+@import "@coms-portal/design-tokens/css";
+@import "@coms-portal/ui-react/styles.css";
+@import "@coms-portal/account-widget-react/styles.css";
+
+/*
+ * Tailwind v4 @theme inline mapping for surfaces the tokens package
+ * leaves to host apps (popover used by SheetContent's `bg-popover`).
+ * Mirrors heroes-web/src/app.css and portal-web/src/app.css.
+ */
+@theme inline {
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+}
+
+:root {
+  --popover: #FFFFFF;
+  --popover-foreground: #1A1B2E;
+}
+
+.dark {
+  --popover: #272A40;
+  --popover-foreground: #F5F5FA;
+}
+
+/*
+ * The chrome assumes four app-level CSS classes exist in the host
+ * stylesheet (named in docs/svelte-chrome-audit.md §"Cross-cutting
+ * requirements for the React port" #2). Heroes-web and portal-web
+ * define richer versions; this smoketest only needs the shapes
+ * present so visual parity reads honestly. The styles below mirror
+ * the prior-art rules in heroes-web/src/app.css.
+ */
+@layer components {
+  .sidebar-link-active {
+    background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+    color: var(--foreground);
+    font-weight: 600;
+  }
+
+  .bnav-active::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2.5rem;
+    height: 2px;
+    background: var(--primary);
+    border-radius: 0 0 9999px 9999px;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .tap-active {
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tap-active:active {
+    transform: scale(0.97);
+  }
+}

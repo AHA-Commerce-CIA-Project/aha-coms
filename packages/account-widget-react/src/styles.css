@@ -1,0 +1,7 @@
+/**
+ * @coms-portal/account-widget-react — Tailwind source registration.
+ *
+ * Same mechanism as @coms-portal/ui-react/styles.css — opts the widget's
+ * .tsx files back into the host's Tailwind v4 scanner.
+ */
+@source "./**/*.tsx";

@@ -1,0 +1,16 @@
+/**
+ * @coms-portal/ui-react — Tailwind source registration.
+ *
+ * Tailwind v4 auto-discovery skips node_modules. When this package is
+ * consumed by a host app (fast at /fast/, the smoketest examples consumer),
+ * the host's Tailwind compile step never sees the chrome components' class
+ * strings — responsive utilities (`md:hidden`, `hidden md:flex`) and
+ * conditional state utilities (`data-[state=open]:slide-in-from-left-10`,
+ * etc.) never compile.
+ *
+ * This file fixes that at the package boundary. The host imports it once
+ * in its Tailwind entry point (after `@import "tailwindcss"`), and the
+ * @source directive below — resolved relative to this file — opts every
+ * chrome and primitive component back into the scanner.
+ */
+@source "./**/*.tsx";

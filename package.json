@@ -2,7 +2,11 @@
   "name": "coms-portal",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "packages/ui-react/examples/smoketest"
+  ],
   "scripts": {
     "dev": "bun run --filter '*' --parallel dev",
     "dev:portal-api": "bun run --filter @coms-portal/portal-api dev",

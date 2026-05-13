@@ -1,7 +1,7 @@
 {
   "name": "@coms-portal/ui-react",
-  "version": "0.0.0",
-  "description": "React variant of the COMS chrome library — empty stub. Populated when aha-fast onboards (post-Spec 02).",
+  "version": "0.1.0",
+  "description": "React variant of the COMS chrome library — ServiceBar, Sidebar, MobileTopBar, MobileBottomNav, SlideOverNav, Sheet primitive set. Mirrors @coms-portal/ui-svelte's contract (see docs/svelte-chrome-audit.md).",
   "private": true,
   "type": "module",
   "license": "UNLICENSED",
@@ -11,13 +11,30 @@
     "directory": "packages/ui-react"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./chrome": "./src/chrome/index.ts",
+    "./primitives": "./src/primitives/index.ts",
+    "./styles.css": "./src/styles.css"
   },
-  "files": ["src"],
+  "files": ["src", "docs"],
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.6",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.460.0",
+    "tailwind-merge": "^3.5.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
   "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "typescript": "^5.5.0"
   }
 }
