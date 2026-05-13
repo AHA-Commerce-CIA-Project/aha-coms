@@ -122,6 +122,28 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
     }
   };
 
+  // Mark the whole task done. Required for INDIVIDUAL routine tasks that
+  // have no checklist (and a fast-path even when there is one) — without
+  // this the claimer had no way to actually finish the task. PUT body is
+  // empty `{}` since all completeTaskSchema fields are optional and the
+  // server fills completedBy from the session.
+  const completeTask = async () => {
+    setBusy('complete');
+    setError(null);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/complete`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setError(data?.error || 'Failed to mark task as done');
+      await fetchSnapshot();
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const title = snapshot?.title || previewTitle;
   const description = snapshot?.description || previewBody || null;
   const type = snapshot?.type ?? 'INDIVIDUAL';
@@ -257,6 +279,22 @@ export function RoutineTaskCard({ taskId, previewTitle, previewBody, currentUser
                   <Lock className="w-3.5 h-3.5 text-slate-400" />
                 ) : null}
               </div>
+            )}
+
+            {/* Mark Done — only the claimer can finish the task, and only
+                while it isn't already done. Sits directly under the claim
+                pill so the action is obvious; works whether or not the
+                task has a checklist. */}
+            {isClaimed && claimedByMe && !isDone && (
+              <button
+                type="button"
+                onClick={completeTask}
+                disabled={!!busy || loading}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {busy === 'complete' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Mark as Done
+              </button>
             )}
 
             {checklist.length > 0 && (

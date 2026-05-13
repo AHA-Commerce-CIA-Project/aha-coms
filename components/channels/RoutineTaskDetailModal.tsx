@@ -171,6 +171,27 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
     }
   };
 
+  // Mark the whole task done — same endpoint and rationale as the in-card
+  // button. INDIVIDUAL claimers had no way to actually finish the task
+  // (the claim pill only locked them in); this restores that path.
+  const completeTask = async () => {
+    if (!taskId) return;
+    setBusy('complete');
+    setError(null);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/complete`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setError(data?.error || 'Failed to mark task as done');
+      await fetchSnapshot();
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Dynamic-checklist mutations. Each one round-trips through the existing
   // /api/tasks/[id]/checklist endpoints; the API enforces the real
   // permission rules — these client paths just gate the affordance.
@@ -431,6 +452,22 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
                       {!claimedByMe && !isDone && <Lock className="w-3.5 h-3.5 text-slate-400" />}
                       {isDone && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                     </div>
+                  )}
+
+                  {/* Mark Done — only the claimer can finish the task,
+                      and only while it isn't already done. Mirrors the
+                      in-feed RoutineTaskCard so users finishing the task
+                      from either surface get the same affordance. */}
+                  {isClaimed && claimedByMe && !isDone && (
+                    <button
+                      type="button"
+                      onClick={completeTask}
+                      disabled={!!busy}
+                      className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {busy === 'complete' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                      Mark as Done
+                    </button>
                   )}
                 </section>
               )}
