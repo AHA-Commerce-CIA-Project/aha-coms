@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  basePath: '/fast',
+  assetPrefix: '/fast',
   typescript: {
     ignoreBuildErrors: true,
   },
