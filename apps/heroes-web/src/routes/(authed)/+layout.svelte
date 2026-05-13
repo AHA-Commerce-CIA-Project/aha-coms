@@ -4,9 +4,9 @@
     Sidebar,
     MobileTopBar,
     MobileBottomNav,
+    SlideOverNav,
     deriveServiceBarServices,
   } from '@coms-portal/ui-svelte/chrome'
-  import { Sheet, SheetContent } from '@coms-portal/ui-svelte/primitives'
   import { AccountWidget } from '@coms-portal/account-widget-svelte'
   import {
     Trophy,
@@ -58,10 +58,6 @@
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   })
-
-  function closeMenu() {
-    menuOpen = false
-  }
 
   // ── chrome data ──────────────────────────────────────────────────────────
 
@@ -139,11 +135,6 @@
     portalRole: data.user.portalRole,
     apps: [...data.user.apps],
   } : null)
-
-  // Active path helper for slide-over menu
-  function isActive(href: string) {
-    return $page.url.pathname === href || $page.url.pathname.startsWith(href + '/')
-  }
 </script>
 
 <div class="app-bg min-h-screen {uiState.sidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded'}">
@@ -271,64 +262,39 @@
 <!--
   Slide-over admin menu — admin/HR only, mobile only.
 
-  Spec 02 Phase 4 / T43 decision: this stays heroes-local rather than
-  graduating into the chrome lib as a `<SlideOverNav>` component. Rationale:
-  heroes is the only Svelte app with admin-only mobile nav today (portal-
-  web has no admin mobile surface; aha-fast is React-side and would
-  consume `@coms-portal/ui-react`, not Svelte chrome). One concrete
-  consumer is premature for an abstraction; when a second appears, lift
-  the composition (brand header + nav list + user-info footer) into
-  chrome then. The cross-app pattern that DID earn a place in the chrome
-  corridor is the panel mechanics — backdrop, focus trap, ESC handling,
-  side-anchored slide-in — and the suite already owned those at
-  `packages/ui-svelte/src/primitives/sheet/` (bits-ui-backed). The
-  hand-rolled `<div class="fixed inset-0…">` backdrop + `<svelte:window
-  onkeydown>` ESC handler + manual close-button shim retired in this
-  pass; the Sheet primitive carries the accessibility load.
+  Lifted into `@coms-portal/ui-svelte/chrome` as `SlideOverNav` once
+  portal-web grew the same need (T47 Finding 3); T43's "one consumer,
+  don't lift" call retired with the second consumer. Heroes supplies
+  the brand mark and the user-identity footer as snippets; the chrome
+  component carries the Sheet wrapping, item iteration, active state,
+  and close-on-click behaviour.
 -->
-<Sheet bind:open={menuOpen}>
-  <SheetContent side="left" class="md:hidden w-72 sm:max-w-sm p-0 bg-card flex flex-col gap-0">
-    <!-- Panel header — heroes brand mark (Sheet ships its own close button at top-3 right-3) -->
-    <div class="flex h-14 items-center border-b border-border px-4 shrink-0">
-      <div class="flex items-center gap-2">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-gold to-gold-light shadow-md">
-          <Trophy class="h-3.5 w-3.5 text-gold-dark" />
-        </div>
-        <span class="font-manrope text-[15px] font-extrabold tracking-wide text-foreground">
-          AHA HEROES
+<SlideOverNav
+  bind:open={menuOpen}
+  items={slideOverNavItems}
+  currentPath={$page.url.pathname}
+>
+  {#snippet brand()}
+    <div class="flex items-center gap-2">
+      <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-gold to-gold-light shadow-md">
+        <Trophy class="h-3.5 w-3.5 text-gold-dark" />
+      </div>
+      <span class="font-manrope text-[15px] font-extrabold tracking-wide text-foreground">
+        AHA HEROES
+      </span>
+    </div>
+  {/snippet}
+  {#snippet footer()}
+    <div class="flex items-center gap-3 rounded-lg px-3 py-2.5">
+      <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-xs font-bold text-primary ring-1 ring-primary/15">
+        <User class="h-4 w-4" />
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-semibold text-foreground">{data.user?.name ?? ''}</p>
+        <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
+          {data.user?.role ?? ''}
         </span>
       </div>
     </div>
-
-    <!-- Panel nav -->
-    <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-      {#each slideOverNavItems as item (item.href)}
-        {@const active = isActive(item.href)}
-        <a
-          href={item.href}
-          onclick={closeMenu}
-          class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-all duration-150 hover:bg-primary/8 hover:text-foreground
-            {active ? 'sidebar-link-active' : ''}"
-        >
-          <item.icon class="h-[18px] w-[18px] shrink-0" />
-          <span class="leading-none">{item.label}</span>
-        </a>
-      {/each}
-    </nav>
-
-    <!-- Panel footer — widget owns sign-out; show user name + role for orientation -->
-    <div class="border-t border-border p-2 shrink-0">
-      <div class="flex items-center gap-3 rounded-lg px-3 py-2.5">
-        <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-xs font-bold text-primary ring-1 ring-primary/15">
-          <User class="h-4 w-4" />
-        </div>
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-semibold text-foreground">{data.user?.name ?? ''}</p>
-          <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
-            {data.user?.role ?? ''}
-          </span>
-        </div>
-      </div>
-    </div>
-  </SheetContent>
-</Sheet>
+  {/snippet}
+</SlideOverNav>

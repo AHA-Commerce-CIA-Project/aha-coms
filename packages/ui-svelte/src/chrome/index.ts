@@ -12,6 +12,7 @@ export { default as ServiceBar } from './ServiceBar.svelte'
 export { default as Sidebar } from './Sidebar.svelte'
 export { default as MobileTopBar } from './MobileTopBar.svelte'
 export { default as MobileBottomNav } from './MobileBottomNav.svelte'
+export { default as SlideOverNav } from './SlideOverNav.svelte'
 export {
   deriveServiceBarServices,
   type ServiceCatalogEntry,
