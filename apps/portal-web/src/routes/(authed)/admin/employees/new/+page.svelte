@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
+  import { base } from '$app/paths'
   import { createEmployeeMutation } from '$lib/queries/employees'
   import { teamsQuery } from '$lib/queries/teams'
   import { PORTAL_ROLES, PORTAL_ROLE_LABELS, type PortalRole } from '@coms-portal/shared'
@@ -50,7 +51,7 @@
         return
       }
 
-      await goto('/admin/employees')
+      await goto(`${base}/admin/employees`)
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to create employee'
     }
@@ -171,7 +172,7 @@
 
         <div class="flex gap-3">
           <Button type="submit" disabled={$mutation.isPending}>Create</Button>
-          <Button href="/admin/employees" variant="outline">Cancel</Button>
+          <Button href="{base}/admin/employees" variant="outline">Cancel</Button>
         </div>
       </form>
     </CardContent>

@@ -63,8 +63,14 @@ export const userinfoRoutes = new Elysia()
       // places — ServiceBar catalog + AccountWidget appSwitcher). T47 lifts
       // that knowledge into the canonical source so future apps inherit it
       // without each one having to remember to special-case the hub.
+      // FU-10: portal-web now mounts at /portal/ (was at /). The dashboard is
+      // /portal/dashboard; pointing the launcher entry there bypasses the
+      // /portal → /portal/dashboard redirect on click. The synthetic entry is
+      // still prepended unconditionally (portal is the hub every authenticated
+      // user reaches, but it does not live in app_registry — see T47 Finding
+      // 5: the prepend lives here, not in each app's layout).
       const launcherApps: Array<{ slug: string; label: string; url: string }> = [
-        { slug: 'portal', label: 'COMS', url: '/' },
+        { slug: 'portal', label: 'COMS', url: '/portal/dashboard' },
       ]
       if (authUser.apps.length > 0) {
         const rows = await db

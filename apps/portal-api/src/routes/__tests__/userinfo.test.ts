@@ -274,7 +274,7 @@ describe('GET /api/userinfo', () => {
     // their own layouts; the canonical source is the registry-walking
     // userinfo response itself).
     expect(body.apps).toEqual([
-      { slug: 'portal', label: 'COMS', url: '/' },
+      { slug: 'portal', label: 'COMS', url: '/portal/dashboard' },
       { slug: 'heroes', label: 'Heroes', url: 'https://heroes.ahacommerce.net' },
     ])
   })
@@ -285,8 +285,10 @@ describe('GET /api/userinfo', () => {
     expect(res.status).toBe(200)
     const body = (await res.json()) as Record<string, unknown>
     // Every authenticated user reaches portal; an empty `apps` list on the
-    // user reduces to a launcher that carries only the hub.
-    expect(body.apps).toEqual([{ slug: 'portal', label: 'COMS', url: '/' }])
+    // user reduces to a launcher that carries only the hub. FU-10 pointed
+    // the hub at /portal/dashboard (was /) after portal-web's base-path
+    // migration; the canonical source is apps/portal-api/src/routes/userinfo.
+    expect(body.apps).toEqual([{ slug: 'portal', label: 'COMS', url: '/portal/dashboard' }])
   })
 })
 

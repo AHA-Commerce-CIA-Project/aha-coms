@@ -27,17 +27,17 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 
   const url = new URL(event.request.url)
 
-  // Skip API calls — always go to network
-  if (url.pathname.startsWith('/api')) return
+  // Skip API calls — always go to network. Portal-api lives at /api/** on
+  // the shared origin (Firebase Hosting routes that namespace to portal-api
+  // regardless of portal-web's base path). Wrapping these in caches.match
+  // would serve stale userinfo / session data.
+  if (url.pathname.startsWith('/api/') || url.pathname === '/api') return
 
-  // Skip /heroes/** — the single-origin migration mounts heroes-web at
-  // /heroes/*, but portal-web's SW scope is `/`, so it would otherwise
-  // intercept every heroes navigation. The wrapped `fetch(event.request)`
-  // round-trip drops Set-Cookie before the browser commits it (observed at
-  // T30 — heroes' broker-exchange 303 set `coms_session=…; Path=/` and the
-  // browser never persisted it, producing a portal↔heroes redirect loop).
-  // CP4 Finding 2 carried this caveat forward; T30 forced the fix.
-  if (url.pathname === '/heroes' || url.pathname.startsWith('/heroes/')) return
+  // FU-10 retired the explicit /heroes skip: portal-web's SW scope is now
+  // /portal/ (manifest.json + svelte.config.js paths.base), so the browser
+  // does not invoke this worker for fetches from /heroes/* pages. The
+  // T30-era CP4 Finding 2 (the fetch round-trip dropped Set-Cookie before
+  // the browser committed it) closes structurally with the scope split.
 
   event.respondWith(
     caches.match(event.request).then((cached) => cached ?? fetch(event.request))

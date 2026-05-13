@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores'
   import { goto } from '$app/navigation'
+  import { base } from '$app/paths'
   import { createQuery, useQueryClient } from '@tanstack/svelte-query'
   import { adminApi } from '$lib/admin-api'
   import type { WebhookEndpoint } from '$lib/admin-api'
@@ -113,7 +114,7 @@
     try {
       await adminApi.deleteApp(id)
       await queryClient.invalidateQueries({ queryKey: ['apps'] })
-      await goto('/admin/apps')
+      await goto(`${base}/admin/apps`)
     } catch (error) {
       deleteError = error instanceof Error ? error.message : 'Failed to delete app'
     } finally {
@@ -546,7 +547,7 @@
             <CardContent class="space-y-1 pt-4">
               {#each app.teamGrants as grant}
                 <div class="flex items-center justify-between py-1">
-                  <a href="/admin/teams/{grant.teamId}" class="text-sm text-primary hover:text-primary/80">{grant.teamName ?? grant.teamId}</a>
+                  <a href="{base}/admin/teams/{grant.teamId}" class="text-sm text-primary hover:text-primary/80">{grant.teamName ?? grant.teamId}</a>
                 </div>
               {/each}
             </CardContent>
@@ -787,5 +788,5 @@
     </Card>
   </div>
 
-  <a href="/admin/apps" class="mt-6 inline-block text-xs text-primary hover:text-primary/80">&larr; Back to apps</a>
+  <a href="{base}/admin/apps" class="mt-6 inline-block text-xs text-primary hover:text-primary/80">&larr; Back to apps</a>
 </div>

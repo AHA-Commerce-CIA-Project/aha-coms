@@ -7,6 +7,13 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "redirects": [
+      {
+        "source": "/",
+        "destination": "/portal",
+        "type": 301
+      }
+    ],
     "rewrites": [
       {
         "source": "/heroes/api/**",
@@ -33,6 +40,20 @@
         "source": "/api/**",
         "run": {
           "serviceId": "coms-portal-api",
+          "region": "asia-southeast2"
+        }
+      },
+      {
+        "source": "/portal",
+        "run": {
+          "serviceId": "coms-portal-web",
+          "region": "asia-southeast2"
+        }
+      },
+      {
+        "source": "/portal/**",
+        "run": {
+          "serviceId": "coms-portal-web",
           "region": "asia-southeast2"
         }
       },

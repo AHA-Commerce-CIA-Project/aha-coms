@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores'
   import { goto } from '$app/navigation'
+  import { base } from '$app/paths'
   import { teamQuery } from '$lib/queries/teams'
   import { appsQuery } from '$lib/queries/apps'
   import { adminApi } from '$lib/admin-api'
@@ -208,7 +209,7 @@
     try {
       await adminApi.deleteTeam(id)
       await queryClient.invalidateQueries({ queryKey: ['teams'] })
-      await goto('/admin/teams')
+      await goto(`${base}/admin/teams`)
     } catch (error) {
       actionError = error instanceof Error ? error.message : 'Failed to delete team'
     } finally {
@@ -530,5 +531,5 @@
     <p class="text-sm text-destructive">Failed to load team.</p>
   {/if}
 
-  <a href="/admin/teams" class="mt-6 inline-block text-xs text-primary hover:text-primary/80">&larr; Back to teams</a>
+  <a href="{base}/admin/teams" class="mt-6 inline-block text-xs text-primary hover:text-primary/80">&larr; Back to teams</a>
 </div>

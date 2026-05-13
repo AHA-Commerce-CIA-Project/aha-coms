@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
+  import { base } from '$app/paths'
   import { createTeamMutation } from '$lib/queries/teams'
   import { Card, CardHeader, CardTitle, CardContent, Button, Label, Input, Textarea } from '@coms-portal/ui-svelte/primitives'
 
@@ -16,7 +17,7 @@
         name: form.name,
         description: form.description || undefined,
       })
-      await goto('/admin/teams')
+      await goto(`${base}/admin/teams`)
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to create team'
     }
@@ -65,7 +66,7 @@
           >
             Create
           </Button>
-          <Button href="/admin/teams" variant="outline">Cancel</Button>
+          <Button href="{base}/admin/teams" variant="outline">Cancel</Button>
         </div>
       </form>
     </CardContent>

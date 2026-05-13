@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
+  import { base } from '$app/paths'
   import { useQueryClient } from '@tanstack/svelte-query'
   import { appsQuery } from '$lib/queries/apps'
   import { adminApi } from '$lib/admin-api'
@@ -376,7 +377,7 @@
         {#each $query.data as app}
           <TableRow>
             <TableCell>
-              <a href="/admin/apps/{app.id}" class="text-primary hover:text-primary/80">{app.name}</a>
+              <a href="{base}/admin/apps/{app.id}" class="text-primary hover:text-primary/80">{app.name}</a>
             </TableCell>
             <TableCell class="text-muted-foreground">{app.slug}</TableCell>
             <TableCell class="text-muted-foreground">{app.transportMode}</TableCell>

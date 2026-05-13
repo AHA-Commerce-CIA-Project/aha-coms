@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores'
+  import { base } from '$app/paths'
   import { getContext, onMount } from 'svelte'
   import { employeeQuery, updateEmployeeMutation } from '$lib/queries/employees'
   import { teamsQuery } from '$lib/queries/teams'
@@ -1207,7 +1208,7 @@
     <p class="text-sm text-muted-foreground">Employee not found.</p>
   {/if}
 
-  <a href="/admin/employees" class="mt-6 inline-block text-xs text-primary hover:text-primary/80">&larr; Back to employees</a>
+  <a href="{base}/admin/employees" class="mt-6 inline-block text-xs text-primary hover:text-primary/80">&larr; Back to employees</a>
 </div>
 
 {#if showLinkModal}

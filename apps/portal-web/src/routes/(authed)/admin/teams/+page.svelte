@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths'
   import { teamsQuery } from '$lib/queries/teams'
   import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Button } from '@coms-portal/ui-svelte/primitives'
 
@@ -8,7 +9,7 @@
 <div class="p-8">
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold">Teams</h1>
-    <Button href="/admin/teams/new">New Team</Button>
+    <Button href="{base}/admin/teams/new">New Team</Button>
   </div>
 
   {#if $query.isLoading}
@@ -31,7 +32,7 @@
         {#each $query.data as team}
           <TableRow>
             <TableCell>
-              <a href="/admin/teams/{team.id}" class="text-primary hover:text-primary/80">{team.name}</a>
+              <a href="{base}/admin/teams/{team.id}" class="text-primary hover:text-primary/80">{team.name}</a>
             </TableCell>
             <TableCell class="text-muted-foreground">{team.description ?? '-'}</TableCell>
             <TableCell class="text-muted-foreground">{team.memberCount ?? 0}</TableCell>

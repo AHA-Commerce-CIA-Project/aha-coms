@@ -1,13 +1,16 @@
 #!/usr/bin/env bun
 // Shape-and-syntax verifier for firebase.json at the monorepo root.
 //
-// Asserts the JSON parses, names the staging site, and registers the five
+// Asserts the JSON parses, names the staging site, and registers the
 // rewrites in precedence order (most specific first). Used by T18 as the
 // red-then-green check; can be re-run as a guard if the routing layer is
 // ever edited by hand. The bare `/heroes` rewrite was added under T30 once
 // the single-origin migration revealed that Firebase Hosting's `/heroes/**`
 // glob does not match the slash-less path the portal launcher hands to the
-// browser (`aha-coms.web.app/heroes?portal_code=…`).
+// browser (`aha-coms.web.app/heroes?portal_code=…`). FU-10 added the
+// analogous `/portal` + `/portal/**` rewrites and a `/` → `/portal` 301
+// redirect so portal-web's manifest scope can narrow to /portal/ without
+// orphaning visitors who land on the root.
 
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
@@ -40,6 +43,8 @@ const expected = [
   { source: '/heroes', serviceId: 'coms-heroes-web' },
   { source: '/heroes/**', serviceId: 'coms-heroes-web' },
   { source: '/api/**', serviceId: 'coms-portal-api' },
+  { source: '/portal', serviceId: 'coms-portal-web' },
+  { source: '/portal/**', serviceId: 'coms-portal-web' },
   { source: '**', serviceId: 'coms-portal-web' },
 ]
 
@@ -48,6 +53,17 @@ if (!Array.isArray(rewrites)) fail('hosting.rewrites must be an array')
 if (rewrites.length !== expected.length) {
   fail(`expected ${expected.length} rewrites, got ${rewrites.length}`)
 }
+
+// FU-10: assert the / → /portal 301 redirect is present (single redirect rule).
+const redirects = hosting.redirects
+if (!Array.isArray(redirects)) fail('hosting.redirects must be an array (FU-10)')
+if (redirects.length !== 1) fail(`expected 1 redirect, got ${redirects.length}`)
+const r0 = redirects[0]
+if (r0?.source !== '/') fail(`redirects[0].source must be "/" (got ${JSON.stringify(r0?.source)})`)
+if (r0?.destination !== '/portal') {
+  fail(`redirects[0].destination must be "/portal" (got ${JSON.stringify(r0?.destination)})`)
+}
+if (r0?.type !== 301) fail(`redirects[0].type must be 301 (got ${JSON.stringify(r0?.type)})`)
 
 for (let i = 0; i < expected.length; i++) {
   const want = expected[i]

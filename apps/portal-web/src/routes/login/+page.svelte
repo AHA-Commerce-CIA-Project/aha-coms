@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
+  import { base } from '$app/paths'
   import { page } from '$app/stores'
   import { signInWithPopup, signOut, getIdToken } from 'firebase/auth'
   import { ArrowLeft } from '@lucide/svelte'
@@ -30,7 +31,7 @@
   let now = $state(Date.now())
   let tickHandle: ReturnType<typeof setInterval> | null = null
 
-  const redirectTo = $derived($page.url.searchParams.get('redirect') ?? '/')
+  const redirectTo = $derived($page.url.searchParams.get('redirect') ?? `${base}/dashboard`)
   const resendSecondsLeft = $derived(
     resendAt && resendAt > now ? Math.ceil((resendAt - now) / 1000) : 0,
   )

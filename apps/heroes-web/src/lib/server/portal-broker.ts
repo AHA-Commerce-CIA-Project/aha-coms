@@ -9,6 +9,10 @@ import { env } from '$env/dynamic/private'
  * to host (`exchangePortalCode`, `assertExchangePayload`, et al.). Heroes
  * reads portal's `__session` cookie directly via `/api/userinfo`, so the
  * legacy round-trip is gone — only the sign-in redirect builder remains.
+ *
+ * FU-10 changed portal's mount point from `/` to `/portal/`. The path here
+ * targets `/portal` directly so the browser does not redirect-chain through
+ * Firebase Hosting's `/` → `/portal` 301 before reaching portal-web.
  */
 export function buildPortalSignInUrl(redirectTo?: string): string {
   const origin = env.PORTAL_ORIGIN
@@ -16,7 +20,7 @@ export function buildPortalSignInUrl(redirectTo?: string): string {
     throw new Error('PORTAL_ORIGIN must be set')
   }
   if (redirectTo) {
-    return `${origin}/?app=heroes&redirect_to=${encodeURIComponent(redirectTo)}`
+    return `${origin}/portal?app=heroes&redirect_to=${encodeURIComponent(redirectTo)}`
   }
-  return `${origin}/`
+  return `${origin}/portal`
 }

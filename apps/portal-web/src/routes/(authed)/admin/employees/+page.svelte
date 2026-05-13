@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths'
   import { employeesQuery, batchUpdateEmployeesMutation, importEmployeesCsvMutation, upgradeWorkspaceMutation } from '$lib/queries/employees'
   import BatchToolbar from '$lib/components/batch-toolbar.svelte'
   import { PORTAL_ROLE_LABELS, PORTAL_ROLES } from '@coms-portal/shared'
@@ -202,7 +203,7 @@
 <div class="p-8">
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold">Employees</h1>
-    <Button href="/admin/employees/new">Add Employee</Button>
+    <Button href="{base}/admin/employees/new">Add Employee</Button>
   </div>
 
   <div class="mb-6 rounded-xl border border-border bg-card p-5">
@@ -399,7 +400,7 @@
                         {/if}
                         — <span class="text-destructive">email collision:</span>
                         <span class="text-foreground">{row.collisionEmail}</span> already belongs to
-                        <a href="/admin/employees/{row.collisionUserId}" class="text-primary hover:underline">
+                        <a href="{base}/admin/employees/{row.collisionUserId}" class="text-primary hover:underline">
                           {row.collisionUserName}
                         </a>
                       </p>
@@ -492,7 +493,7 @@
               <input type="checkbox" checked={selected.has(employee.id)} onchange={() => toggleOne(employee.id)} class="rounded border-border" />
             </TableCell>
             <TableCell>
-              <a href="/admin/employees/{employee.id}" class="text-primary hover:text-primary/80">{employee.name}</a>
+              <a href="{base}/admin/employees/{employee.id}" class="text-primary hover:text-primary/80">{employee.name}</a>
             </TableCell>
             <TableCell class="text-muted-foreground">
               {employee.emails?.find((e) => e.kind === 'workspace')?.address ?? '—'}
