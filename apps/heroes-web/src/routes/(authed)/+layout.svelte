@@ -127,7 +127,16 @@
   // The AccountWidget's launcher list is exactly the rich `apps` array
   // userinfo returned — no slug→label/url mapping needed app-side now that
   // T40 has lifted the derivation out of heroes.
-  const widgetAppSwitcher = $derived([...(data.appCatalog ?? [])])
+  //
+  // The `COMS` entry is prepended same as `serviceBarServices` does for the
+  // desktop tab strip (line 78–87 above). On mobile the ServiceBar is
+  // hidden (T47 Finding 2), so the AccountWidget dropdown is the only
+  // cross-app surface — without this prepend, heroes users have no path
+  // back to portal except typing the URL.
+  const widgetAppSwitcher = $derived([
+    { slug: 'portal', label: 'COMS', url: `${$page.url.origin}/` },
+    ...(data.appCatalog ?? []),
+  ])
 
   const widgetUser = $derived(data.user ? {
     name: data.user.name,
