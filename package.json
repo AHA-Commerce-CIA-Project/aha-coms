@@ -23,5 +23,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.50"
+  },
+  "overrides": {
+    "elysia": "1.4.28"
   }
 }
