@@ -812,12 +812,65 @@ Spec ref: `docs/spec/02-heroes-cleanup.md#phase-6`.
 
 ---
 
+## SPEC 05 — FAST ONBOARDING
+
+Spec ref: `docs/spec/05-fast-onboarding.md`.
+
+Open questions all resolved 2026-05-13 (see Spec 05's Decisions table):
+§1 keep Prisma (ADR 0011), §2 fold React chrome port into Phase 1, §3
+unified `apps/fast/`, §4 stage Better Auth removal in three sub-phases.
+
+### Phase 1: React chrome packages
+
+Spec ref: `docs/spec/05-fast-onboarding.md#phase-1-react-chrome-packages`. Seven chrome components in `packages/ui-svelte/src/chrome/` + `packages/account-widget-svelte/` port to React under `packages/ui-react/src/chrome/` + `packages/account-widget-react/src/`. The largest single body of work in the spec; until this lands, fast cannot satisfy contract §3.
+
+- [ ] **T50: Audit Svelte chrome surface — prop signatures, snippet slots, event callbacks, visual states**
+  - **Prerequisites:** CP11 (crossed)
+  - **What:** Read each of the seven components (`ServiceBar.svelte`, `Sidebar.svelte`, `MobileTopBar.svelte`, `MobileBottomNav.svelte`, `SlideOverNav.svelte`, `Sheet.svelte`, `AccountWidget.svelte`) and write the contract-shaped surface inventory: prop names + types, named snippet slots (which become React `children` / render-prop callbacks), event callback shapes, responsive split points (desktop vs mobile classes), theme variants. Output goes into a single audit doc that the porting work consumes.
+  - **Why audit-then-port instead of port-by-feel:** the Svelte API is the authority; React mirrors. A written audit prevents the React port from drifting (different prop naming, missing snippet, off-by-one responsive class).
+  - **Acceptance:** audit doc (location TBD — likely `packages/ui-react/docs/svelte-chrome-audit.md` or inline in the React component files as JSDoc) covers every prop, snippet, and event for all seven components. Each prop's expected behaviour is named (not just typed).
+
+- [ ] **T51: Port the seven chrome components to React (ui-react/src/chrome/ + account-widget-react/src/)**
+  - **Prerequisites:** T50
+  - **What:** Author the React variants. Each component mirrors the Svelte prop shape but uses React idioms: snippets become children/render-prop callbacks, events become `onX` callbacks, `$derived` becomes `useMemo` (or server-side derivation where possible), `$state` becomes `useState`. Tailwind classes are identical; design tokens come from `@coms-portal/design-tokens/css` exactly as in Svelte. The `Sheet` primitive ports via Radix UI (the React equivalent of bits-ui's backdrop / focus-trap / ESC / slide-in shape).
+  - **Acceptance:** `packages/ui-react/` + `packages/account-widget-react/` typecheck + build green. Every chrome component exists as a named React export at the contract-shaped surface T50 documented.
+
+- [ ] **T52: Port the Sheet primitive — Radix UI selection + integration**
+  - **Prerequisites:** T51 (or parallel with it)
+  - **What:** Replace bits-ui's `Sheet` primitive (Svelte) with Radix UI's equivalent (or a React-only headless lib that matches the backdrop / focus-trap / ESC / slide-in shape). Document the choice if Radix isn't selected. The React `Sheet` wraps the headless lib with the same prop shape (`open`, `onOpenChange`, `side`, etc.) heroes' `SlideOverNav` consumed.
+  - **Acceptance:** the React Sheet primitive matches the Svelte primitive's behavioural surface. The stub consumer (T53) demonstrates open/close, focus-trap, and ESC handling.
+
+- [ ] **T53: Author minimal React stub consumer — packages/ui-react/examples/smoketest/**
+  - **Prerequisites:** T51 + T52
+  - **What:** A one-page Next.js app under `packages/ui-react/examples/smoketest/` (or similar) that mounts every chrome component with sample data: ServiceBar with a 3-app catalog, Sidebar with two sections, MobileTopBar/MobileBottomNav at the mobile breakpoint, SlideOverNav with mocked open state, AccountWidget with a mocked user. The stub confirms the props/render shape works in a real React consumer before fast adopts them in Phase 6.
+  - **Acceptance:** `bun run --filter @coms-portal/ui-react-smoketest dev` (or equivalent) starts a localhost server rendering every chrome component. Manual interaction (open SlideOverNav, ESC closes it, toggle theme, click an app in ServiceBar) works as designed.
+
+- [ ] **T54: Visual parity check — side-by-side against heroes + portal at desktop + mobile + light + dark**
+  - **Prerequisites:** T53
+  - **What:** Capture screenshots of each chrome component in the React stub consumer alongside the same component rendered by `apps/heroes-web/` or `apps/portal-web/`. Cover all four combos (desktop+light, desktop+dark, mobile+light, mobile+dark). Document any intentional divergence (React-only or Svelte-only patterns that don't translate cleanly); any unintentional divergence is a bug to fix before CP12 closes.
+  - **Acceptance:** parity confirmed for every chrome component at every breakpoint+theme combination. Divergence list (if any) committed alongside the screenshots so the next reader knows what's by-design vs accidental.
+
+- [ ] **CHECKPOINT 12: React chrome packages at visual parity with their Svelte siblings.** The stub consumer renders every component. `packages/ui-react/` and `packages/account-widget-react/` typecheck + build green. After CP12, Phase 2 (subtree merge fast) opens.
+
+### Phase 2: Subtree merge fast into the monorepo
+
+Phase 2 tasks (T55–T59) author when Phase 1 nears completion — until the chrome lib exists, the integration step is preparation; fast's eventual mount of the chrome belongs to Phase 6.
+
+### Phase 3: Better Auth removal (staged per §4)
+
+Three sub-phases per Open Question §4 (Option B). Tasks author when Phase 2 nears completion.
+
+### Phases 4–10
+
+Detail tasks added as each near-term phase opens, mirroring the cadence Spec 02 used. The spec itself names the steps; this file holds the per-step task entries when the work is about to start.
+
+---
+
 ## When everything above is `[x]`
 
-Spec 01 and Spec 02 are complete. Heroes is the reference implementation. The monorepo holds the suite. Time to scope Spec 03 (Integration Test Kit) and Spec 04 (SDK as Enforcement Layer) — both currently stubbed in `docs/spec/`.
+Spec 01, Spec 02, and Spec 05 are complete. Heroes (Svelte) and fast (React/Next.js) together prove framework parity in code. The integration contract has two worked examples. Time to scope Spec 03 (Integration Test Kit) and Spec 04 (SDK as Enforcement Layer) — both currently stubbed in `docs/spec/`.
 
 Also pending (separate future specs):
 
-- aha-fast onboarding (Next.js + Better Auth → GIP migration + base-path config + chrome via React variants)
-- Platform-owned notifications v1
+- Platform-owned notifications v1 (the contract's only deviation in heroes + fast)
 - App 3 / app 4 onboarding once their domains are scoped

@@ -45,6 +45,15 @@ This spec is done when all of the following are true:
 
 These have to land in writing before code moves, because the answer reshapes the phase structure.
 
+**All four resolved 2026-05-13.** Each landed on the recommended option below; the spec body assumes these decisions. The §1 decision additionally lives at [`docs/adr/0011-fast-keeps-prisma.md`](../adr/0011-fast-keeps-prisma.md) with explicit reopen criteria.
+
+| Question | Decision | Status |
+|---|---|---|
+| §1 Prisma vs Drizzle | Option B — Keep Prisma; ADR 0011 records the exception with reopen criteria. Phase 5 defaults to skip. | Accepted 2026-05-13 |
+| §2 React chrome port shape | Option B — Fold into Spec 05 Phase 1; React chrome packages port alongside fast as the live consumer. | Accepted 2026-05-13 |
+| §3 Subtree-merge shape | Option A — Unified `apps/fast/`; the unified-vs-split refactor is out of scope. | Accepted 2026-05-13 |
+| §4 Better Auth removal cadence | Option B — Stage in three sub-phases ((a) loadFastAuthUser alongside Better Auth, (b) flip every `requireAuth()` call site, (c) delete surfaces + schema migration). | Accepted 2026-05-13 |
+
 ### §1. Prisma vs Drizzle
 
 Fast currently uses Prisma 5 with `prisma/schema.prisma` and `prisma db push` for migrations (no `prisma/migrations/` history — the canonical deploy path is `scripts/push-db.js`, per fast's own convention). Standing principle 8 (ADR 0008) names Drizzle as the default for the suite.
