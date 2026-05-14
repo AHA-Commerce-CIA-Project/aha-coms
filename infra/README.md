@@ -41,28 +41,31 @@ State bucket: `gs://coms-portal-tofu-state/terraform/state/` (portal),
 
 ## Variables
 
-`infra/terraform.tfvars` carries the **stable** values (project id, region,
-Cloud SQL instance name, Firebase config, sheets ids). Three variables are
-deliberately **not** in tfvars and must be passed at the CLI:
+`infra/terraform.tfvars` carries **every** stable value the apply needs —
+project id, region, Cloud SQL instance name, Firebase config, sheets ids,
+the deployed service URL, the bootstrap admin identity, and the mail-transport
+shape. FU-21's drift-cleanup pass (2026-05-14) lifted five values that the
+original README declared "deliberately not in tfvars" into the file, because
+the prior pattern was the root cause of two production-bug-in-waiting drifts:
+portal-api's SERVICE_URL env var flipping to `https://placeholder` on any
+apply where the placeholder var was passed, and the brevo-secret IAM grant
+being destroyed when `mail_transport` defaulted back to `"stdout"`. The
+tfvars file is the single source of truth; no laptop `-var` flag is required
+for any apply that doesn't touch Cloud Run wiring.
 
-| Variable | Why it's not in tfvars |
-|---|---|
-| `service_url` | Computed from the Cloud Run service after first deploy; passing a placeholder is fine for any apply that doesn't change Cloud Run wiring |
-| `bootstrap_admin_email` | Operator-supplied, varies by environment; passing a placeholder is fine for any apply that doesn't re-seed the bootstrap admin |
-| `bootstrap_admin_name` | Same shape as bootstrap_admin_email |
-
-When in doubt, pass these as placeholders:
+The only operator-passed var that remains for portal applies is when the
+operator deliberately wants to override a tfvars value for a one-off (e.g.,
+testing the `mail_transport = "stdout"` shape locally before a destructive
+flip). In that case, pass the override at the CLI as a normal `-var`.
 
 ```bash
-tofu plan -var-file=terraform.tfvars \
-  -var service_url=https://placeholder \
-  -var bootstrap_admin_email=placeholder@example.com \
-  -var bootstrap_admin_name=placeholder
-```
+# Routine portal apply — tfvars covers everything.
+tofu plan -var-file=terraform.tfvars
+tofu apply -var-file=terraform.tfvars
 
-The placeholders never reach a real resource — they only satisfy the variable
-resolver. Real values land via the CI plan job's repo-level GH variables when
-those specific resources are being changed.
+# Override (rare): test the stdout transport without changing tfvars.
+tofu plan -var-file=terraform.tfvars -var mail_transport=stdout
+```
 
 `infra/heroes/` carries a committed `terraform.tfvars` with the Google
 Sheet IDs the sheet-sync service reads (per FU-9: sheet IDs are not

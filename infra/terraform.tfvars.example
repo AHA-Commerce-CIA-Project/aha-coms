@@ -9,12 +9,25 @@ coms_domain               = "coms.ahacommerce.net"
 session_cookie_max_age    = "1209600"
 sheets_personal_email_id  = "REPLACE_ME"
 sheets_personal_email_tab = "REPLACE_ME"
+
+# Stable runtime values that the FU-21 drift-cleanup pass lifted into tfvars
+# (2026-05-14). The Cloud Run service URL is stable post-first-deploy; the
+# bootstrap admin + mail-transport + brevo-from values are environment-static.
+# Keeping them in tfvars (instead of the README's old "pass at the CLI" pattern)
+# means every apply converges against the live runtime shape without ad-hoc
+# `-var` flags that previously leaked placeholder values into the deployed
+# resource. The `coms-portal-api-...` Cloud Run URL below changes only if
+# Cloud Run rebuilds the service from scratch (e.g., regional move); update
+# here when that happens.
+service_url               = "https://coms-portal-api-45tyczfska-et.a.run.app"
+# `mail_transport=brevo` requires the `coms-portal-brevo-api-key` secret to
+# be populated via `gcloud secrets versions add`. PR B2 wired the Brevo
+# transport and the CI workflow promotes this var to "brevo" automatically;
+# tfvars keeping the same value means laptop applies do not destroy the
+# brevo IAM grant on every apply.
+mail_transport            = "brevo"
+# Verified Brevo single-sender (operator's personal Gmail in dev posture;
+# noreply@ahacommerce.net once DNS lands). Drives the BREVO_FROM Cloud Run env.
+brevo_from                = "handers.the@ahacommerce.net"
 bootstrap_admin_email     = "handers.the@ahacommerce.net"
 bootstrap_admin_name      = "Mr. Door"
-# Outbound mail transport. PR B2 wired the Brevo secret + Cloud Run env. To flip,
-# populate the `coms-portal-brevo-api-key` secret via `gcloud secrets versions add`,
-# then set the MAIL_TRANSPORT GitHub Actions repo variable to "brevo" and re-deploy.
-mail_transport            = "stdout"
-# Verified Brevo single-sender (your personal Gmail in dev posture; noreply@ahacommerce.net once DNS lands).
-# Drives the BREVO_FROM Cloud Run env. In CI this is supplied via the BREVO_FROM GitHub Actions repo var.
-brevo_from                = "REPLACE_ME"

@@ -206,6 +206,14 @@ resource "google_cloud_run_v2_service" "coms_portal_api" {
     ignore_changes = [
       scaling,
       template[0].containers[0].image,
+      # `gcloud run deploy` from the GHA workflow tags each revision with its own
+      # `client = "gcloud"` + `client_version = "<sdk-version>"` annotations. Tofu
+      # otherwise notices them as drift on every plan and proposes to clear them
+      # back to null, but the next workflow run re-adds them — a permanent
+      # Sisyphean feedback loop FU-21's drift-cleanup pass terminated by adding
+      # client + client_version to ignore_changes here.
+      client,
+      client_version,
     ]
   }
 }
@@ -305,6 +313,14 @@ resource "google_cloud_run_v2_service" "coms_portal_web" {
     ignore_changes = [
       scaling,
       template[0].containers[0].image,
+      # `gcloud run deploy` from the GHA workflow tags each revision with its own
+      # `client = "gcloud"` + `client_version = "<sdk-version>"` annotations. Tofu
+      # otherwise notices them as drift on every plan and proposes to clear them
+      # back to null, but the next workflow run re-adds them — a permanent
+      # Sisyphean feedback loop FU-21's drift-cleanup pass terminated by adding
+      # client + client_version to ignore_changes here.
+      client,
+      client_version,
     ]
   }
 }
