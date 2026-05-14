@@ -1318,8 +1318,8 @@ Spec ref: `docs/spec/05-fast-onboarding.md#phase-9-pwa-installability--service-w
 
 Spec ref: `docs/spec/05-fast-onboarding.md#phase-10-verification--documentation`. The closing checklist before CP21 seals Spec 05.
 
-- [ ] **T87: End-to-end smoke (mirrors T47's checklist for heroes)**
-  - **Prerequisites:** CP20, **operator-led**
+- [~] **T87: End-to-end smoke (mirrors T47's checklist for heroes) — code-side artefact authored 2026-05-14; operator walk pending**
+  - **Prerequisites:** CP20, **operator-led** for the walk
   - **What:** Execute the full smoke checklist against prod:
     - Sign in via portal → land on fast (when portal launcher links to fast).
     - Navigate within fast (dashboard, channels, tasks, analytics, orbit, etc.).
@@ -1331,6 +1331,8 @@ Spec ref: `docs/spec/05-fast-onboarding.md#phase-10-verification--documentation`
     - Google Calendar OAuth: connect a calendar, list events, create a meeting — all green after the redirect-URI update (T67).
     - Slack webhook: submit a request, confirm Slack delivery (app-internal, unchanged by the migration).
   - **Acceptance:** every checklist item passes; any regressions documented as Findings (mirror T47's Finding-N pattern). Findings that block CP21 get mended same-session; cosmetic findings can land as separate follow-ups.
+  - **Outcome (code-side, complete):** authored `apps/fast/docs/smoke-checklist.md` as the operator-facing standalone document T47 never had on heroes' side (heroes' T47 lived as a long todo.md entry — fast carries a parallel checklist file so the operator can walk it without scrolling through this todo). The checklist covers eight surfaces mapped to integration-contract clauses: §1 sign-in, §3 chrome render (desktop + mobile), §3+§5 cross-app navigation, §7 admin operations (load + write), §1 escape hatch public surfaces (`/request` + `/track`), §5 OAuth round-trip, §11 webhook delivery (sub-steps 7a/7b/7c), §9 PWA install. Each step has the URL, expected output, recording shape, and a "findings to expect" preamble naming the most likely failure mode at that step. A recovery table mirrors the runbook's "When things go sideways" pattern with eight rows covering the known cracks (e.g., step 4's loopback-fetch trap is the heroes-T47-Finding-1 mirror — Server Components calling `/fast/api/*` from inside fast's own server-side rendering pass; the recovery row points the operator at converting the loader to a direct `lib/` import). FU-24's `SELF_PUBLIC_URL` audience check + the heroes-side patterns lifted from T47 (mobile two-bar artifact, public-surface allowlist, OAuth redirect-URI registration) are folded into the relevant steps so the operator hits each known crack with the recovery in front of them. The doc ends with a "Closer — sealing CP21" section naming what flips in todo.md when every step passes (T87 + CHECKPOINT 21 + optionally T75 closer + T86 if covered during step 8).
+  - **What stays for the operator window:** execute the eight-step walk live against `https://aha-coms.web.app/fast/*`. Estimated 30–45 minutes if no findings surface. Record outcome per step in this entry's body; flip T87 + CP21 to `[x]` once the walk passes cleanly.
 
 - [ ] **T88: Performance check — p50/p95 against pre-migration baseline**
   - **Prerequisites:** T87, **operator-led**
