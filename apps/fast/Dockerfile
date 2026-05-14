@@ -45,6 +45,13 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps apps/
 COPY --from=deps /app/packages packages/
+# Root package.json + lockfile let `bun run --filter @coms-portal/fast` walk
+# the workspace tree to find the build script. heroes-web's Dockerfile works
+# without this (apparently bun resolves the filter via node_modules symlinks
+# for SvelteKit), but Next.js + Prisma + the standalone-output pipeline
+# needs the full workspace context at build time — without root
+# package.json, `bun run --filter` errors ENOENT before next build runs.
+COPY package.json bun.lock ./
 COPY tsconfig.base.json ./
 COPY apps/fast apps/fast
 COPY packages/sdk packages/sdk
