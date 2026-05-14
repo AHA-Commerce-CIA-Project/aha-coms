@@ -284,26 +284,33 @@ For the *why* behind each rule, see the linked ADRs. This document describes the
 
 ## §11. Portal webhooks
 
-**Rule.** The portal pushes lifecycle events to apps via webhooks (user deactivated, app access granted/revoked, profile fields changed). Apps consume webhooks idempotently and recover from missed deliveries.
+**Rule.** The portal pushes lifecycle events to apps via webhooks (user provisioned / updated / offboarded, employment shape changes, taxonomy upserts and deletes, alias resolution changes, per-recipient app-config changes). Apps consume webhooks idempotently and recover from missed deliveries.
 
 **Why.** Apps need to react to portal-side identity changes promptly. Webhooks are the agreed delivery mechanism; the alternative (apps polling the portal) doesn't scale and creates traffic spikes.
 
+**Reference implementations.**
+
+- **Heroes** (Elysia + Drizzle) — `apps/heroes-api/src/routes/portal-webhooks.ts` + `apps/heroes-api/src/services/portal-events/`. Authored 2026-05-08; per-event handlers in `services/portal-events/handle-*.ts`; dispatch map in `dispatch.ts`.
+- **Fast** (Next.js Route Handler + Prisma) — `apps/fast/app/api/webhooks/portal/route.ts` + `apps/fast/lib/portal/`. Authored 2026-05-14 (T77 + T78); per-event handlers in `lib/portal/handlers/handle-*.ts`; dispatch map in `lib/portal/dispatch.ts`. The two implementations share the same auth + dedup + envelope-unwrap shape, adapted to each framework's idioms.
+
 **Satisfaction criteria.**
 
-- App exposes `POST /<app>/api/portal/webhook` and registers the URL with the portal during onboarding.
-- Webhook payloads are signed; the SDK provides `verifyPortalWebhook(req)` which validates the signature. Reject unsigned or invalid-signature requests with 401.
-- The app persists incoming events in `portal_webhook_events` (mirror heroes' migration 0009) with a unique constraint on the portal's event ID for idempotency.
-- The app processes events asynchronously after acknowledging the webhook (return 200 fast, process via background job or transaction commit).
-- The app handles common events: `user.deactivated`, `user.app_access_granted`, `user.app_access_revoked`, `user.profile_updated`. Unknown event types are logged and ignored, not 400-rejected (forward compatibility).
-- A reconciliation script `bun run scripts/reconcile-portal.ts` can backfill state by calling portal API directly; this catches missed deliveries.
+- App exposes `POST <app-base-path>/api/webhooks/portal` and registers the URL with the portal during onboarding (`apps/portal-api/scripts/spec07-register-*.ts`). Heroes registers at `/heroes/api/webhooks/portal`; fast registers at `/fast/api/webhooks/portal`; both share the single Firebase Hosting origin `https://aha-coms.web.app`.
+- Inbound requests carry three headers: `X-Portal-Event` (one of `PORTAL_WEBHOOK_EVENTS` from `@coms-portal/shared`), `X-Portal-Event-Id` (uuid, used for dedup), and `Authorization: Bearer <google-id-token>` signed by the portal's runtime service account. Reject missing headers with 400; reject invalid tokens with 401.
+- Verify the ID token via `google-auth-library`'s `OAuth2Client.verifyIdToken({idToken, audience: SELF_PUBLIC_URL})` against `PORTAL_SERVICE_ACCOUNT_EMAIL` and `SELF_PUBLIC_URL`. The audience portal mints is `new URL(endpoint.url).origin` — for single-origin apps that is the bare Firebase Hosting origin, NOT the basePath-prefixed serving URL (FU-24's lesson; see `apps/fast/lib/portal/oidc.ts` and `apps/heroes-api/src/lib/oidc.ts` for the canonical verifier). The SDK also ships an HMAC-signing helper (`verifyWebhookSignature` in `packages/sdk/src/webhook.ts`) which portal falls back to when OIDC minting fails on its side, but ID-token verification is the primary path both reference implementations use.
+- The app persists incoming events in `portal_webhook_events` with `event_id` as the primary key for idempotency. Heroes uses Drizzle (`packages/heroes-shared/src/db/schema/portal-webhooks.ts`); fast uses Prisma (`apps/fast/prisma/schema.prisma` → `PortalWebhookEvent` model). Dedup INSERT short-circuits the route to 200 before any handler runs, so portal's at-least-once retries replay safely.
+- Unwrap the inbound `PortalWebhookEnvelope<T>` envelope into the inner `envelope.payload` before dispatching to per-event handlers. Passing the whole envelope to handlers silently no-ops them on `payload.<field>` reads (regression caught at heroes on 2026-05-05; pinned by `unwrapWebhookEnvelope` helpers + tests in both implementations).
+- Handle the events the app subscribed to in `app_webhook_endpoints.subscribed_events` (a JSON array set during registration). The full event list lives in `PORTAL_WEBHOOK_EVENTS` at `packages/shared/src/contracts/webhook-events.ts`: `user.provisioned`, `user.updated`, `user.offboarded`, `employment.updated`, `app_config.updated`, `alias.resolved`, `alias.updated`, `alias.deleted`, `taxonomy.upserted`, `taxonomy.deleted`, `session.revoked`, `app.smoketest`. Unknown event types are logged and ignored (handlers map returns no entry → silent no-op), never 400-rejected — forward compatibility.
+- `app.smoketest` events are dispatched synchronously by portal's `POST /api/v1/apps/:slug/smoketest` (Spec 06 Rev 4 PR B). Receivers ack 2xx without business processing; the route's dedup + unwrap path already produces this shape because no business handler is registered.
 
 **Anti-patterns to remove on sight.**
 
-- Trusting webhook contents without signature verification.
-- Processing webhooks synchronously in a way that blocks the response.
+- Trusting webhook contents without ID-token verification.
+- Processing webhooks synchronously in a way that blocks the response beyond the dedup + dispatch fan-out — handlers should themselves be cheap (a Prisma upsert, a Drizzle update); long-running work fans out to a separate job runner if needed.
 - Storing only the latest state without the event log (loses recoverability).
+- Setting `SELF_PUBLIC_URL` to the Cloud Run URL of an app whose registered webhook is fronted by Firebase Hosting — the audience portal mints is the Hosting origin, not the Cloud Run URL. FU-24 records this trap.
 
-**Escape hatch.** For low-volume read-side data that's already in the JWT claims (email, role, apps), apps can skip webhook consumption and just re-read on next session. Webhooks are required only for events that need immediate side effects (deactivation propagation, access revocation).
+**Escape hatch.** For low-volume read-side data that's already in the portal `__session`'s `/api/userinfo` response (email, role, apps), apps can skip webhook consumption for those fields and just re-read on next session. Webhooks are required only for events that need immediate side effects (offboarding propagation, access revocation, taxonomy updates that drive denormalized projections).
 
 ---
 
@@ -422,9 +429,10 @@ A product app with split frontend+backend (e.g., heroes is `heroes-api` + `heroe
 ### Platform integration (§10, §11) `[backend]`
 
 - [ ] Service emits notifications via SDK; no service-local notifications table (heroes is a documented exception — do not copy)
-- [ ] Service exposes `POST /<app>/api/portal/webhook` with SDK-verified signature
-- [ ] Service stores webhook events idempotently in `portal_webhook_events`
-- [ ] Service has a `scripts/reconcile-portal.ts` for missed-delivery recovery
+- [ ] Service exposes `POST <app-base-path>/api/webhooks/portal` and verifies inbound Google ID tokens via `google-auth-library` against `PORTAL_SERVICE_ACCOUNT_EMAIL` + `SELF_PUBLIC_URL` (the audience equals `new URL(endpoint.url).origin`, not the basePath-prefixed serving URL — see §11 and FU-24)
+- [ ] Service stores webhook events idempotently in `portal_webhook_events` with `event_id` as PK; the route's dedup INSERT short-circuits to 200 before any handler runs
+- [ ] Service unwraps `PortalWebhookEnvelope<T>` to `envelope.payload` before dispatching to per-event handlers; never pass the full envelope through (heroes' 2026-05-05 regression anchors this rule)
+- [ ] Service has a `scripts/reconcile-portal.ts` (or app-specific equivalent like fast's `scripts/sync-taxonomies.ts`) for missed-delivery recovery
 
 ### Deploys (§8) `[every service]`
 
