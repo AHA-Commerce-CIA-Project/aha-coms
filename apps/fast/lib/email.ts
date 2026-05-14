@@ -60,11 +60,6 @@ interface RequestEmailData {
 }
 
 export async function sendRequestNotificationEmail(data: RequestEmailData) {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn('RESEND_API_KEY not set, skipping email notification');
-    return false;
-  }
-
   const appUrl = getAppUrl();
   const trackUrl = `${appUrl}/track?token=${data.taskToken}`;
 
@@ -154,36 +149,11 @@ export async function sendRequestNotificationEmail(data: RequestEmailData) {
 
   const subject = `[FAST] New Request: ${data.title} (${data.urgency}) - Token: ${data.taskToken}`;
 
-  // Try Apps Script first (can send to any email)
-  const appsScriptSent = await sendViaAppsScript(
-    recipients,
-    subject,
-    htmlBody,
-  );
+  const appsScriptSent = await sendViaAppsScript(recipients, subject, htmlBody);
   if (appsScriptSent) {
     console.log(`Request notification sent via Apps Script to: ${recipients.join(', ')}`);
-    return true;
   }
-
-  // Fallback to Resend (only sends to verified email)
-  try {
-    const result = await getResend().emails.send({
-      from: 'AHA FAST <onboarding@resend.dev>',
-      to: [NOTIFICATION_EMAIL],
-      subject,
-      html: htmlBody,
-    });
-    console.log('Resend response:', JSON.stringify(result));
-    if (result.error) {
-      console.error('Resend error:', result.error);
-      return false;
-    }
-    console.log(`Request notification sent via Resend to: ${NOTIFICATION_EMAIL}`);
-    return true;
-  } catch (err) {
-    console.error('Failed to send email notification:', err);
-    return false;
-  }
+  return appsScriptSent;
 }
 
 // ==========================================
