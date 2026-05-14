@@ -150,10 +150,37 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
   template {
     service_account = google_service_account.fast_web_runtime.email
 
+    # Always-warm + sticky shape. Matches the deliberate triplet the legacy
+    # `aha-fast-app` ran with (minScale=1 + cpu-throttling=false +
+    # sessionAffinity=true) — the engineer who tuned that config knew the
+    # app well enough to override Cloud Run's serverless defaults, and
+    # the migration's job is to move the app, not silently retune it.
+    #
+    # Why each setting matters for fast specifically:
+    #   • min_instance_count = 1 — Next.js 15 + Prisma cold-start is 3–5s
+    #     (React 19 + lightningcss + sharp + Prisma engine init); for a
+    #     low-traffic admin app, scale-to-zero means most user hits eat
+    #     a cold start. Cost: ~$25–40/month for the always-warm vCPU
+    #     (legacy was already paying this).
+    #   • cpu_idle = false — pairs with min=1. Background async work
+    #     (Prisma connection pool maintenance, in-flight Promise
+    #     resolution between requests) survives the gap between requests
+    #     instead of getting paused.
+    #   • session_affinity = true — the legacy's affinity-on flag is the
+    #     give-away that something in fast carries server-side state per
+    #     instance. Could be SSE for chat/inbox, in-memory caches, or
+    #     stateful comment-reply paths. Affinity-on routes consecutive
+    #     requests from the same client to the same instance so that
+    #     state holds.
+    #
+    # A future window may audit fast for stateful server-side code and
+    # decide which of these can relax. Until then: match production.
     scaling {
-      min_instance_count = 0
+      min_instance_count = 1
       max_instance_count = 3
     }
+
+    session_affinity = true
 
     # Mirrors aha-fast-app's containerConcurrency=80; Next.js handles its own
     # request fanout per instance.
@@ -178,7 +205,9 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
           cpu    = "1"
           memory = "512Mi"
         }
-        cpu_idle = true
+        # cpu_idle = false — CPU always allocated, matches legacy's
+        # `cpu-throttling: false`. See scaling-block comment above.
+        cpu_idle = false
       }
 
       volume_mounts {
