@@ -1,4 +1,20 @@
 @import "tailwindcss";
+/*
+ * Suite chrome registrations — pulls in @coms-portal/design-tokens'
+ * brand palette (--color-primary-dark, --color-deep-navy,
+ * --color-primary-light, etc.) so ServiceBar's `bg-gradient-to-r
+ * from-deep-navy to-primary-dark` + `text-primary-light/45` classes
+ * compile, plus the Tailwind @source directives in the React chrome
+ * + account-widget packages so their component class strings get
+ * scanned even though Tailwind v4's auto-discovery skips node_modules.
+ * Fast's own :root + .dark blocks below override design-tokens'
+ * semantic surfaces (--background, --foreground, --card, ...) so
+ * the visual feel stays fast-native; only the brand palette flows
+ * through from design-tokens.
+ */
+@import "@coms-portal/design-tokens/css";
+@import "@coms-portal/ui-react/styles.css";
+@import "@coms-portal/account-widget-react/styles.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -284,5 +300,47 @@ li::marker { font-size: 1em; }
   30% {
     transform: translateY(-4px);
     opacity: 1;
+  }
+}
+
+/*
+ * Suite chrome contract — four app-level classes the React chrome
+ * components reference (docs/svelte-chrome-audit.md §"Cross-cutting
+ * requirements for the React port" #2). Smoketest defines them at
+ * packages/ui-react/examples/smoketest/src/app/globals.css; heroes-web
+ * + portal-web carry richer versions. Fast mirrors the smoketest
+ * shape so ServiceBar's active state + tap feedback render correctly.
+ */
+@layer components {
+  .sidebar-link-active {
+    background-color: color-mix(in srgb, var(--color-primary-dark, #1D388B) 12%, transparent);
+    color: var(--foreground);
+    font-weight: 600;
+  }
+
+  .bnav-active::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2.5rem;
+    height: 2px;
+    background: var(--color-primary-dark, #1D388B);
+    border-radius: 0 0 9999px 9999px;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .tap-active {
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tap-active:active {
+    transform: scale(0.97);
   }
 }

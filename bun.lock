@@ -12,6 +12,9 @@
       "name": "@coms-portal/fast",
       "version": "0.1.0",
       "dependencies": {
+        "@coms-portal/account-widget-react": "workspace:*",
+        "@coms-portal/design-tokens": "workspace:*",
+        "@coms-portal/ui-react": "workspace:*",
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",

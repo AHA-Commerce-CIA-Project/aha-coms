@@ -321,7 +321,7 @@ export function TopNav() {
     };
 
     return (
-        <header className="h-16 bg-[#0F0E7F] flex items-center px-4 sticky top-0 z-40 shadow-md">
+        <header className="h-16 bg-[#0F0E7F] flex items-center px-4 sticky top-0 md:top-9 z-40 shadow-md">
             {/* Logo — clicking goes to default module */}
             <Link href="/" className="flex items-center gap-2.5 pr-6 shrink-0">
                 <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center p-1">
