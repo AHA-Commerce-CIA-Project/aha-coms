@@ -200,7 +200,7 @@ variable "resend_notification_email" {
 }
 
 variable "gcs_bucket_name" {
-  description = "GCS bucket holding fast's uploads. The bucket itself is provisioned under aha-fast's legacy terraform — not managed by this state."
+  description = "GCS bucket holding fast's uploads. The bucket itself is provisioned under aha-fast's legacy terraform (which used a `random_id` 4-byte hex suffix) — not managed by this state. T80 originally defaulted to `aha-fast-uploads-prod` on a guess; Op-4's apply surfaced the real name."
   type        = string
-  default     = "aha-fast-uploads-prod"
+  default     = "aha-fast-uploads-6892fa68"
 }
