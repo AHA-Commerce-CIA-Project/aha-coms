@@ -11,8 +11,14 @@
  * 26 client-side consumers read today.
  *
  * Returns:
- *   200 { user: AuthUser, profile: { team_id, team_name, avatar_url } }
+ *   200 { user: AuthUser, profile: { team_id, team_name, avatar_url }, appCatalog: AppCatalogEntry[] }
  *   401 { error: 'Unauthorized' }
+ *
+ * `appCatalog` lands as part of T74's chrome wiring — the cross-app
+ * launcher list from portal-api's /api/userinfo flows through here
+ * to the client-side useAuth() context so the SuiteServiceBar +
+ * AccountWidget render the same set of apps everywhere without an
+ * extra round trip.
  *
  * The `profile` envelope mirrors the legacy `/api/profile` response so
  * the auth-context's "supplement with profile API for custom fields"
@@ -46,5 +52,6 @@ export async function GET() {
       team_name: profileRow?.team?.name ?? null,
       avatar_url: profileRow?.image ?? session.user.image,
     },
+    appCatalog: session.appCatalog,
   })
 }

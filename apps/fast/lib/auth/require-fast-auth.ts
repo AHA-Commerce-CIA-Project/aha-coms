@@ -25,7 +25,14 @@ import { loadFastAuthUser, PortalSessionDeniedError, type AuthUser } from './loa
 
 const DEFAULT_PORTAL_ORIGIN = 'https://aha-coms.web.app'
 
-export type FastSession = { user: AuthUser }
+export type AppCatalogEntry = { slug: string; label: string; url: string }
+
+export type FastSession = {
+  user: AuthUser
+  /** Cross-app launcher list from portal-api's /api/userinfo. Portal is prepended server-side
+   *  by portal-api (T47 Finding 5) so callers iterate without special-casing. */
+  appCatalog: readonly AppCatalogEntry[]
+}
 
 /**
  * Resolve the current fast session for a Server Component or Route
@@ -49,7 +56,7 @@ export async function requireFastAuth(): Promise<FastSession | null> {
   try {
     const result = await loadFastAuthUser(sessionCookie, portalOrigin)
     if (!result) return null
-    return { user: result.user }
+    return { user: result.user, appCatalog: result.appCatalog }
   } catch (err) {
     if (err instanceof PortalSessionDeniedError) return null
     throw err

@@ -1,42 +1,82 @@
 'use client';
 
 import { ServiceBar, type ServiceItem } from '@coms-portal/ui-react/chrome';
+import { AccountWidget, type AppSwitcherEntry } from '@coms-portal/account-widget-react';
 import { useTheme } from '@/lib/theme-context';
+import { useAuth } from '@/lib/auth/use-auth';
 
 /*
  * Suite-wide ServiceBar — the cross-app cookie crumb (portal / heroes /
  * fast) that sits above fast's in-app TopNav on desktop. Hidden on
  * mobile per ServiceBar's own `hidden md:flex`.
  *
- * Phase 6 hybrid mount (T72 + T73 + T74 + T75): the services list is
- * static here for now — every signed-in fast user reaches portal +
- * heroes + fast at the same single-origin URLs, and the portal-hub
- * prepend lives in `apps/portal-api/src/routes/userinfo.ts` per T47
- * Finding 5. A future commit can lift this to `data.appCatalog` from
- * loadFastAuthUser if other apps onboard onto the suite.
+ * Phase 6 / T74 — dynamic appCatalog flowing through from portal-api's
+ * /api/userinfo via /api/auth/me. The portal-hub prepend lives in
+ * `apps/portal-api/src/routes/userinfo.ts` per T47 Finding 5 — fast
+ * iterates without special-casing. The static fallback is kept as the
+ * pre-auth render path so the strip never looks empty during the
+ * first paint.
  *
- * AccountWidget mount is deliberately deferred — fast's in-app TopNav
- * already carries notifications + a profile menu that handles
- * fast-specific destinations (Profile Settings, Changelog), and adding
- * a second avatar in the ServiceBar would surface two profile entry
- * points. T74's appCatalog-wiring window is the right moment to
- * deduplicate the two paths.
+ * AccountWidget is mounted into ServiceBar's `right` slot. Fast's
+ * TopNav still carries a fast-specific profile menu (Profile Settings,
+ * Changelog) — the two profiles serve different purposes (cross-app
+ * launcher + sign-out vs. in-app destinations) and coexisting through
+ * Phase 6 is the deliberate hybrid-mount call. T75's visual-parity
+ * pass decides whether the two paths collapse in a follow-up.
  */
 
-const SUITE_SERVICES: ServiceItem[] = [
+const STATIC_FALLBACK: ServiceItem[] = [
     { slug: 'portal', label: 'COMS', href: '/portal' },
     { slug: 'heroes', label: 'AHA Heroes', href: '/heroes/' },
     { slug: 'fast', label: 'AHA Fast', href: '/fast' },
 ];
 
+const PORTAL_ORIGIN =
+    process.env.NEXT_PUBLIC_PORTAL_ORIGIN || 'https://aha-coms.web.app';
+
 export function SuiteServiceBar() {
     const { theme, toggleTheme } = useTheme();
+    const { user, appCatalog } = useAuth();
+
+    const services: ServiceItem[] = appCatalog.length > 0
+        ? appCatalog.map((app) => ({
+              slug: app.slug,
+              label: app.label,
+              href: app.url,
+          }))
+        : STATIC_FALLBACK;
+
+    const appSwitcher: AppSwitcherEntry[] = appCatalog.length > 0
+        ? appCatalog.map((app) => ({
+              slug: app.slug,
+              label: app.label,
+              url: app.url,
+          }))
+        : [];
+
+    const accountWidget = user
+        ? (
+              <AccountWidget
+                  currentApp="fast"
+                  portalOrigin={PORTAL_ORIGIN}
+                  user={{
+                      name: user.name,
+                      email: user.email,
+                      portalRole: user.portalRole,
+                      apps: [...user.apps],
+                  }}
+                  appSwitcher={appSwitcher}
+              />
+          )
+        : null;
+
     return (
         <ServiceBar
-            services={SUITE_SERVICES}
+            services={services}
             currentApp="fast"
             theme={theme}
             onToggleTheme={toggleTheme}
+            right={accountWidget}
         />
     );
 }
