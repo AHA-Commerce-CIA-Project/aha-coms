@@ -498,26 +498,10 @@ export async function sendAccountRejectedEmail(email: string, name: string) {
     </div>
   `;
 
-  const appsScriptSent = await sendViaAppsScript(
+  return await sendViaAppsScript(
     [email],
     '[AHA FAST] Account Registration Update',
     htmlBody,
     NOTIFICATION_EMAIL,
   );
-  if (appsScriptSent) return true;
-
-  if (!process.env.RESEND_API_KEY) return false;
-  try {
-    const result = await getResend().emails.send({
-      from: 'AHA FAST <onboarding@resend.dev>',
-      to: [NOTIFICATION_EMAIL],
-      subject: `[AHA FAST] Account Rejected for ${name} (${email})`,
-      html: htmlBody,
-    });
-    if (result.error) { console.error('Resend error:', result.error); return false; }
-    return true;
-  } catch (err) {
-    console.error('Failed to send rejection email:', err);
-    return false;
-  }
 }
