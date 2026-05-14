@@ -121,7 +121,7 @@ variable "secret_id_google_client_secret" {
 }
 
 variable "secret_id_apps_script_secret" {
-  description = "Secret Manager secret ID holding the shared HMAC for the Apps Script email gateway. Finding A surfaced a hardcoded fallback (`aha-fast-email-secret-2026`) at apps/fast/lib/email.ts:16 — same operator window that creates this secret should also remove the fallback and rotate the value alongside the Apps Script's HMAC."
+  description = "Secret Manager secret ID holding the shared HMAC for the Apps Script email gateway. The hardcoded fallback at apps/fast/lib/email.ts:16 retired via FU-18 (2026-05-14); APPS_SCRIPT_SECRET is now required at runtime — an unset value fails the send rather than authenticating with the historical literal. The same literal still appears in apps/fast/scripts/google-apps-script-email.js (the deployed-Apps-Script source mirror); rotating the value end-to-end needs an operator window to push a PropertiesService-based script to the Apps Script side + update Secret Manager + redeploy Cloud Run."
   type        = string
   default     = "aha-fast-apps-script-secret"
 }

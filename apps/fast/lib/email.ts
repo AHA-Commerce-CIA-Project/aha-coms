@@ -6,11 +6,15 @@ const NOTIFICATION_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL || 'alif.masyhur
 // fallback because the free-tier sender could only deliver to one verified
 // inbox, making it a no-op for every real user.
 const APPS_SCRIPT_EMAIL_URL = process.env.APPS_SCRIPT_EMAIL_URL || '';
-const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET || 'aha-fast-email-secret-2026';
+const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET || '';
 
 export async function sendViaAppsScript(to: string[], subject: string, htmlBody: string, cc?: string): Promise<boolean> {
   if (!APPS_SCRIPT_EMAIL_URL) {
     console.warn('APPS_SCRIPT_EMAIL_URL not set, cannot send via Apps Script');
+    return false;
+  }
+  if (!APPS_SCRIPT_SECRET) {
+    console.warn('APPS_SCRIPT_SECRET not set, cannot authenticate to Apps Script');
     return false;
   }
 
