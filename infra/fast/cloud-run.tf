@@ -111,12 +111,11 @@ locals {
     APPS_SCRIPT_EMAIL_URL = var.apps_script_email_url
     GCS_BUCKET_NAME       = var.gcs_bucket_name
 
-    # Admin recipient for new-request notifications. The variable name
-    # carries Resend history but the runtime semantics aren't Resend-specific
-    # — apps/fast/lib/email.ts:11 reads it as NOTIFICATION_EMAIL and uses it
-    # as the admin recipient for BOTH Apps Script and Resend send paths.
-    # Survives FU-18's Resend retirement; only the env-var rename is owed.
-    RESEND_NOTIFICATION_EMAIL = var.resend_notification_email
+    # Admin recipient for new-request notifications. Apps Script is the
+    # sole send path post-FU-18; apps/fast/lib/email.ts reads this env var
+    # as NOTIFICATION_EMAIL and uses it as the recipient for all five
+    # active senders.
+    ADMIN_NOTIFICATION_EMAIL = var.admin_notification_email
 
     # Cron bearer token — see variables.tf "Plaintext-via-tfvars" note for
     # why this isn't in Secret Manager. The cloud-run revision config will

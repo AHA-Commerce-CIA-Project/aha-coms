@@ -90,14 +90,12 @@ variable "portal_service_account_email" {
 #
 # Audit findings on the deliberately-excluded secrets (recorded so the
 # next implementer doesn't re-add them by reflex):
-#   • aha-fast-resend-api-key — Resend is the FALLBACK email path (every
-#     send tries Apps Script first); on free tier it can only deliver to
-#     one verified address, so it functions as an admin-debug channel
-#     rather than a production delivery path. FU-18 tracks retiring the
-#     Resend dependency entirely; until that closes, the new Cloud Run
-#     revision runs with no RESEND_API_KEY env var set, and the 11 send
-#     paths in apps/fast/lib/email.ts all return false at their
-#     RESEND_API_KEY guard, falling through to Apps Script cleanly.
+#   • aha-fast-resend-api-key — Resend retired by FU-18 (2026-05-14).
+#     The dependency, the import, the client constructor, the per-
+#     function fallback paths, and the env-var template are all gone;
+#     Apps Script is the sole delivery path. The Secret Manager entry
+#     itself was never created in this Tofu state. No env var is owed
+#     to the Cloud Run revision.
 #   • aha-fast-slack-webhook-url — the /api/slack/notify route exists
 #     and reads SLACK_WEBHOOK_URL but a grep across the fast tree
 #     returns zero callers; FU-17 tracks the wire-or-delete decision.
@@ -193,8 +191,8 @@ variable "apps_script_email_url" {
   default     = "https://script.google.com/macros/s/AKfycbyX2PKSytEoLt2bECwMq5qYi2pFUCua-8gbtQGD0xxgmhAjF1t9yciw26KqB2maJS2y/exec"
 }
 
-variable "resend_notification_email" {
-  description = "Reply-To / notification address for outgoing Resend mail."
+variable "admin_notification_email" {
+  description = "Reply-To / admin-recipient address for outgoing transactional mail through the Apps Script gateway. Read by apps/fast/lib/email.ts as NOTIFICATION_EMAIL; the var name historically carried a `resend_` prefix that FU-18 dropped alongside the Resend retirement."
   type        = string
   default     = "ops@ahacommerce.net"
 }

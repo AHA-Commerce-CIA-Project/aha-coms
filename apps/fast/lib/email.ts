@@ -1,6 +1,6 @@
 import { getAppUrl } from '@/lib/appUrl';
 
-const NOTIFICATION_EMAIL = process.env.RESEND_NOTIFICATION_EMAIL || 'alif.masyhur@ahacommerce.net';
+const NOTIFICATION_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL || 'alif.masyhur@ahacommerce.net';
 
 // Google Apps Script is the sole delivery path; FU-18 retired the Resend
 // fallback because the free-tier sender could only deliver to one verified
