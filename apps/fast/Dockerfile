@@ -27,6 +27,11 @@ COPY packages/ui-react/package.json packages/ui-react/
 COPY packages/account-widget-svelte/package.json packages/account-widget-svelte/
 COPY packages/account-widget-react/package.json packages/account-widget-react/
 COPY packages/heroes-shared/package.json packages/heroes-shared/
+# Smoketest workspace — declared in root package.json (T51-T53 added it as
+# the React chrome's stub consumer). `bun install --frozen-lockfile` fails
+# workspace resolution if its package.json isn't present, even though no
+# stage builds it.
+COPY packages/ui-react/examples/smoketest/package.json packages/ui-react/examples/smoketest/
 # Prisma schema must be present before `bun install` triggers `prisma generate`
 # via the postinstall hook in apps/fast/package.json.
 COPY apps/fast/prisma apps/fast/prisma
