@@ -8,13 +8,7 @@ import {
     RotateCcw,
     FileText,
     Users,
-    Sparkles,
     Bell,
-    Sun,
-    Moon,
-    Shield,
-    User,
-    LogOut,
     CheckCheck,
     Trash2,
     Check,
@@ -27,7 +21,6 @@ import {
     X,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth/use-auth';
-import { useTheme } from '@/lib/theme-context';
 import { cn } from '@/lib/utils';
 import { htmlToPlainText } from '@/lib/sanitize';
 
@@ -102,16 +95,13 @@ const MODULES: ModuleTab[] = [
 export function TopNav() {
     const pathname = usePathname();
     const router = useRouter();
-    const { user, profile, isLeader, signOut } = useAuth();
-    const { theme, toggleTheme } = useTheme();
-    const [showDropdown, setShowDropdown] = useState(false);
+    const { user, profile, isLeader } = useAuth();
     const [showNotifs, setShowNotifs] = useState(false);
     const [notifications, setNotifications] = useState<NotifItem[]>([]);
     const [notifTab, setNotifTab] = useState<'all' | 'dms'>('all');
     const [hoveredModule, setHoveredModule] = useState<string | null>(null);
     const hoverCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const notifRef = useRef<HTMLDivElement>(null);
-    const userMenuRef = useRef<HTMLDivElement>(null);
     // Toast notifications — popups for high-signal events only.
     // Excludes generic channel posts, lifecycle, meetings, orbit, etc.
     const TOAST_TYPES = useRef(new Set([
@@ -143,8 +133,6 @@ export function TopNav() {
         hoverCloseTimer.current = setTimeout(() => setHoveredModule(null), 120);
     };
 
-    const displayName = profile?.name || 'User';
-    const displayRole = profile?.role || 'member';
     const unreadCount = notifications.filter(n => !n.read).length;
 
     const visibleModules = MODULES.filter(m => !m.requireLeader || isLeader);
@@ -221,7 +209,6 @@ export function TopNav() {
     useEffect(() => {
         const handleClick = (e: MouseEvent) => {
             if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotifs(false);
-            if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setShowDropdown(false);
         };
         document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
@@ -425,7 +412,7 @@ export function TopNav() {
                 {/* Notifications */}
                 <div className="relative" ref={notifRef}>
                     <button
-                        onClick={() => { setShowNotifs(!showNotifs); setShowDropdown(false); }}
+                        onClick={() => setShowNotifs(!showNotifs)}
                         className="relative p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                     >
                         <Bell className="w-5 h-5" />
