@@ -62,8 +62,24 @@ on `fbi-dev-484410`, plus the portal-api repo's gh-actions write secret
 
 ## Step 1 — Push, watch the deploy
 
-The four pre-window commits live on `main` already; they need to land
+The pre-window commits live on `main` already; they need to land
 in prod via `deploy-fast.yml` before step 2 can walk a real corridor.
+
+> **Known caveat — first push fails at `prisma db push`.** The
+> code-side T64 cut drops `Session` + `Account` + `Verification`
+> models from `schema.prisma` and removes `User.emailVerified`, but
+> the live DB still carries those rows (13 `emailVerified` values
+> + 12 `account` rows + 70 `session` rows last counted). When the
+> workflow runs `prisma db push`, Prisma refuses to drop populated
+> tables without `--accept-data-loss` and the deploy halts before
+> the docker build. The fix is **deploy-first-then-migrate**: push
+> a no-op follow-up commit with `[skip-db-push]` in the message so
+> the workflow bypasses `prisma db push`, builds the image, deploys
+> the new revision; the destructive SQL then runs as step 5 of this
+> runbook against the already-deployed revision (which reads nothing
+> from the to-be-dropped tables). The workflow's own comment at
+> `.github/workflows/deploy-fast.yml:102` names this escape hatch
+> explicitly.
 
 ```bash
 cd "$REPO_ROOT"
