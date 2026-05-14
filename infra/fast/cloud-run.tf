@@ -138,9 +138,19 @@ locals {
   }
 
   fast_runtime_secret_env = {
-    DATABASE_URL         = var.secret_id_db_url
-    GOOGLE_CLIENT_SECRET = var.secret_id_google_client_secret
-    APPS_SCRIPT_SECRET   = var.secret_id_apps_script_secret
+    DATABASE_URL         = { secret = var.secret_id_db_url,              version = "latest" }
+    GOOGLE_CLIENT_SECRET = { secret = var.secret_id_google_client_secret, version = "latest" }
+
+    # APPS_SCRIPT_SECRET pinned to version 1 during the FU-19 (b) handoff
+    # window. A candidate v2 holds a random new value; the Apps Script
+    # web-app at APPS_SCRIPT_EMAIL_URL still validates v1's literal until
+    # the engineer pastes `apps/fast/scripts/google-apps-script-email.js`
+    # into the editor + sets the SHARED_SECRET script property + deploys
+    # the new Apps Script version. Pin lifts back to `"latest"` (or to a
+    # specific number ≥ 2) once the Apps Script side is rotated and the
+    # next `tofu apply` rolls a Cloud Run revision picking up the new
+    # value. See FU-18's caveat block in `tasks/todo.md`.
+    APPS_SCRIPT_SECRET = { secret = var.secret_id_apps_script_secret, version = "1" }
   }
 }
 
@@ -236,8 +246,8 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
           name = env.key
           value_source {
             secret_key_ref {
-              secret  = env.value
-              version = "latest"
+              secret  = env.value.secret
+              version = env.value.version
             }
           }
         }
