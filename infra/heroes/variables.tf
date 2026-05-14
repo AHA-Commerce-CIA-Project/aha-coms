@@ -99,8 +99,11 @@ variable "coms_origin" {
   default     = "https://aha-coms.web.app"
 }
 
-variable "heroes_api_public_url" {
-  description = "Public URL of heroes-api — used as the expected 'aud' claim when verifying portal-issued ID tokens on inbound webhooks (Rev 2 §03)."
-  type        = string
-  default     = "https://coms-heroes-api-45tyczfska-et.a.run.app"
-}
+# Variable `heroes_api_public_url` was removed alongside FU-24 on
+# 2026-05-14. It had backed the `SELF_PUBLIC_URL` env on coms-heroes-api
+# pointing at the Cloud Run URL, but the audience portal mints for
+# inbound webhooks is `new URL(endpoint.url).origin` — for heroes'
+# single-origin endpoint that is `https://aha-coms.web.app`, not the
+# Cloud Run URL. `var.heroes_public_origin` carries the right value;
+# the orphaned variable was deleted to prevent a future reader from
+# reinstating the same mismatch.

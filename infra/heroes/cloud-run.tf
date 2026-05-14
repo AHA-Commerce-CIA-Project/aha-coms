@@ -207,7 +207,19 @@ resource "google_cloud_run_v2_service" "coms_heroes_api" {
 
       # Rev 2 §03: portal webhook OIDC verification. PORTAL_SERVICE_ACCOUNT_EMAIL
       # is the SA the portal Cloud Run runs as. SELF_PUBLIC_URL must match
-      # exactly what portal mints as 'aud' (computed from app_registry.url).
+      # exactly what portal mints as 'aud' — and portal mints
+      # `new URL(endpoint.url).origin` (see apps/portal-api/src/services/
+      # webhook-dispatcher.ts:251). For heroes' single-origin endpoint URL
+      # `https://aha-coms.web.app/heroes/api/webhooks/portal`, the origin is
+      # `https://aha-coms.web.app` — the bare Firebase Hosting host, NOT the
+      # `coms-heroes-api-*.run.app` Cloud Run URL the legacy registration once
+      # used. Using the Cloud Run URL here breaks the audience match the
+      # moment heroes' `app_webhook_endpoints.status` flips back to `active`
+      # (it stayed `disabled` since 2026-05-12's Cloud Tasks retry failure,
+      # which masked this crack until fast tripped the same shape on
+      # 2026-05-14 and FU-24 was filed). Realigned to `var.heroes_public_origin`
+      # alongside fast's CP18 closure so heroes' eventual re-enable does not
+      # repeat the 401 dance.
       env {
         name  = "PORTAL_SERVICE_ACCOUNT_EMAIL"
         value = var.portal_service_account_email
@@ -215,7 +227,7 @@ resource "google_cloud_run_v2_service" "coms_heroes_api" {
 
       env {
         name  = "SELF_PUBLIC_URL"
-        value = var.heroes_api_public_url
+        value = var.heroes_public_origin
       }
 
       env {
