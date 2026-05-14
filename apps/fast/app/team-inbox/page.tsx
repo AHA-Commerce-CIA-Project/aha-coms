@@ -212,7 +212,7 @@ export default function TeamInboxPage() {
             if (teamId) params.set('teamId', teamId);
             if (withArchived ?? showArchived) params.set('showArchived', '1');
             const qs = params.toString();
-            const url = qs ? `/api/team-inbox?${qs}` : '/api/team-inbox';
+            const url = qs ? `/fast/api/team-inbox?${qs}` : '/fast/api/team-inbox';
             const res = await fetch(url);
             // Parse the body as text first so a server-side crash (which often
             // returns an empty body or HTML error page) doesn't blow up the

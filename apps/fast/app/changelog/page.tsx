@@ -95,7 +95,7 @@ export default function ChangelogPage() {
         if (!plain) { setError('Summary is required'); return; }
         setSubmitting(true);
         try {
-            const url = editing ? `/api/changelog/${editing.id}` : '/api/changelog';
+            const url = editing ? `/fast/api/changelog/${editing.id}` : '/fast/api/changelog';
             const method = editing ? 'PUT' : 'POST';
             const res = await fetch(url, {
                 method,

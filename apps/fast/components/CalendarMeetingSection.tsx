@@ -122,7 +122,7 @@ export function CalendarMeetingSection() {
     const fetchGcalEvents = async () => {
         setGcalLoading(true);
         try {
-            let url = `/api/google-calendar?action=events&year=${currentMonth.year}&month=${currentMonth.month}`;
+            let url = `/fast/api/google-calendar?action=events&year=${currentMonth.year}&month=${currentMonth.month}`;
             if (subscribedUsers.length > 0 && user) {
                 url += `&userIds=${[user.id, ...subscribedUsers].join(',')}`;
             }
@@ -167,7 +167,7 @@ export function CalendarMeetingSection() {
         setLoading(true);
         try {
             const monthStr = `${currentMonth.year}-${String(currentMonth.month + 1).padStart(2, '0')}`;
-            let url = `/api/meetings?month=${monthStr}`;
+            let url = `/fast/api/meetings?month=${monthStr}`;
             if (subscribedUsers.length > 0 && user) {
                 url += `&userIds=${[user.id, ...subscribedUsers].join(',')}`;
             }

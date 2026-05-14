@@ -197,7 +197,7 @@ export function RoutineTemplateForm({
     }
 
     try {
-      const url = editId ? `/api/orbit/templates/${editId}` : '/api/orbit/templates';
+      const url = editId ? `/fast/api/orbit/templates/${editId}` : '/fast/api/orbit/templates';
       const method = editId ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,

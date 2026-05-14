@@ -104,7 +104,7 @@ export default function MilestonesPage() {
 
         setSaving(true);
         try {
-            const url = editId ? `/api/orbit/milestones/${editId}` : '/api/orbit/milestones';
+            const url = editId ? `/fast/api/orbit/milestones/${editId}` : '/fast/api/orbit/milestones';
             const method = editId ? 'PATCH' : 'POST';
             const body: Record<string, unknown> = {
                 threshold: t,
