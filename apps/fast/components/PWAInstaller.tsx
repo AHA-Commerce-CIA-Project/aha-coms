@@ -13,10 +13,13 @@ export function PWAInstaller() {
     const [showPrompt, setShowPrompt] = useState(false);
 
     useEffect(() => {
-        // Register service worker
+        // Register service worker — `/fast/sw.js` after the basePath flip
+        // (T65). The worker's scope inherits from the registration path,
+        // and Firebase Hosting serves the file from
+        // `apps/fast/public/sw.js` under `/fast/sw.js`.
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker
-                .register('/sw.js')
+                .register('/fast/sw.js')
                 .then((reg) => console.log('SW registered:', reg.scope))
                 .catch((err) => console.warn('SW registration failed:', err));
         }

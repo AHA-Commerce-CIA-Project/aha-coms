@@ -1,11 +1,21 @@
-// AHA COMSS Service Worker
-const CACHE_NAME = 'aha-comss-v48';
+// AHA Fast service worker — Spec 05 Phase 9 / T85.
+//
+// Scope inherits from the manifest (start_url + scope both `/fast/`),
+// so this worker only intercepts fetches under `/fast/*`. The
+// `aha-coms.web.app` origin hosts three independent PWAs (portal at
+// `/portal/`, heroes at `/heroes/`, fast at `/fast/`); each one's
+// worker is scope-disjoint per FU-10's structural fix.
+//
+// Every cached path is `/fast/`-prefixed because Firebase Hosting
+// preserves the prefix verbatim into the Cloud Run service — the
+// service worker fetches what the browser fetches.
+const CACHE_NAME = 'aha-fast-v1';
 const STATIC_ASSETS = [
-    '/',
-    '/aha-logo.png',
-    '/icon-192.png',
-    '/icon-512.png',
-    '/manifest.webmanifest',
+    '/fast/',
+    '/fast/aha-logo.png',
+    '/fast/icon-192.png',
+    '/fast/icon-512.png',
+    '/fast/manifest.webmanifest',
 ];
 
 // Install: cache static assets
@@ -20,7 +30,8 @@ self.addEventListener('install', (event) => {
     self.skipWaiting();
 });
 
-// Activate: clean up old caches
+// Activate: clean up old caches, including the pre-T85 `aha-comss-v*`
+// cache shape that lived on the unprefixed paths before basePath flipped.
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((keys) => {
@@ -32,7 +43,9 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// Fetch: network-first for API/HTML, cache-first for static assets
+// Fetch: network-first for HTML, cache-first for static assets.
+// API calls + SSE streams skip the worker entirely so authenticated
+// surfaces never serve stale data.
 self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
@@ -42,8 +55,9 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Skip API calls and SSE streams (always go to network)
-    if (url.pathname.startsWith('/api/')) {
+    // Skip API calls — pass through to network. Cookied auth + dynamic
+    // data don't survive caching at the worker layer.
+    if (url.pathname.startsWith('/fast/api/')) {
         return;
     }
 
@@ -52,11 +66,12 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Static assets: cache-first
+    // Static assets: cache-first. Matches both the explicit STATIC_ASSETS
+    // entries above and any incidental image/font/script under /fast/.
     if (
         url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|css|js)$/) ||
-        url.pathname === '/aha-logo.png' ||
-        url.pathname.startsWith('/_next/static/')
+        url.pathname === '/fast/aha-logo.png' ||
+        url.pathname.startsWith('/fast/_next/static/')
     ) {
         event.respondWith(
             caches.match(request).then((cached) => {
@@ -72,7 +87,8 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // HTML pages: network-first with cache fallback
+    // HTML pages: network-first with cache fallback. Offline returns
+    // the cached `/fast/` shell when nothing better matches.
     event.respondWith(
         fetch(request)
             .then((response) => {
@@ -84,7 +100,7 @@ self.addEventListener('fetch', (event) => {
             })
             .catch(() =>
                 caches.match(request).then((cached) =>
-                    cached || caches.match('/') || new Response('Offline', { status: 503 })
+                    cached || caches.match('/fast/') || new Response('Offline', { status: 503 })
                 )
             )
     );
