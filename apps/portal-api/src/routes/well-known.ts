@@ -57,7 +57,7 @@ const discoveryDocument = {
   ],
 
   service_documentation:
-    'https://github.com/mrdoorba/aha-coms/blob/main/docs/integration-contract.md',
+    'https://github.com/AHA-Commerce-CIA-Project/aha-coms/blob/main/docs/integration-contract.md',
 
   'x-coms-platform-auth-contract-version': PLATFORM_AUTH_CONTRACT_VERSION,
   'x-coms-supported-app-transports': ['same_host_cookie', 'portable_token'],
