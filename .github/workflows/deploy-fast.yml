@@ -89,6 +89,29 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Resolve db-push skip token
+        # Decide whether to skip the schema apply by inspecting ONLY the
+        # subject line of the commit message — `[skip-db-push]` is an
+        # opt-out the convention places at the end of the subject (e.g.
+        # `Re-mark the corridor again [skip-db-push]`). The previous gate
+        # used a whole-message `contains()` check, which tripped on the
+        # token appearing anywhere in the body — including narrative prose
+        # that explained why the token wasn't being used (see commit
+        # e76bbd6, T77 + T78). Restricting the match to the first line
+        # both honours the original opt-out convention and stops the body
+        # from accidentally vetoing its own additive schema apply.
+        id: dbpush
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          first_line=$(printf '%s' "$COMMIT_MSG" | head -n1)
+          if printf '%s' "$first_line" | grep -q '\[skip-db-push\]'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Subject line contains [skip-db-push] — schema apply will be skipped"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Apply Prisma schema (db push)
         # Schema lands before the revision that reads it. `prisma db push`
         # is non-destructive for additive shapes (column adds, table adds,
@@ -99,15 +122,16 @@ jobs:
         # new revision deploys first so the old code stops writing to the
         # tables before they disappear. If you find yourself authoring a
         # destructive schema change, stop and reach for an expand → backfill
-        # → contract pattern, OR include `[skip-db-push]` in the commit
-        # message to bypass this step and run the SQL manually via Cloud
-        # SQL Auth Proxy after the new revision is serving.
+        # → contract pattern, OR include `[skip-db-push]` at the end of the
+        # commit's SUBJECT LINE (not anywhere else in the message) to bypass
+        # this step and run the SQL manually via Cloud SQL Auth Proxy after
+        # the new revision is serving.
         #
         # Fail fast: an additive push is seconds. Five minutes is a signal
         # something is stuck (Cloud SQL lock contention, proxy auth-flap,
         # runaway DEFAULT backfill on a huge table) — abort rather than burn
         # the runner.
-        if: ${{ !contains(github.event.head_commit.message, '[skip-db-push]') }}
+        if: steps.dbpush.outputs.skip != 'true'
         timeout-minutes: 5
         run: |
           curl -sSLf -o cloud-sql-proxy \
