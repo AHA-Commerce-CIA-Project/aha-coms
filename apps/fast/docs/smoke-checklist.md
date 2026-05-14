@@ -330,8 +330,13 @@ re-verifies on a fresh device or browser profile.
 DevTools mobile emulation):
 
 1. Visit `https://aha-coms.web.app/fast/`.
-2. Chrome menu → "Install app" → "AHA Fast".
-3. Tile lands on home screen with the indigo "F" icon.
+2. Chrome menu → "Add to home screen" → "Install" → tile label
+   reads "Fast" (the manifest's `short_name`; the longer `name:
+   'AHA Fast'` is what surfaces in the install dialog header).
+3. Tile lands on home screen with the AHA brand mark icon
+   (deep-navy circular gradient — `apps/fast/public/icon-{192,
+   512}.png`, the existing fast-blue mark T84 kept rather than
+   re-rendering).
 4. Launch the tile.
 5. App opens in standalone chrome (no browser address bar) with
    fast's splash on launch.
@@ -348,12 +353,25 @@ installed:
 **Lighthouse PWA audit** (re-run if the desktop browser is handy):
 
 ```bash
-npx -y lighthouse@latest https://aha-coms.web.app/fast/ \
+# Pinned to lighthouse@11 — Lighthouse 12 (released 2024) retired
+# the bundled `pwa` category. The individual audits still exist
+# but are no longer aggregated into one score. T87 walk on
+# 2026-05-14 confirmed the pin holds (Finding 10). Long-term
+# alternative: migrate to Lighthouse 12 with `--only-audits=
+# installable-manifest,service-worker,viewport,themed-omnibox,
+# content-width,apple-touch-icon,maskable-icon,splash-screen,
+# offline-start-url` once the per-audit invocation is preferred.
+#
+# Audit URL pick: /fast/track (public surface, no auth redirect).
+# /fast/ auth-redirects to portal/login for unauthenticated
+# Lighthouse runs, which would audit portal's PWA properties
+# rather than fast's. /fast/track is the cleanest public proxy.
+npx -y lighthouse@11 https://aha-coms.web.app/fast/track \
   --only-categories=pwa \
   --form-factor=mobile \
   --throttling-method=devtools \
   --output=html \
-  --output-path=apps/fast/docs/t87-lighthouse-recheck.html
+  --output-path=apps/fast/docs/t86-lighthouse.report.html
 ```
 
 Expect every PWA check green. If any item flags, mend it before
