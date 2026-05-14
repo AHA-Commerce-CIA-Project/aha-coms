@@ -3,6 +3,14 @@
 
 generator client {
   provider = "prisma-client-js"
+  // The Dockerfile builder stage runs on oven/bun:1 (Debian 12 → OpenSSL 3.0)
+  // and the runtime stage runs on node:20-slim (Debian 11 → OpenSSL 1.1).
+  // Without explicit `binaryTargets`, prisma generate only emits the "native"
+  // binary matching the builder's OpenSSL version, and the runtime container
+  // fails to start with PrismaClientInitializationError. Listing both targets
+  // makes the builder emit all three engine binaries; the runtime picks the
+  // right one at startup. Op-6 surfaced this on the second clean-build deploy.
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
