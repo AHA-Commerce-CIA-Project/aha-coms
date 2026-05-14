@@ -124,10 +124,18 @@ locals {
     # on the service); the operator-set tfvars value is the source of truth.
     CRON_SECRET = var.cron_secret
 
-    # Self-identification for portal webhook OIDC audience verification
-    # once T77 lands the consumer.
+    # Self-identification for portal webhook OIDC audience verification.
+    # The audience portal mints is `new URL(endpoint.url).origin` — for a
+    # single-origin app like fast (endpoint URL is
+    # `https://aha-coms.web.app/fast/api/webhooks/portal`), the origin is
+    # `https://aha-coms.web.app`. SELF_PUBLIC_URL MUST match that origin
+    # exactly, NOT the basePath-prefixed URL where fast actually serves —
+    # appending the `/fast` segment here breaks the audience match and the
+    # verifier 401s every inbound webhook. Sealed 2026-05-14 alongside
+    # CP18 closure after the smoketest exposed the prior `/fast`-suffixed
+    # value as a real audience-mismatch crack.
     PORTAL_SERVICE_ACCOUNT_EMAIL = var.portal_service_account_email
-    SELF_PUBLIC_URL              = "${var.fast_public_origin}/fast"
+    SELF_PUBLIC_URL              = var.fast_public_origin
   }
 
   fast_runtime_secret_env = {
