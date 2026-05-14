@@ -99,13 +99,15 @@ jobs:
         # new revision deploys first so the old code stops writing to the
         # tables before they disappear. If you find yourself authoring a
         # destructive schema change, stop and reach for an expand → backfill
-        # → contract pattern, or run `prisma db push` manually outside the
-        # workflow.
+        # → contract pattern, OR include `[skip-db-push]` in the commit
+        # message to bypass this step and run the SQL manually via Cloud
+        # SQL Auth Proxy after the new revision is serving.
         #
         # Fail fast: an additive push is seconds. Five minutes is a signal
         # something is stuck (Cloud SQL lock contention, proxy auth-flap,
         # runaway DEFAULT backfill on a huge table) — abort rather than burn
         # the runner.
+        if: ${{ !contains(github.event.head_commit.message, '[skip-db-push]') }}
         timeout-minutes: 5
         run: |
           curl -sSLf -o cloud-sql-proxy \
