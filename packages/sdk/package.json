@@ -7,7 +7,7 @@
   "sideEffects": false,
   "repository": {
     "type": "git",
-    "url": "https://github.com/mrdoorba/aha-coms.git",
+    "url": "https://github.com/AHA-Commerce-CIA-Project/aha-coms.git",
     "directory": "packages/sdk"
   },
   "exports": {
