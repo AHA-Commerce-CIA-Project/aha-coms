@@ -167,31 +167,47 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
   template {
     service_account = google_service_account.fast_web_runtime.email
 
-    # Always-warm + sticky shape. Matches the deliberate triplet the legacy
-    # `aha-fast-app` ran with (minScale=1 + cpu-throttling=false +
-    # sessionAffinity=true) — the engineer who tuned that config knew the
-    # app well enough to override Cloud Run's serverless defaults, and
-    # the migration's job is to move the app, not silently retune it.
+    # Always-warm + idle-throttled + sticky shape. The legacy `aha-fast-app`
+    # ran with `minScale=1 + cpu-throttling=false + sessionAffinity=true`;
+    # T80's initial migration preserved that triplet conservatively under
+    # the principle "the migration's job is to move the app, not silently
+    # retune it." FU-21's always-warm audit (2026-05-14) revisited that
+    # conservatism with an actual codebase audit and found Op-7's two
+    # stated reasons for `cpu_idle = false` did not apply:
+    #   1. "Prisma connection pool maintenance between requests" — the
+    #      lib/db.ts singleton is `new PrismaClient(...)` with no
+    #      module-load setInterval. The pool's idle-eviction timer is
+    #      internal to Prisma and self-heals on the first query after
+    #      a quiet window (a few hundred ms of cold-path latency, no
+    #      structural break).
+    #   2. "In-flight Promise resolution between requests" — fast's
+    #      three SSE routes (api/chat/stream, api/notifications/stream,
+    #      api/channels/stream) carry server-side state via
+    #      `setInterval` inside the request handler, scoped to the
+    #      open SSE connection. While an SSE client is connected the
+    #      request is in-flight and Cloud Run keeps CPU allocated
+    #      regardless of `cpu_idle`. There is no module-level
+    #      background work that needs CPU between requests.
+    # The session_affinity setting stays at `true` because the SSE
+    # connections genuinely carry per-instance state — affinity-on
+    # routes consecutive requests from the same client to the same
+    # instance so the stream's controller + interval handle survive.
+    # That concern is unrelated to cpu_idle.
     #
-    # Why each setting matters for fast specifically:
-    #   • min_instance_count = 1 — Next.js 15 + Prisma cold-start is 3–5s
-    #     (React 19 + lightningcss + sharp + Prisma engine init); for a
-    #     low-traffic admin app, scale-to-zero means most user hits eat
-    #     a cold start. Cost: ~$25–40/month for the always-warm vCPU
-    #     (legacy was already paying this).
-    #   • cpu_idle = false — pairs with min=1. Background async work
-    #     (Prisma connection pool maintenance, in-flight Promise
-    #     resolution between requests) survives the gap between requests
-    #     instead of getting paused.
-    #   • session_affinity = true — the legacy's affinity-on flag is the
-    #     give-away that something in fast carries server-side state per
-    #     instance. Could be SSE for chat/inbox, in-memory caches, or
-    #     stateful comment-reply paths. Affinity-on routes consecutive
-    #     requests from the same client to the same instance so that
-    #     state holds.
-    #
-    # A future window may audit fast for stateful server-side code and
-    # decide which of these can relax. Until then: match production.
+    # Why each setting matters for fast post-audit:
+    #   • min_instance_count = 1 — Next.js 15 + Prisma cold-start is
+    #     3–5s (React 19 + lightningcss + sharp + Prisma engine init);
+    #     for a low-traffic admin app, scale-to-zero means most user
+    #     hits eat a cold start. Cost: ~$2.50/mo for the always-warm
+    #     instance's allocated memory (CPU is now idle-throttled).
+    #   • cpu_idle = true — flipped from `false` by the FU-21 audit.
+    #     CPU released between requests. First request after a quiet
+    #     window pays ~50–200ms wakeup latency; subsequent requests
+    #     during the warm window are instant. Savings vs. the original
+    #     `false` choice: ~$47/mo.
+    #   • session_affinity = true — preserved. SSE connections carry
+    #     per-instance state, so consecutive requests must route to
+    #     the same instance.
     scaling {
       min_instance_count = 1
       max_instance_count = 3
@@ -222,9 +238,11 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
           cpu    = "1"
           memory = "512Mi"
         }
-        # cpu_idle = false — CPU always allocated, matches legacy's
-        # `cpu-throttling: false`. See scaling-block comment above.
-        cpu_idle = false
+        # cpu_idle = true — flipped from `false` by FU-21's always-warm
+        # audit (2026-05-14) after auditing fast's codebase for the
+        # background-async-work claim Op-7 cited. See scaling-block
+        # comment above for the full rationale + savings.
+        cpu_idle = true
       }
 
       volume_mounts {
