@@ -13,6 +13,13 @@ COPY apps/portal-api/package.json apps/portal-api/
 COPY apps/portal-web/package.json apps/portal-web/
 COPY apps/heroes-api/package.json apps/heroes-api/
 COPY apps/heroes-web/package.json apps/heroes-web/
+# Fast workspace package.json — needed so `bun install --frozen-lockfile`
+# resolves the workspace declared in root package.json. The fast source +
+# its Prisma schema are NOT needed here; heroes-web doesn't import from
+# fast. T57 added fast to the workspaces, then the postinstall hook
+# removal (alongside Op-6 retries) let unrelated builds skip fast's
+# prisma generate.
+COPY apps/fast/package.json apps/fast/
 COPY packages/shared/package.json packages/shared/
 COPY packages/sdk/package.json packages/sdk/
 COPY packages/design-tokens/package.json packages/design-tokens/

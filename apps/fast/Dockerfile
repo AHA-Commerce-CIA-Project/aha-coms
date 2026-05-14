@@ -32,10 +32,13 @@ COPY packages/heroes-shared/package.json packages/heroes-shared/
 # workspace resolution if its package.json isn't present, even though no
 # stage builds it.
 COPY packages/ui-react/examples/smoketest/package.json packages/ui-react/examples/smoketest/
-# Prisma schema must be present before `bun install` triggers `prisma generate`
-# via the postinstall hook in apps/fast/package.json.
+# Prisma schema is needed for the explicit `db:generate` below. The postinstall
+# hook was removed from apps/fast/package.json so unrelated Dockerfiles
+# (heroes-web, portal-*) can run `bun install` without needing fast's prisma
+# schema. fast's docker build owns the explicit prisma generate step.
 COPY apps/fast/prisma apps/fast/prisma
 RUN bun install --frozen-lockfile
+RUN bun run --filter @coms-portal/fast db:generate
 
 FROM oven/bun:1 AS builder
 WORKDIR /app

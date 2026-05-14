@@ -13,6 +13,9 @@ COPY apps/portal-api/package.json apps/portal-api/
 COPY apps/portal-web/package.json apps/portal-web/
 COPY apps/heroes-api/package.json apps/heroes-api/
 COPY apps/heroes-web/package.json apps/heroes-web/
+# Fast workspace package.json — needed for lockfile resolution. See
+# apps/heroes-web/Dockerfile for the full explanation.
+COPY apps/fast/package.json apps/fast/
 COPY packages/shared/package.json packages/shared/
 COPY packages/sdk/package.json packages/sdk/
 COPY packages/design-tokens/package.json packages/design-tokens/

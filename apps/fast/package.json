@@ -9,8 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "postinstall": "prisma generate"
+    "db:push": "prisma db push"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
