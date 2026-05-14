@@ -13,7 +13,7 @@ variable "region" {
 variable "github_org" {
   description = "GitHub organization or user that owns the repository"
   type        = string
-  default     = "mrdoorba"
+  default     = "AHA-Commerce-CIA-Project"
 }
 
 variable "github_repo" {

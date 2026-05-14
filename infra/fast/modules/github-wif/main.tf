@@ -1,6 +1,6 @@
 # ── Workload Identity Federation for GitHub Actions ───────────────────────────
-# Allows GitHub Actions in `mrdoorba/aha-coms` (the monorepo holding portal +
-# heroes + fast) to authenticate to GCP without long-lived keys. Per the
+# Allows GitHub Actions in `AHA-Commerce-CIA-Project/aha-coms` (the monorepo
+# holding portal + heroes + fast) to authenticate to GCP without long-lived keys. Per the
 # per-app principle, fast carries its own pool + deployer SA — separate
 # from portal's `coms-portal-github-actions` + heroes' `coms-heroes-deployer-sa`.
 # The deployer SA is separate from the Cloud Run runtime SA (least privilege).
