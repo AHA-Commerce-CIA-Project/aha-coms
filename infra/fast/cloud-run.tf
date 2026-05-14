@@ -202,18 +202,22 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
         }
       }
 
-      # Probe path lives behind firebase.json's /fast/api/** rewrite at the
-      # edge, but Cloud Run's probe hits the container directly (no edge
-      # hop). The Next.js basePath rewrites `/fast/*` requests to the
-      # internal `/*` route table — so the in-container path stays
-      # `/api/health` even though the public URL is `/fast/api/health`.
-      # T79 authors the actual health route handler; until that lands, the
-      # default Next.js 404 page still returns 404, which fails the probe.
-      # Pre-T79 deploys should keep the bootstrap image (hello world
-      # responds 200 to any path) or set the probe optional.
+      # Cloud Run probes hit the container directly on port 3000, with no
+      # Firebase Hosting hop. The path MUST include the basePath prefix
+      # because Next.js with `basePath: '/fast'` only matches routes at the
+      # prefixed URL — a request to bare `/api/health` returns 404, the
+      # probe fails, and the revision never serves traffic. Heroes-api
+      # uses the same prefix-included shape (infra/heroes/cloud-run.tf
+      # probes `/heroes/api/healthz` not `/api/healthz`).
+      #
+      # T79 authored `apps/fast/app/api/health/route.ts` returning 200 +
+      # `{ status: 'ok', dbReachable: true }` on a trivial prisma
+      # round-trip. The bootstrap hello-world image responds 200 to any
+      # path, so the first apply's probe passes before the GHA deploy
+      # swaps in a real revision.
       startup_probe {
         http_get {
-          path = "/api/health"
+          path = "/fast/api/health"
         }
         initial_delay_seconds = 0
         period_seconds        = 5
@@ -223,7 +227,7 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
 
       liveness_probe {
         http_get {
-          path = "/api/health"
+          path = "/fast/api/health"
         }
         period_seconds    = 30
         failure_threshold = 5

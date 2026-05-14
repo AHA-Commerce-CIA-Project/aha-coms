@@ -14,11 +14,18 @@ resource "google_monitoring_notification_channel" "email" {
 }
 
 # ── Uptime Check ──────────────────────────────────────────────
-# T79 authors /fast/api/health; until that ships, the uptime check sits
-# pre-wired against the path Cloud Run probes will land on. The 503/404 the
-# check sees pre-T79 will surface in monitoring as "expected failure" — the
-# alert policy below has a 0s duration trigger that fires immediately, so
-# this resource ships disabled (.enabled = false) until T79 closes.
+# T79 sealed `apps/fast/app/api/health/route.ts` returning 200 + a small
+# JSON body when prisma round-trips a trivial query, 503 otherwise.
+# The uptime check fires through Firebase Hosting (the public host
+# `aha-coms.web.app`), which rewrites `/fast/api/**` to coms-fast-web and
+# preserves the path verbatim. The container's Next.js basePath strips
+# `/fast` before route matching, so the route at `app/api/health/route.ts`
+# serves correctly.
+#
+# The alert policy ships `enabled = false` until the operator window
+# applies T80's IaC and confirms one full uptime-check cycle returns
+# success — flipping the alert live before then would page on every
+# pre-deploy 503.
 
 resource "google_monitoring_uptime_check_config" "health" {
   project      = var.project_id
