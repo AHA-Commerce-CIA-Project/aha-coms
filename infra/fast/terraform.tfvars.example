@@ -1,0 +1,14 @@
+# infra/fast/terraform.tfvars.example
+#
+# Copy to terraform.tfvars and adjust for your environment. terraform.tfvars
+# is gitignored (see ../../.gitignore's `infra/**/*.tfvars` rule); this
+# .example file is committed as the schema reference.
+#
+# All variables here have defaults in variables.tf — override only what
+# differs for your environment.
+
+# alert_email is the only required (no-default) variable. The defaults in
+# variables.tf target the fbi-dev-484410 project and the live
+# aha-fast-db-instance-* Cloud SQL host; an alternate environment would
+# also override fast_db_instance_name + the secret_id_* set.
+alert_email = "handers.the@ahacommerce.net"
