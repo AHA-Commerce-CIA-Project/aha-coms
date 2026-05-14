@@ -84,11 +84,31 @@ variable "portal_service_account_email" {
 # These are the secret resource IDs that the Cloud Run service projects into
 # its container env via secret_key_ref. The actual secret values live in
 # Secret Manager and are managed outside this Tofu state — the operator
-# either created them under aha-fast's legacy provisioning or rotates them
-# in a separate window (FU-15 in tasks/todo.md tracks the rotation chain).
+# created the three load-bearing ones (db_url, google_client_secret,
+# apps_script_secret) under aha-fast's legacy provisioning or via the
+# Op-2 creation pass.
 #
-# Defaults point at the existing `aha-fast-*` secrets. Override via tfvars
-# if a fresh `coms-fast-*` naming sweep retires them.
+# Audit findings on the deliberately-excluded secrets (recorded so the
+# next implementer doesn't re-add them by reflex):
+#   • aha-fast-resend-api-key — Resend is the FALLBACK email path (every
+#     send tries Apps Script first); on free tier it can only deliver to
+#     one verified address, so it functions as an admin-debug channel
+#     rather than a production delivery path. FU-18 tracks retiring the
+#     Resend dependency entirely; until that closes, the new Cloud Run
+#     revision runs with no RESEND_API_KEY env var set, and the 11 send
+#     paths in apps/fast/lib/email.ts all return false at their
+#     RESEND_API_KEY guard, falling through to Apps Script cleanly.
+#   • aha-fast-slack-webhook-url — the /api/slack/notify route exists
+#     and reads SLACK_WEBHOOK_URL but a grep across the fast tree
+#     returns zero callers; FU-17 tracks the wire-or-delete decision.
+#   • aha-fast-cron-secret — CRON_SECRET moved to a plaintext-via-tfvars
+#     pattern below; the blast radius is small (idempotent scheduler,
+#     no PII, no money flow) and the operational simplicity of an
+#     apply-time variable outweighs the Secret Manager ceremony for
+#     this single value.
+#   • aha-fast-webhook-hmac — T77 (fast's portal webhook consumer)
+#     hasn't authored yet; reintroducing the reference there keeps the
+#     IaC honest about what's actually wired today.
 
 variable "secret_id_db_url" {
   description = "Secret Manager secret ID holding fast's DATABASE_URL DSN. Default points at the existing aha-fast-db-url; FU-15 will rotate the DSN's embedded password in a separate operator window."
@@ -97,39 +117,42 @@ variable "secret_id_db_url" {
 }
 
 variable "secret_id_google_client_secret" {
-  description = "Secret Manager secret ID holding the Google OAuth 2.0 client secret. Operator creates this secret with the live value before the first apply."
+  description = "Secret Manager secret ID holding the Google OAuth 2.0 client secret."
   type        = string
   default     = "aha-fast-google-client-secret"
 }
 
-variable "secret_id_resend_api_key" {
-  description = "Secret Manager secret ID holding the Resend transactional email API key."
-  type        = string
-  default     = "aha-fast-resend-api-key"
-}
-
 variable "secret_id_apps_script_secret" {
-  description = "Secret Manager secret ID holding the shared HMAC for the Apps Script email gateway."
+  description = "Secret Manager secret ID holding the shared HMAC for the Apps Script email gateway. Finding A surfaced a hardcoded fallback (`aha-fast-email-secret-2026`) at apps/fast/lib/email.ts:16 — same operator window that creates this secret should also remove the fallback and rotate the value alongside the Apps Script's HMAC."
   type        = string
   default     = "aha-fast-apps-script-secret"
 }
 
-variable "secret_id_slack_webhook_url" {
-  description = "Secret Manager secret ID holding the Slack incoming-webhook URL for task escalations."
-  type        = string
-  default     = "aha-fast-slack-webhook-url"
-}
+# ── Plaintext-via-tfvars secret ────────────────────────────────────────────────
+#
+# CRON_SECRET is the bearer token /fast/api/cron/routine-scheduler verifies on
+# inbound calls (constant-time compare; returns 503 if unset). Blast radius is
+# small — the routine scheduler is idempotent per period, so a leaked secret
+# only buys an attacker the ability to fire `runScheduler` manually within an
+# already-scheduled window. Cloud Scheduler (or any cron) is the only intended
+# consumer.
+#
+# Stored as a Tofu variable rather than a Secret Manager secret because
+# (a) the marginal value Secret Manager provides (per-secret IAM, audit log)
+# doesn't justify its operational cost for this risk profile, and
+# (b) the value at apply time can be passed via terraform.tfvars (gitignored)
+# or `-var`, so it never enters git history. `sensitive = true` keeps it out
+# of plan output.
 
-variable "secret_id_cron_secret" {
-  description = "Secret Manager secret ID holding the shared secret for /fast/api/cron endpoints."
+variable "cron_secret" {
+  description = "Shared bearer token for /fast/api/cron/routine-scheduler. Operator sets this in terraform.tfvars (or via -var); a future window may lift to Cloud Scheduler OIDC if the threat model changes."
   type        = string
-  default     = "aha-fast-cron-secret"
-}
+  sensitive   = true
 
-variable "secret_id_webhook_hmac" {
-  description = "Secret Manager secret ID holding the inbound webhook HMAC for portal-issued webhook verification. T77 will consume this once fast's webhook consumer lands."
-  type        = string
-  default     = "aha-fast-webhook-hmac"
+  validation {
+    condition     = length(var.cron_secret) >= 16
+    error_message = "cron_secret must be at least 16 characters — short values defeat the constant-time compare's resistance to timing attacks."
+  }
 }
 
 # ── Plaintext env defaults ─────────────────────────────────────────────────────

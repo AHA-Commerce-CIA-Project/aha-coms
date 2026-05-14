@@ -4,11 +4,25 @@
 # is gitignored (see ../../.gitignore's `infra/**/*.tfvars` rule); this
 # .example file is committed as the schema reference.
 #
-# All variables here have defaults in variables.tf — override only what
-# differs for your environment.
+# Two variables are required (no defaults). Other variables in variables.tf
+# carry defaults targeting the fbi-dev-484410 project and the existing
+# aha-fast-db-instance-* Cloud SQL host; override them via tfvars if
+# deploying to a different environment.
 
-# alert_email is the only required (no-default) variable. The defaults in
-# variables.tf target the fbi-dev-484410 project and the live
-# aha-fast-db-instance-* Cloud SQL host; an alternate environment would
-# also override fast_db_instance_name + the secret_id_* set.
+# Where monitoring alert emails land. One operations inbox for the suite.
 alert_email = "handers.the@ahacommerce.net"
+
+# Bearer token /fast/api/cron/routine-scheduler verifies on inbound calls.
+# Generate a fresh value via `openssl rand -base64 32` for new environments;
+# preserve the existing prod value when bringing up coms-fast-web alongside
+# the legacy aha-fast-app (Cloud Scheduler — when wired — must carry the
+# same value in its outbound Authorization header). The validation in
+# variables.tf rejects values shorter than 16 chars.
+#
+# Pull the legacy aha-fast-app value with:
+#   gcloud run services describe aha-fast-app \
+#     --region=asia-southeast2 --project=fbi-dev-484410 --format=json | \
+#     python3 -c "import json,sys; \
+#       e={v['name']:v.get('value') for v in json.load(sys.stdin)['spec']['template']['spec']['containers'][0]['env']}; \
+#       print(e['CRON_SECRET'])"
+cron_secret = "REPLACE_ME"

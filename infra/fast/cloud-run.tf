@@ -43,20 +43,17 @@ resource "google_project_iam_member" "fast_web_sql_client" {
 
 # ── Secret Manager access ─────────────────────────────────────
 #
-# The runtime SA reads seven secrets at container start: DATABASE_URL +
-# Google OAuth client secret + Resend API key + Apps Script HMAC + Slack
-# webhook URL + cron shared secret + webhook HMAC (latter dormant until
-# T77 lands fast's webhook consumer).
+# The runtime SA reads three secrets at container start: DATABASE_URL +
+# Google OAuth client secret + Apps Script HMAC. The audit recorded in
+# variables.tf names what's deliberately excluded (Resend retiring,
+# Slack uncalled, cron moved to plaintext-via-tfvars, webhook HMAC
+# dormant until T77).
 
 locals {
   fast_runtime_secret_ids = toset([
     var.secret_id_db_url,
     var.secret_id_google_client_secret,
-    var.secret_id_resend_api_key,
     var.secret_id_apps_script_secret,
-    var.secret_id_slack_webhook_url,
-    var.secret_id_cron_secret,
-    var.secret_id_webhook_hmac,
   ])
 }
 
@@ -109,11 +106,23 @@ locals {
     GOOGLE_API_KEY      = var.google_api_key
 
     # HR sheet identity + Apps Script gateway URL — operational, not secret.
-    HR_SPREADSHEET_ID         = var.hr_spreadsheet_id
-    HR_SHEET_NAME             = var.hr_sheet_name
-    APPS_SCRIPT_EMAIL_URL     = var.apps_script_email_url
+    HR_SPREADSHEET_ID     = var.hr_spreadsheet_id
+    HR_SHEET_NAME         = var.hr_sheet_name
+    APPS_SCRIPT_EMAIL_URL = var.apps_script_email_url
+    GCS_BUCKET_NAME       = var.gcs_bucket_name
+
+    # Admin recipient for new-request notifications. The variable name
+    # carries Resend history but the runtime semantics aren't Resend-specific
+    # — apps/fast/lib/email.ts:11 reads it as NOTIFICATION_EMAIL and uses it
+    # as the admin recipient for BOTH Apps Script and Resend send paths.
+    # Survives FU-18's Resend retirement; only the env-var rename is owed.
     RESEND_NOTIFICATION_EMAIL = var.resend_notification_email
-    GCS_BUCKET_NAME           = var.gcs_bucket_name
+
+    # Cron bearer token — see variables.tf "Plaintext-via-tfvars" note for
+    # why this isn't in Secret Manager. The cloud-run revision config will
+    # carry the value in plaintext (visible to anyone with roles/run.viewer
+    # on the service); the operator-set tfvars value is the source of truth.
+    CRON_SECRET = var.cron_secret
 
     # Self-identification for portal webhook OIDC audience verification
     # once T77 lands the consumer.
@@ -124,11 +133,7 @@ locals {
   fast_runtime_secret_env = {
     DATABASE_URL         = var.secret_id_db_url
     GOOGLE_CLIENT_SECRET = var.secret_id_google_client_secret
-    RESEND_API_KEY       = var.secret_id_resend_api_key
     APPS_SCRIPT_SECRET   = var.secret_id_apps_script_secret
-    SLACK_WEBHOOK_URL    = var.secret_id_slack_webhook_url
-    CRON_SECRET          = var.secret_id_cron_secret
-    WEBHOOK_HMAC         = var.secret_id_webhook_hmac
   }
 }
 
