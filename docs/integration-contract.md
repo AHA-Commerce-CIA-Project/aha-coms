@@ -51,7 +51,7 @@ For the *why* behind each rule, see the linked ADRs. This document describes the
 - The app's user-profile table is named `<app>_profiles` (e.g., `heroes_profiles`, `fast_profiles`, `<future_app>_profiles`).
 - Its primary key is `id: uuid` and is **set to the portal user UUID**, not generated locally.
 - The profile table does NOT have `email`, `password`, `email_verified`, `provider_id`, or other identity-defining columns. Identity comes from the JWT; the profile holds app-specific attributes (role within the app, preferences, denormalized snapshots).
-- Profiles are upserted on the user's first authenticated request to the service. The pattern: verify the JWT, check that `apps` claim contains the service's product-app slug, then `INSERT ... ON CONFLICT DO UPDATE` on `<app>_profiles` keyed on the portal user UUID. The canonical post-cleanup implementation lives in heroes per Spec 02 Phase 2 (`loadHeroesAuthUser` and supporting profile-upsert).
+- Profiles are upserted on the user's first authenticated request to the service. The pattern: verify the session, check that the `apps` claim contains the service's product-app slug, then `INSERT ... ON CONFLICT DO UPDATE` on `<app>_profiles` keyed on the portal user UUID. Two canonical reference implementations live in the tree: **heroes** on the Svelte side (`packages/heroes-shared/src/auth/user.ts` → `loadHeroesAuthUser`, post-Spec-02 Phase 2) and **fast** on the React/Next.js side (`apps/fast/lib/auth/load-fast-auth-user.ts` → `loadFastAuthUser`, post-Spec-05 Phase 3). They share the same auth derivation shape adapted to each framework's idioms. New apps should pick the framework-matched parallel as their template.
 - The app checks `portalUser.apps.includes('<app_slug>')` from the JWT payload before allowing access. If the user is not granted membership in the portal, the app returns 403 and does not create a profile row.
 - Deactivation: when the portal deactivates a user, it pushes a webhook. The app marks the profile inactive but does NOT delete the row (audit retention). See §11 for the webhook contract.
 - Snapshot fields (`branch_value_snapshot`, etc.) are permitted for HR-sourced fields that change over time and have historical relevance. Document the snapshot semantics in the schema comment.
@@ -259,7 +259,7 @@ For the *why* behind each rule, see the linked ADRs. This document describes the
 
 **Rule.** Notifications are platform-owned. Services emit events via `@coms-portal/sdk`; the portal stores, displays, and routes them. The unified inbox lives in the account widget.
 
-**Transitional note.** Heroes currently carries an app-local notifications implementation that predates this contract. Migration to platform-owned is a dedicated future spec. **New apps must adopt platform-owned from day one — do not copy heroes' notifications code as a pattern.**
+**Transitional note.** Both heroes and fast currently carry app-local notifications implementations that predate this contract — heroes since its standalone-era origin, fast since its brownfield onboarding under Spec 05. Migration to platform-owned is a dedicated future spec covering both apps in one sweep. **New apps must adopt platform-owned from day one — do not copy either app's notifications code as a pattern.** The presence of two reference implementations carrying the same deviation is *not* permission to add a third; it's evidence the deviation is brownfield-era technical debt the platform-notifications spec will retire.
 
 **Why.** [ADR 0003](./adr/0003-single-origin-pwa.md). "Single super app" without a unified inbox is incomplete. Per-app notification stores produce N inboxes and missed cross-app messages.
 
@@ -360,7 +360,7 @@ For the *why* behind each rule, see the linked ADRs. This document describes the
 - The single suite-wide lockfile is `bun.lock` at the monorepo root. No app has its own `package-lock.json` or `pnpm-lock.yaml`.
 - App `Dockerfile` base images reflect the app's runtime: `oven/bun:1` for Bun-runtime apps, `node:22-alpine` (or similar) for Node-runtime apps.
 - New apps choose the runtime their framework officially supports. Experimental runtime combinations (e.g., Next.js on Bun in production) require an ADR.
-- IaC for any app's infrastructure uses the `tofu` CLI. State backends and configuration follow the existing portal and heroes patterns.
+- IaC for any app's infrastructure uses the `tofu` CLI. State backends and configuration follow the existing portal, heroes, and fast patterns (see [`infra/heroes/`](../infra/heroes/) and [`infra/fast/`](../infra/fast/) for the two worked examples — heroes for a Svelte + Drizzle service split into api + web, fast for a unified Next.js single-service shape).
 
 **Anti-patterns to remove on sight.**
 
@@ -469,7 +469,7 @@ A product app with split frontend+backend (e.g., heroes is `heroes-api` + `heroe
 - [ ] App switcher in chrome shows other apps the user has access to
 - [ ] Mobile chrome renders identically to existing apps (visual parity check)
 - [ ] PWA install prompt offers the COMS suite (not just this product app)
-- [ ] A portal-emitted webhook (e.g., user deactivated) is consumed correctly
+- [ ] A portal-emitted webhook (e.g., `user.offboarded`, `app_config.updated`, or `app.smoketest` from `coms-portal-cli smoketest <slug>`) is consumed correctly — verified by inspecting `portal_webhook_events` for the dedup row and the corresponding handler-side projection (e.g., `User.accountStatus = 'rejected'` for `user.offboarded`)
 
 ---
 
@@ -483,4 +483,7 @@ A product app with split frontend+backend (e.g., heroes is `heroes-api` + `heroe
 - **App catalog** — the list of all product apps in the suite, defined as the `APP_LAUNCHER` constant in `@coms-portal/sdk` (path: `@coms-portal/sdk/constants/app-launcher`). Consumed by chrome, push notification routing, and access checks. Single source of truth.
 - **Single super-PWA** — the architectural target: one installable PWA at `coms.com`, one service worker, one manifest. Multiple product apps inside.
 - **Integration contract** — this document.
-- **Reference implementation** — heroes, post-Spec-02, with one known deviation (notifications remain app-local until the platform-notifications spec ships).
+- **Reference implementation** — two parallel apps prove the contract is framework-orthogonal: **heroes** (post-Spec-02, SvelteKit + Drizzle, the Svelte-side reference) and **fast** (post-Spec-05, Next.js + Prisma, the React-side reference). Both apps carry the same deviation (notifications remain app-local until the platform-notifications spec ships); both apps demonstrate the auth derivation, chrome integration, webhook consumption, app registry, and PWA installability shapes. Reading material:
+  - Svelte side: [`apps/heroes-web/README.md`](../apps/heroes-web/README.md) + [`apps/heroes-api/README.md`](../apps/heroes-api/README.md)
+  - React side: [`apps/fast/README.md`](../apps/fast/README.md)
+  - The cross-framework UI fork ADR ([ADR 0002](./adr/0002-cross-framework-ui-fork.md)) is what makes the parity sustainable.
