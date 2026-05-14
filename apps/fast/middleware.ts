@@ -55,7 +55,15 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-    // Skip framework-internal paths + the manifest + favicon. Everything else
-    // goes through the public allowlist + cookie check above.
-    matcher: ['/((?!_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|.*\\.png|.*\\.svg).*)'],
+    // Skip framework-internal paths + the manifest + favicon + the service
+    // worker. Everything else goes through the public allowlist + cookie
+    // check above.
+    //
+    // `sw.js` needs the carve-out because the browser fetches the worker
+    // script BEFORE any user signs in — a redirect to portal sign-in for
+    // `/fast/sw.js` means the worker never registers and the PWA fails
+    // installability. The other static assets (manifest.webmanifest, .png
+    // icons, .svg art) already have their own exclusions for the same
+    // reason; sw.js was simply missed at T68.
+    matcher: ['/((?!_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|sw\\.js|.*\\.png|.*\\.svg).*)'],
 };
