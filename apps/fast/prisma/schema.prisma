@@ -124,6 +124,46 @@ model User {
 // so no code touches the dropped tables before the SQL runs).
 
 // ==========================================
+// PORTAL BRIDGE (Spec 05 Phase 7 / T77 + T78)
+// ==========================================
+
+// Idempotency log for portal-issued webhooks. Spec 07 §11: every
+// inbound webhook carries `X-Portal-Event-Id`; the consumer inserts
+// this id on first receipt and short-circuits 200 on conflict, so
+// portal retries (the portal's at-least-once delivery shape) replay
+// the same event without re-running handlers. event_id is opaque
+// uuid; received_at is informational only — no TTL on this table
+// because portal_webhook_events is small relative to product tables
+// (~event_count × low-bytes) and the audit value of "did event X
+// ever land?" outweighs the storage cost.
+model PortalWebhookEvent {
+  eventId    String   @id @map("event_id")
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@map("portal_webhook_events")
+}
+
+// Projection of portal-owned org taxonomies (Spec 05 Phase 7 / T78).
+// Fast subscribes to the 'teams' taxonomy per spec07-register-fast.ts
+// — additional taxonomies land via `taxonomy.upserted` webhooks
+// without a schema change. Composite PK on (taxonomyId, key) so an
+// upsert can target the existing row when portal re-emits an entry.
+// Mirrors heroes' shape at packages/heroes-shared/src/db/schema/
+// taxonomy-cache.ts; the read-side query is one cheap lookup against
+// (taxonomyId, key) and value is the denormalised display snapshot
+// the portal sent at write time.
+model TaxonomyCache {
+  taxonomyId String   @map("taxonomy_id") @db.VarChar(64)
+  key        String   @db.VarChar(128)
+  value      String   @db.VarChar(255)
+  metadata   Json?
+  cachedAt   DateTime @default(now()) @map("cached_at") @db.Timestamptz(6)
+
+  @@id([taxonomyId, key])
+  @@map("taxonomy_cache")
+}
+
+// ==========================================
 // AHA SMART TRACKER MODELS (Migrated from Supabase)
 // ==========================================
 
