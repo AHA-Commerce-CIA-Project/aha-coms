@@ -60,7 +60,7 @@ const sectionConfigs: Record<string, NavSection> = {
     fast: {
         label: 'AHA Fast',
         items: [
-            { href: '/fast', icon: LayoutDashboard, label: 'Dashboard' },
+            { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
             { href: '/tasks', icon: CheckSquare, label: 'Tasks', hasBadge: true, badgeKey: 'tasks', subItems: [
                 { href: '/tasks', label: 'My Tasks' },
                 { href: '/my-request', label: 'My Request' },

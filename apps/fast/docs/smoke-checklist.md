@@ -158,14 +158,20 @@ Sign back in. Navigate to fast's admin surfaces (operator must have
 admin role on fast — `User.role = 'admin'` post-Spec-07
 app-config or via the `set-admin.ts` script).
 
-**Load-path verification** — every admin page renders without
-500-ing. Walk through these in order:
+**Load-path verification** — every admin-equivalent page renders
+without 500-ing. Fast's admin surfaces live flat (no `/admin/*`
+namespace today; the underlying architectural question of whether
+fast should grow one mirroring heroes' `/heroes/admin/*` is logged
+as an open follow-up under T87). Walk through these in order:
 
-1. `/fast/admin` (admin landing).
-2. `/fast/users` (user management).
-3. `/fast/admin/teams` (team settings; if route exists).
-4. `/fast/admin/changelog` (changelog publishing).
-5. `/fast/admin/audit-log` (activity log).
+1. `/fast/users` (fast's admin landing — the User Control Panel,
+   leader-gated via `requireLeader: true`).
+2. `/fast/users?tab=teams` (team settings via the Users page's
+   tab query).
+3. `/fast/users?tab=roles` (role assignment via the Users page's
+   tab query).
+4. `/fast/changelog` (changelog publishing).
+5. `/fast/activity-log` (activity log).
 
 For each: page renders with data, no console errors, no 5xx in
 DevTools Network tab.
