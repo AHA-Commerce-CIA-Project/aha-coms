@@ -217,8 +217,15 @@ export function Sidebar() {
                 // Hidden on mobile — TopNav module tabs handle navigation there.
                 // The sidebar's contextual sub-items still appear on tablets/desktop.
                 'hidden md:block',
-                'fixed left-0 top-16 z-40 bg-white border-r border-slate-200 transition-all duration-300 ease-in-out',
-                'h-[calc(100vh-4rem)]',
+                // Vertical offset accounts for BOTH bars on desktop: the
+                // 36px ServiceBar (fixed top-0, z-70) plus the 64px TopNav
+                // (sticky md:top-9, z-40) — totalling 100px. Pre-T72/T73 the
+                // Sidebar sat at `top-16` (64px) because only TopNav lived
+                // above. The hybrid mount added the ServiceBar; the Sidebar
+                // shifts down to clear TopNav's full sticky range and avoid
+                // overlapping the logo + module tabs on the left side.
+                'fixed left-0 top-[100px] z-40 bg-white border-r border-slate-200 transition-all duration-300 ease-in-out',
+                'h-[calc(100vh-100px)]',
                 expanded ? 'w-64 shadow-xl' : 'w-20'
             )}
         >
