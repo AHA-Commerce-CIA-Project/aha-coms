@@ -1,17 +1,10 @@
-import { Resend } from 'resend';
 import { getAppUrl } from '@/lib/appUrl';
 
-let _resend: Resend | null = null;
-function getResend(): Resend {
-  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
-  return _resend;
-}
-
-// On Resend free tier, can only send to verified email.
 const NOTIFICATION_EMAIL = process.env.RESEND_NOTIFICATION_EMAIL || 'alif.masyhur@ahacommerce.net';
 
-// Google Apps Script email sender - bypasses Resend free tier limitations
-// Can send to any email via Google Workspace
+// Google Apps Script is the sole delivery path; FU-18 retired the Resend
+// fallback because the free-tier sender could only deliver to one verified
+// inbox, making it a no-op for every real user.
 const APPS_SCRIPT_EMAIL_URL = process.env.APPS_SCRIPT_EMAIL_URL || '';
 const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET || 'aha-fast-email-secret-2026';
 
