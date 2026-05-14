@@ -18,60 +18,15 @@ resource "google_monitoring_notification_channel" "email" {
   }
 }
 
-# ── Uptime Check ──────────────────────────────────────────────────────────────
-
-resource "google_monitoring_uptime_check_config" "health" {
-  project      = var.project_id
-  display_name = "AHA Heroes — /heroes/api/health"
-  timeout      = "10s"
-  period       = "300s" # every 5 minutes
-
-  http_check {
-    path         = "/heroes/api/health"
-    port         = 443
-    use_ssl      = true
-    validate_ssl = true
-  }
-
-  monitored_resource {
-    type = "uptime_url"
-    labels = {
-      project_id = var.project_id
-      host       = replace(var.cloud_run_url, "https://", "")
-    }
-  }
-}
-
-# ── Alert: Uptime Check Failure ───────────────────────────────────────────────
-
-resource "google_monitoring_alert_policy" "uptime_failure" {
-  project      = var.project_id
-  display_name = "AHA Heroes — Uptime Check Failed"
-  combiner     = "OR"
-
-  conditions {
-    display_name = "Uptime check failure"
-    condition_threshold {
-      filter          = "resource.type = \"uptime_url\" AND metric.type = \"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.labels.check_id = \"${google_monitoring_uptime_check_config.health.uptime_check_id}\""
-      comparison      = "COMPARISON_GT"
-      threshold_value = 1
-      duration        = "0s"
-
-      aggregations {
-        alignment_period     = "300s"
-        per_series_aligner   = "ALIGN_NEXT_OLDER"
-        cross_series_reducer = "REDUCE_COUNT_FALSE"
-        group_by_fields      = ["resource.label.project_id"]
-      }
-    }
-  }
-
-  notification_channels = [google_monitoring_notification_channel.email.name]
-
-  alert_strategy {
-    auto_close = "1800s"
-  }
-}
+# ── Uptime Check + Uptime-Failure Alert: REMOVED via FU-21 always-warm audit
+# (2026-05-14). The 5-min probe was keeping heroes-api always-warm (~$2.50/mo
+# memory cost) and provided outage detection within ~10 min. Removing the
+# probe drops heroes-api to true scale-to-zero; the 5xx alert below remains as
+# the outage signal. Trade-off recorded: a service with zero traffic that's
+# silently broken won't trigger 5xx (no requests means no 5xx ratio), so
+# detection becomes reactive (operator/user-reported) rather than proactive.
+# Acceptable for admin-grade. Re-add the probe + uptime_failure alert here
+# if heroes' user-facing tolerance ever needs sub-30-min outage detection.
 
 # ── Alert: Cloud Run 5xx Error Rate ──────────────────────────────────────────
 # One policy per service so an api-only blip pages with the api service named

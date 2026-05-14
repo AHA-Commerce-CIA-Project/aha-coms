@@ -13,76 +13,15 @@ resource "google_monitoring_notification_channel" "email" {
   }
 }
 
-# ── Uptime Check ──────────────────────────────────────────────
-# T79 sealed `apps/fast/app/api/health/route.ts` returning 200 + a small
-# JSON body when prisma round-trips a trivial query, 503 otherwise.
-# The uptime check fires through Firebase Hosting (the public host
-# `aha-coms.web.app`), which rewrites `/fast/api/**` to coms-fast-web and
-# preserves the path verbatim. The container's Next.js basePath strips
-# `/fast` before route matching, so the route at `app/api/health/route.ts`
-# serves correctly.
-#
-# The alert policy ships `enabled = false` until the operator window
-# applies T80's IaC and confirms one full uptime-check cycle returns
-# success — flipping the alert live before then would page on every
-# pre-deploy 503.
-
-resource "google_monitoring_uptime_check_config" "health" {
-  project      = var.project_id
-  display_name = "AHA Fast — /fast/api/health"
-  timeout      = "10s"
-  period       = "300s"
-
-  http_check {
-    path         = "/fast/api/health"
-    port         = 443
-    use_ssl      = true
-    validate_ssl = true
-  }
-
-  monitored_resource {
-    type = "uptime_url"
-    labels = {
-      project_id = var.project_id
-      host       = "aha-coms.web.app"
-    }
-  }
-}
-
-# ── Alert: Uptime Check Failure ───────────────────────────────
-
-resource "google_monitoring_alert_policy" "uptime_failure" {
-  project      = var.project_id
-  display_name = "AHA Fast — Uptime Check Failed"
-  combiner     = "OR"
-
-  # Disabled until T79 lands /fast/api/health. Enable in the same operator
-  # window that ships the health route handler.
-  enabled = false
-
-  conditions {
-    display_name = "Uptime check failure"
-    condition_threshold {
-      filter          = "resource.type = \"uptime_url\" AND metric.type = \"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.labels.check_id = \"${google_monitoring_uptime_check_config.health.uptime_check_id}\""
-      comparison      = "COMPARISON_GT"
-      threshold_value = 1
-      duration        = "0s"
-
-      aggregations {
-        alignment_period     = "300s"
-        per_series_aligner   = "ALIGN_NEXT_OLDER"
-        cross_series_reducer = "REDUCE_COUNT_FALSE"
-        group_by_fields      = ["resource.label.project_id"]
-      }
-    }
-  }
-
-  notification_channels = [google_monitoring_notification_channel.email.name]
-
-  alert_strategy {
-    auto_close = "1800s"
-  }
-}
+# ── Uptime Check + Uptime-Failure Alert: REMOVED via FU-21 always-warm audit
+# (2026-05-14). The 5-min probe at `/fast/api/health` (sealed by T79) was
+# providing outage detection within ~10 min, redundant against fast-web's
+# `min=1` always-warm shape (Path X kept). The probe was costing ~$0 directly
+# but stayed as a noise generator on every plan and kept an alert resource
+# whose `enabled = false` was a historical "until T79 lands" deferral that
+# never flipped. Removing the probe + dependent uptime_failure alert. The
+# 5xx alert below remains as the outage signal. Re-add the probe here if
+# fast's user-facing SLO ever needs sub-30-min proactive detection.
 
 # ── Alert: Cloud Run 5xx Error Rate ───────────────────────────
 

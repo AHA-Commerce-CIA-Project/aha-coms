@@ -73,6 +73,12 @@ resource "google_cloud_run_v2_service" "coms_portal_api" {
           cpu    = "1"
           memory = "512Mi"
         }
+        # FU-21 always-warm audit (2026-05-14): CPU throttles when idle.
+        # Portal is admin-grade — sub-second cold-path latency is fine;
+        # 24/7-allocated CPU was unnecessary spend (~$46/mo/service if a
+        # probe ever induced warmth). Heroes' cloud-run.tf carries the
+        # same setting; fast keeps `cpu_idle = false` per Op-7's Path X.
+        cpu_idle = true
       }
 
       volume_mounts {
@@ -248,6 +254,12 @@ resource "google_cloud_run_v2_service" "coms_portal_web" {
           cpu    = "1"
           memory = "512Mi"
         }
+        # FU-21 always-warm audit (2026-05-14): CPU throttles when idle.
+        # Portal is admin-grade — sub-second cold-path latency is fine;
+        # 24/7-allocated CPU was unnecessary spend (~$46/mo/service if a
+        # probe ever induced warmth). Heroes' cloud-run.tf carries the
+        # same setting; fast keeps `cpu_idle = false` per Op-7's Path X.
+        cpu_idle = true
       }
 
       # SvelteKit SSR's hooks.server.ts calls into portal-api's services/auth
