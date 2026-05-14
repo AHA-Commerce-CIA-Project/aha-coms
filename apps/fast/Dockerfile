@@ -63,7 +63,13 @@ COPY packages/design-tokens packages/design-tokens
 # apps/fast/.next/standalone/{server.js, ...} plus apps/fast/.next/static/.
 RUN NODE_ENV=production bun run --filter @coms-portal/fast build
 
-FROM node:20-slim AS runtime
+# Bullseye (Debian 11) carries libssl1.1 — Prisma's runtime detection picks
+# the debian-openssl-1.1.x query engine binary; without libssl1.1 the engine
+# fails to load. node:20-slim defaults to Bookworm (Debian 12) which only
+# ships libssl3, so the 1.1.x binary can't link. Pinning to bullseye-slim
+# matches what Prisma is detecting and keeps the runtime stage's libssl
+# layer aligned with the binary picked at startup.
+FROM node:20-bullseye-slim AS runtime
 LABEL org.opencontainers.image.title="COMS Fast" \
       org.opencontainers.image.description="Next.js standalone — AHA Smart Tracker"
 WORKDIR /app
