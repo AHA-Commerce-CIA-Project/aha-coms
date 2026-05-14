@@ -418,17 +418,10 @@ export function TopNav() {
                 })}
             </nav>
 
-            {/* Right cluster */}
+            {/* Right cluster — fast-specific only; theme toggle + profile/identity
+                live in the suite ServiceBar above (Phase 6 chrome cleanup, 2026-05-14).
+                Profile Settings + Changelog moved to the Sidebar footer in the same pass. */}
             <div className="flex items-center gap-1 pl-4 shrink-0">
-                {/* Theme toggle */}
-                <button
-                    onClick={toggleTheme}
-                    className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                >
-                    {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                </button>
-
                 {/* Notifications */}
                 <div className="relative" ref={notifRef}>
                     <button
@@ -536,71 +529,11 @@ export function TopNav() {
                     )}
                 </div>
 
-                {/* Profile menu */}
-                <div className="relative" ref={userMenuRef}>
-                    <button
-                        onClick={() => { setShowDropdown(!showDropdown); setShowNotifs(false); }}
-                        className="flex items-center gap-3 pl-3 ml-2 border-l border-white/15 hover:opacity-80"
-                    >
-                        <div className="text-right hidden sm:block">
-                            <p className="text-sm font-semibold text-white">{displayName}</p>
-                            <p className="text-[11px] text-white/70 capitalize flex items-center gap-1 justify-end">
-                                {isLeader && <Shield className="w-3 h-3" />}
-                                {displayRole === 'admin' ? 'Master' : displayRole === 'leader' ? 'Leader' : displayRole}
-                            </p>
-                        </div>
-                        <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center overflow-hidden">
-                            {profile?.avatar_url ? (
-                                <img src={profile.avatar_url} alt={displayName} className="w-9 h-9 rounded-full object-cover" />
-                            ) : (
-                                <span className="text-white font-bold text-sm">{displayName.charAt(0).toUpperCase()}</span>
-                            )}
-                        </div>
-                    </button>
-                    {showDropdown && (
-                        <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50">
-                            {user ? (
-                                <>
-                                    <div className="px-4 py-3 border-b border-slate-100">
-                                        <p className="text-sm font-medium text-slate-800 truncate">{profile?.email || user.email}</p>
-                                        <p className="text-xs text-slate-500 capitalize">{displayRole}</p>
-                                    </div>
-                                    <Link
-                                        href="/profile"
-                                        onClick={() => setShowDropdown(false)}
-                                        className="w-full px-4 py-3 flex items-center gap-2 text-sm text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
-                                    >
-                                        <User className="w-4 h-4" />
-                                        Profile Settings
-                                    </Link>
-                                    <Link
-                                        href="/changelog"
-                                        onClick={() => setShowDropdown(false)}
-                                        className="w-full px-4 py-3 flex items-center gap-2 text-sm text-slate-600 hover:text-indigo-600 hover:bg-slate-50 border-t border-slate-100"
-                                    >
-                                        <Sparkles className="w-4 h-4" />
-                                        Changelog
-                                    </Link>
-                                    <button
-                                        onClick={() => { signOut(); setShowDropdown(false); }}
-                                        className="w-full px-4 py-3 flex items-center gap-2 text-sm text-slate-600 hover:text-rose-600 hover:bg-slate-50 border-t border-slate-100"
-                                    >
-                                        <LogOut className="w-4 h-4" />
-                                        Sign out
-                                    </button>
-                                </>
-                            ) : (
-                                <a
-                                    href="/portal?app=fast"
-                                    className="block px-4 py-3 text-sm text-slate-600 hover:bg-slate-50"
-                                    onClick={() => setShowDropdown(false)}
-                                >
-                                    Sign in
-                                </a>
-                            )}
-                        </div>
-                    )}
-                </div>
+                {/* Profile menu removed in the 2026-05-14 chrome cleanup — the
+                    suite ServiceBar's AccountWidget covers name/role/email,
+                    Manage Account, and Sign out as cross-app surfaces. Profile
+                    Settings and Changelog moved to the Sidebar footer (fast-
+                    specific destinations live with fast's in-app nav). */}
             </div>
 
             {/* Toast popups — anchored just under the topnav, top-right. Only
