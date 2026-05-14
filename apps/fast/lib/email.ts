@@ -246,8 +246,6 @@ interface TaskCompletedEmailData {
 }
 
 export async function sendTaskCompletedEmail(data: TaskCompletedEmailData) {
-  if (!process.env.RESEND_API_KEY) return false;
-
   const appUrl = getAppUrl();
   const trackUrl = `${appUrl}/track?token=${data.taskToken}`;
 
@@ -309,22 +307,7 @@ export async function sendTaskCompletedEmail(data: TaskCompletedEmailData) {
     recipients.push(data.requesterEmail);
   }
 
-  const sent = await sendViaAppsScript(recipients, subject, htmlBody);
-  if (sent) return true;
-
-  try {
-    const result = await getResend().emails.send({
-      from: 'AHA FAST <onboarding@resend.dev>',
-      to: recipients,
-      subject,
-      html: htmlBody,
-    });
-    if (result.error) { console.error('Resend error:', result.error); return false; }
-    return true;
-  } catch (err) {
-    console.error('Failed to send task completed email:', err);
-    return false;
-  }
+  return await sendViaAppsScript(recipients, subject, htmlBody);
 }
 
 // ==========================================
