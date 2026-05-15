@@ -187,3 +187,42 @@ Not permanent. Revisit when any of:
   the PR template prompts.
 - `.github/CODEOWNERS` — the routing map.
 - `.github/pull_request_template.md` — the soft PR-description prompt.
+
+## 2026-05-15 addendum — review requirement relaxed
+
+The ruleset's `pull_request` rule was edited via the GitHub Settings UI:
+`required_approving_review_count` lowered from `1` to `0`;
+`require_code_owner_reviews` flipped from `true` to `false`. Force-push
+and deletion blocks stay in place. Status checks (`Typecheck & unit
+tests`, `Lint hardcoded URLs`) stay required and remain the only hard
+gate before merge.
+
+**Why.** Two-dev cadence (@mrdoorba + @alifm17). Every fast PR routed
+through @mrdoorba's queue, and the bilateral review ceremony was
+landing on doc-rot sweeps and unverified popover-clipping claims —
+real work, but not load-bearing enough to justify the latency it
+added to the fast engineer's loop. The CI checks catch the structural
+breakage (typecheck against the generated Prisma client, hardcoded
+URL drift); review was catching polish. Relaxing inverts the default
+— review becomes opt-in via PR comment, not a synchronous gate.
+
+**What stays the same.** The Sequence 0 team + bypass-actor model
+(§Decision 1–2) is unchanged. CODEOWNERS routing is unchanged — PRs
+still auto-request @mrdoorba on `/packages/`, `/infra/`, `/.github/`,
+and co-owned `/apps/fast/` paths; the request is now advisory. The
+`Sequence 0` team's `bypass_mode: always` remains the mechanism for
+@mrdoorba's direct-push windows (force-push windows still need legacy
+protection's relax-restore dance per Reopen criteria §2).
+
+**Reopen criteria additions.**
+
+4. **A substantive merge lands broken because no one read it.** If
+   the relaxed gate produces a regression on `main` that a
+   synchronous reviewer would have caught — a typecheck-evading
+   runtime bug, a security-shaped change to `/auth`, a schema
+   migration without coordination — restore
+   `required_approving_review_count: 1` and document the trigger
+   here.
+5. **A third engineer joins.** Two-dev trust is the load-bearing
+   assumption; a third party shifts the calculus. Re-evaluate
+   against their scope rather than auto-applying the relaxed shape.
