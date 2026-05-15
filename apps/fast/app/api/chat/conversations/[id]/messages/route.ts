@@ -113,75 +113,83 @@ export async function POST(
         return NextResponse.json({ error: 'Message content or attachments are required' }, { status: 400 });
     }
 
-    const [message] = await prisma.$transaction([
-        prisma.directMessage.create({
-            data: {
-                conversationId,
-                senderId: userId,
-                content: messageContent,
-                attachments: messageAttachments,
-            },
-            include: {
-                sender: {
-                    select: { id: true, name: true, image: true },
-                },
-            },
-        }),
-        prisma.conversation.update({
-            where: { id: conversationId },
-            data: { updatedAt: new Date() },
-        }),
-        // Also update the sender's lastReadAt
-        prisma.conversationParticipant.update({
-            where: {
-                conversationId_userId: { conversationId, userId },
-            },
-            data: { lastReadAt: new Date() },
-        }),
-    ]);
-
-    // Notification preview should mirror what the recipient will see — strip
-    // HTML so the toast and bell list don't show raw `<br>` / mention-chip
-    // markup.
-    const plainForNotif = htmlToPlainText(messageContent);
-
-    // Create a notification for the other participant
-    const otherParticipant = await prisma.conversationParticipant.findFirst({
-        where: {
+    // Critical path — create the message and respond. Side effects (sidebar
+    // ordering bump, sender read-marker, recipient notification) are deferred
+    // to a fire-and-forget block below so the perceived send latency stays
+    // tight. Cloud Run keeps min=1 instance alive between requests, so the
+    // deferred work resolves on the same instance without blocking the
+    // response.
+    const message = await prisma.directMessage.create({
+        data: {
             conversationId,
-            userId: { not: userId },
+            senderId: userId,
+            content: messageContent,
+            attachments: messageAttachments,
+        },
+        include: {
+            sender: {
+                select: { id: true, name: true, image: true },
+            },
         },
     });
 
-    if (otherParticipant) {
-        let notifMessage = plainForNotif;
-        if (!notifMessage && messageAttachments.length > 0) {
-            notifMessage = `📎 Sent ${messageAttachments.length} file${messageAttachments.length > 1 ? 's' : ''}`;
-        }
-        await prisma.notification.create({
-            data: {
-                userId: otherParticipant.userId,
-                type: 'dm_message',
-                title: `New message from ${session.user.name}`,
-                message: notifMessage.length > 80
-                    ? notifMessage.substring(0, 80) + '...'
-                    : notifMessage,
-                data: {
-                    conversation_id: conversationId,
-                    sender_id: userId,
-                    sender_name: session.user.name,
-                },
-            },
-        });
-    }
+    void (async () => {
+        try {
+            await prisma.conversation.update({
+                where: { id: conversationId },
+                data: { updatedAt: new Date() },
+            });
+            await prisma.conversationParticipant.update({
+                where: { conversationId_userId: { conversationId, userId } },
+                data: { lastReadAt: new Date() },
+            });
 
+            const otherParticipant = await prisma.conversationParticipant.findFirst({
+                where: { conversationId, userId: { not: userId } },
+            });
+            if (!otherParticipant) return;
+
+            const plainForNotif = htmlToPlainText(messageContent);
+            let notifMessage = plainForNotif;
+            if (!notifMessage && messageAttachments.length > 0) {
+                notifMessage = `📎 Sent ${messageAttachments.length} file${messageAttachments.length > 1 ? 's' : ''}`;
+            }
+            await prisma.notification.create({
+                data: {
+                    userId: otherParticipant.userId,
+                    type: 'dm_message',
+                    title: `New message from ${session.user.name}`,
+                    message: notifMessage.length > 80
+                        ? notifMessage.substring(0, 80) + '...'
+                        : notifMessage,
+                    data: {
+                        conversation_id: conversationId,
+                        sender_id: userId,
+                        sender_name: session.user.name,
+                    },
+                },
+            });
+        } catch (err) {
+            console.error('DM POST side effects failed:', err);
+        }
+    })();
+
+    // Canonical message shape — matches the GET response and the SSE payload
+    // so the client doesn't need a special-case normaliser for the optimistic
+    // send path. The previous shape (flat senderName/senderImage) only
+    // worked because the prior client ignored the response and refetched.
     return NextResponse.json({
         id: message.id,
+        conversationId: message.conversationId,
+        senderId: message.senderId,
+        sender: { id: message.sender.id, name: message.sender.name, image: message.sender.image },
         content: message.content,
         attachments: message.attachments || [],
-        senderId: message.senderId,
-        senderName: message.sender.name,
-        senderImage: message.sender.image,
+        type: 'text',
+        taskId: null,
+        taskSnapshot: null,
+        isEdited: false,
+        reactions: [],
         createdAt: message.createdAt.toISOString(),
     }, { status: 201 });
 }
