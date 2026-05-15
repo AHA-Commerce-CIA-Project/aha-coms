@@ -182,8 +182,14 @@ pinned to v1 via `infra/fast/cloud-run.tf:153`). Two remain for you:
 
 - `apps/fast/README.md` — application surface (routes, features, schemas).
 - `apps/fast/PROJECT_CONTEXT.md` — pre-integration architectural context.
-- `tasks/todo.md` — running corridor of follow-ups. Search `FU-18`, `FU-19`,
-  `FU-20`, `FU-21` for fast-related items.
+- `tasks/todo.md` — running corridor of follow-ups. Search `FU-18`,
+  `FU-19`, `FU-20`, `FU-21`, `FU-22`, `FU-23`, `FU-24`, `FU-25`, `FU-26`
+  for fast- or access-related items.
 - `tasks/plan.md` — Spec 05 plan documenting the migration.
 - `infra/README.md` — laptop-CLI runbook for `tofu apply`.
-- `~/.claude/skills/mr-door/SKILL.md` — Mr. Door voice spec.
+- `docs/adr/0011-fast-keeps-prisma.md` — why fast keeps Prisma when the
+  rest of the suite is on Drizzle; the per-app exception's reopen
+  criteria.
+- `docs/adr/0012-sequence-0-main-protection.md` — the ruleset +
+  CODEOWNERS + Sequence 0 bypass-team model that decides why your PRs
+  block on @mrdoorba's review.
