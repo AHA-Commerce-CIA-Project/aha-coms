@@ -14,6 +14,7 @@ module "monitoring" {
   cloud_run_service_name  = google_cloud_run_v2_service.coms_fast_web.name
   cloud_sql_instance_name = data.google_sql_database_instance.fast.name
   alert_email             = var.alert_email
+  labels                  = local.fast_labels
 }
 
 module "github_wif" {

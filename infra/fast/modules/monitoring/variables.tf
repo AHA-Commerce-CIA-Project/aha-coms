@@ -16,3 +16,8 @@ variable "alert_email" {
   description = "Email address for monitoring alert notifications."
   type        = string
 }
+
+variable "labels" {
+  description = "GCP resource labels applied as `user_labels` on alert policies and notification channels. The caller passes `local.fast_labels` to satisfy standing principle 4 — every label-able fast resource in this state carries the shared label set."
+  type        = map(string)
+}

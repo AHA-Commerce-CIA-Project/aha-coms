@@ -13,9 +13,13 @@ resource "google_monitoring_notification_channel" "email" {
   project      = var.project_id
   display_name = "AHA Heroes Alerts"
   type         = "email"
+  # `labels` here is the channel-type-specific config (email_address for
+  # `type = "email"`), NOT GCP resource labels. `user_labels` below is the
+  # principle-4 label set.
   labels = {
     email_address = var.alert_email
   }
+  user_labels = var.labels
 }
 
 # ── Uptime Check + Uptime-Failure Alert: REMOVED via FU-21 always-warm audit
@@ -60,6 +64,8 @@ resource "google_monitoring_alert_policy" "cloud_run_5xx" {
   alert_strategy {
     auto_close = "1800s"
   }
+
+  user_labels = var.labels
 }
 
 # ── Alert: Cloud SQL CPU > 80% ───────────────────────────────────────────────
@@ -89,5 +95,7 @@ resource "google_monitoring_alert_policy" "cloud_sql_cpu" {
   alert_strategy {
     auto_close = "1800s"
   }
+
+  user_labels = var.labels
 }
 

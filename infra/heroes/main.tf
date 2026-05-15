@@ -35,6 +35,7 @@ module "monitoring" {
   cloud_run_url           = google_cloud_run_v2_service.coms_heroes_api.uri
   cloud_sql_instance_name = module.cloud_sql.instance_name
   alert_email             = var.alert_email
+  labels                  = local.heroes_labels
 }
 
 module "sheet_sync" {

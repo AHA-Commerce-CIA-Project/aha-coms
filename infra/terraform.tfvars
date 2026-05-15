@@ -21,8 +21,8 @@ sheets_personal_email_tab = "HEROES - Fulltime Staff"
 # destroy when mail_transport defaulted back to stdout). Lifted into tfvars
 # now so every apply converges against the live runtime shape; the README's
 # "pass at the CLI" section is rewritten accordingly.
-service_url               = "https://coms-portal-api-45tyczfska-et.a.run.app"
-mail_transport            = "brevo"
-brevo_from                = "handers.the@ahacommerce.net"
-bootstrap_admin_email     = "handers.the@ahacommerce.net"
-bootstrap_admin_name      = "Mr. Door"
+service_url           = "https://coms-portal-api-45tyczfska-et.a.run.app"
+mail_transport        = "brevo"
+brevo_from            = "handers.the@ahacommerce.net"
+bootstrap_admin_email = "handers.the@ahacommerce.net"
+bootstrap_admin_name  = "Mr. Door"

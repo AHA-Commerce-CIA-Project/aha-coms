@@ -138,7 +138,7 @@ locals {
   }
 
   fast_runtime_secret_env = {
-    DATABASE_URL         = { secret = var.secret_id_db_url,              version = "latest" }
+    DATABASE_URL         = { secret = var.secret_id_db_url, version = "latest" }
     GOOGLE_CLIENT_SECRET = { secret = var.secret_id_google_client_secret, version = "latest" }
 
     # APPS_SCRIPT_SECRET pinned to version 1 during the FU-19 (b) handoff
