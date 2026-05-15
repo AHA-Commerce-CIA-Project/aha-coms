@@ -167,16 +167,22 @@ export function ChannelPane() {
       .catch(() => {});
   }, [session]);
 
-  // Fetch channels — scoped by the active purpose toggle.
+  // Fetch channels — scoped by the active purpose toggle. Always clears
+  // the loading state in a finally so a 5xx/4xx doesn't leave the
+  // spinner up forever — the previous shape only cleared loading on the
+  // success and exception paths, so a flat non-ok response (e.g. the
+  // pool-saturation 500s seen during the render-loop incident) left
+  // the sidebar stuck on the initial spinner even after the loop was
+  // resolved.
   const fetchChannels = useCallback(async () => {
     try {
       const res = await fetch(`/fast/api/channels?purpose=${encodeURIComponent(purpose)}`);
       if (res.ok) {
         const data = await res.json();
         setChannels(data);
-        setLoadingChannels(false);
       }
     } catch {
+    } finally {
       setLoadingChannels(false);
     }
   }, [purpose]);
