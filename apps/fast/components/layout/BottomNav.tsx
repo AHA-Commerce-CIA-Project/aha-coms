@@ -21,7 +21,7 @@ interface TabDef {
 }
 
 const PRIMARY_TABS: TabDef[] = [
-    { href: '/fast', icon: LayoutDashboard, label: 'Home', activePaths: ['/fast'] },
+    { href: '/dashboard', icon: LayoutDashboard, label: 'Home', activePaths: ['/fast'] },
     { href: '/tasks', icon: CheckSquare, label: 'Tasks', badgeKey: 'tasks', activePaths: ['/tasks', '/my-request', '/nexus', '/team-inbox', '/orbit'] },
     // Unified Messages workspace — DMs and channels share one tab now.
     { href: '/messages', icon: MessageCircle, label: 'Messages', badgeKey: 'messages', activePaths: ['/messages', '/channels'] },

@@ -137,11 +137,11 @@ function MessagesWorkspace() {
         // refetch the per-channel unread map so the index badges stay live.
         // /api/chat/stream does the same for DMs — we refetch the convo list
         // (which carries unreadCount per row) on every message tick.
-        const channelSse = new EventSource('/api/channels/stream');
+        const channelSse = new EventSource('/fast/api/channels/stream');
         channelSse.addEventListener('unread', () => {
             fetchUnread();
         });
-        const dmSse = new EventSource('/api/chat/stream');
+        const dmSse = new EventSource('/fast/api/chat/stream');
         dmSse.addEventListener('messages', () => {
             fetchConvos();
         });

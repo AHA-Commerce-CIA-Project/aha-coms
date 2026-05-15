@@ -336,7 +336,7 @@ export function ChannelPane() {
     if (!selectedChannel) return;
     fetchMessages(selectedChannel.id);
 
-    const es = new EventSource(`/api/channels/stream?channelId=${selectedChannel.id}`);
+    const es = new EventSource(`/fast/api/channels/stream?channelId=${selectedChannel.id}`);
 
     es.addEventListener('messages', (e) => {
       try {

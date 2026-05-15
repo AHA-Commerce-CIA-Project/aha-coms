@@ -54,12 +54,12 @@ interface ModuleTab {
 
 const MODULES: ModuleTab[] = [
     {
-        key: 'fast', label: 'AHA Fast', href: '/fast', icon: Zap,
+        key: 'fast', label: 'AHA Fast', href: '/dashboard', icon: Zap,
         // Orbit lives under AHA Fast now — surfaced via the My Tasks / Task Queue / AHA Orbit tab row
         // instead of a top-bar module.
         matchPaths: ['/fast', '/tasks', '/my-request', '/nexus', '/analytics', '/activity-log', '/later', '/channels', '/messages', '/orbit', '/team-inbox'],
         subItems: [
-            { label: 'Dashboard', href: '/fast' },
+            { label: 'Dashboard', href: '/dashboard' },
             {
                 label: 'Tasks', href: '/tasks',
                 subItems: [
@@ -184,7 +184,7 @@ export function TopNav() {
     // already loaded via the initial fetch.
     useEffect(() => {
         if (!user) return;
-        const es = new EventSource('/api/notifications/stream');
+        const es = new EventSource('/fast/api/notifications/stream');
         es.addEventListener('notification', (ev: MessageEvent) => {
             try {
                 const n: NotifItem = JSON.parse(ev.data);
@@ -243,8 +243,8 @@ export function TopNav() {
     const clearAll = async () => {
         try {
             const url = notifTab === 'dms'
-                ? '/api/notifications?type=dm_message'
-                : '/api/notifications';
+                ? '/fast/api/notifications?type=dm_message'
+                : '/fast/api/notifications';
             await fetch(url, { method: 'DELETE' });
             setNotifications(prev => notifTab === 'dms'
                 ? prev.filter(n => !isDmType(n.type))

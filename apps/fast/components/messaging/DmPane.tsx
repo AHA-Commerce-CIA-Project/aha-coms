@@ -405,7 +405,7 @@ export function DmPane() {
     useEffect(() => {
         if (!selected || !user) return;
 
-        const es = new EventSource(`/api/chat/stream?conversationId=${selected.id}`);
+        const es = new EventSource(`/fast/api/chat/stream?conversationId=${selected.id}`);
         es.addEventListener('messages', (e) => {
             try {
                 const newMsgs: DmMessage[] = JSON.parse(e.data);
