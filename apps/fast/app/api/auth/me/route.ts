@@ -16,9 +16,11 @@
  *
  * `appCatalog` lands as part of T74's chrome wiring — the cross-app
  * launcher list from portal-api's /api/userinfo flows through here
- * to the client-side useAuth() context so the SuiteServiceBar +
- * AccountWidget render the same set of apps everywhere without an
- * extra round trip.
+ * to the client-side useAuth() context so the TopNav's cross-app
+ * pills render the same set of apps everywhere without an extra
+ * round trip. (Pre-2026-05-15 the consumers were the SuiteServiceBar
+ * strip + the shared AccountWidget; both were folded into TopNav by
+ * PR #6's header consolidation.)
  *
  * The `profile` envelope mirrors the legacy `/api/profile` response so
  * the auth-context's "supplement with profile API for custom fields"

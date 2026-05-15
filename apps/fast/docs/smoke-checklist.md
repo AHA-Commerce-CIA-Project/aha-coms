@@ -406,7 +406,7 @@ has its second worked example.
 | Symptom | Probable cause | Recovery |
 |---|---|---|
 | Step 1 sign-in loops back to portal | `__session` cookie scope missing `Path=/` | DevTools → Application → Cookies; check `Path` column on `__session`. If wrong, audit portal-web's cookie-set handler |
-| Step 2 mobile shows two top bars | ServiceBar missing `hidden md:flex` (heroes' T47 Finding 2 mirror) | Audit `packages/ui-react/...` or fast's `SuiteServiceBar.tsx` for responsive classes |
+| Step 2 mobile pills/tabs crush the right cluster | After PR #6's header consolidation, cross-app pills and module tabs share one row with the right cluster (bell + theme + account); if the pills/tabs row wraps instead of horizontally scrolling, the bell/avatar can get crushed off-screen | Audit `components/layout/TopNav.tsx` — the cross-app `<nav aria-label="Switch app">` should be `shrink-0 whitespace-nowrap`, the module-tabs `<nav>` should carry `flex-1 min-w-0 overflow-x-auto`, the right cluster should be `pl-4 shrink-0` |
 | Step 3 cross-app nav forces re-auth | `__session` not surviving Firebase Hosting forwarding | Check `firebase.json` rewrites; the cookie should flow across all three app paths |
 | Step 4 admin page 500s | Server Component fetching its own `/api/*` route in a loopback | Heroes-T47-Finding-1 mirror; convert the loader to a direct `lib/` import |
 | Step 5 `/request` redirects to portal | Allowlist missing `/request` in middleware | Audit `apps/fast/middleware.ts:19` PUBLIC_PATH_PREFIXES |
