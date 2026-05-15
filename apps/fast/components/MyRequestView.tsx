@@ -1,9 +1,12 @@
 'use client';
 
-// MyRequestView — tasks the current user posted into channels via Direct
-// Assign, surfaced as a top-level Tasks tab. Same data + behavior as the
-// former "Posted Cards" Later tab (GET /api/tasks/posted-cards); just lives
-// under /my-request now so it sits next to My Tasks / Task Queue.
+// MyRequestView — every task the current user initiated, regardless of
+// whether it was posted into a channel (cross-division ask) or a direct
+// assignment to a specific member. The route filter behind GET
+// /api/tasks/posted-cards expanded in PR #23 from "channel-posted only"
+// to "anything I requested," so this tab now functions as a single
+// command center for initiators (e.g. a leader tracking their own
+// member-direct-assignments alongside their cross-team requests).
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -99,7 +102,7 @@ export function MyRequestView() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-800">My Request</h1>
-          <p className="text-sm text-slate-400">Tasks you posted to other divisions — track who claimed and completed each one.</p>
+          <p className="text-sm text-slate-400">Everything you initiated — cross-division channel posts and direct assignments to your team, in one place.</p>
         </div>
       </div>
 
@@ -156,11 +159,19 @@ export function MyRequestView() {
                   : card.status === 'todo' ? 'Open'
                   : card.status;
                 const statusCls = statusColor[card.status] || 'bg-slate-100 text-slate-600';
+                // Channel-posted cards jump into the source channel and
+                // highlight the original message; direct assignments (no
+                // channel) open the task detail in /nexus, mirroring how
+                // direct-assign cards already deep-link from DM threads.
+                const isChannelRequest = !!card.target_channel_id;
                 const goToCard = () => {
-                  if (!card.target_channel_id) return;
-                  const params = new URLSearchParams({ task: card.id, purpose: 'assign_task', channel: card.target_channel_id });
-                  if (card.channel_message_id) params.set('highlight', card.channel_message_id);
-                  router.push(`/messages?${params.toString()}`);
+                  if (isChannelRequest) {
+                    const params = new URLSearchParams({ task: card.id, purpose: 'assign_task', channel: card.target_channel_id! });
+                    if (card.channel_message_id) params.set('highlight', card.channel_message_id);
+                    router.push(`/messages?${params.toString()}`);
+                  } else {
+                    router.push(`/nexus?task=${encodeURIComponent(card.id)}&action=view`);
+                  }
                 };
                 return (
                   <li
@@ -176,6 +187,26 @@ export function MyRequestView() {
                         <StatusIcon className="w-3 h-3" />
                         {statusLabel}
                       </span>
+                      {/* Origin badge — discriminates how the user initiated the
+                          task. target_channel_id non-null = posted to a channel
+                          for any team member to claim ("Channel Request").
+                          Otherwise the task was assigned directly to a specific
+                          person via the Create Task modal ("Direct Assignment").
+                          The two flows live in different routes (/api/tasks/
+                          direct-assign for channel posts, the leader-created
+                          path for direct assignments), but both stamp the
+                          requester's email and surface here. */}
+                      {card.target_channel_id ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 text-indigo-600">
+                          <Hash className="w-3 h-3" />
+                          Channel Request
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-violet-50 text-violet-600">
+                          <Send className="w-3 h-3" />
+                          Direct Assignment
+                        </span>
+                      )}
                       {card.task_token && (
                         <span className="ml-auto font-mono text-[11px] text-indigo-500">{card.task_token}</span>
                       )}
@@ -210,7 +241,7 @@ export function MyRequestView() {
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
-                        Open in channel
+                        {isChannelRequest ? 'Open in channel' : 'View task'}
                       </button>
                     </div>
                   </li>

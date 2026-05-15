@@ -3,9 +3,22 @@ import { prisma } from '@/lib/db';
 import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET /api/tasks/posted-cards
-// All Direct Assign card tasks the current user posted into a channel,
-// regardless of who eventually claimed/completed them. Used by /later → Posted
-// Cards tab to give the poster a single tracking view across channels.
+// Every task the current user initiated, regardless of how — channel-posted
+// Direct Assign cards (cross-division asks), leader-created direct
+// assignments to specific members, request-form submissions filed under
+// the user's own email, and DM-spawned tasks. Powers the /my-request
+// "Command Center" view so initiators have one place to track everything
+// they've asked for.
+//
+// Filter is intentionally permissive: requesterEmail = me.email AND
+// source != 'queue'. The queue source is reserved for public form
+// submissions where the requester is typically an external partner who
+// happens to share an email with someone on the platform — those don't
+// belong in a personal tracker. Channel-deleted cards still show up so
+// initiators don't lose visibility on tasks whose source message was
+// removed (the previous shape filtered them out via channelMessageId
+// non-null; the frontend's "Channel Request" badge already degrades
+// gracefully when target_channel_id is null).
 export async function GET() {
     const session = await requireFastAuth();
     if (!session) {
@@ -20,17 +33,10 @@ export async function GET() {
         return NextResponse.json([], { status: 200 });
     }
 
-    // Match by requester email — that's how direct-assign and direct-assign-from-message
-    // both stamp posted cards, regardless of how the user signed in.
-    // Hide cards whose channel or source message has been deleted: both FKs use
-    // onDelete: SetNull, so a null on either field means the card is no longer
-    // reachable from a channel and shouldn't appear in the tracker.
     const tasks = await prisma.task.findMany({
         where: {
-            source: 'direct_assign',
             requesterEmail: me.email,
-            channelMessageId: { not: null },
-            targetChannelId: { not: null },
+            source: { not: 'queue' },
         },
         orderBy: { createdAt: 'desc' },
         include: {
