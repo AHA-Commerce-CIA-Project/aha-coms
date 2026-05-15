@@ -521,7 +521,7 @@ export default function RequestPage() {
                             Track Request
                         </Link>
                         <Link href="/" className="text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors">
-                            &larr; Back to AHA COMSS
+                            &larr; Back to AHA COMS
                         </Link>
                     </div>
                 </div>

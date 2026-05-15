@@ -127,7 +127,7 @@ export default function ChangelogPage() {
             <div className="flex items-start justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 mb-2">Changelog</h1>
-                    <p className="text-slate-500">What&apos;s new, improved, and fixed in AHA COMSS.</p>
+                    <p className="text-slate-500">What&apos;s new, improved, and fixed in AHA COMS.</p>
                 </div>
                 {isMaster && (
                     <button

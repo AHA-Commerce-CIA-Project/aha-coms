@@ -327,7 +327,7 @@ export async function sendAccountApprovedEmail(email: string, name: string) {
           Your AHA FAST account has been approved by a team leader. You can now log in and start using the platform.
         </p>
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${appUrl}/login" style="display: inline-block; background: #059669; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-size: 16px; font-weight: 700;">
+          <a href="${appUrl}" style="display: inline-block; background: #059669; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-size: 16px; font-weight: 700;">
             Log In Now
           </a>
         </div>
