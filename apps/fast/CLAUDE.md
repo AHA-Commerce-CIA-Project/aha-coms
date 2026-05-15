@@ -44,10 +44,15 @@ surface (routes, features, schemas) lives in `apps/fast/README.md` and
   step shares the pool with the live `coms-fast-web` revision, so a
   wedged pool will fail the step but unblock the runtime deploy (which
   connects via the Cloud Run socket, not the proxy). Proven in the
-  2026-05-15 pool-saturation incident: four sequential deploys
-  (`4cabd35`, `cd4f14e`, `1d6fdca`, `75298eb`) rode the token — the
-  first two invoked case (2) to break the wedged pool, the last two
-  carried by inertia while the pool drained.
+  2026-05-15 pool-saturation incident: five sequential deploys
+  (`4cabd35`, `cd4f14e`, `1d6fdca`, `75298eb`, plus this one riding
+  the my-direct-requests `'pending'` whitelist fix at `f8c49ea`) rode
+  the token — the first two invoked case (2) to break the wedged
+  pool, `75298eb` carried by inertia while the pool drained, and the
+  pool re-wedged 25 minutes later when PR #18 merged (db:push failed
+  with `FATAL: remaining connection slots are reserved for
+  non-replication superuser connections` on run 25910819034), needing
+  one more token ride to get the fix onto Cloud Run.
 - **Manual trigger**: deploys auto-fire on every push to `main` that matches
   the path filter above (see Trigger), so a manual kick is rarely needed.
   When it is — e.g. re-running after a transient failure on a no-op commit,
