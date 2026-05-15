@@ -37,7 +37,7 @@ variable "app_image" {
   default = "us-docker.pkg.dev/cloudrun/container/hello"
 }
 
-# ── Cloud SQL (existing aha-fast-db-instance) ─────────────────────────────────
+# ── Cloud SQL (aha-fast-db-instance) ──────────────────────────────────────────
 #
 # Per standing principle 1, fast carries its own Cloud SQL instance —
 # `aha-fast-db-instance-cd5db712` was provisioned pre-merge by aha-fast's
@@ -45,13 +45,15 @@ variable "app_image" {
 # Renaming Cloud SQL in place is not supported (recreate + DMS migration);
 # the naming wart stays as recorded in plan.md.
 #
-# infra/fast/ does NOT manage the DB instance itself — it references it via
-# `data.google_sql_database_instance` for the connection name. The instance,
-# its database, and its user remain under aha-fast's legacy terraform state
-# until a future window imports them here.
+# As of 2026-05-15 the instance + the `aha-fast-db` application database
+# are codified in `cloud-sql.tf` and held in this state. The SQL users
+# (`postgres`, `aha-fast-admin`) remain unmanaged because their passwords
+# are externally rotated through Secret Manager; pulling them in would
+# require declaring the password inline or wiring lifecycle ignore_changes,
+# which is a separate decision recorded as a future follow-up.
 
 variable "fast_db_instance_name" {
-  description = "Name of the existing Cloud SQL instance fast connects to. References the legacy aha-fast-* instance provisioned pre-merge; not managed by this state."
+  description = "Name of the Cloud SQL instance fast connects to — used as the `name` attribute on `google_sql_database_instance.fast` in cloud-sql.tf and as the lookup key for legacy references elsewhere. Renaming requires instance recreation + DMS migration; the naming wart from the pre-merge `alifm17/aha-fast` provisioning carries forward."
   type        = string
   default     = "aha-fast-db-instance-cd5db712"
 }

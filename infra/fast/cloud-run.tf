@@ -17,13 +17,6 @@
 # same shape heroes uses.
 ############################################################
 
-# ── External lookups ──────────────────────────────────────────
-
-data "google_sql_database_instance" "fast" {
-  project = var.project_id
-  name    = var.fast_db_instance_name
-}
-
 # ── Runtime service account ───────────────────────────────────
 
 resource "google_service_account" "fast_web_runtime" {
@@ -234,7 +227,7 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
     volumes {
       name = "cloudsql"
       cloud_sql_instance {
-        instances = [data.google_sql_database_instance.fast.connection_name]
+        instances = [google_sql_database_instance.fast.connection_name]
       }
     }
 

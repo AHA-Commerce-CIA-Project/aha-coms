@@ -10,7 +10,7 @@ output "artifact_registry_hostname" {
 
 output "cloud_sql_connection_name" {
   description = "Cloud SQL instance connection name (aha-fast-db-instance-*) for Auth Proxy + Cloud Run socket mount"
-  value       = data.google_sql_database_instance.fast.connection_name
+  value       = google_sql_database_instance.fast.connection_name
 }
 
 output "cloud_run_service_account" {
