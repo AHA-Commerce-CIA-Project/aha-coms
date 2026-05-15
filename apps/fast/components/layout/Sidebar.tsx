@@ -144,47 +144,12 @@ export function Sidebar() {
         if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     }, []);
     const expanded = sidebarOpen || sidebarHovered;
-    const [unreadCount, setUnreadCount] = useState(0);
-    const [orbitUnclaimedCount, setOrbitUnclaimedCount] = useState(0);
-    const [changelogUnseenCount, setChangelogUnseenCount] = useState(0);
-    const [dmUnreadCount, setDmUnreadCount] = useState(0);
+    // Badge counts come from the shared BadgePoller mounted once in AppShell.
+    // The old per-Sidebar 5s poll duplicated BottomNav's; both surfaces now
+    // read the same store slice.
+    const { channelsUnread: unreadCount, orbitUnclaimed: orbitUnclaimedCount, changelogUnseen: changelogUnseenCount, dmUnread: dmUnreadCount } =
+        useAppStore((s) => s.badgeCounts);
     const [storageInfo, setStorageInfo] = useState<{ usedGB: number; totalGB: number; availableGB: number; usagePercent: number } | null>(null);
-
-    // Poll badge counts
-    useEffect(() => {
-        if (!user) return;
-
-        const fetchBadges = async () => {
-            try {
-                const [channelRes, orbitRes, changelogRes, dmRes] = await Promise.all([
-                    fetch('/fast/api/channels/unread'),
-                    fetch('/fast/api/orbit/unclaimed'),
-                    fetch('/fast/api/changelog'),
-                    fetch('/fast/api/chat/unread'),
-                ]);
-                if (channelRes.ok) {
-                    const data = await channelRes.json();
-                    setUnreadCount(data.unreadCount || 0);
-                }
-                if (orbitRes.ok) {
-                    const data = await orbitRes.json();
-                    setOrbitUnclaimedCount(data.unclaimedCount || 0);
-                }
-                if (changelogRes.ok) {
-                    const data = await changelogRes.json();
-                    setChangelogUnseenCount(data.unseenCount || 0);
-                }
-                if (dmRes.ok) {
-                    const data = await dmRes.json();
-                    setDmUnreadCount(data.unreadCount || 0);
-                }
-            } catch { }
-        };
-
-        fetchBadges();
-        const interval = setInterval(fetchBadges, 5000);
-        return () => clearInterval(interval);
-    }, [user]);
 
     // Fetch storage info
     useEffect(() => {

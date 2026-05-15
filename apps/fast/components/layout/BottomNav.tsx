@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -8,6 +8,7 @@ import {
     BarChart3, Activity, Bookmark, FileText, Users, Sparkles, Shield, LogOut, X,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth/use-auth';
+import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 
 interface TabDef {
@@ -44,35 +45,15 @@ export function BottomNav() {
 
     const [moreOpen, setMoreOpen] = useState(false);
 
-    // The Messages tab badge sums channel + DM unread, since they're now one nav entry.
-    const [badges, setBadges] = useState({ tasks: 0, messages: 0, changelog: 0 });
-
-    // Reuse the same endpoints the Sidebar polls so badge state stays in sync
-    // even though the two nav surfaces fetch independently. Cheap — endpoints
-    // are tiny aggregates.
-    useEffect(() => {
-        if (!user) return;
-        const tick = async () => {
-            try {
-                const [channelRes, dmRes, changelogRes] = await Promise.all([
-                    fetch('/fast/api/channels/unread'),
-                    fetch('/fast/api/chat/unread'),
-                    fetch('/fast/api/changelog'),
-                ]);
-                const next = { ...badges };
-                const channelUnread = channelRes.ok ? ((await channelRes.json()).unreadCount || 0) : 0;
-                const dmUnread = dmRes.ok ? ((await dmRes.json()).unreadCount || 0) : 0;
-                next.messages = channelUnread + dmUnread;
-                if (changelogRes.ok) next.changelog = (await changelogRes.json()).unseenCount || 0;
-                setBadges(next);
-            } catch {}
-        };
-        tick();
-        const id = setInterval(tick, 5000);
-        return () => clearInterval(id);
-    // We deliberately don't depend on `badges` — would loop. The poll always reads fresh values.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user]);
+    // Badge state lives in the store, fed by &lt;BadgePoller&gt; mounted once in
+    // AppShell — Sidebar reads the same slice, so the two chrome surfaces
+    // can't drift.
+    const counts = useAppStore((s) => s.badgeCounts);
+    const badges = {
+        tasks: 0,
+        messages: counts.channelsUnread + counts.dmUnread,
+        changelog: counts.changelogUnseen,
+    };
 
     if (!user) return null;
 

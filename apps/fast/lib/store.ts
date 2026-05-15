@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Task, Project, User, ProjectTemplate, TaskStatus, TaskPriority } from './types';
 import { mockUsers, mockProjects, mockTasks, mockTemplates } from './mock-data';
 import type { UserProfile } from './user-profile-types';
+import { ZERO_BADGE_COUNTS, type BadgeCounts } from './badge-counts';
 
 // Shape consumed by &lt;ChannelHeader&gt; when rendered inline in the workspace's
 // top tab row. Callbacks should be useCallback-stabilised by the publisher
@@ -81,6 +82,11 @@ interface AppState {
     // unmount/deselect; MessagesWorkspace reads it and renders &lt;ChannelHeader&gt;.
     chatHeader: ChatHeaderState | null;
 
+    // Cross-chrome badge counts (Sidebar + BottomNav). A single &lt;BadgePoller&gt;
+    // mounted in AppShell drives the poll; both nav surfaces read from here
+    // instead of running their own intervals.
+    badgeCounts: BadgeCounts;
+
     // Actions
     setSelectedProject: (id: string | null) => void;
     setSelectedTask: (id: string | null) => void;
@@ -100,6 +106,7 @@ interface AppState {
     notifyChannelPinned: () => void;
     setProfileUser: (user: UserProfile | null, opts?: { showAddToConversation?: boolean; hideSendDm?: boolean }) => void;
     setChatHeader: (state: ChatHeaderState | null) => void;
+    setBadgeCounts: (counts: BadgeCounts) => void;
 
     // Task Actions
     addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
@@ -152,6 +159,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     profileShowAddToConversation: false,
     profileHideSendDm: false,
     chatHeader: null,
+    badgeCounts: ZERO_BADGE_COUNTS,
 
     // UI Actions
     setSelectedProject: (id) => set({ selectedProjectId: id }),
@@ -177,6 +185,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         profileHideSendDm: user ? !!opts?.hideSendDm : false,
     }),
     setChatHeader: (state) => set({ chatHeader: state }),
+    setBadgeCounts: (counts) => set({ badgeCounts: counts }),
 
     // Task Actions
     addTask: (taskData) => set((state) => ({

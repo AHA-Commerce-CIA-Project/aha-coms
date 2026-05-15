@@ -9,6 +9,7 @@ import { SuiteServiceBar } from '@/components/layout/SuiteServiceBar';
 import { DirectAssignModal } from '@/components/DirectAssignModal';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { UserProfilePanel } from '@/components/UserProfilePanel';
+import { BadgePoller } from '@/components/BadgePoller';
 import { useAuth } from '@/lib/auth/use-auth';
 
 const PUBLIC_ROUTES = ['/request', '/track'];
@@ -40,6 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     return (
         <div className="min-h-screen bg-slate-50 text-slate-900">
+            <BadgePoller />
             <SuiteServiceBar />
             <TopNav />
             <Suspense fallback={null}>
