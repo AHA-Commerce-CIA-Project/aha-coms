@@ -47,22 +47,63 @@ surface (routes, features, schemas) lives in `apps/fast/README.md` and
 
 ## Code modification
 
-- **Commit voice = Mr. Door**, every commit, PR title + body, and issue title
-  + body. Formal/archaic voice anchored to concrete technical detail; every
-  commit ends with the literal `Author: Mr. Door` anchor. **NO
-  `Co-Authored-By: Claude` lines, NO `🤖 Generated with [Claude Code]`
-  footers** — Claude Code's defaults add these and the repo's PreToolUse hook
-  at `~/.claude/hooks/mr-door-check` blocks them. The spec lives at
-  `~/.claude/skills/mr-door/SKILL.md`; use `/mr-door` to re-invoke it on a
-  draft.
+- **Commit format.** Plain technical English. The title is a verb +
+  em-dash + technical consequence (e.g. `Fix SSE channel leak — abort
+  signal now closes the interval on disconnect`). The body explains the
+  why. Every commit ends with exactly these four trailers — and only
+  these. **NO `Co-Authored-By: Claude` line, NO `🤖 Generated with
+  [Claude Code]` footer.** Claude Code's defaults insert both; strip
+  them before committing.
+
+      Confidence: high | medium | low
+      Scope-risk: <one-line description of blast radius if wrong>
+      Tested: <what you actually ran to verify>
+      Related: <FU-IDs, ADR refs, file:line refs, or `none`>
+
+  Example:
+
+      Fix SSE channel leak — abort signal now closes the interval on disconnect
+
+      The /api/channels/stream route opened a setInterval at request start
+      but only cleared it inside the stream's catch handler. A client that
+      disconnected cleanly (no error thrown) left the interval running for
+      the lifetime of the Cloud Run instance. Wired the cleanup to
+      request.signal.addEventListener('abort', ...) so the interval closes
+      on either path.
+
+      Confidence: high
+      Scope-risk: SSE routes only — no behaviour change for non-streaming endpoints.
+      Tested: bun run --filter @coms-portal/fast typecheck; manual: opened
+        /channels/stream, killed the tab, watched server logs confirm the
+        interval cleared.
+      Related: apps/fast/app/api/channels/stream/route.ts:42
+
+  The trailers are searchable: `git log --grep "Confidence: low"`,
+  `git log --grep "Scope-risk:"`, `git log --grep "Tested:"`. They are
+  the load-bearing part of the format — keep them on every commit, even
+  the small ones (use `Tested: typecheck` and `Related: none` if there is
+  truly nothing more).
+- **The `Author: Mr. Door` anchor is reserved for the operator's
+  commits.** Do not append it to yours — it is @mrdoorba's personal
+  signature.
 - **Pre-commit hooks** that fire on every commit:
   - `Detect hardcoded secrets` — regex scan over the staged diff for
     common secret patterns. The pattern catalogue tightened during FU-15;
     paste a `re_` Resend key or a DSN literal and the commit fails.
   - `code-review-graph detect-changes` — schema-graph consistency check.
-- **Branch protection on `main`**: `allow_force_pushes: false`, required
-  status checks `Typecheck & unit tests` + `Lint hardcoded URLs`. PRs must
-  pass them to merge; direct admin pushes can bypass.
+- **Merges into `main` go through a PR.** The `Sequence 0 — main
+  protection` ruleset requires one approving Code Owner review plus the
+  `Typecheck & unit tests` and `Lint hardcoded URLs` status checks; force
+  pushes and deletions are blocked. CODEOWNERS routing
+  (`.github/CODEOWNERS`):
+  - `/apps/fast/` — co-owned with @mrdoorba. You cannot self-approve, so
+    @mrdoorba's approval is required on every Fast PR.
+  - `/packages/`, `/infra/`, `/.github/` — @mrdoorba only.
+  - Anything else falls to the default `* @mrdoorba`.
+
+  The PR template at `.github/pull_request_template.md` auto-fills the
+  description with a cross-app-impact checklist; fill it in honestly so
+  the reviewer knows what they are reading.
 - **Secrets handling**. NEVER embed secrets in code. Production secrets live
   in GCP Secret Manager and reach Cloud Run via env vars wired by IaC
   (`infra/fast/cloud-run.tf` `fast_runtime_secret_env` local). Three live

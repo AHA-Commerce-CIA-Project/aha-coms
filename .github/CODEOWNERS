@@ -1,0 +1,23 @@
+# CODEOWNERS — routing for required reviews on `main`.
+#
+# A Ruleset on `main` ("Sequence 0 — main protection") requires Code Owner
+# approval before merge. The patterns below decide who that owner is. The
+# LAST matching line wins, so the default fallback comes first and specific
+# paths override it.
+
+# Default: everything not explicitly routed below needs @mrdoorba's approval.
+*                   @mrdoorba
+
+# apps/fast/ — the second engineer co-owns. PRs he authors still need
+# someone else's approval (GitHub forbids self-approval), so @mrdoorba
+# remains required for every Fast PR.
+/apps/fast/         @mrdoorba @alifm17
+
+# Shared workspace packages — touched by every app. @mrdoorba reviews.
+/packages/          @mrdoorba
+
+# Infrastructure-as-code (OpenTofu / GCP) — production blast radius.
+/infra/             @mrdoorba
+
+# CI workflows, CODEOWNERS itself, ruleset-adjacent configs.
+/.github/           @mrdoorba
