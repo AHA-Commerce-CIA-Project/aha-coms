@@ -21,7 +21,6 @@ import {
     Activity,
     HardDrive,
     MessageCircle,
-    Sparkles,
     Shield,
     Send,
     Trophy,
@@ -100,23 +99,18 @@ const sectionConfigs: Record<string, NavSection> = {
             { href: '/users?tab=roles', icon: Shield, label: 'Roles', requireLeader: true },
         ],
     },
-    changelog: {
-        label: 'Changelog',
-        items: [
-            { href: '/changelog', icon: Sparkles, label: 'Changelog', hasBadge: true, badgeKey: 'changelog' },
-        ],
-    },
 };
 
 // Determine which section the current pathname belongs to.
 // AHA Orbit lives as a tab inside Tasks now, so /orbit shares the Fast sidebar.
 // /orbit/manage and /orbit/analytics still resolve to the orbit-admin section so
 // leaders see those tools when configuring routine tasks.
+// /changelog has no dedicated section — it's reached via the profile menu and
+// shares the default Fast sidebar when visited.
 function getCurrentSection(pathname: string): keyof typeof sectionConfigs {
     if (pathname.startsWith('/orbit/manage') || pathname.startsWith('/orbit/analytics') || pathname.startsWith('/orbit/milestones')) return 'orbit';
     if (pathname.startsWith('/request')) return 'request';
     if (pathname.startsWith('/users')) return 'users';
-    if (pathname.startsWith('/changelog')) return 'changelog';
     return 'fast';
 }
 
@@ -125,7 +119,7 @@ export function Sidebar() {
     const searchParams = useSearchParams();
     const currentTab = searchParams.get('tab');
     const { sidebarOpen, sidebarHovered, toggleSidebar, setSidebarHovered, setDirectAssignOpen } = useAppStore();
-    const { isLeader, isMaster, user } = useAuth();
+    const { isLeader, user } = useAuth();
     // Hover-driven expansion. The sidebar lifts its hover state into the store so
     // AppShell can reflow the page width to match. Toggle button still pins it open
     // via `sidebarOpen` — `expanded = pinned || hovered`.
@@ -182,15 +176,14 @@ export function Sidebar() {
                 // Hidden on mobile — TopNav module tabs handle navigation there.
                 // The sidebar's contextual sub-items still appear on tablets/desktop.
                 'hidden md:block',
-                // Vertical offset accounts for BOTH bars on desktop: the
-                // 36px ServiceBar (fixed top-0, z-70) plus the 64px TopNav
-                // (sticky md:top-9, z-40) — totalling 100px. Pre-T72/T73 the
-                // Sidebar sat at `top-16` (64px) because only TopNav lived
-                // above. The hybrid mount added the ServiceBar; the Sidebar
-                // shifts down to clear TopNav's full sticky range and avoid
-                // overlapping the logo + module tabs on the left side.
-                'fixed left-0 top-[100px] z-40 bg-white border-r border-slate-200 transition-all duration-300 ease-in-out',
-                'h-[calc(100vh-100px)]',
+                // Sidebar sits flush beneath the 64px sticky TopNav. The
+                // 36px SuiteServiceBar that previously stacked above TopNav
+                // was folded into the single blue bar in the 2026-05-15
+                // chrome consolidation (PR #6), so the prior 100px offset
+                // would now leave a 36px dead strip between header and
+                // sidebar — back to `top-16` to close it.
+                'fixed left-0 top-16 z-40 bg-white border-r border-slate-200 transition-all duration-300 ease-in-out',
+                'h-[calc(100vh-4rem)]',
                 expanded ? 'w-64 shadow-xl' : 'w-20'
             )}
         >
@@ -378,47 +371,13 @@ export function Sidebar() {
                 )}
             </button>
 
-            {/* Footer — fast-specific destinations (Profile Settings, Changelog)
-                live here since the 2026-05-14 chrome cleanup pulled them out of
-                TopNav's profile menu. Cross-app surfaces (Manage Account, Sign
-                out) live in the suite ServiceBar's AccountWidget; only the
-                fast-internal routes surface in this footer. */}
+            {/* Footer — Settings and Changelog moved into TopNav's profile
+                menu in the chrome standardization pass, so the footer now
+                only carries the Storage gauge (Employee-only) and the
+                copyright strip. */}
             {expanded ? (
                 <div className="absolute bottom-0 left-0 right-0 px-4 py-3 border-t border-slate-200">
-                    <div className="mb-2.5 space-y-0.5">
-                        <Link
-                            href="/profile"
-                            className={cn(
-                                'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors',
-                                pathname === '/profile'
-                                    ? 'bg-indigo-50 text-indigo-700'
-                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-                            )}
-                        >
-                            <Settings className="w-3.5 h-3.5 shrink-0" />
-                            Profile Settings
-                        </Link>
-                        <Link
-                            href="/changelog"
-                            className={cn(
-                                'flex items-center justify-between gap-2.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors',
-                                pathname.startsWith('/changelog')
-                                    ? 'bg-indigo-50 text-indigo-700'
-                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-                            )}
-                        >
-                            <span className="flex items-center gap-2.5">
-                                <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                                Changelog
-                            </span>
-                            {changelogUnseenCount > 0 && (
-                                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
-                                    {changelogUnseenCount > 99 ? '99+' : changelogUnseenCount}
-                                </span>
-                            )}
-                        </Link>
-                    </div>
-                    {isMaster && storageInfo && (
+                    {!isLeader && storageInfo && (
                         <div className="mb-2.5 px-2 py-2 bg-slate-50/80 rounded-lg">
                             <div className="flex items-center justify-between mb-1.5">
                                 <div className="flex items-center gap-1.5">
@@ -447,36 +406,7 @@ export function Sidebar() {
                 </div>
             ) : (
                 <div className="absolute bottom-0 left-0 right-0 p-2 border-t border-slate-200 flex flex-col items-center gap-1.5">
-                    <Link
-                        href="/profile"
-                        title="Profile Settings"
-                        className={cn(
-                            'p-1.5 rounded-md transition-colors',
-                            pathname === '/profile'
-                                ? 'bg-indigo-50 text-indigo-700'
-                                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900',
-                        )}
-                    >
-                        <Settings className="w-4 h-4" />
-                    </Link>
-                    <Link
-                        href="/changelog"
-                        title="Changelog"
-                        className={cn(
-                            'relative p-1.5 rounded-md transition-colors',
-                            pathname.startsWith('/changelog')
-                                ? 'bg-indigo-50 text-indigo-700'
-                                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900',
-                        )}
-                    >
-                        <Sparkles className="w-4 h-4" />
-                        {changelogUnseenCount > 0 && (
-                            <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
-                                {changelogUnseenCount > 9 ? '9+' : changelogUnseenCount}
-                            </span>
-                        )}
-                    </Link>
-                    {isMaster && storageInfo && (
+                    {!isLeader && storageInfo && (
                         <div className="relative group cursor-default mt-0.5">
                             <HardDrive className={cn(
                                 'w-4 h-4',
