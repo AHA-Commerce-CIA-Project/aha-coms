@@ -12,6 +12,12 @@ import { NextRequest, NextResponse } from 'next/server';
 const PUBLIC_PATH_PREFIXES = [
     '/request',
     '/track',
+    // Public Request Form data sources — the /request page renders for guests
+    // and fetches both of these on mount. The route handlers themselves are
+    // already auth-free (brand codes pull from a server-side Google Sheets
+    // token; employees lists reference data with no user-scoped fields), so
+    // the edge guard is the only thing that was 401-ing the guest dropdown.
+    '/api/brand-codes',
     '/api/employees',
     '/api/auth/google/callback',
     '/api/webhooks',
