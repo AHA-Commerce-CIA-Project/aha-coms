@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import {
-    Zap,
     RotateCcw,
     FileText,
     Users,
@@ -19,10 +18,32 @@ import {
     MessageSquare,
     ClipboardList,
     X,
+    Sun,
+    Moon,
+    LogOut,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth/use-auth';
+import { useTheme } from '@/lib/theme-context';
 import { cn } from '@/lib/utils';
 import { htmlToPlainText } from '@/lib/sanitize';
+
+// Cross-app pills sit just right of the logo and link OUT of fast (full URLs
+// resolved at runtime from /api/userinfo's appCatalog; the static fallback
+// renders pre-auth so the strip never looks empty during first paint). Slugs
+// match the suite contract (portal=COMS), labels are normalised to the
+// short all-caps form the design calls for ('AHA Fast' → 'FAST').
+interface CrossAppEntry { slug: string; label: string; url: string; }
+
+const CROSS_APP_FALLBACK: CrossAppEntry[] = [
+    { slug: 'portal', label: 'COMS', url: 'https://aha-coms.web.app/portal' },
+    { slug: 'heroes', label: 'HEROES', url: 'https://aha-coms.web.app/heroes/' },
+    { slug: 'fast', label: 'FAST', url: 'https://aha-coms.web.app/fast' },
+];
+
+const PORTAL_ORIGIN =
+    process.env.NEXT_PUBLIC_PORTAL_ORIGIN || 'https://aha-coms.web.app';
+
+const pillLabel = (raw: string) => raw.replace(/^AHA\s+/i, '').toUpperCase();
 
 interface NotifItem {
     id: string;
@@ -52,31 +73,12 @@ interface ModuleTab {
     subItems?: SubItem[];
 }
 
+// In-app modules. The legacy `AHA Fast` entry (with its 7-item dropdown) was
+// folded out when the cross-app pills moved into this header — Sidebar +
+// BottomNav already cover Dashboard / Tasks / Messages / Channels / Analytics
+// / Activity Log / Later, so the top bar no longer carries a duplicate fast
+// menu.
 const MODULES: ModuleTab[] = [
-    {
-        key: 'fast', label: 'AHA Fast', href: '/dashboard', icon: Zap,
-        // Orbit lives under AHA Fast now — surfaced via the My Tasks / Task Queue / AHA Orbit tab row
-        // instead of a top-bar module.
-        matchPaths: ['/fast', '/tasks', '/my-request', '/nexus', '/analytics', '/activity-log', '/later', '/channels', '/messages', '/orbit', '/team-inbox'],
-        subItems: [
-            { label: 'Dashboard', href: '/dashboard' },
-            {
-                label: 'Tasks', href: '/tasks',
-                subItems: [
-                    { label: 'My Tasks', href: '/tasks' },
-                    { label: 'My Request', href: '/my-request' },
-                    { label: 'Task Queue', href: '/nexus' },
-                    { label: 'Task Inbox', href: '/team-inbox' },
-                    { label: 'AHA Orbit', href: '/orbit' },
-                ],
-            },
-            { label: 'Messages', href: '/messages' },
-            { label: 'Channels', href: '/channels' },
-            { label: 'Analytics', href: '/analytics', requireLeader: true },
-            { label: 'Activity Log', href: '/activity-log', requireLeader: true },
-            { label: 'Later', href: '/later' },
-        ],
-    },
     {
         key: 'request', label: 'Request Form', href: '/request', icon: FileText,
         matchPaths: ['/request'],
@@ -95,13 +97,22 @@ const MODULES: ModuleTab[] = [
 export function TopNav() {
     const pathname = usePathname();
     const router = useRouter();
-    const { user, profile, isLeader } = useAuth();
+    const { user, profile, isLeader, appCatalog, signOut } = useAuth();
+    const { theme, toggleTheme } = useTheme();
     const [showNotifs, setShowNotifs] = useState(false);
+    const [showAccount, setShowAccount] = useState(false);
     const [notifications, setNotifications] = useState<NotifItem[]>([]);
     const [notifTab, setNotifTab] = useState<'all' | 'dms'>('all');
     const [hoveredModule, setHoveredModule] = useState<string | null>(null);
     const hoverCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const notifRef = useRef<HTMLDivElement>(null);
+    const accountRef = useRef<HTMLDivElement>(null);
+
+    // Cross-app pill source: live appCatalog from /api/userinfo when the auth
+    // fetch has settled, static fallback before then so the row paints.
+    const crossApps: CrossAppEntry[] = appCatalog.length > 0
+        ? appCatalog.map(a => ({ slug: a.slug, label: pillLabel(a.label), url: a.url }))
+        : CROSS_APP_FALLBACK;
     // Toast notifications — popups for high-signal events only.
     // Excludes generic channel posts, lifecycle, meetings, orbit, etc.
     const TOAST_TYPES = useRef(new Set([
@@ -209,6 +220,7 @@ export function TopNav() {
     useEffect(() => {
         const handleClick = (e: MouseEvent) => {
             if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotifs(false);
+            if (accountRef.current && !accountRef.current.contains(e.target as Node)) setShowAccount(false);
         };
         document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
@@ -308,20 +320,51 @@ export function TopNav() {
     };
 
     return (
-        <header className="h-16 bg-[#0F0E7F] flex items-center px-4 sticky top-0 md:top-9 z-40 shadow-md">
+        // Single header line — the previous SuiteServiceBar (cross-app strip
+        // above this bar) was folded in here, which is also why this bar no
+        // longer needs the `md:top-9` sticky offset that reserved its 36px.
+        <header className="h-16 bg-[#0F0E7F] flex items-center px-4 sticky top-0 z-40 shadow-md">
             {/* Logo — clicking goes to default module */}
-            <Link href="/" className="flex items-center gap-2.5 pr-6 shrink-0">
+            <Link href="/" className="flex items-center gap-2.5 pr-4 sm:pr-5 shrink-0">
                 <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center p-1">
                     <img src="/fast/aha-logo.png?v=2" alt="AHA" className="w-full h-full object-contain" />
                 </div>
                 <div className="hidden sm:flex items-baseline">
                     <span className="text-xl font-extrabold text-white tracking-tight">AHA</span>
-                    <span className="text-xl font-medium text-white/90 ml-1 tracking-tight">COMSS</span>
+                    <span className="text-xl font-medium text-white/90 ml-1 tracking-tight">COMS</span>
                 </div>
             </Link>
 
-            {/* Horizontal module tabs — scrollable on mobile so they don't crush
-                the notification + avatar at the right edge. */}
+            {/* Cross-app pills — leave fast for COMS / Heroes via real URLs.
+                FAST is always marked active here since this bar only renders
+                inside fast. Plain `<a>` (not next/link) because the targets
+                are other origins served by Firebase Hosting rewrites. */}
+            <nav
+                aria-label="Switch app"
+                className="flex items-center gap-1 mr-2 sm:mr-4 shrink-0"
+            >
+                {crossApps.map(app => {
+                    const isActive = app.slug === 'fast';
+                    return (
+                        <a
+                            key={app.slug}
+                            href={app.url}
+                            aria-current={isActive ? 'page' : undefined}
+                            className={cn(
+                                'inline-flex items-center px-3 py-1.5 text-xs sm:text-sm font-bold uppercase tracking-wide rounded-full transition-colors whitespace-nowrap',
+                                isActive
+                                    ? 'bg-white text-[#0F0E7F] shadow-sm'
+                                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                            )}
+                        >
+                            {app.label}
+                        </a>
+                    );
+                })}
+            </nav>
+
+            {/* Horizontal in-app module tabs (Request Form, User Control Panel)
+                — scrollable on mobile so they don't crush the right cluster. */}
             <nav className="flex items-center gap-0.5 sm:gap-1 flex-1 min-w-0 overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
                 {visibleModules.map(m => {
                     const isActive = activeModule?.key === m.key;
@@ -405,9 +448,12 @@ export function TopNav() {
                 })}
             </nav>
 
-            {/* Right cluster — fast-specific only; theme toggle + profile/identity
-                live in the suite ServiceBar above (Phase 6 chrome cleanup, 2026-05-14).
-                Profile Settings + Changelog moved to the Sidebar footer in the same pass. */}
+            {/* Right cluster — bell, theme toggle, and account popover. The
+                suite ServiceBar that previously hosted theme + AccountWidget
+                was folded into this bar in the header consolidation; both
+                surfaces moved here so sign-out and dark mode stay reachable
+                without the second header row. Profile Settings + Changelog
+                still live in the Sidebar footer per the 2026-05-14 cleanup. */}
             <div className="flex items-center gap-1 pl-4 shrink-0">
                 {/* Notifications */}
                 <div className="relative" ref={notifRef}>
@@ -516,11 +562,85 @@ export function TopNav() {
                     )}
                 </div>
 
-                {/* Profile menu removed in the 2026-05-14 chrome cleanup — the
-                    suite ServiceBar's AccountWidget covers name/role/email,
-                    Manage Account, and Sign out as cross-app surfaces. Profile
-                    Settings and Changelog moved to the Sidebar footer (fast-
-                    specific destinations live with fast's in-app nav). */}
+                {/* Theme toggle — single source of dark mode after the
+                    SuiteServiceBar fold-in. Icon flips to the *target* mode
+                    so users see what they're switching TO. */}
+                <button
+                    type="button"
+                    onClick={toggleTheme}
+                    aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                >
+                    {theme === 'dark'
+                        ? <Sun className="w-5 h-5" />
+                        : <Moon className="w-5 h-5" />}
+                </button>
+
+                {/* Account — avatar + first name trigger, popover carries
+                    name/email/role + Manage account + Sign out. Cross-app
+                    switcher lives in the pills row instead, so the popover
+                    here intentionally omits it. */}
+                {user && (
+                    <div className="relative" ref={accountRef}>
+                        <button
+                            type="button"
+                            onClick={() => setShowAccount(v => !v)}
+                            aria-label="Account menu"
+                            aria-haspopup="menu"
+                            aria-expanded={showAccount}
+                            className="flex items-center gap-2 pl-1.5 pr-2.5 py-1 ml-1 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition-colors"
+                        >
+                            {profile?.avatar_url ? (
+                                <img
+                                    src={profile.avatar_url}
+                                    alt=""
+                                    className="w-7 h-7 rounded-full object-cover ring-1 ring-white/30"
+                                />
+                            ) : (
+                                <div className="w-7 h-7 rounded-full bg-white/15 ring-1 ring-white/30 flex items-center justify-center text-[11px] font-bold">
+                                    {user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+                                </div>
+                            )}
+                            <span className="hidden sm:inline text-sm font-semibold whitespace-nowrap">
+                                {user.name.split(' ')[0]}
+                            </span>
+                        </button>
+
+                        {showAccount && (
+                            <div
+                                role="menu"
+                                className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50"
+                            >
+                                <div className="px-4 py-3 border-b border-slate-100">
+                                    <p className="text-sm font-semibold text-slate-900 truncate">{user.name}</p>
+                                    <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                                    <span className="mt-1.5 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                                        {user.portalRole || user.role}
+                                    </span>
+                                </div>
+                                <div className="p-1">
+                                    <a
+                                        href={`${PORTAL_ORIGIN}/profile`}
+                                        onClick={() => setShowAccount(false)}
+                                        role="menuitem"
+                                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                    >
+                                        Manage account
+                                    </a>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowAccount(false); signOut(); }}
+                                        role="menuitem"
+                                        className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                    >
+                                        <LogOut className="w-4 h-4 text-slate-500" />
+                                        Sign out
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Toast popups — anchored just under the topnav, top-right. Only

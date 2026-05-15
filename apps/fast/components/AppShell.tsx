@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { Sidebar, TopNav, BottomNav } from '@/components/layout';
-import { SuiteServiceBar } from '@/components/layout/SuiteServiceBar';
 import { DirectAssignModal } from '@/components/DirectAssignModal';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { UserProfilePanel } from '@/components/UserProfilePanel';
@@ -42,7 +41,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
         <div className="min-h-screen bg-slate-50 text-slate-900">
             <BadgePoller />
-            <SuiteServiceBar />
             <TopNav />
             <Suspense fallback={null}>
                 <Sidebar />
