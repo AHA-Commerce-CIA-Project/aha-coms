@@ -58,7 +58,7 @@ interface RequestEmailData {
 
 export async function sendRequestNotificationEmail(data: RequestEmailData) {
   const appUrl = getAppUrl();
-  const trackUrl = `${appUrl}/track?token=${data.taskToken}`;
+  const trackUrl = `${appUrl}/fast/track?token=${data.taskToken}`;
 
   const requestTypeLabel: Record<string, string> = {
     'fix_request': 'Partner Request',
@@ -168,7 +168,7 @@ interface TaskClaimedEmailData {
 
 export async function sendTaskClaimedEmail(data: TaskClaimedEmailData) {
   const appUrl = getAppUrl();
-  const trackUrl = `${appUrl}/track?token=${data.taskToken}`;
+  const trackUrl = `${appUrl}/fast/track?token=${data.taskToken}`;
 
   const htmlBody = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
@@ -244,7 +244,7 @@ interface TaskCompletedEmailData {
 
 export async function sendTaskCompletedEmail(data: TaskCompletedEmailData) {
   const appUrl = getAppUrl();
-  const trackUrl = `${appUrl}/track?token=${data.taskToken}`;
+  const trackUrl = `${appUrl}/fast/track?token=${data.taskToken}`;
 
   const htmlBody = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
