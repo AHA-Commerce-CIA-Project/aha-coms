@@ -535,12 +535,50 @@ export function DmPane() {
         }
     };
 
+    // Optimistic toggle — same pattern as ChannelPane.handleReaction. The
+    // POST is idempotent, so failure rolls back by re-toggling locally.
+    // Removes the full-conversation refetch the previous shape did, which
+    // is what users felt as the 3-5s lag.
     const handleReaction = async (msgId: string, emoji: string) => {
-        if (!selected) return;
-        await fetch(`/fast/api/chat/conversations/${selected.id}/messages/${msgId}/reactions`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }),
-        });
-        fetchMessages(selected.id);
+        if (!selected || !user) return;
+        const myId = user.id;
+        const myName = user.name;
+
+        const toggleLocal = () => {
+            setMessages((prev) => prev.map((m) => {
+                if (m.id !== msgId) return m;
+                const reactions = ((m as any).reactions || []) as { id: string; emoji: string; userId: string; user: { id: string; name: string } }[];
+                const idx = reactions.findIndex((r) => r.userId === myId && r.emoji === emoji);
+                if (idx >= 0) {
+                    return { ...m, reactions: reactions.filter((_, i) => i !== idx) } as any;
+                }
+                return {
+                    ...m,
+                    reactions: [
+                        ...reactions,
+                        {
+                            id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                            emoji,
+                            userId: myId,
+                            user: { id: myId, name: myName },
+                        },
+                    ],
+                } as any;
+            }));
+        };
+
+        toggleLocal();
+
+        try {
+            const res = await fetch(`/fast/api/chat/conversations/${selected.id}/messages/${msgId}/reactions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emoji }),
+            });
+            if (!res.ok) toggleLocal();
+        } catch {
+            toggleLocal();
+        }
     };
 
     const handleEditMsg = async (msgId: string, content: string) => {

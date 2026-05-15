@@ -484,17 +484,53 @@ export function ChannelPane() {
     }
   };
 
+  // Reactions toggle locally first, then POST in the background. The
+  // server endpoint is idempotent — POST flips add↔remove based on the
+  // (user, emoji, message) tuple — so a failed round-trip rolls back by
+  // simply toggling the local state again. Eliminates the 3-5s delay
+  // users felt clicking ✅/👀/🙌 from the quick-reaction strip; the
+  // refetch the previous shape did was the load-bearing latency, not
+  // the reaction insert itself.
   const handleReaction = async (messageId: string, emoji: string) => {
-    if (!selectedChannel) return;
+    if (!selectedChannel || !session) return;
+    const myId = session.user.id;
+    const myName = session.user.name;
+
+    const toggleLocal = () => {
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const reactions = (m.reactions || []) as { id: string; emoji: string; userId: string; user: { id: string; name: string } }[];
+        const idx = reactions.findIndex((r) => r.userId === myId && r.emoji === emoji);
+        if (idx >= 0) {
+          return { ...m, reactions: reactions.filter((_, i) => i !== idx) };
+        }
+        return {
+          ...m,
+          reactions: [
+            ...reactions,
+            {
+              id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              emoji,
+              userId: myId,
+              user: { id: myId, name: myName },
+            },
+          ],
+        };
+      }));
+    };
+
+    toggleLocal();
+
     try {
-      await fetch(`/fast/api/channels/${selectedChannel.id}/${messageId}/reactions`, {
+      const res = await fetch(`/fast/api/channels/${selectedChannel.id}/${messageId}/reactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emoji }),
       });
-      // Refresh messages to get updated reactions
-      fetchMessages(selectedChannel.id);
-    } catch {}
+      if (!res.ok) toggleLocal();
+    } catch {
+      toggleLocal();
+    }
   };
 
   const handleSave = async (messageId: string) => {
