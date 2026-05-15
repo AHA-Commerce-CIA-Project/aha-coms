@@ -1,0 +1,65 @@
+#!/bin/bash
+# PreToolUse hook: warn before destructive git operations when the local
+# branch is drifted in a way the operation would make worse.
+#
+# Triggers on the staged Bash command containing one of:
+#   - git push          → behind origin? non-fast-forward incoming
+#   - git rebase        → uncommitted work? rebase clobbers it
+#   - git merge         → uncommitted work? merge clobbers it
+#   - git reset --hard  → uncommitted work? data loss
+#   - git commit        → on `main` while drifted? PR-only policy violation
+#
+# Exits 2 + stderr message to block; Claude surfaces the stderr to the
+# operator and explains what's needed. Exits 0 silently otherwise.
+#
+# No network: uses the cached tracking refs from the SessionStart fetch.
+
+set -uo pipefail
+
+input=$(cat)
+tool_name=$(printf '%s' "$input" | jq -r '.tool_name // empty')
+command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
+
+# Only inspect Bash commands
+[ "$tool_name" = "Bash" ] || exit 0
+[ -n "$command" ] || exit 0
+
+# Fast exit: no relevant git verb in the command
+case "$command" in
+  *"git push"*|*"git rebase"*|*"git merge"*|*"git reset --hard"*|*"git commit"*) ;;
+  *) exit 0 ;;
+esac
+
+cd "${CLAUDE_PROJECT_DIR:-$(pwd)}" || exit 0
+git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null) || exit 0
+UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2>/dev/null) || exit 0
+
+BEHIND=$(git rev-list --count "@..@{u}" 2>/dev/null || echo 0)
+DIRTY=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+
+# Per-operation hazard checks
+case "$command" in
+  *"git commit"*)
+    # Committing directly on a protected branch while drifted = PR-policy violation
+    if [ "$BRANCH" = "main" ] && [ "$BEHIND" != "0" ]; then
+      echo "Refusing 'git commit' on '$BRANCH' while $BEHIND commits behind origin/$BRANCH. Branch off origin/$BRANCH first (PR-only policy), or pull and check what changed." >&2
+      exit 2
+    fi
+    ;;
+  *"git push"*)
+    if [ "$BEHIND" != "0" ]; then
+      echo "Refusing 'git push' from '$BRANCH' which is $BEHIND commits behind origin. Pull or rebase first to avoid the non-fast-forward failure." >&2
+      exit 2
+    fi
+    ;;
+  *"git rebase"*|*"git merge"*|*"git reset --hard"*)
+    if [ "$DIRTY" != "0" ]; then
+      echo "Refusing destructive git operation with $DIRTY uncommitted files in the working tree. Stash or commit first." >&2
+      exit 2
+    fi
+    ;;
+esac
+
+exit 0

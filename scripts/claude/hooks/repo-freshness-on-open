@@ -1,0 +1,51 @@
+#!/bin/bash
+# SessionStart hook: fetches origin, surfaces drift to Claude as session
+# context, auto-fast-forwards when safe.
+#
+# Auto-pull policy: ONLY when the working tree is clean AND the branch is
+# purely behind (no diverged ahead commits). Any divergence or
+# uncommitted changes — report and leave the decision to the operator.
+#
+# Network behaviour: fetch is capped at 8 seconds. If the network is slow
+# or offline, the script falls back to reporting drift against the stale
+# tracking ref. Better than hanging session start.
+
+set -uo pipefail
+
+cd "${CLAUDE_PROJECT_DIR:-$(pwd)}" || exit 0
+git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+
+timeout 8 git fetch origin --quiet 2>/dev/null || true
+
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null) || exit 0
+UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2>/dev/null) || exit 0
+
+BEHIND=$(git rev-list --count "@..@{u}" 2>/dev/null || echo 0)
+AHEAD=$(git rev-list --count "@{u}..@" 2>/dev/null || echo 0)
+DIRTY=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+
+# Synchronized + clean — silent (no spam on healthy state)
+if [ "$BEHIND" = "0" ] && [ "$AHEAD" = "0" ] && [ "$DIRTY" = "0" ]; then
+  exit 0
+fi
+
+STATUS="branch '$BRANCH' vs '$UPSTREAM': behind=$BEHIND, ahead=$AHEAD, uncommitted=$DIRTY"
+ACTION=""
+
+# Auto-pull only on the boring-safe case: clean tree, pure fast-forward
+if [ "$BEHIND" != "0" ] && [ "$AHEAD" = "0" ] && [ "$DIRTY" = "0" ]; then
+  if git pull --ff-only --quiet 2>/dev/null; then
+    ACTION=" → auto-pulled (fast-forward, clean tree). Local is in sync now."
+  else
+    ACTION=" → auto-pull failed; manual investigation needed."
+  fi
+fi
+
+MSG="Repo freshness on session start: ${STATUS}.${ACTION}"
+
+jq -n --arg msg "$MSG" '{
+  hookSpecificOutput: {
+    hookEventName: "SessionStart",
+    additionalContext: $msg
+  }
+}'
