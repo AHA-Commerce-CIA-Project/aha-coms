@@ -74,11 +74,14 @@ my-document/
 
 # Dev scripts (local-only) — anchored to repo root.
 # `apps/*/scripts/` are tracked. The top-level scripts/ folder is local-only
-# except for explicit wrappers that belong in the repo (dev-* and verify-*).
+# except for explicit wrappers that belong in the repo (dev-* and verify-*),
+# plus the /scripts/claude/ subdirectory (shared Claude Code installer + hooks
+# that need to travel with the repo).
 # Glob the children rather than the directory so `!` re-inclusion works.
 /scripts/*
 !/scripts/dev-*.sh
 !/scripts/verify-*.mjs
+!/scripts/claude/
 
 # SvelteKit build output
 apps/portal-web/build/
