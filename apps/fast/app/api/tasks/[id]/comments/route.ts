@@ -152,7 +152,7 @@ export async function POST(
             const { sendViaAppsScript } = await import('@/lib/email');
             const { getAppUrl } = await import('@/lib/appUrl');
             const appUrl = getAppUrl();
-            const trackUrl = `${appUrl}/track?token=${task.taskToken}`;
+            const trackUrl = `${appUrl}/fast/track?token=${task.taskToken}`;
             sendViaAppsScript(
                 [task.requesterEmail],
                 `[FAST] New reply on your request: ${task.title}`,
