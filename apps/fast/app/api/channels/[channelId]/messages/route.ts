@@ -24,6 +24,17 @@ export async function GET(
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     orderBy: { createdAt: 'desc' },
+    // TODO: Decide whether to filter null-sender messages at the source
+    // vs. continue rendering them as placeholders. ChannelMessage.senderId
+    // has onDelete: SetNull, so messages outlive their authors and the
+    // `sender` include returns null for orphaned rows. The client
+    // handles this defensively with a "Deleted User" fallback across
+    // ChannelMessageItem / PinnedMessagesBanner / ThreadPanel / the
+    // ChannelPane search-result UI (PR #20). If product decides
+    // orphaned messages should disappear from the feed instead, add
+    // `where: { senderId: { not: null } }` (and matching nullability in
+    // the schema) here and remove the client fallbacks. Same call
+    // applies to the pinned + replies + per-message search endpoints.
     include: {
       sender: { select: { id: true, name: true, image: true } },
       reactions: {

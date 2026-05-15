@@ -45,10 +45,13 @@ interface Message {
   mentions: string[];
   replyCount: number;
   senderId: string;
-  sender: { id: string; name: string; image: string | null };
+  // Nullable: orphaned messages from deleted users return sender: null
+  // from the API. Render sites in this file resolve to a "Deleted User"
+  // placeholder rather than crashing the tree.
+  sender: { id: string; name: string; image: string | null } | null;
   reactions: Reaction[];
   savedBy: { id: string }[];
-  replies?: { id: string; createdAt: string; sender: { id: string; name: string; image: string | null } }[];
+  replies?: { id: string; createdAt: string; sender: { id: string; name: string; image: string | null } | null }[];
   isPinned?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -355,7 +358,7 @@ export function ChannelMessageItem({
         month: 'long',
         day: 'numeric',
       });
-      text = `${message.sender.name} created this channel on ${date}. This is the very beginning of the #${channelName || 'channel'} channel.`;
+      text = `${message.sender?.name ?? 'Deleted User'} created this channel on ${date}. This is the very beginning of the #${channelName || 'channel'} channel.`;
       Icon = Hash;
       iconClass = 'text-indigo-500';
     } else if (kind === 'member_added') {
@@ -419,14 +422,14 @@ export function ChannelMessageItem({
               className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-sm font-bold overflow-hidden hover:ring-2 hover:ring-indigo-300 transition-all cursor-pointer"
               title="View profile"
             >
-              {message.sender.image ? (
+              {message.sender?.image ? (
                 <img
                   src={message.sender.image}
                   alt={message.sender.name}
                   className="w-10 h-10 rounded-full object-cover"
                 />
               ) : (
-                message.sender.name.charAt(0).toUpperCase()
+                (message.sender?.name ?? 'Deleted User').charAt(0).toUpperCase()
               )}
             </button>
           ) : (
@@ -443,7 +446,7 @@ export function ChannelMessageItem({
                   className="font-bold text-base text-slate-800 hover:text-indigo-600 hover:underline transition-colors cursor-pointer"
                   title="View profile"
                 >
-                  {message.sender.name}
+                  {message.sender?.name ?? 'Deleted User'}
                 </button>
                 <span className="text-xs text-slate-400">
                   {formatTime(message.createdAt)}
@@ -729,7 +732,11 @@ export function ChannelMessageItem({
                 {message.replies && message.replies.length > 0 && (
                   <div className="flex -space-x-1.5">
                     {/* Deduplicate senders */}
-                    {Array.from(new Map(message.replies.map((r) => [r.sender.id, r.sender])).values())
+                    {/* Skip replies with deleted-user senders here — the
+                        avatar dedupe key needs a real id and we'd rather
+                        omit anonymous heads from the "who replied" strip
+                        than show a misleading placeholder per orphan. */}
+                    {Array.from(new Map(message.replies.filter((r) => r.sender).map((r) => [r.sender!.id, r.sender!])).values())
                       .slice(0, 3)
                       .map((sender) => (
                         <div
@@ -924,8 +931,8 @@ export function ChannelMessageItem({
         onConfirm={performDelete}
         kind="message"
         preview={{
-          senderName: message.sender.name,
-          senderImage: message.sender.image,
+          senderName: message.sender?.name ?? 'Deleted User',
+          senderImage: message.sender?.image ?? null,
           createdAt: message.createdAt,
           content: message.content,
           channelName,

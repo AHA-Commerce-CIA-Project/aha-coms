@@ -35,7 +35,9 @@ interface Reply {
   attachments: Attachment[];
   mentions: string[];
   senderId: string;
-  sender: { id: string; name: string; image: string | null };
+  // Nullable — see ChannelPane.tsx's Message interface for the reason.
+  // Same API substrate (ChannelMessage rows), same orphan-sender shape.
+  sender: { id: string; name: string; image: string | null } | null;
   reactions: Reaction[];
   createdAt: string;
   updatedAt: string;
@@ -45,7 +47,7 @@ interface ParentMessage {
   id: string;
   content: string;
   attachments: any[];
-  sender: { id: string; name: string; image: string | null };
+  sender: { id: string; name: string; image: string | null } | null;
   replyCount: number;
   createdAt: string;
 }
@@ -175,15 +177,15 @@ export function ThreadPanel({
       <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
         <div className="flex gap-3">
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-sm font-bold">
-            {message.sender.image ? (
+            {message.sender?.image ? (
               <img src={message.sender.image} alt="" className="w-9 h-9 rounded-full object-cover" />
             ) : (
-              message.sender.name.charAt(0).toUpperCase()
+              (message.sender?.name ?? 'Deleted User').charAt(0).toUpperCase()
             )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 mb-0.5">
-              <span className="font-bold text-sm text-slate-800">{message.sender.name}</span>
+              <span className="font-bold text-sm text-slate-800">{message.sender?.name ?? 'Deleted User'}</span>
               <span className="text-[11px] text-slate-400">{formatTime(message.createdAt)}</span>
             </div>
             {(() => {
@@ -350,15 +352,15 @@ function ThreadReplyItem({
     <div className="group relative px-4 py-2.5 hover:bg-slate-50 transition-colors">
       <div className="flex gap-3">
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
-          {reply.sender.image ? (
+          {reply.sender?.image ? (
             <img src={reply.sender.image} alt="" className="w-8 h-8 rounded-full object-cover" />
           ) : (
-            reply.sender.name.charAt(0).toUpperCase()
+            (reply.sender?.name ?? 'Deleted User').charAt(0).toUpperCase()
           )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 mb-0.5">
-            <span className="font-bold text-sm text-slate-800">{reply.sender.name}</span>
+            <span className="font-bold text-sm text-slate-800">{reply.sender?.name ?? 'Deleted User'}</span>
             <span className="text-[11px] text-slate-400">{formatTime(reply.createdAt)}</span>
           </div>
           {editing ? (
@@ -535,8 +537,8 @@ function ThreadReplyItem({
       onConfirm={performDelete}
       kind="reply"
       preview={{
-        senderName: reply.sender.name,
-        senderImage: reply.sender.image,
+        senderName: reply.sender?.name ?? 'Deleted User',
+        senderImage: reply.sender?.image ?? null,
         createdAt: reply.createdAt,
         content: reply.content,
         contextLabel: 'Thread reply',

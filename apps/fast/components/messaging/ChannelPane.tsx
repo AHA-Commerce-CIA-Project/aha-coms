@@ -55,7 +55,11 @@ interface Message {
   mentions: string[];
   replyCount: number;
   senderId: string;
-  sender: { id: string; name: string; image: string | null };
+  // Nullable: the underlying User row can be deleted (FK is onDelete:
+  // SetNull) and the API will hand back `sender: null` for messages
+  // authored by since-removed accounts. Renderers must fall back to a
+  // "Deleted User" placeholder rather than crashing the tree.
+  sender: { id: string; name: string; image: string | null } | null;
   reactions: any[];
   savedBy: { id: string }[];
   isPinned?: boolean;
@@ -663,15 +667,15 @@ export function ChannelPane() {
                   >
                     <div className="flex gap-3">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
-                        {msg.sender.image ? (
+                        {msg.sender?.image ? (
                           <img src={msg.sender.image} alt="" className="w-8 h-8 rounded-full object-cover" />
                         ) : (
-                          msg.sender.name.charAt(0).toUpperCase()
+                          (msg.sender?.name ?? 'Deleted User').charAt(0).toUpperCase()
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2">
-                          <span className="font-semibold text-sm text-slate-700">{msg.sender.name}</span>
+                          <span className="font-semibold text-sm text-slate-700">{msg.sender?.name ?? 'Deleted User'}</span>
                           <span className="text-[11px] text-slate-400">
                             {new Date(msg.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                           </span>
@@ -705,15 +709,15 @@ export function ChannelPane() {
                         </div>
                         <div className="flex gap-3">
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
-                            {reply.sender.image ? (
+                            {reply.sender?.image ? (
                               <img src={reply.sender.image} alt="" className="w-8 h-8 rounded-full object-cover" />
                             ) : (
-                              reply.sender.name.charAt(0).toUpperCase()
+                              (reply.sender?.name ?? 'Deleted User').charAt(0).toUpperCase()
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-baseline gap-2">
-                              <span className="font-semibold text-sm text-slate-700">{reply.sender.name}</span>
+                              <span className="font-semibold text-sm text-slate-700">{reply.sender?.name ?? 'Deleted User'}</span>
                               <span className="text-[11px] text-slate-400">
                                 {new Date(reply.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                               </span>
@@ -770,8 +774,8 @@ export function ChannelPane() {
                       } catch {}
                     }
                     setForwardMessage({
-                      originalAuthor: msg.sender.name,
-                      originalAuthorImage: msg.sender.image,
+                      originalAuthor: msg.sender?.name ?? 'Deleted User',
+                      originalAuthorImage: msg.sender?.image ?? null,
                       originalContent: raw
                         .replace(/<!--forward:.*?-->/s, '')
                         .replace(/<!--direct_assign:[^\s>]+?-->/g, '')

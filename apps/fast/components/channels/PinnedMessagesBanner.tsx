@@ -15,7 +15,10 @@ interface PinnedMessage {
     id: string;
     content: string;
     createdAt: string;
-    sender: { id: string; name: string; image: string | null };
+    // Nullable — see ChannelPane.tsx's Message interface. Pinned messages
+    // are just a filtered view of the same ChannelMessage rows, so they
+    // inherit the same orphan-sender shape from the API.
+    sender: { id: string; name: string; image: string | null } | null;
 }
 
 interface PinnedMessagesBannerProps {
@@ -65,7 +68,7 @@ export function PinnedMessagesBanner({ channelId, refreshTick, onJumpToMessage }
                             Pinned
                         </span>
                         <span className="text-xs text-slate-700 truncate">
-                            <span className="font-semibold">{headline.sender.name}:</span>{' '}
+                            <span className="font-semibold">{headline.sender?.name ?? 'Deleted User'}:</span>{' '}
                             {headlinePreview || <span className="italic text-slate-400">(no text)</span>}
                         </span>
                     </div>
@@ -105,7 +108,7 @@ export function PinnedMessagesBanner({ channelId, refreshTick, onJumpToMessage }
                             >
                                 <Pin className="w-3 h-3 text-indigo-400 flex-shrink-0" />
                                 <span className="flex-1 min-w-0 truncate">
-                                    <span className="font-semibold">{m.sender.name}:</span>{' '}
+                                    <span className="font-semibold">{m.sender?.name ?? 'Deleted User'}:</span>{' '}
                                     {preview || <span className="italic text-slate-400">(no text)</span>}
                                 </span>
                             </button>
