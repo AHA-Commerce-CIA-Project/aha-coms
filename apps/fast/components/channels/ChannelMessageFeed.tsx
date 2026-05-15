@@ -11,7 +11,10 @@ interface Message {
   mentions: string[];
   replyCount: number;
   senderId: string;
-  sender: { id: string; name: string; image: string | null };
+  // Nullable — see ChannelPane.tsx's matching interface for the reason
+  // (User row can be deleted; API returns sender: null). Kept in sync
+  // here so feed-level consumers don't widen the type accidentally.
+  sender: { id: string; name: string; image: string | null } | null;
   reactions: any[];
   savedBy: { id: string }[];
   isPinned?: boolean;
