@@ -8,6 +8,7 @@ import { htmlToPlainText } from '@/lib/sanitize';
 import { PageTabs } from '@/components/PageTabs';
 import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';
 import { TeamInboxTaskModal, type TeamInboxTask } from '@/components/TeamInboxTaskModal';
+import { RoutineTaskDetailModal } from '@/components/channels/RoutineTaskDetailModal';
 
 interface Attachment {
     url: string;
@@ -160,8 +161,12 @@ export default function TeamInboxPage() {
     // submenu (assign-picker) state. Only one menu is open at a time.
     const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
     // Local task-detail modal — opened from the "View Details" button so the
-    // user can inspect/edit a task without leaving the inbox.
+    // user can inspect/edit a task without leaving the inbox. Standard tasks
+    // use TeamInboxTaskModal; routine reminders use the richer
+    // RoutineTaskDetailModal (which already carries the reassign + checklist
+    // + comments affordances they share with the in-channel card view).
     const [detailTask, setDetailTask] = useState<TeamInboxTask | null>(null);
+    const [routineDetailTaskId, setRoutineDetailTaskId] = useState<string | null>(null);
     const [assignPickerForId, setAssignPickerForId] = useState<string | null>(null);
     const [pickerMembers, setPickerMembers] = useState<PickerMember[]>([]);
     const [pickerLoading, setPickerLoading] = useState(false);
@@ -180,11 +185,18 @@ export default function TeamInboxPage() {
     const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
     // Open the local task-detail modal — keeps the user on /team-inbox so they
-    // can inspect details + run the checklist without losing their place. The
-    // modal accepts a TeamInboxTask which is structurally a subset of InboxTask;
-    // we cast through unknown to satisfy TS without duplicating the type.
+    // can inspect details + run the checklist without losing their place.
+    // Routine reminders open the dedicated RoutineTaskDetailModal so leaders
+    // and current claimers can reassign from the same surface they use in
+    // channels; standard tasks keep their existing TeamInboxTaskModal. The
+    // cast on the standard branch is safe because TeamInboxTask is
+    // structurally a subset of InboxTask.
     const openDetail = (t: InboxTask) => {
-        setDetailTask(t as unknown as TeamInboxTask);
+        if (t.routineTemplate) {
+            setRoutineDetailTaskId(t.id);
+        } else {
+            setDetailTask(t as unknown as TeamInboxTask);
+        }
     };
 
     const openTaskInChannel = (t: InboxTask) => {
@@ -899,13 +911,15 @@ export default function TeamInboxPage() {
                                                 // pending cards: the "overdue" framing is irrelevant
                                                 // while the task is paused.
                                                 const deadline = (col.key === 'completed' || isPaused) ? null : deadlineState(t.dueDate);
-                                                // Routine-spawned tasks usually have an empty description
-                                                // (the template name lives in t.title). Fall back to the
-                                                // routine name so the card reads as something useful
-                                                // instead of "No description".
+                                                // Routine-spawned tasks always show the routine's title in
+                                                // place of the description. Spec calls this out explicitly:
+                                                // a reminder card represents the routine, not a freeform
+                                                // request, so the human-meaningful label is the routine
+                                                // template's name.
                                                 const isRoutine = !!t.routineTemplate;
-                                                const descPreview = t.description ? htmlToPlainText(t.description).slice(0, 140) : '';
-                                                const previewText = descPreview || (isRoutine ? t.routineTemplate?.name ?? '' : '');
+                                                const previewText = isRoutine
+                                                    ? (t.routineTemplate?.name ?? '')
+                                                    : (t.description ? htmlToPlainText(t.description).slice(0, 140) : '');
                                                 // Routine reminders come from AHABOT, not a human requester.
                                                 const requesterLabel = isRoutine ? 'AHABOT' : (t.requesterName || 'Someone');
                                                 const attachmentCount = Array.isArray(t.attachments) ? t.attachments.length : 0;
@@ -1350,6 +1364,23 @@ export default function TeamInboxPage() {
                     currentUserId={myId || undefined}
                     onClose={() => setDetailTask(null)}
                     onChange={() => fetchInbox(selectedTeamId)}
+                />
+            )}
+
+            {/* Routine-task detail modal — same component the in-channel
+                routine card opens. Brings reassign + checklist + comments to
+                the team-inbox surface without duplicating the UI. Refetches
+                the inbox on close so a reassign immediately reflects in the
+                kanban cards. */}
+            {routineDetailTaskId && (
+                <RoutineTaskDetailModal
+                    open={!!routineDetailTaskId}
+                    taskId={routineDetailTaskId}
+                    currentUserId={myId || ''}
+                    onClose={() => {
+                        setRoutineDetailTaskId(null);
+                        fetchInbox(selectedTeamId);
+                    }}
                 />
             )}
 
