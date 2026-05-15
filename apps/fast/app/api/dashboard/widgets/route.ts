@@ -33,83 +33,84 @@ export async function GET() {
 
     const ninetyDaysAgo = new Date(Date.now() - COMPLETED_TASK_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-    // Phase 1 — all independent queries fan out in parallel. The old endpoint
-    // awaited each sequentially; on Cloud SQL the round-trip stack-up was the
-    // bulk of dashboard TTFB.
-    const [
-        userActive,
-        myTasks,
-        pendingDirectRequests,
-        teamMembers,
-        statusGroups,
-        urgencyGroups,
-        completedTasksTime,
-        orbitGroups,
-        reviews,
-    ] = await Promise.all([
-        prisma.user.findUnique({
-            where: { id: userId },
-            select: { activeSecondsToday: true, activeDate: true },
-        }),
-        prisma.task.findMany({
-            where: { ...myTasksFilter, status: { in: ACTIVE_TASK_STATUSES as unknown as string[] } },
-            select: {
-                id: true, title: true, status: true, urgency: true, dueDate: true, taskToken: true,
-                requesterName: true, createdAt: true, source: true,
-            },
-            orderBy: [{ urgency: 'asc' }, { createdAt: 'desc' }],
-            take: 8,
-        }),
-        prisma.task.findMany({
-            where: { directAssigneeId: userId, status: 'pending_approval' },
-            select: {
-                id: true, title: true, urgency: true, requesterName: true, requesterDivision: true,
-                createdAt: true, taskToken: true, responseDeadline: true, description: true,
-                status: true, attachmentLink: true, dueDate: true, requestType: true, requesterEmail: true,
-            },
-            orderBy: { createdAt: 'desc' },
-        }),
-        teamId
-            ? prisma.user.findMany({
-                where: { teamId, accountStatus: 'active' },
-                select: { id: true, name: true, email: true, image: true, role: true, status: true, lastSeenAt: true },
-                orderBy: { name: 'asc' },
-            })
-            : Promise.resolve([] as Array<{ id: string; name: string; email: string; image: string | null; role: string; status: string | null; lastSeenAt: Date | null }>),
-        prisma.task.groupBy({
-            by: ['status'],
-            where: { ...myTasksFilter, NOT: { status: 'archived' } },
-            _count: { _all: true },
-        }),
-        prisma.task.groupBy({
-            by: ['urgency'],
-            where: { ...myTasksFilter, NOT: { status: 'archived' } },
-            _count: { _all: true },
-        }),
-        prisma.task.findMany({
-            where: {
-                ...myTasksFilter,
-                status: 'done',
-                completedAt: { gte: ninetyDaysAgo },
-            },
-            select: { createdAt: true, completedAt: true, difficultyScore: true },
-        }),
-        prisma.routineTaskClaim.groupBy({
-            by: ['status'],
-            where: { claimedBy: userId },
-            _count: { _all: true },
-        }),
-        prisma.taskReview.findMany({
-            where: {
-                reviewerType: 'requester',
-                task: { assigneeId: userId, status: 'done' },
-            },
-            select: { rating: true },
-        }),
-    ]);
+    // Queries run sequentially — the earlier `Promise.all` fan-out tripled
+    // per-request peak Prisma-pool occupancy (1 → 3 connections held
+    // simultaneously). On Cloud SQL `db-f1-micro`'s 25-connection ceiling,
+    // a handful of concurrent dashboard loads saturated the pool and every
+    // authed route 500'd with P2037. Each request now holds at most one
+    // connection at a time; the wins that drove this endpoint's rewrite
+    // (bounded 90-day completedTasksTime, groupBy aggregates, single orbit
+    // groupBy, derived team-member IDs) all survive untouched.
+    const userActive = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { activeSecondsToday: true, activeDate: true },
+    });
 
-    // Phase 2 — recentActivity depends on the team member IDs. Derive them
-    // from the teamMembers row set instead of a second user.findMany.
+    const myTasks = await prisma.task.findMany({
+        where: { ...myTasksFilter, status: { in: ACTIVE_TASK_STATUSES as unknown as string[] } },
+        select: {
+            id: true, title: true, status: true, urgency: true, dueDate: true, taskToken: true,
+            requesterName: true, createdAt: true, source: true,
+        },
+        orderBy: [{ urgency: 'asc' }, { createdAt: 'desc' }],
+        take: 8,
+    });
+
+    const pendingDirectRequests = await prisma.task.findMany({
+        where: { directAssigneeId: userId, status: 'pending_approval' },
+        select: {
+            id: true, title: true, urgency: true, requesterName: true, requesterDivision: true,
+            createdAt: true, taskToken: true, responseDeadline: true, description: true,
+            status: true, attachmentLink: true, dueDate: true, requestType: true, requesterEmail: true,
+        },
+        orderBy: { createdAt: 'desc' },
+    });
+
+    const teamMembers: Array<{ id: string; name: string; email: string; image: string | null; role: string; status: string | null; lastSeenAt: Date | null }> = teamId
+        ? await prisma.user.findMany({
+            where: { teamId, accountStatus: 'active' },
+            select: { id: true, name: true, email: true, image: true, role: true, status: true, lastSeenAt: true },
+            orderBy: { name: 'asc' },
+        })
+        : [];
+
+    const statusGroups = await prisma.task.groupBy({
+        by: ['status'],
+        where: { ...myTasksFilter, NOT: { status: 'archived' } },
+        _count: { _all: true },
+    });
+
+    const urgencyGroups = await prisma.task.groupBy({
+        by: ['urgency'],
+        where: { ...myTasksFilter, NOT: { status: 'archived' } },
+        _count: { _all: true },
+    });
+
+    const completedTasksTime = await prisma.task.findMany({
+        where: {
+            ...myTasksFilter,
+            status: 'done',
+            completedAt: { gte: ninetyDaysAgo },
+        },
+        select: { createdAt: true, completedAt: true, difficultyScore: true },
+    });
+
+    const orbitGroups = await prisma.routineTaskClaim.groupBy({
+        by: ['status'],
+        where: { claimedBy: userId },
+        _count: { _all: true },
+    });
+
+    const reviews = await prisma.taskReview.findMany({
+        where: {
+            reviewerType: 'requester',
+            task: { assigneeId: userId, status: 'done' },
+        },
+        select: { rating: true },
+    });
+
+    // `recentActivity` derives its `userId: { in: ... }` filter from the
+    // teamMembers row set above instead of running a second `findMany`.
     const teamMemberIds = teamId ? teamMembers.map((m) => m.id) : [userId];
 
     const recentActivity = await prisma.activityLog.findMany({
