@@ -10,13 +10,13 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "AHA COMSS",
+  title: "AHA COMS",
   description: "Company Support Systems",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "AHA COMSS",
+    title: "AHA COMS",
   },
   icons: {
     icon: "/aha-logo.png",
