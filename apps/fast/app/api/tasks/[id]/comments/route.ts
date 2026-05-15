@@ -152,7 +152,7 @@ export async function POST(
             const { sendViaAppsScript } = await import('@/lib/email');
             const { getAppUrl } = await import('@/lib/appUrl');
             const appUrl = getAppUrl();
-            const trackUrl = `${appUrl}/track?token=${task.taskToken}`;
+            const trackUrl = `${appUrl}/fast/track?token=${task.taskToken}`;
             sendViaAppsScript(
                 [task.requesterEmail],
                 `[FAST] New reply on your request: ${task.title}`,
@@ -169,7 +169,7 @@ export async function POST(
                         <div style="text-align: center; margin: 24px 0;">
                             <a href="${trackUrl}" style="display: inline-block; background: #0F0E7F; color: #fff; text-decoration: none; padding: 12px 32px; border-radius: 8px; font-size: 14px; font-weight: 600;">View & Reply</a>
                         </div>
-                        <p style="color: #94A3B8; font-size: 11px; text-align: center; margin-top: 20px;">AHA COMSS - Company Support Systems</p>
+                        <p style="color: #94A3B8; font-size: 11px; text-align: center; margin-top: 20px;">AHA COMS - Company Support Systems</p>
                     </div>
                 </div>`,
             ).catch(() => {});

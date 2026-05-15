@@ -12,13 +12,22 @@ import { NextRequest, NextResponse } from 'next/server';
 const PUBLIC_PATH_PREFIXES = [
     '/request',
     '/track',
-    // Public Request Form data sources — the /request page renders for guests
-    // and fetches both of these on mount. The route handlers themselves are
-    // already auth-free (brand codes pull from a server-side Google Sheets
-    // token; employees lists reference data with no user-scoped fields), so
-    // the edge guard is the only thing that was 401-ing the guest dropdown.
+    // Public Request Form endpoints — /request renders for guests and walks
+    // through dropdowns (brand codes, employees, assignee/meeting-invite
+    // users) then POSTs the submission (request, request-meeting, upload).
+    // Each handler is designed for guest traffic: input is Zod-validated
+    // (request, request-meeting), uploads cap at 25MB (upload), users/public
+    // returns id + name + team only (email scrubbed in the same PR as this
+    // allowlist), brand codes + employees are reference data with no
+    // user-scoped fields. Spam/abuse vectors (notify-all on submit, no MIME
+    // check on upload, no rate limit) are by-design or follow-ups — see
+    // PR #16 description.
     '/api/brand-codes',
     '/api/employees',
+    '/api/users/public',
+    '/api/request',
+    '/api/request-meeting',
+    '/api/upload',
     '/api/auth/google/callback',
     '/api/webhooks',
     '/api/cron',

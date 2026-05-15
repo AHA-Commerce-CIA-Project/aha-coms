@@ -1094,7 +1094,7 @@ export function CalendarMeetingSection() {
                                 </div>
                                 <div>
                                     <h3 className="text-lg font-bold text-slate-900">Disconnect Google Calendar</h3>
-                                    <p className="text-sm text-slate-500 mt-1">Your calendar events will no longer sync with AHA COMSS. You can reconnect anytime.</p>
+                                    <p className="text-sm text-slate-500 mt-1">Your calendar events will no longer sync with AHA COMS. You can reconnect anytime.</p>
                                 </div>
                             </div>
                         </div>

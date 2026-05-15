@@ -61,7 +61,7 @@ export function PWAInstaller() {
                 <Download className="w-5 h-5 text-indigo-600" />
             </div>
             <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-800">Install AHA COMSS</p>
+                <p className="text-sm font-semibold text-slate-800">Install AHA COMS</p>
                 <p className="text-xs text-slate-500 mt-0.5 mb-3">
                     Get quick access from your home screen with offline support.
                 </p>
