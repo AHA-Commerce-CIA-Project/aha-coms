@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireFastAuth } from '@/lib/auth/require-fast-auth';
+import { buildMemberCountMap } from '@/lib/channel-member-count';
 
 // GET /api/channels - List channels visible to current user
 // Optional ?purpose=discussion|assign_task to scope results.
@@ -55,27 +56,45 @@ export async function GET(request: Request) {
     orderBy: { updatedAt: 'desc' },
   });
 
-  // Member count:
-  //  - public + visibleToAllTeams → total user count
-  //  - public + allowedTeamIds → users in those teams
-  //  - private / otherwise → creator + explicit members
-  const result = await Promise.all(
-    channels.map(async (ch) => {
-      let memberCount = ch._count.members + 1; // default: creator + explicit members
-      if (!ch.isPrivate && ch.visibleToAllTeams) {
-        memberCount = await prisma.user.count();
-      } else if (!ch.isPrivate && ch.allowedTeamIds.length > 0) {
-        memberCount = await prisma.user.count({
-          where: { teamId: { in: ch.allowedTeamIds } },
-        });
-      }
-      const isPinned = ch.pinnedBy.length > 0;
-      // Strip the join rows from the response — the boolean is all the
-      // client needs and it keeps the payload small.
-      const { pinnedBy: _pinnedBy, ...rest } = ch;
-      return { ...rest, memberCount, isPinned };
-    })
+  // Member count — two optional queries run in parallel, then a single
+  // in-memory pass over channels:
+  //  - public + visibleToAllTeams → total user count (one shared query)
+  //  - public + allowedTeamIds    → groupBy teamId over the union of teamIds
+  //  - private / otherwise        → _count.members + 1 (no DB query)
+  const needsTotalUsers = channels.some((ch) => !ch.isPrivate && ch.visibleToAllTeams);
+  const teamIdsUnion = new Set<string>(
+    channels
+      .filter((ch) => !ch.isPrivate && !ch.visibleToAllTeams && ch.allowedTeamIds.length > 0)
+      .flatMap((ch) => ch.allowedTeamIds),
   );
+
+  const [totalUserCount, teamUserRows] = await Promise.all([
+    needsTotalUsers ? prisma.user.count() : Promise.resolve(0),
+    teamIdsUnion.size === 0
+      ? Promise.resolve([] as { teamId: string | null; _count: { _all: number } }[])
+      : prisma.user.groupBy({
+          by: ['teamId'],
+          where: { teamId: { in: [...teamIdsUnion] } },
+          _count: { _all: true },
+        }),
+  ]);
+
+  // groupBy returns null teamId rows for users without a team — skip them.
+  const userCountByTeamId = new Map<string, number>(
+    teamUserRows
+      .filter((r): r is { teamId: string; _count: { _all: number } } => r.teamId !== null)
+      .map((r) => [r.teamId, r._count._all]),
+  );
+
+  const memberCountMap = buildMemberCountMap(channels, totalUserCount, userCountByTeamId);
+
+  const result = channels.map((ch) => {
+    const isPinned = ch.pinnedBy.length > 0;
+    // Strip the join rows from the response — the boolean is all the
+    // client needs and it keeps the payload small.
+    const { pinnedBy: _pinnedBy, ...rest } = ch;
+    return { ...rest, memberCount: memberCountMap.get(ch.id) ?? ch._count.members + 1, isPinned };
+  });
 
   return NextResponse.json(result);
 }
