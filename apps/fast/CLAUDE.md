@@ -43,11 +43,11 @@ surface (routes, features, schemas) lives in `apps/fast/README.md` and
   `db:push` is a no-op for that diff anyway, and the proxy-bound `db:push`
   step shares the pool with the live `coms-fast-web` revision, so a
   wedged pool will fail the step but unblock the runtime deploy (which
-  connects via the Cloud Run socket, not the proxy). Confirmed 2026-05-15
-  against the four-task performance carving — `4cabd35` and `cd4f14e`
-  both jammed at `FATAL: remaining connection slots are reserved for
-  non-replication superuser connections` until a subject-line
-  `[skip-db-push]` let the deploy step through to drain the pool.
+  connects via the Cloud Run socket, not the proxy). Proven in the
+  2026-05-15 pool-saturation incident: four sequential deploys
+  (`4cabd35`, `cd4f14e`, `1d6fdca`, `75298eb`) rode the token — the
+  first two invoked case (2) to break the wedged pool, the last two
+  carried by inertia while the pool drained.
 - **Manual trigger**: deploys auto-fire on every push to `main` that matches
   the path filter above (see Trigger), so a manual kick is rarely needed.
   When it is — e.g. re-running after a transient failure on a no-op commit,
