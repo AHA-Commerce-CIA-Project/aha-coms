@@ -21,6 +21,10 @@ import {
     Sun,
     Moon,
     LogOut,
+    Zap,
+    Trophy,
+    Settings,
+    Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth/use-auth';
 import { useTheme } from '@/lib/theme-context';
@@ -29,15 +33,23 @@ import { htmlToPlainText } from '@/lib/sanitize';
 
 // Cross-app pills sit just right of the logo and link OUT of fast (full URLs
 // resolved at runtime from /api/userinfo's appCatalog; the static fallback
-// renders pre-auth so the strip never looks empty during first paint). Slugs
-// match the suite contract (portal=COMS), labels are normalised to the
-// short all-caps form the design calls for ('AHA Fast' → 'FAST').
-interface CrossAppEntry { slug: string; label: string; url: string; }
+// renders pre-auth so the strip never looks empty during first paint). The
+// portal pill was retired — the "AHA COMS" wordmark logo to the left is the
+// canonical portal-home affordance now. Labels are normalised to the short
+// all-caps form the design calls for ('AHA Fast' → 'FAST'), and each pill
+// carries the app's brand glyph (Zap for FAST, Trophy for HEROES per the
+// heroes-web brand mark documented in apps/heroes-web/README.md).
+interface CrossAppEntry { slug: string; label: string; url: string; icon?: any; }
+
+const iconForSlug = (slug: string): any => {
+    if (slug === 'fast') return Zap;
+    if (slug === 'heroes') return Trophy;
+    return undefined;
+};
 
 const CROSS_APP_FALLBACK: CrossAppEntry[] = [
-    { slug: 'portal', label: 'COMS', url: 'https://aha-coms.web.app/portal' },
-    { slug: 'heroes', label: 'HEROES', url: 'https://aha-coms.web.app/heroes/' },
-    { slug: 'fast', label: 'FAST', url: 'https://aha-coms.web.app/fast' },
+    { slug: 'fast', label: 'FAST', url: 'https://aha-coms.web.app/fast', icon: Zap },
+    { slug: 'heroes', label: 'HEROES', url: 'https://aha-coms.web.app/heroes/', icon: Trophy },
 ];
 
 const PORTAL_ORIGIN =
@@ -109,9 +121,13 @@ export function TopNav() {
     const accountRef = useRef<HTMLDivElement>(null);
 
     // Cross-app pill source: live appCatalog from /api/userinfo when the auth
-    // fetch has settled, static fallback before then so the row paints.
+    // fetch has settled, static fallback before then so the row paints. The
+    // portal slug is filtered out — the brand wordmark on the left is the
+    // portal-home affordance, so a separate pill would be a redundant trip.
     const crossApps: CrossAppEntry[] = appCatalog.length > 0
-        ? appCatalog.map(a => ({ slug: a.slug, label: pillLabel(a.label), url: a.url }))
+        ? appCatalog
+            .filter(a => a.slug !== 'portal')
+            .map(a => ({ slug: a.slug, label: pillLabel(a.label), url: a.url, icon: iconForSlug(a.slug) }))
         : CROSS_APP_FALLBACK;
     // Toast notifications — popups for high-signal events only.
     // Excludes generic channel posts, lifecycle, meetings, orbit, etc.
@@ -324,8 +340,15 @@ export function TopNav() {
         // above this bar) was folded in here, which is also why this bar no
         // longer needs the `md:top-9` sticky offset that reserved its 36px.
         <header className="h-16 bg-[#0F0E7F] flex items-center px-4 sticky top-0 z-40 shadow-md">
-            {/* Logo — clicking goes to default module */}
-            <Link href="/" className="flex items-center gap-2.5 pr-4 sm:pr-5 shrink-0">
+            {/* Logo — "AHA COMS" wordmark is the portal-home link, replacing
+                the retired COMS pill. Plain <a> (not next/link) because the
+                target is the portal origin served via Firebase Hosting
+                rewrite, not a fast-internal route. */}
+            <a
+                href={`${PORTAL_ORIGIN}/portal`}
+                aria-label="AHA COMS — return to portal"
+                className="flex items-center gap-2.5 pr-4 sm:pr-5 shrink-0"
+            >
                 <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center p-1">
                     <img src="/fast/aha-logo.png?v=2" alt="AHA" className="w-full h-full object-contain" />
                 </div>
@@ -333,7 +356,7 @@ export function TopNav() {
                     <span className="text-xl font-extrabold text-white tracking-tight">AHA</span>
                     <span className="text-xl font-medium text-white/90 ml-1 tracking-tight">COMS</span>
                 </div>
-            </Link>
+            </a>
 
             {/* Cross-app pills — leave fast for COMS / Heroes via real URLs.
                 FAST is always marked active here since this bar only renders
@@ -345,18 +368,20 @@ export function TopNav() {
             >
                 {crossApps.map(app => {
                     const isActive = app.slug === 'fast';
+                    const PillIcon = app.icon;
                     return (
                         <a
                             key={app.slug}
                             href={app.url}
                             aria-current={isActive ? 'page' : undefined}
                             className={cn(
-                                'inline-flex items-center px-3 py-1.5 text-xs sm:text-sm font-bold uppercase tracking-wide rounded-full transition-colors whitespace-nowrap',
+                                'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-bold uppercase tracking-wide rounded-full transition-colors whitespace-nowrap',
                                 isActive
                                     ? 'bg-white text-[#0F0E7F] shadow-sm'
                                     : 'text-white/80 hover:text-white hover:bg-white/10'
                             )}
                         >
+                            {PillIcon && <PillIcon className="w-3.5 h-3.5" />}
                             {app.label}
                         </a>
                     );
@@ -627,6 +652,29 @@ export function TopNav() {
                                     >
                                         Manage account
                                     </a>
+                                    {/* Fast-internal destinations pulled out of the
+                                        sidebar footer in the chrome standardization
+                                        pass — Settings and Changelog now live next to
+                                        Manage account so the whole "you" surface sits
+                                        in one menu. */}
+                                    <Link
+                                        href="/profile"
+                                        onClick={() => setShowAccount(false)}
+                                        role="menuitem"
+                                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                    >
+                                        <Settings className="w-4 h-4 text-slate-500" />
+                                        Settings
+                                    </Link>
+                                    <Link
+                                        href="/changelog"
+                                        onClick={() => setShowAccount(false)}
+                                        role="menuitem"
+                                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                    >
+                                        <Sparkles className="w-4 h-4 text-slate-500" />
+                                        Changelog
+                                    </Link>
                                     <button
                                         type="button"
                                         onClick={() => { setShowAccount(false); signOut(); }}
