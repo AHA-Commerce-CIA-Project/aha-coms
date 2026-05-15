@@ -108,18 +108,20 @@ surface (routes, features, schemas) lives in `apps/fast/README.md` and
     paste a `re_` Resend key or a DSN literal and the commit fails.
   - `code-review-graph detect-changes` — schema-graph consistency check.
 - **Merges into `main` go through a PR.** The `Sequence 0 — main
-  protection` ruleset requires one approving Code Owner review plus the
-  `Typecheck & unit tests` and `Lint hardcoded URLs` status checks; force
-  pushes and deletions are blocked. CODEOWNERS routing
-  (`.github/CODEOWNERS`):
-  - `/apps/fast/` — co-owned with @mrdoorba. You cannot self-approve, so
-    @mrdoorba's approval is required on every Fast PR.
-  - `/packages/`, `/infra/`, `/.github/` — @mrdoorba only.
-  - Anything else falls to the default `* @mrdoorba`.
+  protection` ruleset requires both `Typecheck & unit tests` and
+  `Lint hardcoded URLs` status checks to pass; force-pushes and
+  branch deletions stay blocked. **As of 2026-05-15 the review
+  requirement is relaxed** — open a PR, wait for both checks green,
+  merge it yourself. CODEOWNERS routing (`.github/CODEOWNERS`) still
+  pings @mrdoorba on cross-cutting paths (`/packages/`, `/infra/`,
+  `/.github/`) and on co-owned `/apps/fast/` paths, but approval is
+  advisory now — not a hard gate. The full rationale is in
+  `docs/adr/0012-sequence-0-main-protection.md`'s 2026-05-15
+  addendum.
 
   The PR template at `.github/pull_request_template.md` auto-fills the
   description with a cross-app-impact checklist; fill it in honestly so
-  the reviewer knows what they are reading.
+  the diff stays self-explanatory for the relaxed-review model.
 - **Secrets handling**. NEVER embed secrets in code. Production secrets live
   in GCP Secret Manager and reach Cloud Run via env vars wired by IaC
   (`infra/fast/cloud-run.tf` `fast_runtime_secret_env` local). Three live
@@ -211,5 +213,6 @@ pinned to v1 via `infra/fast/cloud-run.tf:153`). Two remain for you:
   rest of the suite is on Drizzle; the per-app exception's reopen
   criteria.
 - `docs/adr/0012-sequence-0-main-protection.md` — the ruleset +
-  CODEOWNERS + Sequence 0 bypass-team model that decides why your PRs
-  block on @mrdoorba's review.
+  CODEOWNERS + Sequence 0 bypass-team model, and the 2026-05-15
+  addendum where the review requirement was relaxed (CI checks are
+  the only hard gate).
