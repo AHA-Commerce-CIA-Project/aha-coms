@@ -19,7 +19,12 @@ export async function GET() {
         where: {
             source: 'direct_request',
             assigneeId: session.user.id,
-            status: { in: ['in-progress', 'review', 'done', 'pending_completion_details'] },
+            // 'pending' is the DB status for tasks the assignee has put On Hold
+            // (the /api/tasks/[id]/pending route flips status to 'pending' and
+            // snapshots the prior status into pendedFromStatus). Without it
+            // here, on-hold tasks vanish from the assignee's own list while
+            // still showing for admins via /api/tasks/direct-requests-all.
+            status: { in: ['in-progress', 'review', 'done', 'pending_completion_details', 'pending'] },
         },
         include: {
             assignee: { select: { name: true } },
