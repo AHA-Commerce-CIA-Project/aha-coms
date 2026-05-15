@@ -12,6 +12,11 @@
         "source": "/",
         "destination": "/portal",
         "type": 301
+      },
+      {
+        "source": "/profile",
+        "destination": "/portal/profile",
+        "type": 301
       }
     ],
     "rewrites": [

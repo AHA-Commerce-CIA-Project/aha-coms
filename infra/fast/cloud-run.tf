@@ -220,8 +220,9 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
 
     session_affinity = true
 
-    # Mirrors aha-fast-app's containerConcurrency=80; Next.js handles its own
-    # request fanout per instance.
+    # Inherited from the legacy aha-fast-app's containerConcurrency=80
+    # (retired 2026-05-15 per FU-27); Next.js handles its own request
+    # fanout per instance.
     max_instance_request_concurrency = 80
 
     volumes {
