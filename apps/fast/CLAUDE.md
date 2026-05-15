@@ -32,20 +32,22 @@ surface (routes, features, schemas) lives in `apps/fast/README.md` and
   `docker build` (buildkit cache-from `:latest`) → push to
   `coms-fast-registry` → `gcloud run deploy coms-fast-web` → smoke check.
 - **Skipping the migration step**: include `[skip-db-push]` (exact literal,
-  brackets included) on its own line in the commit body. Two cases call for
-  it. (1) Destructive migrations (DROP COLUMN, DROP TABLE) — those need the
-  manual `cloud-sql-proxy` + `bun run` sequence per `infra/README.md`.
-  (2) The Cloud SQL connection pool is saturated and your commits touch no
-  schema (`prisma/schema.prisma` unchanged) — `db:push` is a no-op for that
-  diff anyway, and the proxy-bound `db:push` step shares the pool with the
-  live `coms-fast-web` revision, so a wedged pool will fail the step but
-  unblock the runtime deploy (which connects via the Cloud Run socket, not
-  the proxy). Confirmed 2026-05-15 against the four-task performance
-  carving — every retry of `4cabd35` jammed at `FATAL: remaining
-  connection slots are reserved for non-replication superuser connections`
-  until a `[skip-db-push]` body let the deploy step through to drain the
-  pool. The workflow's grep matches the literal at line-start to avoid
-  substring trips from prose.
+  brackets included) **in the commit subject line** — anywhere on the first
+  line, conventionally at the end. The workflow's `Resolve db-push skip token`
+  step greps only `head -n1` of the commit message (see
+  `.github/workflows/deploy-fast.yml`), so the body is not inspected. Two
+  cases call for it. (1) Destructive migrations (DROP COLUMN, DROP TABLE)
+  — those need the manual `cloud-sql-proxy` + `bun run` sequence per
+  `infra/README.md`. (2) The Cloud SQL connection pool is saturated and
+  your commits touch no schema (`prisma/schema.prisma` unchanged) —
+  `db:push` is a no-op for that diff anyway, and the proxy-bound `db:push`
+  step shares the pool with the live `coms-fast-web` revision, so a
+  wedged pool will fail the step but unblock the runtime deploy (which
+  connects via the Cloud Run socket, not the proxy). Confirmed 2026-05-15
+  against the four-task performance carving — `4cabd35` and `cd4f14e`
+  both jammed at `FATAL: remaining connection slots are reserved for
+  non-replication superuser connections` until a subject-line
+  `[skip-db-push]` let the deploy step through to drain the pool.
 - **Manual escape hatch**: `gcloud builds submit
   --config=apps/fast/cloudbuild.yaml .` from the laptop still works when the
   workflow is offline.
