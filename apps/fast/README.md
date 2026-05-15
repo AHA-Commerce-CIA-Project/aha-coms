@@ -134,8 +134,9 @@ README, not to dead code:
 - **No hardcoded app catalog in chrome.** `data.appCatalog` flows
   from `/api/auth/me`'s response, which derives it from
   `loadFastAuthUser`'s `apps` projection. A new app onboarding requires
-  zero changes in fast's `SuiteServiceBar` component — the per-tab
-  list lifts from the auth payload on every render.
+  zero changes in fast's `TopNav` cross-app pills — the per-pill list
+  lifts from the auth payload on every render (with a static fallback
+  rendered pre-auth so the row never looks empty on first paint).
 - **No `email_verified`, `provider_id`, `password_hash` columns**
   anywhere in `User`. Identity comes from `/api/userinfo`; the row
   holds fast-specific state (`role`, `teamId`, `lastSeenAt`,
@@ -262,8 +263,8 @@ SQL files for destructive shapes live in `apps/fast/prisma/sql/`:
 - **Middleware** — `middleware.ts` (T68): auth-cookie check with
   public-path allowlist.
 - **Chrome integration** — `components/AppShell.tsx`,
-  `components/layout/SuiteServiceBar.tsx`, `components/layout/TopNav.tsx`,
-  `components/layout/Sidebar.tsx`, `components/layout/BottomNav.tsx`.
+  `components/layout/TopNav.tsx`, `components/layout/Sidebar.tsx`,
+  `components/layout/BottomNav.tsx`.
 - **Health checks** — `/fast/api/health` (T79); Cloud Run startup
   + liveness probes + portal dashboard probe.
 
@@ -273,7 +274,7 @@ SQL files for destructive shapes live in `apps/fast/prisma/sql/`:
 |---|---|
 | §1 Authentication and session | `apps/fast/lib/auth/load-fast-auth-user.ts` (`loadFastAuthUser`); `apps/fast/middleware.ts` (PUBLIC_PATH_PREFIXES allowlist); `apps/fast/app/api/auth/me/route.ts` |
 | §2 User identity | `User` model at `apps/fast/prisma/schema.prisma`; PK is currently `id` (legacy Better-Auth string), bridged to portal via `portal_sub @unique`. PK promotion to `portal_sub` deferred per T64's cascade scope |
-| §3 Chrome and account widget | `components/AppShell.tsx` mounts `SuiteServiceBar` (above) + `TopNav` + `Sidebar` + `BottomNav` — `ServiceBar` + `AccountWidget` from `@coms-portal/ui-react` + `@coms-portal/account-widget-react` |
+| §3 Chrome and account widget | `components/AppShell.tsx` mounts `TopNav` + `Sidebar` + `BottomNav`. `TopNav` carries cross-app pills + an inline account popover after the 2026-05-15 header consolidation (PR #6); the shared `@coms-portal/ui-react` `ServiceBar` and `@coms-portal/account-widget-react` `AccountWidget` are not mounted in fast — an inline popover sidesteps the shared widget's hardcoded `fixed top-9 right-3` offset that assumed a separate 36px-tall ServiceBar above the TopNav |
 | §4 Design tokens | `@coms-portal/design-tokens` imported via `app/globals.css`; brand palette + spacing primitives flow through Tailwind v4's `@source` registration |
 | §5 Routing and base path | `next.config.ts` `basePath: '/fast'` + `assetPrefix`; `middleware.ts` matches against `req.nextUrl.pathname` (Next.js strips the basePath in middleware context) |
 | §6 Real-time and chat | Postgres LISTEN/NOTIFY through `app/api/chat/` routes; no public WebSockets, no SSE (chat uses long-polling today; SSE swap deferred) |

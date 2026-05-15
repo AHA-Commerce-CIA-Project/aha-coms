@@ -15,6 +15,21 @@ needs investigation.
 > T77's webhook consumer + T78's taxonomy projection hadn't landed
 > yet. Subsequent operator windows should follow this order verbatim.
 
+> **2026-05-15 note on chrome description.** PR #6 (header
+> consolidation) folded the cross-app `ServiceBar` strip + theme
+> toggle + shared `AccountWidget` into fast's single blue `TopNav`
+> on 2026-05-15, after this runbook was authored. The chrome
+> descriptions below (CP17 acceptance, Step 4 walk, Step 5 screenshot
+> grid) still describe the **pre-consolidation two-bar layout** —
+> a 36px `ServiceBar` above the 64px `TopNav` with the `AccountWidget`
+> mounted in `ServiceBar`'s right slot. That layout no longer exists.
+> For the current chrome architecture (single blue `TopNav` with
+> cross-app pills + inline account popover), see Step 2 of
+> [`smoke-checklist.md`](smoke-checklist.md). This runbook is kept
+> verbatim as the historical record of the CP14→CP20 operator window;
+> future runbooks for similar windows should derive from the
+> consolidated `TopNav` shape, not from this document's chrome prose.
+
 ## What crosses by the end
 
 - **CP14** — fast has no Better Auth surfaces in code AND no orphan
