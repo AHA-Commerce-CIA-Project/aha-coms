@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 /**
  * useAuth — client-side identity hook.
@@ -122,7 +122,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const handleSignOut = async () => {
+    // Wrapped in useCallback so the AuthContext value below stays
+    // referentially stable across renders — a fresh function literal here
+    // would defeat the useMemo that wraps the provider value and ripple
+    // back into every useEffect that depends on the context object.
+    const handleSignOut = useCallback(async () => {
         setProfile(null);
         const portalOrigin =
             process.env.NEXT_PUBLIC_PORTAL_ORIGIN ||
@@ -132,20 +136,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.location.assign(
             `${portalOrigin}/api/auth/sign-out?returnTo=${encodeURIComponent(returnTo)}`,
         );
-    };
+    }, []);
+
+    // Memoised so the context object identity only changes when one of
+    // its inputs changes. The previous shape (a fresh object literal in
+    // the JSX prop) crashed /fast/messages by triggering an infinite
+    // render loop: every render produced a new context value, every
+    // useSession()/useAuth() consumer saw a new reference, every
+    // useEffect with session in its deps re-ran, and ChannelPane's
+    // setChatHeader publish re-fired into MessagesWorkspace's Zustand
+    // subscriber — Maximum update depth exceeded.
+    const value = useMemo(
+        () => ({
+            user: profile,
+            profile,
+            isLeader: profile?.role === 'leader' || profile?.role === 'admin',
+            isMaster: profile?.role === 'admin',
+            loading,
+            appCatalog,
+            signOut: handleSignOut,
+        }),
+        [profile, loading, appCatalog, handleSignOut],
+    );
 
     return (
-        <AuthContext.Provider
-            value={{
-                user: profile,
-                profile,
-                isLeader: profile?.role === 'leader' || profile?.role === 'admin',
-                isMaster: profile?.role === 'admin',
-                loading,
-                appCatalog,
-                signOut: handleSignOut,
-            }}
-        >
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );
@@ -160,21 +175,28 @@ export const useAuth = () => useContext(AuthContext);
  * consumers continue reading `data?.user.id` after the credential-lib
  * cut. The `user` shape is the minimal Better Auth surface those
  * callers already access: `{ id, email, name, image, role }`.
+ *
+ * The wrapper object MUST be memoised. Returning a fresh literal each
+ * call gave every consumer a new `data` reference per render, so any
+ * useEffect with `data`/`session` in its deps re-ran on every render
+ * and triggered the /fast/messages infinite-loop crash documented
+ * inline above the AuthProvider value memo. Memoising on `user` keeps
+ * the reference stable as long as the underlying profile state is
+ * stable.
  */
 export function useSession() {
     const { user, loading } = useAuth();
-    return {
-        data: user
-            ? {
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    name: user.name,
-                    image: user.image,
-                    role: user.role,
-                },
-            }
-            : null,
-        isPending: loading,
-    };
+    const data = useMemo(() => {
+        if (!user) return null;
+        return {
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                image: user.image,
+                role: user.role,
+            },
+        };
+    }, [user]);
+    return { data, isPending: loading };
 }
