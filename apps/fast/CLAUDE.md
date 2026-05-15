@@ -48,9 +48,14 @@ surface (routes, features, schemas) lives in `apps/fast/README.md` and
   both jammed at `FATAL: remaining connection slots are reserved for
   non-replication superuser connections` until a subject-line
   `[skip-db-push]` let the deploy step through to drain the pool.
-- **Manual escape hatch**: `gcloud builds submit
-  --config=apps/fast/cloudbuild.yaml .` from the laptop still works when the
-  workflow is offline.
+- **Manual trigger**: deploys auto-fire on every push to `main` that matches
+  the path filter above (see Trigger), so a manual kick is rarely needed.
+  When it is — e.g. re-running after a transient failure on a no-op commit,
+  or shipping a deploy that touched no path-filtered files — use
+  `gh workflow run deploy-fast.yml --ref main`. The legacy
+  `gcloud builds submit --config=apps/fast/cloudbuild.yaml .` path is gone;
+  no Cloud Build config exists for fast (only the four sibling apps —
+  heroes-api, heroes-web, portal-api, portal-web — keep one).
 - **Live URL**: `https://aha-coms.web.app/fast/` (Firebase Hosting →
   `coms-fast-web` via path-based rewrite). The raw Cloud Run URL
   `https://coms-fast-web-45tyczfska-et.a.run.app` exists but isn't
