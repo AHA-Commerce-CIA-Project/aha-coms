@@ -78,77 +78,115 @@ table for `__session` scope troubleshooting.
 Still in the authenticated session.
 
 **Desktop (≥md breakpoint, viewport width ≥768px).** Expected
-layout:
+layout after PR #6's 2026-05-15 header consolidation:
 
 ```
-[ ServiceBar (36px high, top:0)            ]  ← @coms-portal/ui-react
-[ Fast TopNav (64px high, top:36px)        ]  ← apps/fast/components/layout/TopNav.tsx
-[ Fast Sidebar (collapsed 64px, top:100px) ]  ← apps/fast/components/layout/Sidebar.tsx
-[ Page content (offset by sidebar width)   ]
+[ Consolidated TopNav (64px high, sticky top:0, bg #0F0E7F)   ]  ← apps/fast/components/layout/TopNav.tsx
+[ Fast Sidebar (collapsed 64px, top:64px)                     ]  ← apps/fast/components/layout/Sidebar.tsx
+[ Page content (offset by sidebar width)                      ]
 ```
 
-ServiceBar carries:
-- Three tabs: **COMS** / **AHA Heroes** / **AHA Fast** (AHA Fast
-  marked "Here" / active).
-- Left slot: brand `F` mark (gradient + letter), label "AHA Fast".
-- Right slot: AccountWidget avatar with the operator's initials.
+The TopNav is **one blue bar** carrying everything left-to-right.
+The pre-consolidation two-bar layout (a 36px shared ServiceBar
+above a 64px TopNav) is gone — see PR #6 for the fold-in rationale.
 
-Fast TopNav carries (post-FU-from-finding-4 strip):
-- Notification bell.
-- (No theme toggle — ServiceBar's covers cross-app concerns;
-  fast's TopNav lost that surface in commit `61a58be`.)
-- (No profile menu in TopNav — AccountWidget owns it.)
+TopNav slots:
+
+- **Logo + wordmark** (left): round AHA logo + `AHA COMS` wordmark.
+- **Cross-app pills**: **COMS** / **HEROES** / **FAST** (FAST is
+  active — white pill, dark-blue text). The pills are plain `<a>`
+  (not `next/link`) because the targets are other-origin URLs
+  served by Firebase Hosting rewrites.
+- **In-app module tabs**: `Request Form` always visible; `User
+  Control Panel` only visible when `useAuth().isLeader` is true.
+  The legacy `AHA Fast` MODULE entry and its 7-item dropdown are
+  gone — those destinations (Dashboard, Tasks, Messages, Channels,
+  Analytics, Activity Log, Later) live in the Sidebar (≥md) and
+  BottomNav (<md) now.
+- **Right cluster** (`pl-4 shrink-0`): notification bell with `9+`
+  unread badge if applicable → theme toggle (Sun icon when dark,
+  Moon icon when light — flips to the target mode) → account
+  button (avatar + first-name on ≥sm; avatar-only on <sm via
+  `hidden sm:inline` on the first-name span).
 
 **Mobile (<md, viewport width <768px).** Expected:
 
-- ServiceBar hidden (`hidden md:flex`).
-- Fast's TopNav serves as the only top bar.
-- Fast's BottomNav sits at the bottom.
+- The blue TopNav stays at top, full-width — there's still only
+  one bar.
+- Cross-app pills + module tabs share a horizontally scrollable
+  row (`overflow-x-auto` on the module-tabs nav, `shrink-0
+  whitespace-nowrap` on the pills); the right cluster stays
+  anchored to the right edge (`pl-4 shrink-0`).
+- Account button collapses to avatar-only.
+- Sidebar hidden; BottomNav at the bottom.
 
-**Test the AccountWidget popover** (desktop):
+**Test the account popover** (desktop):
 
-1. Click the avatar in ServiceBar's right slot.
-2. Popover should render with: name + email + portalRole badge →
-   "Manage account" link (→ portal `/profile`) → app launcher
-   showing all three apps with "Here" on AHA Fast → "Sign out".
+1. Click the avatar + first-name trigger on the right cluster.
+2. Popover should render **anchored below the trigger** (`absolute
+   top-full mt-2`, NOT clipped under the bar). The inline
+   implementation sidesteps the shared `AccountWidget`'s hardcoded
+   `fixed top-9 right-3` offset — that offset assumed a separate
+   36px-tall ServiceBar above the TopNav, and mounting the shared
+   widget inside the 64px TopNav would have floated the popover
+   over the trigger itself.
+3. Popover contents: name + email + role chip
+   (`user.portalRole`) → "Manage account" link (→ portal
+   `/profile`) → "Sign out" button.
 
-**Findings to expect.** Two-avatar visual artifact if TopNav's
-in-app profile menu wasn't fully stripped (see commit `61a58be`).
-If you see one, file as a T75 cosmetic finding, not a CP21
-blocker.
+**Test the cross-app pills**: hover each. FAST stays pinned (white
+pill, dark text, `bg-white text-[#0F0E7F]`); COMS and HEROES
+hover-darken (`hover:bg-white/10`). Click COMS — navigates to
+`https://aha-coms.web.app/portal`; click HEROES — navigates to
+`https://aha-coms.web.app/heroes/`.
+
+**Test the theme toggle**: click the sun/moon icon. The whole UI
+flips light↔dark. Hard-reload the page — the theme persists
+(`localStorage.aha-theme`).
+
+**Findings to expect.** None typically post-PR-#6. Watch for:
+- Popover clipping under the TopNav (would indicate the inline
+  popover regressed to a fixed-offset implementation).
+- Mobile right cluster getting crushed by the pills/tabs row
+  (would indicate the right cluster's `shrink-0` regressed).
+- A second 36px strip rendering above the blue bar (would indicate
+  the SuiteServiceBar was somehow remounted into AppShell).
 
 **Record:** PASS / FAIL under T87 step 2 with screenshots if the
 layout differs from above.
 
 ## Step 3 — Cross-app navigation (§3, §5)
 
-Click each ServiceBar tab in sequence:
+Click each cross-app pill in sequence:
 
-1. **AHA Fast → COMS** (portal).
+1. **FAST → COMS**.
    - URL flips to `https://aha-coms.web.app/portal/...`.
    - Portal's chrome renders; no re-auth prompt.
    - DevTools shows `__session` cookie still attached.
-2. **COMS → AHA Heroes**.
+2. **COMS → HEROES**.
    - URL flips to `https://aha-coms.web.app/heroes/...`.
    - Heroes' chrome (SvelteKit-rendered) renders.
    - No re-auth.
-3. **AHA Heroes → AHA Fast** (back to start).
-   - Back at `/fast/...` with the AccountWidget showing the
-     operator.
+3. **HEROES → FAST** (back to start).
+   - Back at `/fast/...` with the account button showing the
+     operator's avatar + first-name on the right cluster.
 
 **Test sign-out:**
 
-1. Open AccountWidget → click "Sign out".
-2. Browser hits portal's `/api/auth/sign-out`.
-3. `__session` cookie clears.
-4. Browser redirects to the post-logout destination
+1. Open the account popover → click "Sign out".
+2. The popover closes; `useAuth().signOut()` fires.
+3. Browser hits portal's `/api/auth/sign-out`.
+4. `__session` cookie clears.
+5. Browser redirects to the post-logout destination
    (`https://aha-coms.web.app/`).
 
 **Verify:** Try `https://aha-coms.web.app/fast/dashboard` again.
 Expected: bounces through portal sign-in again (cookie cleared).
 
 **Findings to expect.** None typically; CP17's authenticated walk
-already exercised this in the CP14→CP20 window.
+already exercised the cross-app navigation in the CP14→CP20
+window. After PR #6, the cross-app pills are the only nav surface
+between apps — the deprecated ServiceBar tab strip is gone.
 
 **Record:** PASS / FAIL under T87 step 3.
 
