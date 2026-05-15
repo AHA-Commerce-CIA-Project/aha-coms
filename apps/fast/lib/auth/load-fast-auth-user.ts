@@ -30,6 +30,7 @@
  * fast-side identity in-line — `role`, `teamId`, `image` — so there's
  * no `fast_profiles` second-table read).
  */
+import { cache } from 'react'
 import { prisma } from '@/lib/db'
 
 /**
@@ -85,23 +86,16 @@ export type FastAuthResult = {
   appCatalog: readonly { slug: string; label: string; url: string }[]
 }
 
-/**
- * Resolve the fast AuthUser for an incoming request.
- *
- * `portalSessionCookie` is the raw `__session` cookie value Firebase
- * Hosting forwarded into fast (read via `cookies().get('__session')`
- * in Next.js Server Components or Route Handlers). `portalOrigin` is
- * the single-origin host that fronts every consuming app —
- * `https://aha-coms.web.app` in prod, the dev origin locally.
- *
- * Returns `null` when the portal session is missing/invalid (401 from
- * userinfo) so callers can hand the request off to portal sign-in.
- * Throws `PortalSessionDeniedError` when the session is valid but the
- * user does not have the `fast` app slug — distinct from "not signed
- * in" so the layout can render a 403 instead of bouncing through the
- * sign-in handoff.
- */
-export async function loadFastAuthUser(
+type SessionCacheEntry = { result: FastAuthResult; expiresAt: number }
+const sessionResultCache = new Map<string, SessionCacheEntry>()
+const SESSION_CACHE_TTL_MS = 5 * 60 * 1000
+const SESSION_CACHE_MAX_ENTRIES = 5000
+
+export function __resetAuthCacheForTests(): void {
+  sessionResultCache.clear()
+}
+
+async function resolveFastAuthUserFresh(
   portalSessionCookie: string,
   portalOrigin: string,
 ): Promise<FastAuthResult | null> {
@@ -121,11 +115,6 @@ export async function loadFastAuthUser(
     throw new PortalSessionDeniedError(info.sub)
   }
 
-  // Upsert the User row keyed on portal_sub. The first-time path
-  // creates the row with a fresh local id (Prisma generates the
-  // string id) so the 38 product-model FKs that reference `User.id`
-  // continue to resolve. T64 collapses the local id and promotes
-  // portal_sub to PK once every active user has a non-null value.
   const row = await prisma.user.upsert({
     where: { portal_sub: info.sub },
     create: {
@@ -162,3 +151,44 @@ export async function loadFastAuthUser(
     appCatalog: info.apps,
   }
 }
+
+/**
+ * Resolve the fast AuthUser for an incoming request.
+ *
+ * Two layers of memoization sit in front of the portal-api fetch +
+ * Prisma upsert:
+ *   1. React `cache()` coalesces calls inside one server render
+ *      (Server Components that all call requireFastAuth share one
+ *      result).
+ *   2. A module-level Map keyed on the `__session` cookie with a
+ *      5-minute TTL coalesces calls across requests on the same Cloud
+ *      Run instance. session_affinity routes a given client's repeat
+ *      requests to the same instance, so the hit rate is high.
+ *
+ * Only successful results are cached. 401 (revoked / expired session)
+ * and PortalSessionDeniedError (no `fast` claim) re-check on every
+ * call so revocation propagates immediately.
+ */
+export const loadFastAuthUser = cache(
+  async (
+    portalSessionCookie: string,
+    portalOrigin: string,
+  ): Promise<FastAuthResult | null> => {
+    const cached = sessionResultCache.get(portalSessionCookie)
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.result
+    }
+    const result = await resolveFastAuthUserFresh(portalSessionCookie, portalOrigin)
+    if (result) {
+      if (sessionResultCache.size >= SESSION_CACHE_MAX_ENTRIES) {
+        const oldest = sessionResultCache.keys().next().value
+        if (oldest !== undefined) sessionResultCache.delete(oldest)
+      }
+      sessionResultCache.set(portalSessionCookie, {
+        result,
+        expiresAt: Date.now() + SESSION_CACHE_TTL_MS,
+      })
+    }
+    return result
+  },
+)

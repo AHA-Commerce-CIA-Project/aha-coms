@@ -34,7 +34,9 @@ mock.module('@/lib/db', () => ({
   },
 }))
 
-const { loadFastAuthUser, PortalSessionDeniedError } = await import('./load-fast-auth-user')
+const { loadFastAuthUser, PortalSessionDeniedError, __resetAuthCacheForTests } = await import(
+  './load-fast-auth-user',
+)
 
 const PORTAL_ORIGIN = 'https://aha-coms.web.app'
 
@@ -70,6 +72,7 @@ function userinfoResponse(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   upsertMock.mockClear()
+  __resetAuthCacheForTests()
 })
 
 afterEach(() => {
@@ -140,5 +143,50 @@ describe('loadFastAuthUser', () => {
     expect(url).toBe(`${PORTAL_ORIGIN}/api/userinfo`)
     const headers = (init.headers as Record<string, string>) ?? {}
     expect(headers.cookie).toBe('__session=the-cookie-value')
+  })
+
+  it('coalesces repeat calls with the same __session cookie — one portal fetch + one upsert', async () => {
+    let fetchCount = 0
+    globalThis.fetch = mock(async () => {
+      fetchCount++
+      return userinfoResponse()
+    }) as unknown as typeof fetch
+
+    await loadFastAuthUser('repeat-cookie', PORTAL_ORIGIN)
+    await loadFastAuthUser('repeat-cookie', PORTAL_ORIGIN)
+    await loadFastAuthUser('repeat-cookie', PORTAL_ORIGIN)
+
+    expect(fetchCount).toBe(1)
+    expect(upsertMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats distinct session cookies as separate cache entries', async () => {
+    let fetchCount = 0
+    globalThis.fetch = mock(async () => {
+      fetchCount++
+      return userinfoResponse()
+    }) as unknown as typeof fetch
+
+    await loadFastAuthUser('cookie-A', PORTAL_ORIGIN)
+    await loadFastAuthUser('cookie-B', PORTAL_ORIGIN)
+
+    expect(fetchCount).toBe(2)
+    expect(upsertMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not cache 401 results — a revoked session re-checks portal-api on retry', async () => {
+    let fetchCount = 0
+    globalThis.fetch = mock(async () => {
+      fetchCount++
+      return new Response(JSON.stringify({ message: 'No session cookie' }), { status: 401 })
+    }) as unknown as typeof fetch
+
+    const a = await loadFastAuthUser('expired', PORTAL_ORIGIN)
+    const b = await loadFastAuthUser('expired', PORTAL_ORIGIN)
+
+    expect(a).toBeNull()
+    expect(b).toBeNull()
+    expect(fetchCount).toBe(2)
+    expect(upsertMock).not.toHaveBeenCalled()
   })
 })
