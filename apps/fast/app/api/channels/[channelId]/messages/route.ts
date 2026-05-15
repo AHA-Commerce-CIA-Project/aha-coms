@@ -105,6 +105,16 @@ export async function POST(
     return NextResponse.json({ error: 'Message content or attachments required' }, { status: 400 });
   }
 
+  // Critical path: create the message and respond. Everything below the
+  // response — channel.updatedAt bump, activity log, channel info fetch,
+  // target-user fan-out, team-handle expansion, notification createMany —
+  // ran inside the request before this rewrite, so a public channel with
+  // N users paid an N-row prisma.user.findMany + N-row notification.
+  // createMany cost on every send. That was the 3-5 second send latency
+  // users were seeing. The new shape returns the message immediately and
+  // defers the fan-out to a fire-and-forget block; min=1 Cloud Run keeps
+  // the instance alive between requests, so deferred work completes on
+  // the same instance without blocking the user.
   const message = await prisma.channelMessage.create({
     data: {
       channelId,
@@ -120,81 +130,88 @@ export async function POST(
     },
   });
 
-  // Update channel updatedAt
-  await prisma.channel.update({
-    where: { id: channelId },
-    data: { updatedAt: new Date() },
-  });
+  const senderId = session.user.id;
+  const senderName = session.user.name;
 
-  // Log activity
-  logActivity(session.user.id, 'channel_message', `${session.user.name} posted a message in a channel`, 'channel', channelId);
+  void (async () => {
+    try {
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: { updatedAt: new Date() },
+      });
 
-  // Get channel info for notification
-  const channel = await prisma.channel.findUnique({
-    where: { id: channelId },
-    select: { name: true, isPrivate: true, createdBy: true },
-  });
+      logActivity(senderId, 'channel_message', `${senderName} posted a message in a channel`, 'channel', channelId);
 
-  // For private channels, only notify members + creator; for public, notify all
-  let targetUsers: { id: string }[];
-  if (channel?.isPrivate) {
-    const members = await prisma.channelMember.findMany({
-      where: { channelId },
-      select: { userId: true },
-    });
-    const memberIds = new Set(members.map((m) => m.userId));
-    if (channel.createdBy) memberIds.add(channel.createdBy);
-    memberIds.delete(session.user.id);
-    targetUsers = Array.from(memberIds).map((id) => ({ id }));
-  } else {
-    targetUsers = await prisma.user.findMany({
-      where: { id: { not: session.user.id } },
-      select: { id: true },
-    });
-  }
+      const channel = await prisma.channel.findUnique({
+        where: { id: channelId },
+        select: { name: true, isPrivate: true, createdBy: true },
+      });
 
-  const mentionSet = new Set<string>(mentions);
-
-  // Expand team-handle mentions (@tfbi, @tpr, …) — pull each handle's members
-  // into the mention set so they get a "you were mentioned" notification.
-  const handleMatches = new Set<string>();
-  const plain = htmlToPlainText(content || '');
-  for (const m of plain.matchAll(/@([a-z0-9][a-z0-9_-]{1,29})/gi)) {
-    handleMatches.add(m[1].toLowerCase());
-  }
-  if (handleMatches.size > 0) {
-    const teams = await prisma.team.findMany({
-      where: { mentionHandle: { in: Array.from(handleMatches) } },
-      select: {
-        mentionHandle: true,
-        users: { select: { id: true } },
-      },
-    });
-    for (const t of teams) {
-      for (const u of t.users) {
-        if (u.id !== session.user.id) mentionSet.add(u.id);
+      // For private channels, only notify members + creator; for public, notify all.
+      let targetUsers: { id: string }[];
+      if (channel?.isPrivate) {
+        const members = await prisma.channelMember.findMany({
+          where: { channelId },
+          select: { userId: true },
+        });
+        const memberIds = new Set(members.map((m) => m.userId));
+        if (channel.createdBy) memberIds.add(channel.createdBy);
+        memberIds.delete(senderId);
+        targetUsers = Array.from(memberIds).map((id) => ({ id }));
+      } else {
+        targetUsers = await prisma.user.findMany({
+          where: { id: { not: senderId } },
+          select: { id: true },
+        });
       }
+
+      const mentionSet = new Set<string>(mentions);
+
+      // Expand team-handle mentions (@tfbi, @tpr, …) — pull each handle's
+      // members into the mention set so they get a "you were mentioned"
+      // notification.
+      const handleMatches = new Set<string>();
+      const plain = htmlToPlainText(content || '');
+      for (const m of plain.matchAll(/@([a-z0-9][a-z0-9_-]{1,29})/gi)) {
+        handleMatches.add(m[1].toLowerCase());
+      }
+      if (handleMatches.size > 0) {
+        const teams = await prisma.team.findMany({
+          where: { mentionHandle: { in: Array.from(handleMatches) } },
+          select: {
+            mentionHandle: true,
+            users: { select: { id: true } },
+          },
+        });
+        for (const t of teams) {
+          for (const u of t.users) {
+            if (u.id !== senderId) mentionSet.add(u.id);
+          }
+        }
+      }
+
+      const notifications = targetUsers.map((u) => ({
+        userId: u.id,
+        type: mentionSet.has(u.id) ? 'mention' : 'channel_message',
+        title: mentionSet.has(u.id)
+          ? `${senderName} mentioned you in #${channel?.name || 'channel'}`
+          : `${senderName} posted in #${channel?.name || 'channel'}`,
+        message: htmlToPlainText(content).substring(0, 80) || 'sent an attachment',
+        data: {
+          channel_id: channelId,
+          message_id: message.id,
+          sender_id: senderId,
+          sender_name: senderName,
+        },
+      }));
+
+      if (notifications.length > 0) {
+        await prisma.notification.createMany({ data: notifications });
+      }
+    } catch (err) {
+      console.error('channel POST side effects failed:', err);
     }
-  }
-
-  const notifications = targetUsers.map((u) => ({
-    userId: u.id,
-    type: mentionSet.has(u.id) ? 'mention' : 'channel_message',
-    title: mentionSet.has(u.id)
-      ? `${session.user.name} mentioned you in #${channel?.name || 'channel'}`
-      : `${session.user.name} posted in #${channel?.name || 'channel'}`,
-    message: htmlToPlainText(content).substring(0, 80) || 'sent an attachment',
-    data: {
-      channel_id: channelId,
-      message_id: message.id,
-      sender_id: session.user.id,
-      sender_name: session.user.name,
-    },
-  }));
-
-  if (notifications.length > 0) {
-    await prisma.notification.createMany({ data: notifications });
-  }
+  })();
 
   return NextResponse.json(message, { status: 201 });
 }

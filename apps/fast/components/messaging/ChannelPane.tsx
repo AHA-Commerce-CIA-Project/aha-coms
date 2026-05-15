@@ -437,7 +437,32 @@ export function ChannelPane() {
   };
 
   const handleSendMessage = async (content: string, attachments: Attachment[], mentions: string[]) => {
-    if (!selectedChannel) return;
+    if (!selectedChannel || !session) return;
+    // Optimistic insert — the message appears at the top of the feed
+    // (newest-first state) before the request resolves so users never see
+    // the 3-5s lag the route handler's notification fan-out used to add.
+    // The SSE 'messages' listener dedupes by id, so the same message
+    // pushed back through the stream after the round-trip is filtered.
+    // On error we drop the temp row so the user can retry.
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimistic: Message = {
+      id: tempId,
+      content,
+      attachments,
+      mentions,
+      replyCount: 0,
+      senderId: session.user.id,
+      sender: {
+        id: session.user.id,
+        name: session.user.name,
+        image: session.user.image,
+      },
+      reactions: [],
+      savedBy: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [optimistic, ...prev]);
     try {
       const res = await fetch(`/fast/api/channels/${selectedChannel.id}/messages`, {
         method: 'POST',
@@ -446,10 +471,17 @@ export function ChannelPane() {
       });
       if (res.ok) {
         const msg = await res.json();
-        setMessages((prev) => [msg, ...prev]);
+        // Swap the temp row for the server's canonical message (real id,
+        // real createdAt). Done in-place so the user doesn't see a flicker
+        // or scroll jump.
+        setMessages((prev) => prev.map((m) => (m.id === tempId ? msg : m)));
         markAsRead(selectedChannel.id);
+      } else {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
-    } catch {}
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    }
   };
 
   const handleReaction = async (messageId: string, emoji: string) => {

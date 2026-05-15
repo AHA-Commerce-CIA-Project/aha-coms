@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, PenSquare, X, Send, Paperclip, Image as ImageIcon, Smile, ChevronLeft, Plus, ClipboardList, Clock, CheckCircle2, Pencil, Trash2, Bookmark } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { ChannelMessageComposer } from '@/components/channels/ChannelMessageComposer';
+import { DeleteMessageModal } from '@/components/channels/DeleteMessageModal';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { PresenceDot } from '@/components/PresenceDot';
 import { linkifyHtml } from '@/lib/linkify';
@@ -296,6 +297,11 @@ export function DmPane() {
     const [uploading, setUploading] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+    // Delete-message modal target — set by the trash icon, cleared on close.
+    // Matches the channels surface, which has used DeleteMessageModal since
+    // the messaging unification pass; DMs were the last surface still on
+    // window.confirm().
+    const [deleteTarget, setDeleteTarget] = useState<DmMessage | null>(null);
     const [mobileShowThread, setMobileShowThread] = useState(false);
     const msgEndRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
@@ -545,10 +551,28 @@ export function DmPane() {
         fetchMessages(selected.id);
     };
 
-    const handleDeleteMsg = async (msgId: string) => {
-        if (!selected || !confirm('Delete this message?')) return;
-        await fetch(`/fast/api/chat/conversations/${selected.id}/messages/${msgId}`, { method: 'DELETE' });
-        fetchMessages(selected.id);
+    // Hand the target message to the modal — actual DELETE fires from
+    // confirmDeleteMsg below once the user clicks Delete in the modal.
+    const handleDeleteMsg = (msgId: string) => {
+        const target = messages.find((m) => m.id === msgId);
+        if (!target) return;
+        setDeleteTarget(target);
+    };
+
+    const confirmDeleteMsg = async () => {
+        if (!selected || !deleteTarget) return;
+        try {
+            await fetch(
+                `/fast/api/chat/conversations/${selected.id}/messages/${deleteTarget.id}`,
+                { method: 'DELETE' },
+            );
+            // Optimistic drop — the SSE stream won't push deletions, so we
+            // remove the row locally instead of waiting on a full refetch.
+            setMessages((prev) => prev.filter((m) => m.id !== deleteTarget.id));
+        } catch {
+            // On failure, the row stays; the SSE/30s safety net will
+            // reconcile the next time the conversation list refetches.
+        }
     };
 
     const filtered = conversations.filter(c => {
@@ -767,21 +791,51 @@ export function DmPane() {
                             <div ref={msgEndRef} />
                         </div>
 
-                        {/* Composer — Channel-style with rich text */}
+                        {/* Composer — Channel-style with rich text. The
+                            onSend handler does an optimistic insert into
+                            local state before awaiting the POST so the
+                            message renders instantly; the DM POST route's
+                            side effects (sidebar bump, recipient notif)
+                            were deferred to a fire-and-forget block in
+                            this same PR, but the optimistic insert is what
+                            users actually perceive as "snappy". The SSE
+                            'messages' listener dedupes by id, so the same
+                            message echoed back through the stream is
+                            filtered. On failure we drop the temp row. */}
                         <div className="border-t border-slate-200">
                             <ChannelMessageComposer
                                 channelId={selected.id}
                                 channelName={selected.otherUser?.name || 'DM'}
                                 users={[]}
                                 onSend={async (content, attachments) => {
+                                    if (!user) return;
+                                    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                                    const optimistic: DmMessage = {
+                                        id: tempId,
+                                        conversationId: selected.id,
+                                        senderId: user.id,
+                                        sender: { id: user.id, name: user.name, image: user.image },
+                                        content,
+                                        attachments: attachments ?? [],
+                                        createdAt: new Date().toISOString(),
+                                    };
+                                    setMessages((prev) => [...prev, optimistic]);
                                     try {
-                                        await fetch(`/fast/api/chat/conversations/${selected.id}/messages`, {
+                                        const res = await fetch(`/fast/api/chat/conversations/${selected.id}/messages`, {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({ content, attachments }),
                                         });
-                                        fetchConversations();
-                                    } catch {}
+                                        if (res.ok) {
+                                            const real = await res.json();
+                                            setMessages((prev) => prev.map((m) => (m.id === tempId ? real : m)));
+                                            fetchConversations();
+                                        } else {
+                                            setMessages((prev) => prev.filter((m) => m.id !== tempId));
+                                        }
+                                    } catch {
+                                        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+                                    }
                                 }}
                                 placeholder={`Message ${selected.otherUser?.name || ''}...`}
                             />
@@ -798,6 +852,27 @@ export function DmPane() {
                     </div>
                 )}
             </div>
+
+            {/* Delete-message modal — same Slack-style preview card as the
+                channels surface. Replaces the legacy window.confirm() so the
+                DM delete flow is on parity with channel deletes. */}
+            {deleteTarget && (
+                <DeleteMessageModal
+                    open={!!deleteTarget}
+                    onClose={() => setDeleteTarget(null)}
+                    onConfirm={confirmDeleteMsg}
+                    preview={{
+                        senderName: deleteTarget.sender?.name ?? 'Deleted User',
+                        senderImage: deleteTarget.sender?.image ?? null,
+                        createdAt: deleteTarget.createdAt,
+                        content: deleteTarget.content,
+                        contextLabel: selected?.otherUser?.name
+                            ? `Direct Message · ${selected.otherUser.name}`
+                            : 'Direct Message',
+                    }}
+                    kind="message"
+                />
+            )}
 
             {/* New DM modal */}
             {showNewDm && (
