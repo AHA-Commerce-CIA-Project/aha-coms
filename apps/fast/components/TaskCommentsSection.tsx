@@ -135,12 +135,12 @@ export function TaskCommentsSection({
     const [mentionAnchor, setMentionAnchor] = useState<number>(0); // selectionStart of the '@'
     const [mentionActiveIdx, setMentionActiveIdx] = useState(0);
 
-    const apiBase = `/api/tasks/${taskId}/comments`;
+    const apiBase = `/fast/api/tasks/${taskId}/comments`;
     // localStorage key — one draft per task. Cleared on successful post.
     const draftStorageKey = `task-comment-draft:${taskId}`;
     const uploadUrl = token
-        ? `/api/chat/upload?token=${encodeURIComponent(token)}&taskId=${encodeURIComponent(taskId)}`
-        : '/api/chat/upload';
+        ? `/fast/api/chat/upload?token=${encodeURIComponent(token)}&taskId=${encodeURIComponent(taskId)}`
+        : '/fast/api/chat/upload';
 
     const fetchComments = useCallback(async () => {
         try {

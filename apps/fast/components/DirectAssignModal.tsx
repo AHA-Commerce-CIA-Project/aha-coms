@@ -340,8 +340,8 @@ export function DirectAssignModal({
             }
 
             const endpoint = isFromMessage
-                ? '/api/tasks/direct-assign-from-message'
-                : '/api/tasks/direct-assign';
+                ? '/fast/api/tasks/direct-assign-from-message'
+                : '/fast/api/tasks/direct-assign';
             const payload = isFromMessage
                 ? {
                     messageId: sourceMessageId,
