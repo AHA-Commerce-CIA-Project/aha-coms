@@ -1,0 +1,5 @@
+Smoke test for the Sequence 0 ruleset gate. Routes via `*` →
+@mrdoorba. The PR opened from this branch is expected to show
+`reviewDecision: REVIEW_REQUIRED` and `mergeStateStatus: BLOCKED`.
+Delete this file + close the PR + delete the branch when the test
+is done.
