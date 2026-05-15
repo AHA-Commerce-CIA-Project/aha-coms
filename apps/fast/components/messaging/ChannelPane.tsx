@@ -304,8 +304,8 @@ export function ChannelPane() {
     if (!isPolling) setLoadingMessages(true);
     try {
       const url = cursor
-        ? `/api/channels/${channelId}/messages?cursor=${cursor}`
-        : `/api/channels/${channelId}/messages`;
+        ? `/fast/api/channels/${channelId}/messages?cursor=${cursor}`
+        : `/fast/api/channels/${channelId}/messages`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -393,7 +393,7 @@ export function ChannelPane() {
     const timeout = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/channels/${selectedChannel.id}/search?q=${encodeURIComponent(searchQuery)}`
+          `/fast/api/channels/${selectedChannel.id}/search?q=${encodeURIComponent(searchQuery)}`
         );
         if (res.ok) {
           const data = await res.json();

@@ -30,8 +30,8 @@ export function TeamMembersPopover({ open, teamId, channelId, onClose, onMemberC
     setTeam(null);
     setMembers([]);
     const url = channelId
-      ? `/api/teams/${teamId}/members?channelId=${encodeURIComponent(channelId)}`
-      : `/api/teams/${teamId}/members`;
+      ? `/fast/api/teams/${teamId}/members?channelId=${encodeURIComponent(channelId)}`
+      : `/fast/api/teams/${teamId}/members`;
     fetch(url)
       .then(r => (r.ok ? r.json() : null))
       .then((data) => {

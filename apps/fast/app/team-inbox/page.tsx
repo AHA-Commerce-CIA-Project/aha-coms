@@ -280,7 +280,7 @@ export default function TeamInboxPage() {
     const handleClaim = (task: InboxTask) =>
         runQuickAction(
             task,
-            `/api/tasks/${task.id}/claim`,
+            `/fast/api/tasks/${task.id}/claim`,
             (t) => ({
                 ...t,
                 status: 'in-progress',
@@ -293,7 +293,7 @@ export default function TeamInboxPage() {
     const handleComplete = (task: InboxTask) =>
         runQuickAction(
             task,
-            `/api/tasks/${task.id}/quick-complete`,
+            `/fast/api/tasks/${task.id}/quick-complete`,
             (t) => ({ ...t, status: 'done', completedAt: new Date().toISOString() }),
             'Failed to mark complete',
         );
@@ -301,7 +301,7 @@ export default function TeamInboxPage() {
     const handleReopen = (task: InboxTask) =>
         runQuickAction(
             task,
-            `/api/tasks/${task.id}/reopen`,
+            `/fast/api/tasks/${task.id}/reopen`,
             (t) => ({ ...t, status: 'in-progress', completedAt: null }),
             'Failed to reopen task',
         );
@@ -309,7 +309,7 @@ export default function TeamInboxPage() {
     const handleAcknowledgeOverdue = (task: InboxTask) =>
         runQuickAction(
             task,
-            `/api/tasks/${task.id}/acknowledge-overdue`,
+            `/fast/api/tasks/${task.id}/acknowledge-overdue`,
             (t) => ({ ...t, overdueAcknowledgedAt: new Date().toISOString() }),
             'Failed to update task',
         );
