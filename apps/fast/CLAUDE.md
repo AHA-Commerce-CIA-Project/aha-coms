@@ -129,7 +129,11 @@ surface (routes, features, schemas) lives in `apps/fast/README.md` and
 ## Cloud Run shape (so you know what you're hitting)
 
 - Service: `coms-fast-web` in `fbi-dev-484410` / `asia-southeast2`.
-- min=1, max=3, cpu=1, memory=512Mi.
+- min=1, max=5, cpu=1, memory=512Mi. (max raised from 3 by the
+  2026-05-15 scale-out audit — Cloud Monitoring's 7-day window had
+  active instance count p95=max=3 hitting the old ceiling, while CPU
+  and memory carried 40–50% headroom; the binding signal was
+  service-level concurrency, not per-instance saturation.)
 - **cpu_idle=true** (FU-21 audit 2026-05-14 flipped this from false after
   finding no module-level continuous background work — the legacy Path-X
   rationale was theoretical). First request after a quiet window pays

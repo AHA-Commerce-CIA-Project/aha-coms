@@ -208,9 +208,21 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
     #   • session_affinity = true — preserved. SSE connections carry
     #     per-instance state, so consecutive requests must route to
     #     the same instance.
+    #   • max_instance_count = 5 — raised from 3 by the 2026-05-15
+    #     scale-out audit. Cloud Monitoring 7-day window showed CPU
+    #     p95=39% / max=53% and memory p95=55% / max=58% (well under
+    #     per-instance saturation) BUT active instance count
+    #     p95=max=3 — autoscaling was hitting the ceiling regularly.
+    #     The binding signal was concurrency at the service level, not
+    #     CPU/RAM at the instance level, so the answer was scale-OUT,
+    #     not scale-UP. Raised the cap to 5 for headroom without
+    #     touching the 1 vCPU / 512 MiB per-instance shape. Steady-
+    #     state cost unchanged (Cloud Run only bills running instances);
+    #     spike-window cost grows ~pro-rata with how often we touch the
+    #     new 4th–5th instances.
     scaling {
       min_instance_count = 1
-      max_instance_count = 3
+      max_instance_count = 5
     }
 
     session_affinity = true

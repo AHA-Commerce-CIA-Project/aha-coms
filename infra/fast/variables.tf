@@ -194,7 +194,7 @@ variable "apps_script_email_url" {
 variable "admin_notification_email" {
   description = "Reply-To / admin-recipient address for outgoing transactional mail through the Apps Script gateway. Read by apps/fast/lib/email.ts as NOTIFICATION_EMAIL; the var name historically carried a `resend_` prefix that FU-18 dropped alongside the Resend retirement."
   type        = string
-  default     = "ops@ahacommerce.net"
+  default     = "alif.masyhur@ahacommerce.net"
 }
 
 variable "gcs_bucket_name" {
