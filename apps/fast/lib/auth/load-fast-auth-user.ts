@@ -95,6 +95,23 @@ export function __resetAuthCacheForTests(): void {
   sessionResultCache.clear()
 }
 
+/**
+ * Drop one entry from the in-memory session result cache.
+ *
+ * Called by mutation endpoints (e.g. POST /api/profile/avatar) that
+ * change a field carried by FastAuthResult — name, image, role, etc.
+ * Without invalidation the next requireFastAuth() call on the same
+ * cookie returns the pre-mutation snapshot for up to 5 minutes,
+ * making freshly-uploaded avatars appear to revert in the header /
+ * sidebar until the TTL lapses.
+ *
+ * No-op when the cookie isn't currently cached; safe to call
+ * unconditionally from the mutation path.
+ */
+export function invalidateFastAuthCache(portalSessionCookie: string): void {
+  sessionResultCache.delete(portalSessionCookie)
+}
+
 async function resolveFastAuthUserFresh(
   portalSessionCookie: string,
   portalOrigin: string,
@@ -131,7 +148,17 @@ async function resolveFastAuthUserFresh(
       portal_sub: info.sub,
       email: info.email,
       name: info.name,
-      image: info.avatar_url,
+      // image is intentionally NOT updated on subsequent sign-ins.
+      // The portal-supplied avatar seeds the row at create time;
+      // after that, fast owns user.image — the only writer is the
+      // POST /api/profile/avatar endpoint. Without this carve-out
+      // a user's custom avatar gets clobbered by the portal's
+      // value every time the 5-min session cache misses + this
+      // upsert runs. Re-syncing from portal when the user has
+      // never customized would be nicer, but distinguishing
+      // "portal-default" from "user-customized" without an extra
+      // column is fragile — leaving image alone is the boring
+      // correct option.
       updatedAt: new Date(),
     },
   })
