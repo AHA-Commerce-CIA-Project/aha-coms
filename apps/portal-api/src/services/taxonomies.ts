@@ -6,7 +6,7 @@
 import { db } from '~/db'
 import { orgTaxonomies } from '~/db/schema/org-taxonomies'
 import { appManifests } from '~/db/schema/app-manifests'
-import { and, count, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { OrgTaxonomy } from '~/db/schema/org-taxonomies'
 
 export type { OrgTaxonomy }
@@ -120,10 +120,15 @@ export async function getTaxonomyEntryCounts(): Promise<
   const ids = await listAllTaxonomyIds()
   if (ids.length === 0) return []
 
+  // drizzle-orm 0.45.x doesn't re-export `count` from the main entry point
+  // (it lives under drizzle-orm/sql/functions/aggregate.js), so the typed
+  // import passes `tsc --noEmit` but explodes at Bun's runtime ESM load.
+  // Raw SQL is the portable shape used elsewhere in the repo (cf. the
+  // correlated subquery in apps/heroes-api/src/repositories/teams.ts).
   const rows = await db
     .select({
       taxonomyId: orgTaxonomies.taxonomyId,
-      entryCount: count(),
+      entryCount: sql<number>`count(*)::int`,
     })
     .from(orgTaxonomies)
     .where(inArray(orgTaxonomies.taxonomyId, ids))
