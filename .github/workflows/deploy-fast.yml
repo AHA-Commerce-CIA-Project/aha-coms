@@ -158,12 +158,23 @@ jobs:
           PROD_URL=$(gcloud secrets versions access latest \
             --secret="${DB_URL_SECRET}" \
             --project="${GCP_PROJECT_ID}")
-          # Fast's stored DSN form: postgresql://user:pw@HOST:5432/db?schema=...
-          # (public-IP form from the legacy aha-fast/terraform/main.tf). The
-          # runner reaches Cloud SQL via the proxy on 127.0.0.1:5433, so we
-          # rewrite the host:port segment. `?host=...` socket-DSN form is
-          # not used today; the sed below handles the host:port shape only.
-          PROXY_URL=$(echo "${PROD_URL}" | sed -E 's#@[^/@]+:[0-9]+/#@127.0.0.1:5433/#')
+          # Fast's stored DSN arrives in one of two shapes:
+          #   1. Legacy public-IP form (pre-d532556):
+          #        postgresql://user:pw@HOST:5432/db?schema=public
+          #   2. Socket form (since d532556 sealed connector-only + SSL):
+          #        postgresql://user:pw@localhost/db?host=/cloudsql/...&...
+          # The runner reaches Cloud SQL via the proxy on 127.0.0.1:5433 — a
+          # TCP listener, not the UNIX socket Cloud Run mounts. We therefore
+          # (a) rewrite the authority to point at the proxy regardless of
+          # which shape arrived, AND (b) strip any `host=/cloudsql/...` query
+          # param so Prisma does not try the socket path that exists only on
+          # Cloud Run. The pre-d532556 sed assumed shape (1) and silently
+          # passed through (2) unchanged, producing a P1001 against the
+          # missing socket — see PR #28 deploy failure at run 26012403071.
+          PROXY_URL=$(echo "${PROD_URL}" \
+            | sed -E 's#@[^/@?]+(:[0-9]+)?/#@127.0.0.1:5433/#' \
+            | sed -E 's#([?&])host=[^&]*&?#\1#g' \
+            | sed -E 's#\?$##')
 
           DATABASE_URL="${PROXY_URL}" \
             bun --filter @coms-portal/fast db:push
