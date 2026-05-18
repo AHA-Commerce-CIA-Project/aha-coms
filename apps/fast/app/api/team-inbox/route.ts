@@ -99,6 +99,10 @@ export async function GET(request: NextRequest) {
         assignedTeam: t.assignedTeam,
         routineTemplate: t.routineTemplate,
         archivedByMe: t.personalArchives.length > 0,
+        // Timestamp of the viewer's personal archive — null when the row
+        // isn't archived for this user. The Task Inbox uses it to sort the
+        // dedicated Archive view (Newest/Oldest/Last 30 days/All time).
+        archivedAt: t.personalArchives[0]?.archivedAt?.toISOString() ?? null,
         pendingReason: t.pendingReason,
         pendingTag: t.pendingTag,
         pendedAt: t.pendedAt,
