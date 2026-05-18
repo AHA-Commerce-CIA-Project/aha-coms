@@ -441,7 +441,10 @@ export function CalendarMeetingSection() {
         return { bg: 'bg-slate-200/60', text: 'text-slate-600', dot: 'bg-slate-400', name: 'slate' };
     };
 
-    // Build the legend (followed users + current user + pending)
+    // Build the legend (followed users + current user). The standalone
+    // "Pending" chip used to appear here too but was retired with the
+    // workflow it represented; pending-status meetings still render with
+    // PENDING_COLOR inside the calendar grid, just without a legend entry.
     const legendUsers = [
         ...(user ? [{ id: user.id, name: user.name || 'You', isCurrent: true }] : []),
         ...subscribedUsers.map(uid => {
@@ -935,9 +938,6 @@ export function CalendarMeetingSection() {
                                     </div>
                                 );
                             })}
-                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                                <span className="w-2 h-2 rounded-full bg-yellow-400" /> Pending
-                            </div>
                         </div>
 
                         {/* Action Buttons — below calendar */}

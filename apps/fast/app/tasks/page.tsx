@@ -1601,20 +1601,22 @@ function MyTasksContent() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => { closeEditingNote(); }}>
                     <div onClick={e => e.stopPropagation()}
                         className={`w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col ${noteColors[editingNote.color]?.bg || 'bg-white'} border-2 ${noteColors[editingNote.color]?.border || 'border-slate-200'} rounded-2xl shadow-2xl transition-colors`}>
-                        <div className="p-6 space-y-3 flex-1 overflow-y-auto">
-                            <input
-                                type="text"
-                                value={editingNote.title || ''}
-                                onChange={e => setEditingNote({ ...editingNote, title: e.target.value })}
-                                placeholder="Title"
-                                className="w-full text-xl font-bold text-slate-900 placeholder-slate-300 border-none outline-none bg-transparent"
-                            />
+                        <div className="px-6 pt-2 pb-6 flex-1 overflow-y-auto">
                             <RichEditor
                                 value={editingNote.content || ''}
                                 onChange={(html) => setEditingNote({ ...editingNote, content: html })}
                                 placeholder="Write something..."
                                 minHeight="300px"
                                 toolbarBg={noteColors[editingNote.color]?.bg || 'bg-white'}
+                                headerSlot={
+                                    <input
+                                        type="text"
+                                        value={editingNote.title || ''}
+                                        onChange={e => setEditingNote({ ...editingNote, title: e.target.value })}
+                                        placeholder="Title"
+                                        className="w-full text-xl font-bold text-slate-900 placeholder-slate-300 border-none outline-none bg-transparent"
+                                    />
+                                }
                             />
                         </div>
                         <div className="px-6 pb-2">
