@@ -55,12 +55,14 @@ const DEFAULT_THEME = URGENCY_THEME['P3'];
 
 export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUserId, onOpenDetail }: DirectAssignCardProps) {
   const router = useRouter();
-  // teamId drives the "Open in Team Inbox" visibility gate below. Read from
-  // the auth profile rather than threading another prop through the
+  // teamId + isMaster drive the "Open in Team Inbox" visibility gate below.
+  // Read from the auth profile rather than threading more props through the
   // ChannelMessageItem → DirectAssignCard chain — keeps the prop surface
   // narrow and matches the pattern other auth-aware components in this app
-  // use (e.g. /tasks/page.tsx, /users/page.tsx).
-  const { profile } = useAuth();
+  // use (e.g. /tasks/page.tsx, /users/page.tsx). isMaster is already
+  // derived inside useAuth as `profile.role === 'admin'` — Master is the
+  // display label for the admin role (see /users/page.tsx:472).
+  const { profile, isMaster } = useAuth();
   const currentUserTeamId = profile?.teamId ?? null;
   const [snapshot, setSnapshot] = useState<TaskSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,15 +109,18 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
   const claimedByMe = snapshot?.assignee?.id === currentUserId;
   const isClaimed = !!snapshot?.assignee && status !== 'todo';
   const isDone = status === 'done';
-  // Show the "Open in Team Inbox" link only when the viewer shares a team
-  // with the claimer. Unclaimed tasks (assignee == null), tasks claimed by
-  // someone with no team set, and viewers with no team set all evaluate to
-  // false and hide the button. The claimer themselves trivially matches —
-  // their own teamId equals their own teamId.
-  const canOpenInTeamInbox =
+  // Show the "Open in Team Inbox" link when EITHER the viewer is a Master
+  // (admin role, cross-divisional oversight — typically has no teamId set
+  // so the same-team check alone would lock them out) OR the viewer shares
+  // a team with the claimer. Unclaimed tasks (assignee == null) still
+  // hide the button regardless of role — there's no team inbox row to
+  // open until someone claims it. The same-team check stays strictly
+  // null-safe so two teamless rows never "match" each other.
+  const isSameTeam =
     !!snapshot?.assignee?.team_id &&
     !!currentUserTeamId &&
     snapshot.assignee.team_id === currentUserTeamId;
+  const canOpenInTeamInbox = !!snapshot?.assignee && (isMaster || isSameTeam);
 
   const title = snapshot?.title || previewTitle;
   const token = snapshot?.task_token;
@@ -223,6 +228,15 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
                   <div className="text-slate-500">Completed the task</div>
                 </div>
               </div>
+              {canOpenInTeamInbox && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); router.push('/team-inbox'); }}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                >
+                  Open in Team Inbox <ExternalLink className="w-3 h-3" />
+                </button>
+              )}
             </div>
           ) : isClaimed ? (
             <div className="flex items-center justify-between gap-2">
