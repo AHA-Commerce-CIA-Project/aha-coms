@@ -1,11 +1,9 @@
-import adapter from '@sveltejs/adapter-node'
+import adapter from 'svelte-adapter-bun'
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
   kit: {
-    adapter: adapter({
-      out: 'build',
-    }),
+    adapter: adapter(),
     // Portal-web mounts at /portal/ on the shared Firebase Hosting origin
     // (FU-10). Heroes lives at /heroes/, future apps at /<slug>/. The /
     // root is a Firebase Hosting 301 redirect to /portal/ — see firebase.json.

@@ -52,6 +52,14 @@ let upsertShouldThrow = false
 
 const mockListAllTaxonomyIds = mock(async () => listAllIdsResult)
 const mockListTaxonomyEntries = mock(async () => listEntriesResult)
+// The admin sidebar route migrated from N listTaxonomyEntries() calls to a
+// single getTaxonomyEntryCounts() — its returned array IS the response shape.
+const mockGetTaxonomyEntryCounts = mock(async () =>
+  listAllIdsResult.map((taxonomyId) => ({
+    taxonomyId,
+    entryCount: taxonomyId === TAXONOMY_ID ? listEntriesResult.length : 0,
+  })),
+)
 const mockUpsertTaxonomyEntry = mock(async () => {
   if (upsertShouldThrow) throw Object.assign(new Error('unique constraint violation'), { code: '23505' })
   return upsertResult
@@ -62,6 +70,7 @@ const mockDeleteEntries = mock(async () => deleteResult)
 mock.module('~/services/taxonomies', () => ({
   listAllTaxonomyIds: mockListAllTaxonomyIds,
   listTaxonomyEntries: mockListTaxonomyEntries,
+  getTaxonomyEntryCounts: mockGetTaxonomyEntryCounts,
   upsertTaxonomyEntry: mockUpsertTaxonomyEntry,
   bulkUpsertTaxonomyEntries: mockBulkUpsert,
   deleteTaxonomyEntries: mockDeleteEntries,

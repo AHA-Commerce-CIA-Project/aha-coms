@@ -1,4 +1,4 @@
-import { eq, count, ilike, and } from 'drizzle-orm'
+import { eq, count, ilike, and, sql } from 'drizzle-orm'
 import { taxonomyCache, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -7,6 +7,7 @@ export type TeamRow = {
   id: string
   name: string
   key: string
+  memberCount: number
 }
 
 export async function listTeams(
@@ -21,12 +22,20 @@ export async function listTeams(
 
   const where = and(...conditions)
 
+  const memberCountSubquery = sql<number>`(
+    SELECT COUNT(*)::int
+    FROM ${heroesProfiles}
+    WHERE ${heroesProfiles.teamKey} = ${taxonomyCache.key}
+      AND ${heroesProfiles.isActive} = true
+  )`
+
   const [rows, [{ total }]] = await Promise.all([
     db
       .select({
         id: taxonomyCache.key,
         name: taxonomyCache.value,
         key: taxonomyCache.key,
+        memberCount: memberCountSubquery,
       })
       .from(taxonomyCache)
       .where(where)

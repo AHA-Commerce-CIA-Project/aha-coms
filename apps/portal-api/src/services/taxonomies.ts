@@ -6,7 +6,7 @@
 import { db } from '~/db'
 import { orgTaxonomies } from '~/db/schema/org-taxonomies'
 import { appManifests } from '~/db/schema/app-manifests'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { OrgTaxonomy } from '~/db/schema/org-taxonomies'
 
 export type { OrgTaxonomy }
@@ -103,6 +103,39 @@ export async function listAllTaxonomyIds(): Promise<string[]> {
     }
   }
   return Array.from(seen)
+}
+
+// ---------------------------------------------------------------------------
+// getTaxonomyEntryCounts
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns one `{ taxonomyId, entryCount }` row per taxonomy ID known to any
+ * app manifest. Taxonomies with zero entries are included (count = 0).
+ * Replaces the N+1 Promise.all loop in the admin GET / route.
+ */
+export async function getTaxonomyEntryCounts(): Promise<
+  { taxonomyId: string; entryCount: number }[]
+> {
+  const ids = await listAllTaxonomyIds()
+  if (ids.length === 0) return []
+
+  // drizzle-orm 0.45.x doesn't re-export `count` from the main entry point
+  // (it lives under drizzle-orm/sql/functions/aggregate.js), so the typed
+  // import passes `tsc --noEmit` but explodes at Bun's runtime ESM load.
+  // Raw SQL is the portable shape used elsewhere in the repo (cf. the
+  // correlated subquery in apps/heroes-api/src/repositories/teams.ts).
+  const rows = await db
+    .select({
+      taxonomyId: orgTaxonomies.taxonomyId,
+      entryCount: sql<number>`count(*)::int`,
+    })
+    .from(orgTaxonomies)
+    .where(inArray(orgTaxonomies.taxonomyId, ids))
+    .groupBy(orgTaxonomies.taxonomyId)
+
+  const counted = new Map(rows.map((r) => [r.taxonomyId, r.entryCount]))
+  return ids.map((taxonomyId) => ({ taxonomyId, entryCount: counted.get(taxonomyId) ?? 0 }))
 }
 
 // ---------------------------------------------------------------------------

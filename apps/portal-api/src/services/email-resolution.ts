@@ -1,6 +1,6 @@
 import { db } from '~/db'
 import { identityUserEmails } from '~/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { asc } from 'drizzle-orm'
 import type { UserEmailEntry, UserEmailKind, UserEmailAddedBy } from '@coms-portal/shared'
 
@@ -54,6 +54,42 @@ export async function getEmailEntries(identityUserId: string): Promise<UserEmail
  */
 export interface UserEmailEntryWithId extends UserEmailEntry {
   emailId: string
+}
+
+/**
+ * Batch variant of getDisplayEmail — resolves the Q8a display email for each
+ * userId in one query.  Returns a Map<userId, string | null>; users with no
+ * email row map to null.
+ */
+export async function getDisplayEmailsForUsers(
+  identityUserIds: string[],
+): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>(identityUserIds.map((id) => [id, null]))
+  if (identityUserIds.length === 0) return map
+
+  const rows = await db
+    .select()
+    .from(identityUserEmails)
+    .where(inArray(identityUserEmails.identityUserId, identityUserIds))
+    .orderBy(asc(identityUserEmails.createdAt))
+
+  // Group rows by userId, then apply the same Q8a precedence as getDisplayEmail
+  const grouped = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const bucket = grouped.get(row.identityUserId) ?? []
+    bucket.push(row)
+    grouped.set(row.identityUserId, bucket)
+  }
+
+  for (const [userId, userRows] of grouped) {
+    const workspace = userRows.find((r) => r.kind === 'workspace')
+    if (workspace) { map.set(userId, workspace.email); continue }
+    const primary = userRows.find((r) => r.kind === 'personal' && r.isPrimary)
+    if (primary) { map.set(userId, primary.email); continue }
+    map.set(userId, userRows.find((r) => r.kind === 'personal')?.email ?? null)
+  }
+
+  return map
 }
 
 export async function getEmailEntriesWithIds(

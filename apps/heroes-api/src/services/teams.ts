@@ -25,18 +25,8 @@ export async function listTeams(input: ListTeamsInput, ctx: ServiceContext) {
     ),
   )
 
-  // Enrich with member counts
-  const teamsWithCounts = await Promise.all(
-    rows.map(async (team) => {
-      const memberCount = await withRLS(ctx.actor, (db) =>
-        teamsRepo.getTeamMemberCount(team.id, db),
-      )
-      return { ...team, memberCount }
-    }),
-  )
-
   return {
-    teams: teamsWithCounts,
+    teams: rows,
     meta: { total, page: input.page, limit: input.limit },
   }
 }
