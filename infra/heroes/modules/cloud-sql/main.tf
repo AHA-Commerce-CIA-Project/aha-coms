@@ -41,7 +41,7 @@ resource "google_sql_database_instance" "main" {
 
     database_flags {
       name  = "max_connections"
-      value = "40"
+      value = "25"
     }
   }
 }
