@@ -39,6 +39,9 @@ interface InboxTask {
     assignedTeam: { id: string; name: string } | null;
     taskToken: string | null;
     archivedByMe?: boolean;
+    // ISO timestamp when this row was personally-archived; null when the
+    // user hasn't archived it. Drives the Archive view's sort dropdown.
+    archivedAt?: string | null;
     pendingReason?: string | null;
     pendingTag?: string | null;
     pendedAt?: string | null;
@@ -178,6 +181,10 @@ export default function TeamInboxPage() {
     // filtered out of the regular buckets. Toggled by clicking the
     // ARCHIVED metric chip (on) or any other metric chip (off).
     const [showArchivedOnly, setShowArchivedOnly] = useState(false);
+    // Sort/filter applied inside the Archive view. Defaults to "Newest
+    // Archived" so the row the user just archived sits at the top.
+    type ArchiveSort = 'newest' | 'oldest' | 'last30' | 'all';
+    const [archiveSort, setArchiveSort] = useState<ArchiveSort>('newest');
     // Free-text filter applied to title + plain-text description before
     // bucketing. Client-side only; the API doesn't get a search param.
     const [searchQuery, setSearchQuery] = useState('');
@@ -409,11 +416,12 @@ export default function TeamInboxPage() {
         setPendingId(task.id);
         setActionError(null);
         const snapshot = tasks;
-        // Optimistic: flip the archive flag in place. The bucketing pass
-        // downstream filters archived rows out of the regular columns when
-        // showArchivedOnly is false and into the archive-only view when
-        // it's true, so the task slides between views without a refetch.
-        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, archivedByMe: true } : t)));
+        // Optimistic: flip the archive flag in place and stamp archivedAt
+        // with the local clock so "Newest Archived" sort lifts the row to
+        // the top of the Archive grid without waiting for a refetch. The
+        // bucketing pass downstream slides the task between views.
+        const nowIso = new Date().toISOString();
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, archivedByMe: true, archivedAt: nowIso } : t)));
         try {
             const res = await fetch(`/fast/api/tasks/${task.id}/personal-archive`, { method: 'POST' });
             if (!res.ok) {
@@ -434,7 +442,7 @@ export default function TeamInboxPage() {
         setPendingId(task.id);
         setActionError(null);
         const snapshot = tasks;
-        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, archivedByMe: false } : t)));
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, archivedByMe: false, archivedAt: null } : t)));
         try {
             const res = await fetch(`/fast/api/tasks/${task.id}/personal-archive`, { method: 'DELETE' });
             if (!res.ok) {
@@ -785,8 +793,28 @@ export default function TeamInboxPage() {
                 // Split off the archived rows so the regular four-column
                 // Kanban never sees them and the ARCHIVED chip / dedicated
                 // view always have their full set.
-                const archivedTasks = searched.filter(t => t.archivedByMe);
+                const archivedAll = searched.filter(t => t.archivedByMe);
                 const visibleTasks = searched.filter(t => !t.archivedByMe);
+
+                // Sort + timeframe filter for the Archive view. archivedAt
+                // is an ISO string from /api/team-inbox; missing values
+                // (legacy rows or optimistic mid-flight ones the API hasn't
+                // returned yet) fall back to createdAt so they still order.
+                const archiveTs = (t: InboxTask): number => {
+                    const v = t.archivedAt || t.completedAt || t.createdAt;
+                    return v ? new Date(v).getTime() : 0;
+                };
+                const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+                const archivedTasks = (() => {
+                    const cutoff = Date.now() - THIRTY_DAYS_MS;
+                    const filtered = archiveSort === 'last30'
+                        ? archivedAll.filter(t => archiveTs(t) >= cutoff)
+                        : archivedAll;
+                    const sorted = [...filtered].sort((a, b) =>
+                        archiveSort === 'oldest' ? archiveTs(a) - archiveTs(b) : archiveTs(b) - archiveTs(a),
+                    );
+                    return sorted;
+                })();
 
                 // Bucket tasks into 4 mutually-exclusive columns. Overdue takes
                 // precedence over the regular status — a P1 that's past its
@@ -814,8 +842,16 @@ export default function TeamInboxPage() {
                     else if (t.status === 'todo' && !t.assignee) buckets.unclaimed.push(t);
                     else buckets.inProgress.push(t);
                 }
-                const archivedCount = archivedTasks.length;
+                // archivedCount drives the metric chip and stays decoupled
+                // from the archive view's sort/timeframe dropdown — flipping
+                // to "Last 30 Days" inside the archive view shouldn't
+                // silently change the chip count the kanban view sees.
+                const archivedCount = archivedAll.length;
                 const total = visibleTasks.length + archivedCount;
+                // Visible signal for the kanban side: when the user has typed
+                // a query and the only hits are in archives, surface a count
+                // on the chip so they don't conclude their search is empty.
+                const searchHitsArchivedOnly = !!q && visibleTasks.length === 0 && archivedCount > 0;
 
                 if (total === 0) {
                     const isRoutineTab = activeTab === 'routine';
@@ -888,13 +924,25 @@ export default function TeamInboxPage() {
                                 type="button"
                                 onClick={() => setShowArchivedOnly(true)}
                                 aria-pressed={showArchivedOnly}
-                                className={`text-left rounded-2xl bg-white border ${showArchivedOnly ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-slate-300'} p-4 transition-colors`}
+                                title={searchHitsArchivedOnly ? `Your search matches ${archivedCount} archived task${archivedCount === 1 ? '' : 's'} — click to view.` : undefined}
+                                className={`text-left rounded-2xl bg-white border p-4 transition-colors ${
+                                    showArchivedOnly
+                                        ? 'border-indigo-300 ring-2 ring-indigo-100'
+                                        : searchHitsArchivedOnly
+                                        ? 'border-indigo-300 ring-2 ring-indigo-100'
+                                        : 'border-slate-200 hover:border-slate-300'
+                                }`}
                             >
                                 <div className="flex items-center gap-1.5 mb-1">
                                     <Archive className="w-3.5 h-3.5 text-slate-500" />
                                     <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Archived</span>
                                 </div>
-                                <div className="text-2xl font-bold text-slate-700">{archivedCount}</div>
+                                <div className={`text-2xl font-bold ${searchHitsArchivedOnly ? 'text-indigo-600' : 'text-slate-700'}`}>{archivedCount}</div>
+                                {searchHitsArchivedOnly && (
+                                    <div className="text-[10px] font-medium text-indigo-500 mt-0.5">
+                                        Only match{archivedCount === 1 ? '' : 'es'} — click to view
+                                    </div>
+                                )}
                             </button>
                         </div>
 
@@ -906,61 +954,110 @@ export default function TeamInboxPage() {
                         )}
 
                         {/* Archived-only view replaces the Kanban when the
-                            ARCHIVED metric chip is selected. Minimal layout —
-                            archived rows are historical; the goal is browse +
-                            restore, not act-on. The four-column Kanban is the
-                            default view for everything else. */}
+                            ARCHIVED metric chip is selected. Now a responsive
+                            grid of compact cards (was a stretched single-
+                            column list) so the rows are scannable side-by-
+                            side. Cards are stripped-down versions of the
+                            Kanban card — same header strip + token + title +
+                            assignee/archive metadata — minus drag-and-drop
+                            and the 3-dot menu since archived rows aren't
+                            actionable beyond Restore. */}
                         {showArchivedOnly ? (
-                            <div className="rounded-2xl bg-white border border-slate-200 p-4">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                        <Archive className="w-4 h-4 text-slate-500" /> Archived
-                                        <span className="text-xs font-medium text-slate-400">({archivedCount})</span>
-                                    </h3>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowArchivedOnly(false)}
-                                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-                                    >
-                                        ← Back to all
-                                    </button>
+                            <div className="space-y-3">
+                                {/* Sub-header — Back to all + sort dropdown. */}
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowArchivedOnly(false)}
+                                            className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                                        >
+                                            ← Back to all
+                                        </button>
+                                        <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                            <Archive className="w-4 h-4 text-slate-500" /> Archived
+                                            <span className="text-xs font-medium text-slate-400">
+                                                ({archivedTasks.length}{archivedTasks.length !== archivedAll.length ? ` of ${archivedAll.length}` : ''})
+                                            </span>
+                                        </h3>
+                                    </div>
+                                    <label className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                                        <span className="font-medium">Sort</span>
+                                        <select
+                                            value={archiveSort}
+                                            onChange={(e) => setArchiveSort(e.target.value as ArchiveSort)}
+                                            aria-label="Sort archived tasks"
+                                            className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:border-indigo-500"
+                                        >
+                                            <option value="newest">Newest Archived</option>
+                                            <option value="oldest">Oldest Archived</option>
+                                            <option value="last30">Last 30 Days</option>
+                                            <option value="all">All Time</option>
+                                        </select>
+                                    </label>
                                 </div>
+
                                 {archivedTasks.length === 0 ? (
-                                    <p className="text-sm text-slate-400 text-center py-12">
-                                        {q ? 'No archived tasks match your search.' : 'No archived tasks yet.'}
-                                    </p>
+                                    <div className="rounded-2xl bg-white border border-slate-200 p-12 text-center">
+                                        <Archive className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                                        <p className="text-sm text-slate-400">
+                                            {q
+                                                ? 'No archived tasks match your search.'
+                                                : archiveSort === 'last30'
+                                                ? 'Nothing archived in the last 30 days.'
+                                                : 'No archived tasks yet.'}
+                                        </p>
+                                    </div>
                                 ) : (
-                                    <div className="divide-y divide-slate-100">
-                                        {archivedTasks.map(t => (
-                                            <div key={t.id} className="flex items-center justify-between gap-3 py-3">
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openDetail(t)}
-                                                            className="text-sm font-semibold text-slate-800 hover:text-indigo-600 truncate text-left"
-                                                        >
-                                                            {t.title}
-                                                        </button>
-                                                        {t.taskToken && (
-                                                            <span className="text-[10px] font-mono text-slate-400 flex-shrink-0">#{t.taskToken}</span>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                        {archivedTasks.map(t => {
+                                            const tone = (t.urgency && PRIORITY_TONE[t.urgency]) || PRIORITY_TONE.P3;
+                                            const isRoutine = !!t.routineTemplate;
+                                            const requesterLabel = isRoutine ? 'AHABOT' : (t.requesterName || 'Someone');
+                                            return (
+                                                <div
+                                                    key={t.id}
+                                                    className="rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all p-3 flex flex-col gap-2 opacity-95"
+                                                >
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="text-xs font-semibold text-slate-700 truncate">{requesterLabel}</span>
+                                                        {t.urgency && (
+                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${tone.bg} ${tone.text} ${tone.border} flex-shrink-0`}>
+                                                                {t.urgency}
+                                                            </span>
                                                         )}
                                                     </div>
-                                                    <p className="text-xs text-slate-500 truncate">
-                                                        {t.assignee?.name ? `Completed by ${t.assignee.name}` : 'Unassigned'}
-                                                        {t.completedAt ? ` · ${formatRelative(t.completedAt)}` : ''}
-                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openDetail(t)}
+                                                        className="text-sm font-bold text-slate-900 hover:text-indigo-600 text-left line-clamp-2"
+                                                    >
+                                                        {t.title}
+                                                    </button>
+                                                    <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                                                        <span className="truncate">
+                                                            {t.assignee?.name ? `Done by ${t.assignee.name.split(' ')[0]}` : 'Unassigned'}
+                                                        </span>
+                                                        {t.taskToken && (
+                                                            <span className="font-mono text-[10px] text-slate-400 flex-shrink-0">#{t.taskToken}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                                                        <span className="text-[10px] text-slate-400 truncate">
+                                                            Archived {t.archivedAt ? formatRelative(t.archivedAt) : '—'}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleUnarchive(t)}
+                                                            disabled={pendingId === t.id}
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-md transition-colors disabled:opacity-50 flex-shrink-0"
+                                                        >
+                                                            <ArchiveRestore className="w-3 h-3" /> Restore
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleUnarchive(t)}
-                                                    disabled={pendingId === t.id}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-lg transition-colors disabled:opacity-50"
-                                                >
-                                                    <ArchiveRestore className="w-3.5 h-3.5" /> Restore
-                                                </button>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
