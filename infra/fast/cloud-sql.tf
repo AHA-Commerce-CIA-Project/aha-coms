@@ -60,11 +60,18 @@ resource "google_sql_database_instance" "fast" {
 
     # Every client (Cloud Run via the /cloudsql socket, GHA workflows
     # via cloud-sql-proxy, operator laptops via the same proxy CLI)
-    # already transits a Cloud SQL connector; `REQUIRED` makes that
-    # the only permitted ingress at the instance level. Combined with
+    # transits a Cloud SQL connector; `REQUIRED` makes that the only
+    # permitted ingress at the instance level. Combined with
     # `ssl_mode = "ENCRYPTED_ONLY"` below and the absence of any
     # `authorized_networks` block, raw psql against the instance's
-    # public IP is now rejected at three independent layers.
+    # public IP is rejected at three independent layers.
+    #
+    # An earlier 2026-05-18 attempt at this seal triggered a 10-minute
+    # Fast outage at 01:54Z — the Prisma DATABASE_URL secret was wired
+    # to the public IP (34.101.176.36:5432) rather than the socket the
+    # .tf already mounted. Secret version 2 of `aha-fast-db-url` now
+    # points at the socket; revision coms-fast-web-00051-mm8 onward
+    # uses that DSN, so the seal can re-land without breakage.
     connector_enforcement = "REQUIRED"
 
     backup_configuration {
@@ -88,10 +95,9 @@ resource "google_sql_database_instance" "fast" {
       # internet — alongside `ssl_mode = ALLOW_UNENCRYPTED_AND_ENCRYPTED`
       # and `connector_enforcement = NOT_REQUIRED`, meaning the
       # instance accepted plaintext psql from any IP that knew the
-      # password. The 2026-05-18 audit confirmed every real client
-      # (Cloud Run /cloudsql socket, the three GHA deploy workflows,
-      # the apps/fast backfill script) already transits the Cloud
-      # SQL Auth Proxy, so the allow-all was vestigial. Removing the
+      # password. After the DSN rotation (aha-fast-db-url v2 swapped
+      # 34.101.176.36:5432 for the /cloudsql socket), every real
+      # client now transits the Cloud SQL Auth Proxy. Removing the
       # block, requiring SSL, and enforcing the connector closes the
       # surface without breaking any known path.
     }
