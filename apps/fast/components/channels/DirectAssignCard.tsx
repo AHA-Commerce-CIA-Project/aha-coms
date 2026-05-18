@@ -109,6 +109,17 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
   const claimedByMe = snapshot?.assignee?.id === currentUserId;
   const isClaimed = !!snapshot?.assignee && status !== 'todo';
   const isDone = status === 'done';
+  const isPending = status === 'pending';
+  // Status overrides priority for completion-states. A green "Completed"
+  // banner reads as resolution at a glance; an amber "On hold" banner
+  // matches the pending colour everywhere else in the app. Active tasks
+  // (todo / in-progress / unclaimed) keep the priority palette so the
+  // colour still encodes urgency.
+  const headerBanner = isDone
+    ? 'from-emerald-500 to-emerald-600'
+    : isPending
+    ? 'from-amber-400 to-amber-500'
+    : theme.banner;
   // Show the "Open in Team Inbox" link when EITHER the viewer is a Master
   // (admin role, cross-divisional oversight — typically has no teamId set
   // so the same-team check alone would lock them out) OR the viewer shares
@@ -134,8 +145,8 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
 
   return (
     <div className={containerClassName} onClick={handleCardClick} role={onOpenDetail ? 'button' : undefined}>
-      {/* Colored banner — priority-driven */}
-      <div className={`relative h-16 bg-gradient-to-br ${theme.banner}`}>
+      {/* Colored banner — status overrides priority on Completed/Pending. */}
+      <div className={`relative h-16 bg-gradient-to-br ${headerBanner}`}>
         {/* Decorative swirls */}
         <div className="absolute inset-0 opacity-20" style={{
           backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.3) 0%, transparent 30%), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.25) 0%, transparent 35%)',
