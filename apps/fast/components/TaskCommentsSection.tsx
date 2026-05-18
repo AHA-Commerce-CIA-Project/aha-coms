@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { MessageSquare, Send as SendIcon, Pencil, X as XIcon, Check, Loader2, Paperclip, Smile, AtSign, ListOrdered, List, Hash, SmilePlus } from 'lucide-react';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { linkifyText, linkifyHtml } from '@/lib/linkify';
@@ -188,7 +190,20 @@ export function TaskCommentsSection({
     });
 
     // @mention autocomplete — populated lazily on first @ keystroke and reused for the session.
-    const [mentionUsers, setMentionUsers] = useState<{ id: string; name: string; email: string; image: string | null }[]>([]);
+    // role + teamName surface in the mention list so the click-to-open
+    // UserProfilePopover can render the role/team badge without a second
+    // fetch. The /fast/api/chat/users endpoint already returns these
+    // fields; the old type just dropped them.
+    const [mentionUsers, setMentionUsers] = useState<{ id: string; name: string; email: string; image: string | null; role?: string | null; teamName?: string | null }[]>([]);
+    // UserProfilePopover state — set when a mention badge inside the
+    // comment body is clicked. Position is the badge's bounding rect so
+    // the floating card anchors directly under the clicked text.
+    const [profilePopover, setProfilePopover] = useState<{
+        user: { id: string; name: string; image: string | null; role?: string | null; teamName?: string | null };
+        rect: { left: number; top: number; bottom: number };
+    } | null>(null);
+    // Next.js router for the Send DM action below.
+    const dmRouter = useRouter();
     const [mentionQuery, setMentionQuery] = useState<string | null>(null);
     const [mentionAnchor, setMentionAnchor] = useState<number>(0); // selectionStart of the '@'
     const [mentionActiveIdx, setMentionActiveIdx] = useState(0);
@@ -426,6 +441,50 @@ export function TaskCommentsSection({
         insertAtCursor(emoji, emojiPickerMode ?? 'new');
         setEmojiPickerMode(null);
     };
+
+    // Mention badge click handler — opens the lightweight UserProfilePopover
+    // anchored under the clicked badge. Lazy-fetches mentionUsers if the
+    // list isn't already loaded (viewers who haven't typed @ themselves
+    // won't have it cached yet). Quiet no-op if the handle doesn't map to
+    // any active user — likely a stale mention from a deleted account.
+    const handleMentionBadgeClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        const target = e.target as HTMLElement | null;
+        const handle = target?.getAttribute('data-mention');
+        if (!handle) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = target!.getBoundingClientRect();
+        const findUser = (list: typeof mentionUsers) =>
+            list.find(u => u.name.replace(/\s+/g, '.') === handle);
+        const cached = findUser(mentionUsers);
+        if (cached) {
+            setProfilePopover({ user: cached, rect: { left: rect.left, top: rect.top, bottom: rect.bottom } });
+            return;
+        }
+        fetch('/fast/api/chat/users')
+            .then(r => r.ok ? r.json() : [])
+            .then((list) => {
+                setMentionUsers(list);
+                const u = findUser(list);
+                if (u) setProfilePopover({ user: u, rect: { left: rect.left, top: rect.top, bottom: rect.bottom } });
+            })
+            .catch(() => {});
+    };
+
+    // Click-outside dismiss for the UserProfilePopover. Uses mousedown so
+    // a click on a different mention badge re-opens immediately at the new
+    // position instead of just closing-and-doing-nothing.
+    useEffect(() => {
+        if (!profilePopover) return;
+        const onDown = (ev: MouseEvent) => {
+            const t = ev.target as HTMLElement | null;
+            if (t?.closest('[data-userprofile-popover]')) return;
+            if (t?.getAttribute('data-mention')) return;
+            setProfilePopover(null);
+        };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [profilePopover]);
 
     // Detect @<query> immediately before the caret in whichever composer
     // is active. Operates on the current text node's content via the
@@ -939,36 +998,51 @@ export function TaskCommentsSection({
                                             />
                                             {renderAttachmentStrip(editingAttachments, (idx) => setEditingAttachments(prev => prev.filter((_, i) => i !== idx)))}
 
-                                            {/* @mention popover for the edit composer — same layout
-                                                as the new-composer popover but anchored here so the
-                                                arrow keys + click target this row. */}
-                                            {mentionMode === 'edit' && mentionQuery !== null && filteredMentionUsers.length > 0 && (
-                                                <div className="absolute bottom-full left-0 mb-1 w-[260px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
-                                                    <div className="py-1 max-h-[240px] overflow-y-auto">
-                                                        {filteredMentionUsers.map((u, idx) => (
-                                                            <button
-                                                                key={u.id}
-                                                                type="button"
-                                                                onMouseDown={e => { e.preventDefault(); selectMention(u, 'edit'); }}
-                                                                className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${idx === mentionActiveIdx ? 'bg-indigo-50' : 'hover:bg-indigo-50'}`}
-                                                            >
-                                                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden">
-                                                                    {u.image ? (
-                                                                        // eslint-disable-next-line @next/next/no-img-element
-                                                                        <img src={u.image} alt={u.name} className="w-6 h-6 rounded-full object-cover" />
-                                                                    ) : (
-                                                                        u.name.charAt(0).toUpperCase()
-                                                                    )}
-                                                                </div>
-                                                                <div className="min-w-0">
-                                                                    <div className="text-xs font-semibold text-slate-800 truncate">{u.name}</div>
-                                                                    <div className="text-[10px] text-slate-500 truncate">{u.email}</div>
-                                                                </div>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
+                                            {/* @mention popover for the edit composer — portalled to
+                                                document.body with position:fixed so no ancestor
+                                                overflow (comment list scroll, modal scroll, card
+                                                border-radius round-trip) can clip it the way the
+                                                in-flow absolute version did in the original report. */}
+                                            {mentionMode === 'edit' && mentionQuery !== null && filteredMentionUsers.length > 0 && editRef.current && typeof window !== 'undefined' && (() => {
+                                                const rect = editRef.current.getBoundingClientRect();
+                                                return createPortal(
+                                                    <div
+                                                        style={{
+                                                            position: 'fixed',
+                                                            left: rect.left,
+                                                            bottom: window.innerHeight - rect.top + 4,
+                                                            width: Math.min(260, Math.max(rect.width, 200)),
+                                                            maxHeight: 240,
+                                                        }}
+                                                        className="bg-white border border-slate-200 rounded-xl shadow-lg z-[200] overflow-hidden"
+                                                    >
+                                                        <div className="py-1 max-h-[238px] overflow-y-auto">
+                                                            {filteredMentionUsers.map((u, idx) => (
+                                                                <button
+                                                                    key={u.id}
+                                                                    type="button"
+                                                                    onMouseDown={e => { e.preventDefault(); selectMention(u, 'edit'); }}
+                                                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${idx === mentionActiveIdx ? 'bg-indigo-50' : 'hover:bg-indigo-50'}`}
+                                                                >
+                                                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden">
+                                                                        {u.image ? (
+                                                                            // eslint-disable-next-line @next/next/no-img-element
+                                                                            <img src={u.image} alt={u.name} className="w-6 h-6 rounded-full object-cover" />
+                                                                        ) : (
+                                                                            u.name.charAt(0).toUpperCase()
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <div className="text-xs font-semibold text-slate-800 truncate">{u.name}</div>
+                                                                        <div className="text-[10px] text-slate-500 truncate">{u.email}</div>
+                                                                    </div>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>,
+                                                    document.body,
+                                                );
+                                            })()}
 
                                             <div className="flex items-center gap-1.5 mt-1.5">
                                                 <button
@@ -1029,11 +1103,12 @@ export function TaskCommentsSection({
                                             {c.message && c.message.trim().length > 0 && (
                                                 isHtml(c.message) ? (
                                                     <div
+                                                        onClick={handleMentionBadgeClick}
                                                         className={`${bodyTextClass} text-slate-800 leading-relaxed break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-100 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono`}
                                                         dangerouslySetInnerHTML={{ __html: highlightMentions(renderShortcodes(linkifyHtml(sanitizeRichText(c.message)), customEmojiMap)) }}
                                                     />
                                                 ) : (
-                                                    <div className={`${bodyTextClass} text-slate-800 leading-relaxed whitespace-pre-wrap break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700`}>
+                                                    <div onClick={handleMentionBadgeClick} className={`${bodyTextClass} text-slate-800 leading-relaxed whitespace-pre-wrap break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700`}>
                                                         {parseInlineImages(c.message).map((p, i) => p.type === 'image' ? (
                                                             <img
                                                                 key={`inline-${i}`}
@@ -1318,6 +1393,77 @@ export function TaskCommentsSection({
             {error && <p className="text-[11px] text-rose-600 mt-1.5">{error}</p>}
 
             <ImageLightbox src={lightboxUrl} images={lightboxGallery} onClose={() => setLightboxUrl(null)} />
+
+            {/* UserProfilePopover — lightweight floating card anchored under
+                the clicked @mention badge inside a comment body. Portalled
+                to document.body with position:fixed so card-radius / modal
+                overflow / comment-list scroll can't clip it. Click-outside
+                dismisses via the mousedown listener registered above. */}
+            {profilePopover && typeof window !== 'undefined' && createPortal(
+                (() => {
+                    const POPOVER_WIDTH = 260;
+                    // Anchor under the badge but flip above when the badge
+                    // sits near the viewport bottom. left clamps inside the
+                    // viewport so the card never hangs off the edge.
+                    const spaceBelow = window.innerHeight - profilePopover.rect.bottom;
+                    const aboveInsteadOfBelow = spaceBelow < 200 && profilePopover.rect.top > 200;
+                    const top = aboveInsteadOfBelow
+                        ? Math.max(8, profilePopover.rect.top - 8)
+                        : profilePopover.rect.bottom + 6;
+                    const left = Math.max(8, Math.min(profilePopover.rect.left, window.innerWidth - POPOVER_WIDTH - 8));
+                    const u = profilePopover.user;
+                    const roleLabel = u.role === 'admin' ? 'Master' : u.role === 'leader' ? 'Leader' : u.role === 'member' ? 'Member' : null;
+                    return (
+                        <div
+                            data-userprofile-popover
+                            style={{
+                                position: 'fixed',
+                                left,
+                                ...(aboveInsteadOfBelow ? { bottom: window.innerHeight - top } : { top }),
+                                width: POPOVER_WIDTH,
+                            }}
+                            className="bg-white border border-slate-200 rounded-2xl shadow-xl z-[200] overflow-hidden"
+                        >
+                            <div className="p-4 flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-base font-bold flex-shrink-0 overflow-hidden">
+                                    {u.image ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={u.image} alt={u.name} className="w-12 h-12 rounded-full object-cover" />
+                                    ) : (
+                                        u.name.charAt(0).toUpperCase()
+                                    )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-bold text-slate-800 truncate">{u.name}</p>
+                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                        {roleLabel && (
+                                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${u.role === 'admin' ? 'bg-purple-50 text-purple-700' : u.role === 'leader' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                {roleLabel}
+                                            </span>
+                                        )}
+                                        {u.teamName && (
+                                            <span className="text-[10px] font-medium text-slate-500 truncate">{u.teamName}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="px-3 pb-3">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setProfilePopover(null);
+                                        dmRouter.push(`/messages?with=${encodeURIComponent(u.id)}`);
+                                    }}
+                                    className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                                >
+                                    <SendIcon className="w-3.5 h-3.5" /> Send Direct Message
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })(),
+                document.body,
+            )}
         </div>
     );
 }
