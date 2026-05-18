@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { Smile } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 
@@ -9,10 +9,15 @@ interface RichEditorProps {
     onChange: (html: string) => void;
     placeholder?: string;
     minHeight?: string;
-    // Tailwind bg utility used as the toolbar's opaque backdrop while it is
-    // sticky. Must match the surrounding container so scrolling content does
-    // not bleed through the formatting controls.
+    // Tailwind bg utility used as the sticky shell's opaque backdrop. Must
+    // match the surrounding container so scrolling content doesn't bleed
+    // through the title row or the formatting controls.
     toolbarBg?: string;
+    // Optional content that renders inside the same sticky wrapper as the
+    // formatting toolbar — typically the note title input. Lifting the
+    // title into this slot is what keeps it frozen at the top alongside
+    // the toolbar instead of scrolling out of view on long notes.
+    headerSlot?: ReactNode;
 }
 
 function execCmd(command: string, value?: string) {
@@ -86,7 +91,7 @@ function sanitizePastedHtml(html: string): string {
     return wrapper.innerHTML;
 }
 
-export function RichEditor({ value, onChange, placeholder = 'Write your note...', minHeight = '100px', toolbarBg = 'bg-white' }: RichEditorProps) {
+export function RichEditor({ value, onChange, placeholder = 'Write your note...', minHeight = '100px', toolbarBg = 'bg-white', headerSlot }: RichEditorProps) {
     const editorRef = useRef<HTMLDivElement>(null);
     const isInitialized = useRef(false);
     const [activeFormats, setActiveFormats] = useState<Record<string, boolean>>({});
@@ -350,10 +355,13 @@ export function RichEditor({ value, onChange, placeholder = 'Write your note...'
 
     return (
         <div>
-            {/* Toolbar — sticks to the top of the scrolling ancestor so the
-                formatting controls stay reachable on long notes. The opaque
-                toolbarBg keeps the editor body from bleeding through. */}
-            <div className={`sticky top-0 z-10 flex items-center gap-0.5 pt-1 pb-2 mb-2 border-b border-slate-100 ${toolbarBg}`}>
+            {/* Sticky header — pins to the top of the scrolling ancestor so
+                the optional headerSlot (e.g. the note title) and the
+                formatting toolbar travel together. The opaque toolbarBg
+                keeps the editor body from bleeding through. */}
+            <div className={`sticky top-0 z-50 mb-2 border-b border-slate-100 ${toolbarBg}`}>
+                {headerSlot && <div className="pt-2 pb-2">{headerSlot}</div>}
+                <div className="flex items-center gap-0.5 pt-1 pb-2">
 
                 {toolbarBtn('bold', 'B', 'Bold (Ctrl+B)', 'font-bold')}
                 {toolbarBtn('italic', 'I', 'Italic (Ctrl+I)', 'italic')}
@@ -432,6 +440,7 @@ export function RichEditor({ value, onChange, placeholder = 'Write your note...'
                     className="w-9 h-9 flex items-center justify-center text-xs text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors font-mono" title="Inline code">
                     {'</>'}
                 </button>
+                </div>
             </div>
 
             {/* Editor area */}

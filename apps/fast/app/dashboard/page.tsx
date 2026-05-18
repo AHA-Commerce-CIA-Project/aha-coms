@@ -61,6 +61,20 @@ function formatRelative(dateStr: string) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+// Team Directory presence text. Mirrors the three buckets of getPresence()
+// — Active (<1 min) / Idle (<5 min) / Offline — but spells them out as the
+// status copy that sits under each member's name in place of the old static
+// role subtext (Master/Leader/Member). Offline rows fall through to the
+// existing formatRelative() helper so "Last seen Yesterday" / "Last seen
+// 3h ago" reads consistently with the activity feed above.
+function formatLastSeen(lastSeenAt: string | null | undefined): string {
+    if (!lastSeenAt) return 'Offline';
+    const diffMin = (Date.now() - new Date(lastSeenAt).getTime()) / 60000;
+    if (diffMin < 1) return 'Active now';
+    if (diffMin < 5) return 'Idle';
+    return `Last seen ${formatRelative(lastSeenAt)}`;
+}
+
 export default function FastDashboard() {
     const { profile } = useAuth();
     const router = useRouter();
@@ -353,15 +367,12 @@ export default function FastDashboard() {
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <p className="text-xs font-semibold text-slate-800 truncate">{member.name}</p>
-                                        <p className="text-[10px] text-slate-400 capitalize">
-                                            {member.role === 'admin' ? 'Master' : member.role === 'leader' ? 'Leader' : 'Member'}
+                                        <p className={`text-[10px] font-medium ${getPresence(member.lastSeenAt).color} truncate`}>
+                                            {formatLastSeen(member.lastSeenAt)}
                                         </p>
                                     </div>
-                                    <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                                        <span className={`w-2.5 h-2.5 rounded-full ${getPresence(member.lastSeenAt).dot}`} />
-                                        <span className={`text-[9px] font-medium ${getPresence(member.lastSeenAt).color}`}>
-                                            {getPresence(member.lastSeenAt).label}
-                                        </span>
+                                    <div className="flex-shrink-0">
+                                        <span className={`block w-2.5 h-2.5 rounded-full ${getPresence(member.lastSeenAt).dot}`} title={formatLastSeen(member.lastSeenAt)} />
                                     </div>
                                 </div>
                             ))}
