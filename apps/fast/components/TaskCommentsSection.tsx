@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useRouter } from 'next/navigation';
 import { MessageSquare, Send as SendIcon, Pencil, X as XIcon, Check, Loader2, Paperclip, Smile, AtSign, ListOrdered, List, Hash, SmilePlus } from 'lucide-react';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { linkifyText, linkifyHtml } from '@/lib/linkify';
@@ -11,64 +10,7 @@ import { COMMENT_DRAFT_EVENT } from '@/lib/use-comment-drafts';
 import { isHtml, sanitizeRichText } from '@/lib/sanitize';
 import { useCustomEmojiMap } from '@/lib/customEmojis';
 import { renderShortcodes } from '@/lib/renderShortcodes';
-
-// Wrap @Handle.Name mentions in a styled badge for display. HTML-safe:
-// walks only text nodes, skips <a> descendants so an email-anchor like
-// `mailto:foo@bar.com` doesn't get its local part eaten. Mentions must
-// be preceded by whitespace or the start of the text node so mid-word
-// `@` (typically inside emails / file paths) is left alone. The data-
-// mention attribute marks the badge for future click handlers without
-// committing to a profile route today.
-function highlightMentions(html: string): string {
-    if (!html || !html.includes('@')) return html;
-    if (typeof window === 'undefined') return html;
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = html;
-    const MENTION_RE = /(^|\s)(@[A-Za-z][A-Za-z0-9._-]*)/g;
-    const walk = (node: Node) => {
-        if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === 'A') return;
-        if (node.nodeType === Node.TEXT_NODE) {
-            const text = node.textContent || '';
-            if (!text.includes('@')) return;
-            MENTION_RE.lastIndex = 0;
-            let match: RegExpExecArray | null;
-            const parts: { text: string; isMention: boolean }[] = [];
-            let lastIdx = 0;
-            while ((match = MENTION_RE.exec(text)) !== null) {
-                const start = match.index + match[1].length;
-                const end = MENTION_RE.lastIndex;
-                if (start > lastIdx) parts.push({ text: text.slice(lastIdx, start), isMention: false });
-                parts.push({ text: match[2], isMention: true });
-                lastIdx = end;
-            }
-            if (lastIdx === 0) return;
-            if (lastIdx < text.length) parts.push({ text: text.slice(lastIdx), isMention: false });
-            const frag = document.createDocumentFragment();
-            for (const p of parts) {
-                if (p.isMention) {
-                    const span = document.createElement('span');
-                    // pointer-events-auto is load-bearing: an ancestor in the
-                    // task detail modal portal cascade applies pointer-events:
-                    // none in some browser/Strict-Mode combos, which kills
-                    // both React delegation AND native listeners on the badge.
-                    // Explicit auto reverses it so the badge is clickable
-                    // even when the surrounding tree opts out.
-                    span.className = 'px-1.5 py-0.5 rounded font-medium bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 hover:underline cursor-pointer pointer-events-auto';
-                    span.setAttribute('data-mention', p.text.slice(1));
-                    span.textContent = p.text;
-                    frag.appendChild(span);
-                } else {
-                    frag.appendChild(document.createTextNode(p.text));
-                }
-            }
-            node.parentNode?.replaceChild(frag, node);
-            return;
-        }
-        Array.from(node.childNodes).forEach(walk);
-    };
-    walk(wrapper);
-    return wrapper.innerHTML;
-}
+import { highlightMentions, useMentionPopover } from '@/lib/mentions';
 
 interface CommentAttachment {
     url: string;
@@ -196,20 +138,18 @@ export function TaskCommentsSection({
     });
 
     // @mention autocomplete — populated lazily on first @ keystroke and reused for the session.
-    // role + teamName surface in the mention list so the click-to-open
-    // UserProfilePopover can render the role/team badge without a second
-    // fetch. The /fast/api/chat/users endpoint already returns these
-    // fields; the old type just dropped them.
+    // role + teamName surface in the mention list so the @-autocomplete
+    // popover can render the role/team badge without a second fetch.
+    // The /fast/api/chat/users endpoint already returns these fields.
+    // (UserProfilePopover state was moved into useMentionPopover() — see
+    // the hook destructure further down.)
     const [mentionUsers, setMentionUsers] = useState<{ id: string; name: string; email: string; image: string | null; role?: string | null; teamName?: string | null }[]>([]);
-    // UserProfilePopover state — set when a mention badge inside the
-    // comment body is clicked. Position is the badge's bounding rect so
-    // the floating card anchors directly under the clicked text.
-    const [profilePopover, setProfilePopover] = useState<{
-        user: { id: string; name: string; image: string | null; role?: string | null; teamName?: string | null };
-        rect: { left: number; top: number; bottom: number };
-    } | null>(null);
-    // Next.js router for the Send DM action below.
-    const dmRouter = useRouter();
+
+    // Click-to-open profile card on rendered @mention badges. Single
+    // stable handler on the comments list parent (no per-badge useEffect
+    // rebinding race like PR #42 had); portalled popover rendered via
+    // {mentionPopoverElement} below.
+    const { onMentionContainerClick, popoverElement: mentionPopoverElement } = useMentionPopover();
     const [mentionQuery, setMentionQuery] = useState<string | null>(null);
     const [mentionAnchor, setMentionAnchor] = useState<number>(0); // selectionStart of the '@'
     const [mentionActiveIdx, setMentionActiveIdx] = useState(0);
@@ -447,108 +387,6 @@ export function TaskCommentsSection({
         insertAtCursor(emoji, emojiPickerMode ?? 'new');
         setEmojiPickerMode(null);
     };
-
-    // Open the UserProfilePopover for the clicked badge. Pulled out of the
-    // React event handler so the same code is reachable from a native
-    // addEventListener path — see the useEffect below.
-    const openProfilePopoverForBadge = useCallback((mentionBadge: HTMLElement) => {
-        const rawHandle = mentionBadge.getAttribute('data-mention') || '';
-        const cleanedHandle = rawHandle.startsWith('@') ? rawHandle.slice(1) : rawHandle;
-        if (!cleanedHandle) return;
-        const rect = mentionBadge.getBoundingClientRect();
-        // Case-insensitive compare. The mention regex accepts mixed-case
-        // handles (`@alfiano.mahardika`, `@Alfiano.Mahardika`, etc.), but
-        // `user.name.replace(/\s+/g, '.')` preserves the canonical casing
-        // of the stored user row. Lowercasing both sides matches
-        // regardless of what the author typed.
-        const needle = cleanedHandle.toLowerCase();
-        const findUser = (list: typeof mentionUsers) =>
-            list.find(u => u.name.replace(/\s+/g, '.').toLowerCase() === needle);
-        const cached = findUser(mentionUsers);
-        if (cached) {
-            setProfilePopover({ user: cached, rect: { left: rect.left, top: rect.top, bottom: rect.bottom } });
-            return;
-        }
-        fetch('/fast/api/chat/users')
-            .then(r => r.ok ? r.json() : [])
-            .then((list) => {
-                setMentionUsers(list);
-                const u = findUser(list);
-                if (u) {
-                    setProfilePopover({ user: u, rect: { left: rect.left, top: rect.top, bottom: rect.bottom } });
-                } else {
-                    console.warn('Mention user lookup failed for handle:', cleanedHandle);
-                }
-            })
-            .catch((err) => {
-                console.warn('Mention user fetch failed:', err);
-            });
-    }, [mentionUsers]);
-
-    // React-level delegation kept as a fallback — fires when the modal
-    // tree doesn't intercept. In environments where it gets swallowed
-    // (capture-phase listeners in the modal portal cascade), the native
-    // listeners attached in the useEffect below take over.
-    const handleMentionBadgeClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        const mentionBadge = (e.target as HTMLElement | null)?.closest?.('[data-mention]') as HTMLElement | null;
-        if (!mentionBadge) return;
-        e.preventDefault();
-        e.stopPropagation();
-        openProfilePopoverForBadge(mentionBadge);
-    };
-
-    // Container for the rendered comment list — the useEffect below scopes
-    // its querySelectorAll to this subtree so we don't pick up unrelated
-    // [data-mention] elements rendered by some future caller.
-    const commentsListRef = useRef<HTMLDivElement | null>(null);
-
-    // Belt-and-suspenders native click delegation. When the comment list
-    // re-renders, find every `[data-mention]` span inside it and attach a
-    // native click listener directly on the badge element. Bypasses any
-    // ancestor `e.stopPropagation()` / `pointer-events` weirdness in the
-    // modal portal cascade — the listener fires on the target itself
-    // before bubble phase even starts, so it cannot be blocked by an
-    // upstream React synthetic-event delegation issue. The handler still
-    // routes through openProfilePopoverForBadge so the lookup + lazy
-    // fetch + popover open logic stays single-sourced.
-    useEffect(() => {
-        const container = commentsListRef.current;
-        if (!container) return;
-        const badges = Array.from(container.querySelectorAll<HTMLElement>('[data-mention]'));
-        const handlers = new Map<HTMLElement, EventListener>();
-        for (const badge of badges) {
-            const handler: EventListener = (ev) => {
-                ev.preventDefault();
-                ev.stopPropagation();
-                openProfilePopoverForBadge(badge);
-            };
-            badge.addEventListener('click', handler);
-            handlers.set(badge, handler);
-        }
-        return () => {
-            for (const [badge, handler] of handlers) {
-                badge.removeEventListener('click', handler);
-            }
-        };
-    }, [comments, openProfilePopoverForBadge]);
-
-    // Click-outside dismiss for the UserProfilePopover. Uses mousedown so
-    // a click on a different mention badge re-opens immediately at the new
-    // position instead of just closing-and-doing-nothing.
-    useEffect(() => {
-        if (!profilePopover) return;
-        const onDown = (ev: MouseEvent) => {
-            const t = ev.target as HTMLElement | null;
-            if (t?.closest('[data-userprofile-popover]')) return;
-            // Use closest() here too so a click on any inner element of
-            // a mention badge still counts as "re-anchor, don't close".
-            // Mirrors the click-handler upstream which uses .closest().
-            if (t?.closest('[data-mention]')) return;
-            setProfilePopover(null);
-        };
-        document.addEventListener('mousedown', onDown);
-        return () => document.removeEventListener('mousedown', onDown);
-    }, [profilePopover]);
 
     // Detect @<query> immediately before the caret in whichever composer
     // is active. Operates on the current text node's content via the
@@ -976,7 +814,7 @@ export function TaskCommentsSection({
             </p>
 
             {comments.length > 0 && (
-                <div ref={commentsListRef} className={`space-y-3 mb-3 overflow-y-auto ${size === 'regular' ? 'max-h-[28rem]' : 'max-h-80'}`}>
+                <div onClick={onMentionContainerClick} className={`space-y-3 mb-3 overflow-y-auto ${size === 'regular' ? 'max-h-[28rem]' : 'max-h-80'}`}>
                     {comments.map(c => {
                         const isEditing = editingId === c.id;
                         const editable = canEdit(c);
@@ -1167,12 +1005,11 @@ export function TaskCommentsSection({
                                             {c.message && c.message.trim().length > 0 && (
                                                 isHtml(c.message) ? (
                                                     <div
-                                                        onClick={handleMentionBadgeClick}
                                                         className={`${bodyTextClass} text-slate-800 leading-relaxed break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-100 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono`}
                                                         dangerouslySetInnerHTML={{ __html: highlightMentions(renderShortcodes(linkifyHtml(sanitizeRichText(c.message)), customEmojiMap)) }}
                                                     />
                                                 ) : (
-                                                    <div onClick={handleMentionBadgeClick} className={`${bodyTextClass} text-slate-800 leading-relaxed whitespace-pre-wrap break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700`}>
+                                                    <div className={`${bodyTextClass} text-slate-800 leading-relaxed whitespace-pre-wrap break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700`}>
                                                         {parseInlineImages(c.message).map((p, i) => p.type === 'image' ? (
                                                             <img
                                                                 key={`inline-${i}`}
@@ -1458,76 +1295,10 @@ export function TaskCommentsSection({
 
             <ImageLightbox src={lightboxUrl} images={lightboxGallery} onClose={() => setLightboxUrl(null)} />
 
-            {/* UserProfilePopover — lightweight floating card anchored under
-                the clicked @mention badge inside a comment body. Portalled
-                to document.body with position:fixed so card-radius / modal
-                overflow / comment-list scroll can't clip it. Click-outside
-                dismisses via the mousedown listener registered above. */}
-            {profilePopover && typeof window !== 'undefined' && createPortal(
-                (() => {
-                    const POPOVER_WIDTH = 260;
-                    // Anchor under the badge but flip above when the badge
-                    // sits near the viewport bottom. left clamps inside the
-                    // viewport so the card never hangs off the edge.
-                    const spaceBelow = window.innerHeight - profilePopover.rect.bottom;
-                    const aboveInsteadOfBelow = spaceBelow < 200 && profilePopover.rect.top > 200;
-                    const top = aboveInsteadOfBelow
-                        ? Math.max(8, profilePopover.rect.top - 8)
-                        : profilePopover.rect.bottom + 6;
-                    const left = Math.max(8, Math.min(profilePopover.rect.left, window.innerWidth - POPOVER_WIDTH - 8));
-                    const u = profilePopover.user;
-                    const roleLabel = u.role === 'admin' ? 'Master' : u.role === 'leader' ? 'Leader' : u.role === 'member' ? 'Member' : null;
-                    return (
-                        <div
-                            data-userprofile-popover
-                            style={{
-                                position: 'fixed',
-                                left,
-                                ...(aboveInsteadOfBelow ? { bottom: window.innerHeight - top } : { top }),
-                                width: POPOVER_WIDTH,
-                            }}
-                            className="bg-white border border-slate-200 rounded-2xl shadow-xl z-[200] overflow-hidden"
-                        >
-                            <div className="p-4 flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-base font-bold flex-shrink-0 overflow-hidden">
-                                    {u.image ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img src={u.image} alt={u.name} className="w-12 h-12 rounded-full object-cover" />
-                                    ) : (
-                                        u.name.charAt(0).toUpperCase()
-                                    )}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-bold text-slate-800 truncate">{u.name}</p>
-                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                        {roleLabel && (
-                                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${u.role === 'admin' ? 'bg-purple-50 text-purple-700' : u.role === 'leader' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
-                                                {roleLabel}
-                                            </span>
-                                        )}
-                                        {u.teamName && (
-                                            <span className="text-[10px] font-medium text-slate-500 truncate">{u.teamName}</span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="px-3 pb-3">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setProfilePopover(null);
-                                        dmRouter.push(`/messages?with=${encodeURIComponent(u.id)}`);
-                                    }}
-                                    className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-                                >
-                                    <SendIcon className="w-3.5 h-3.5" /> Send Direct Message
-                                </button>
-                            </div>
-                        </div>
-                    );
-                })(),
-                document.body,
-            )}
+            {/* Floating user-profile card. Rendered from the shared
+                useMentionPopover() hook above — anchors under the clicked
+                badge via portal, dismisses on click-outside. */}
+            {mentionPopoverElement}
         </div>
     );
 }
