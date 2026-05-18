@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, count, desc } from 'drizzle-orm'
+import { eq, and, gte, lte, desc, sql } from 'drizzle-orm'
 import { auditLogs, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -62,7 +62,7 @@ export async function listAuditLogs(
       .orderBy(desc(auditLogs.createdAt))
       .limit(input.limit)
       .offset(offset),
-    db.select({ total: count() }).from(auditLogs).where(where),
+    db.select({ total: sql<number>`count(*)::int` }).from(auditLogs).where(where),
   ])
 
   return { rows, total }

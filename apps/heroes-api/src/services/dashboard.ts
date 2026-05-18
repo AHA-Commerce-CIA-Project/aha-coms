@@ -1,4 +1,4 @@
-import { eq, and, desc, count } from 'drizzle-orm'
+import { eq, and, desc, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { pointSummaries, achievementPoints, pointCategories, heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
 import { withRLS } from '../repositories/base'
@@ -79,7 +79,7 @@ async function getPendingCount(
     if (!actorTeamKey) return 0
 
     const rows = await db
-      .select({ cnt: count() })
+      .select({ cnt: sql<number>`count(*)::int` })
       .from(achievementPoints)
       .innerJoin(heroesProfiles, eq(achievementPoints.userId, heroesProfiles.id))
       .where(
@@ -94,7 +94,7 @@ async function getPendingCount(
   // hr / admin — all pending in branch
   const actorBranchKey = ctx.actor.branchKey
   const rows = await db
-    .select({ cnt: count() })
+    .select({ cnt: sql<number>`count(*)::int` })
     .from(achievementPoints)
     .innerJoin(heroesProfiles, eq(achievementPoints.userId, heroesProfiles.id))
     .where(

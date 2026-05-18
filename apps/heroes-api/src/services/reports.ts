@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, count, sum, sql } from 'drizzle-orm'
+import { eq, and, gte, lte, sql } from 'drizzle-orm'
 import { achievementPoints, pointCategories, heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
 import { withRLS } from '../repositories/base'
 import type { AuthUser } from '../middleware/auth'
@@ -43,10 +43,10 @@ export async function getDashboardStats(
     const baseWhere = baseConditions.length > 0 ? and(...baseConditions) : undefined
 
     const [totalResult, categoryRows, teamRows, overTimeRows] = await Promise.all([
-      db.select({ total: count() }).from(achievementPoints).where(baseWhere),
+      db.select({ total: sql<number>`count(*)::int` }).from(achievementPoints).where(baseWhere),
 
       db
-        .select({ name: pointCategories.defaultName, count: count() })
+        .select({ name: pointCategories.defaultName, count: sql<number>`count(*)::int` })
         .from(achievementPoints)
         .innerJoin(pointCategories, eq(achievementPoints.categoryId, pointCategories.id))
         .where(baseWhere)
@@ -54,7 +54,7 @@ export async function getDashboardStats(
         .orderBy(pointCategories.defaultName),
 
       db
-        .select({ name: heroesProfiles.teamValueSnapshot, total: sum(achievementPoints.points) })
+        .select({ name: heroesProfiles.teamValueSnapshot, total: sql<number>`sum(${achievementPoints.points})::int` })
         .from(achievementPoints)
         .innerJoin(heroesProfiles, eq(achievementPoints.userId, heroesProfiles.id))
         .where(baseWhere)
@@ -64,7 +64,7 @@ export async function getDashboardStats(
       db
         .select({
           date: sql<string>`DATE(${achievementPoints.createdAt})`.as('date'),
-          count: count(),
+          count: sql<number>`count(*)::int`,
         })
         .from(achievementPoints)
         .where(baseWhere)

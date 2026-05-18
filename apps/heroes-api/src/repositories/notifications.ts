@@ -1,4 +1,4 @@
-import { eq, and, count, desc, sql } from 'drizzle-orm'
+import { eq, and, desc, sql } from 'drizzle-orm'
 import { notifications } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -33,7 +33,7 @@ export async function listNotifications(opts: ListNotificationsOpts, tx?: DbClie
       .orderBy(desc(notifications.createdAt))
       .limit(opts.limit)
       .offset(offset),
-    db.select({ total: count() }).from(notifications).where(where),
+    db.select({ total: sql<number>`count(*)::int` }).from(notifications).where(where),
   ])
 
   return { rows, total }
@@ -42,7 +42,7 @@ export async function listNotifications(opts: ListNotificationsOpts, tx?: DbClie
 export async function countUnread(userId: string, tx?: DbClient) {
   const db = getDb(tx)
   const [{ total }] = await db
-    .select({ total: count() })
+    .select({ total: sql<number>`count(*)::int` })
     .from(notifications)
     .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
   return total

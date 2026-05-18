@@ -1,4 +1,4 @@
-import { eq, and, count, desc, sql, ilike, gte, lte } from 'drizzle-orm'
+import { eq, and, desc, sql, ilike, gte, lte } from 'drizzle-orm'
 import { redemptions, rewards, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -74,7 +74,7 @@ export async function listRedemptions(
       .limit(opts.limit)
       .offset(offset),
     db
-      .select({ total: count() })
+      .select({ total: sql<number>`count(*)::int` })
       .from(redemptions)
       .innerJoin(rewards, eq(redemptions.rewardId, rewards.id))
       .where(where),

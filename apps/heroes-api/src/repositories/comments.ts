@@ -1,4 +1,4 @@
-import { eq, and, count, asc } from 'drizzle-orm'
+import { eq, and, asc, sql } from 'drizzle-orm'
 import { comments, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -40,7 +40,7 @@ export async function listByEntity(opts: ListOpts, tx?: DbClient) {
       .orderBy(asc(comments.createdAt))
       .limit(opts.limit)
       .offset(offset),
-    db.select({ total: count() }).from(comments).where(where),
+    db.select({ total: sql<number>`count(*)::int` }).from(comments).where(where),
   ])
 
   return { rows, total }
