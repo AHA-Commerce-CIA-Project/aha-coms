@@ -71,12 +71,14 @@ tofu plan -var-file=terraform.tfvars -var mail_transport=stdout
 Sheet IDs the sheet-sync service reads (per FU-9: sheet IDs are not
 secret enough to warrant Secret Manager, but they are environment-
 specific enough that an empty default silently dropped them on every
-apply — Tofu validation now forces them to be set). The one remaining
-operator-passed var is `alert_email`:
+apply — Tofu validation now forces them to be set). `alert_email` —
+the recipient on the Cloud Run 5xx notification channel — also lives
+in `terraform.tfvars` now; no operator-passed vars remain for the
+heroes substate:
 
 ```bash
 cd infra/heroes
-tofu plan -var alert_email=ops@ahacommerce.net
+tofu plan
 ```
 
 If you ever clone the repo onto a fresh laptop, confirm `infra/heroes/
@@ -176,8 +178,8 @@ Same workflow, different directory + state bucket:
 ```bash
 cd infra/heroes
 tofu init -upgrade
-tofu plan -var alert_email=ops@ahacommerce.net
-tofu apply -var alert_email=ops@ahacommerce.net
+tofu plan
+tofu apply
 ```
 
 The heroes state is a separate file in a separate bucket (`coms-aha-heroes-tfstate`).

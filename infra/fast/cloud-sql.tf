@@ -35,7 +35,7 @@ resource "google_sql_database_instance" "fast" {
   project          = var.project_id
   name             = var.fast_db_instance_name
   region           = var.region
-  database_version = "POSTGRES_15"
+  database_version = "POSTGRES_18"
 
   # Terraform-side guard. Set true to refuse `terraform destroy`
   # against this resource — the Cloud SQL API's own deletion-
@@ -61,12 +61,12 @@ resource "google_sql_database_instance" "fast" {
 
     backup_configuration {
       enabled                        = true
-      start_time                     = "14:00"
+      start_time                     = "17:00"
       point_in_time_recovery_enabled = true
       transaction_log_retention_days = 7
 
       backup_retention_settings {
-        retained_backups = 14
+        retained_backups = 7
         retention_unit   = "COUNT"
       }
     }
