@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { requireFastAuth } from '@/lib/auth/require-fast-auth';
+import { invalidateFastAuthCache } from '@/lib/auth/load-fast-auth-user';
 import { logActivity } from '@/lib/activity-log';
 import { Storage } from '@google-cloud/storage';
 import sharp from 'sharp';
@@ -83,6 +85,15 @@ export async function POST(request: NextRequest) {
         data: { image: imageUrl, updatedAt: new Date() },
         select: { id: true, name: true, image: true },
     });
+
+    // Drop the session-result cache entry for this caller so the next
+    // requireFastAuth() round-trip re-reads from the DB and surfaces the
+    // freshly-uploaded image. Without this, the in-memory cache (5-min
+    // TTL keyed on the __session cookie) would keep returning the
+    // pre-upload snapshot to header / sidebar reads — looking like the
+    // upload silently reverted.
+    const sessionCookie = (await cookies()).get('__session')?.value;
+    if (sessionCookie) invalidateFastAuthCache(sessionCookie);
 
     logActivity(
         session.user.id,
