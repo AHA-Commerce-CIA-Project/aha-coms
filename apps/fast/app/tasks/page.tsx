@@ -1520,6 +1520,7 @@ function MyTasksContent() {
                         </span>
                     </h2>
                     <button
+                        type="button"
                         onClick={handleAddNewNote}
                         disabled={creatingNote}
                         className="inline-flex items-center gap-1.5 w-auto px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-all disabled:opacity-50"
@@ -1542,7 +1543,7 @@ function MyTasksContent() {
                     card bottom via mt-auto so rows stay aligned naturally. ── */}
                 {sortedNotes.length > 0 ? (
                     <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div id="my-notes-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {(notesExpanded ? sortedNotes : sortedNotes.slice(0, NOTES_PREVIEW_COUNT)).map(note => {
                                 const colors = noteColors[note.color] || noteColors.default;
                                 return (
@@ -1576,6 +1577,8 @@ function MyTasksContent() {
                                 <button
                                     type="button"
                                     onClick={() => setNotesExpanded(v => !v)}
+                                    aria-expanded={notesExpanded}
+                                    aria-controls="my-notes-grid"
                                     className="text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors"
                                 >
                                     {notesExpanded
