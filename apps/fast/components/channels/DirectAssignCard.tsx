@@ -11,6 +11,7 @@ import {
   Calendar,
   User as UserIcon,
 } from 'lucide-react';
+import { useAuth } from '@/lib/auth/use-auth';
 
 interface TaskSnapshot {
   id: string;
@@ -20,7 +21,10 @@ interface TaskSnapshot {
   status: string;
   claimed_at: string | null;
   completed_at: string | null;
-  assignee: { id: string; name: string; image: string | null } | null;
+  // team_id surfaces the claimer's team so the card can scope the
+  // "Open in Team Inbox" link to teammates of the assignee. Null when the
+  // claimer has no team set; the gate treats that as "do not show".
+  assignee: { id: string; name: string; image: string | null; team_id: string | null } | null;
   requester_name: string | null;
   due_date: string | null;
 }
@@ -51,6 +55,13 @@ const DEFAULT_THEME = URGENCY_THEME['P3'];
 
 export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUserId, onOpenDetail }: DirectAssignCardProps) {
   const router = useRouter();
+  // teamId drives the "Open in Team Inbox" visibility gate below. Read from
+  // the auth profile rather than threading another prop through the
+  // ChannelMessageItem → DirectAssignCard chain — keeps the prop surface
+  // narrow and matches the pattern other auth-aware components in this app
+  // use (e.g. /tasks/page.tsx, /users/page.tsx).
+  const { profile } = useAuth();
+  const currentUserTeamId = profile?.teamId ?? null;
   const [snapshot, setSnapshot] = useState<TaskSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
@@ -96,6 +107,15 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
   const claimedByMe = snapshot?.assignee?.id === currentUserId;
   const isClaimed = !!snapshot?.assignee && status !== 'todo';
   const isDone = status === 'done';
+  // Show the "Open in Team Inbox" link only when the viewer shares a team
+  // with the claimer. Unclaimed tasks (assignee == null), tasks claimed by
+  // someone with no team set, and viewers with no team set all evaluate to
+  // false and hide the button. The claimer themselves trivially matches —
+  // their own teamId equals their own teamId.
+  const canOpenInTeamInbox =
+    !!snapshot?.assignee?.team_id &&
+    !!currentUserTeamId &&
+    snapshot.assignee.team_id === currentUserTeamId;
 
   const title = snapshot?.title || previewTitle;
   const token = snapshot?.task_token;
@@ -215,7 +235,7 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
                   <div className="text-slate-500">Working on it</div>
                 </div>
               </div>
-              {claimedByMe && (
+              {canOpenInTeamInbox && (
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); router.push('/team-inbox'); }}

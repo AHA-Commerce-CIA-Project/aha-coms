@@ -36,7 +36,10 @@ export async function GET(
             claimedAt: true,
             completedAt: true,
             assigneeId: true,
-            assignee: { select: { id: true, name: true, image: true } },
+            // Surface teamId so the channel card can decide whether to show
+            // the "Open in Team Inbox" affordance — visible only when the
+            // viewer and the claimer are on the same team.
+            assignee: { select: { id: true, name: true, image: true, teamId: true } },
             requesterName: true,
             dueDate: true,
             checklistItems: {
@@ -71,7 +74,12 @@ export async function GET(
         claimed_at: task.claimedAt?.toISOString() || null,
         completed_at: task.completedAt?.toISOString() || null,
         assignee: task.assignee
-            ? { id: task.assignee.id, name: task.assignee.name, image: task.assignee.image }
+            ? {
+                  id: task.assignee.id,
+                  name: task.assignee.name,
+                  image: task.assignee.image,
+                  team_id: task.assignee.teamId,
+              }
             : null,
         requester_name: task.requesterName,
         due_date: task.dueDate?.toISOString() || null,
