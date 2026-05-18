@@ -39,10 +39,12 @@ resource "google_sql_database_instance" "main" {
       query_insights_enabled = true
     }
 
-    database_flags {
-      name  = "max_connections"
-      value = "25"
-    }
+    # No `database_flags { max_connections }` override — the instance
+    # uses Cloud SQL's tier-derived default (25 on db-f1-micro). The
+    # earlier explicit `value = "25"` hardcoded a number that happened
+    # to match today's default; removing the block lets the ceiling
+    # scale with any future tier change rather than capping the new
+    # capacity below its own default.
   }
 }
 
