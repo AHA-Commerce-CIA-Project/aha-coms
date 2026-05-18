@@ -1,5 +1,8 @@
 import { describe, expect, mock, test, beforeEach } from 'bun:test'
 
+// NOTE: getTaxonomyEntryCounts needs two sequential SELECTs — per-call queue
+// lives below and is used by the getTaxonomyEntryCounts describe block.
+
 // ---------------------------------------------------------------------------
 // Mock drizzle-orm
 // ---------------------------------------------------------------------------
@@ -8,6 +11,8 @@ mock.module('drizzle-orm', () => ({
   eq: (l: unknown, r: unknown) => ({ type: 'eq', l, r }),
   and: (...args: unknown[]) => ({ type: 'and', args }),
   inArray: (l: unknown, r: unknown) => ({ type: 'inArray', l, r }),
+  asc: (col: unknown) => ({ type: 'asc', col }),
+  desc: (col: unknown) => ({ type: 'desc', col }),
   sql: new Proxy((s: TemplateStringsArray) => s.join(''), { get: (_t, p) => p }),
   uniqueIndex: () => ({ on: () => ({}) }),
   index: () => ({ on: () => ({}) }),
@@ -51,6 +56,11 @@ type Row = Record<string, unknown>
 let _selectRows: Row[] = []
 let _insertRows: Row[] = []
 
+// Per-call queue: populated by getTaxonomyEntryCounts tests which need two
+// sequential SELECTs (one in listAllTaxonomyIds, one for the GROUP BY).
+let _selectCallIndex = 0
+let _selectRowsByCall: Row[][] = []
+
 function makeSelectChain(rows: Row[]) {
   const chain: Record<string, unknown> = {}
   chain.from = () => chain
@@ -58,6 +68,7 @@ function makeSelectChain(rows: Row[]) {
   chain.leftJoin = () => chain
   chain.where = () => chain
   chain.orderBy = () => Promise.resolve(rows)
+  chain.groupBy = () => Promise.resolve(rows)
   chain.limit = (_n: number) => Promise.resolve(rows.slice(0, _n as number))
   chain.then = (onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
     Promise.resolve(rows).then(onFulfilled, onRejected)
@@ -65,7 +76,7 @@ function makeSelectChain(rows: Row[]) {
 }
 
 const mockDb = {
-  select: () => makeSelectChain(_selectRows),
+  select: selectFn,
 
   insert: (_table: unknown) => ({
     values: (row: Row) => ({
@@ -99,6 +110,7 @@ mock.module('~/db', () => ({ db: mockDb }))
 
 const {
   getTaxonomyEntriesForApp,
+  getTaxonomyEntryCounts,
   listAllTaxonomyIds,
   listTaxonomyEntries,
   upsertTaxonomyEntry,
@@ -112,11 +124,24 @@ const {
 
 const MOCK_APP_ID = 'app-uuid-heroes'
 
+function selectFn() {
+  if (_selectRowsByCall.length > 0) {
+    const rows = _selectRowsByCall[_selectCallIndex] ?? []
+    _selectCallIndex++
+    return makeSelectChain(rows)
+  }
+  return makeSelectChain(_selectRows)
+}
+
 function reset() {
   _selectRows = []
   _insertRows = []
   _capturedDeleteWhere = null
   _deleteReturningRows = []
+  _selectCallIndex = 0
+  _selectRowsByCall = []
+  // Restore select in case a test overwrote it (getTaxonomyEntriesForApp tests do this)
+  mockDb.select = selectFn
 }
 
 // ---------------------------------------------------------------------------
@@ -305,5 +330,85 @@ describe('deleteTaxonomyEntries', () => {
     expect(result.entries[0].id).toBe('1d8c1a96-1234-4abc-9def-000000000001')
     expect(result.entries[0].key).toBe('SMOKE')
     expect(result.entries[0].value).toBe('Smoke')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getTaxonomyEntryCounts
+// ---------------------------------------------------------------------------
+
+describe('getTaxonomyEntryCounts', () => {
+  beforeEach(reset)
+
+  test('empty manifest list → returns empty array', async () => {
+    // listAllTaxonomyIds SELECT returns no rows → no second SELECT fires
+    _selectRowsByCall = [[]]
+    const result = await getTaxonomyEntryCounts()
+    expect(result).toHaveLength(0)
+  })
+
+  test('all taxonomies have org rows → counts mapped correctly', async () => {
+    // call 0: listAllTaxonomyIds manifest rows
+    // call 1: GROUP BY result
+    _selectRowsByCall = [
+      [{ taxonomies: ['branches', 'teams'] }],
+      [
+        { taxonomyId: 'branches', entryCount: 5 },
+        { taxonomyId: 'teams', entryCount: 12 },
+      ],
+    ]
+    const result = await getTaxonomyEntryCounts()
+    expect(result).toEqual([
+      { taxonomyId: 'branches', entryCount: 5 },
+      { taxonomyId: 'teams', entryCount: 12 },
+    ])
+  })
+
+  test('manifest-only taxonomy with no org rows → entryCount defaults to 0', async () => {
+    // 'departments' is in manifest but absent from GROUP BY results
+    _selectRowsByCall = [
+      [{ taxonomies: ['branches', 'departments', 'teams'] }],
+      [
+        { taxonomyId: 'branches', entryCount: 5 },
+        { taxonomyId: 'teams', entryCount: 12 },
+      ],
+    ]
+    const result = await getTaxonomyEntryCounts()
+    const dept = result.find((r) => r.taxonomyId === 'departments')
+    expect(dept).toBeDefined()
+    expect(dept!.entryCount).toBe(0)
+    // Other counts still correct
+    expect(result.find((r) => r.taxonomyId === 'branches')!.entryCount).toBe(5)
+    expect(result.find((r) => r.taxonomyId === 'teams')!.entryCount).toBe(12)
+  })
+
+  test('manifest order preserved — result follows manifest, not GROUP BY order', async () => {
+    // manifest order: teams first, then branches
+    _selectRowsByCall = [
+      [{ taxonomies: ['teams', 'branches'] }],
+      // GROUP BY might return in any order
+      [
+        { taxonomyId: 'branches', entryCount: 5 },
+        { taxonomyId: 'teams', entryCount: 12 },
+      ],
+    ]
+    const result = await getTaxonomyEntryCounts()
+    expect(result[0].taxonomyId).toBe('teams')
+    expect(result[1].taxonomyId).toBe('branches')
+  })
+
+  test('multiple manifests deduplicate — each taxonomy id appears exactly once', async () => {
+    // 'branches' appears in both manifests
+    _selectRowsByCall = [
+      [{ taxonomies: ['branches', 'teams'] }, { taxonomies: ['branches'] }],
+      [
+        { taxonomyId: 'branches', entryCount: 3 },
+        { taxonomyId: 'teams', entryCount: 7 },
+      ],
+    ]
+    const result = await getTaxonomyEntryCounts()
+    const branchResults = result.filter((r) => r.taxonomyId === 'branches')
+    expect(branchResults).toHaveLength(1)
+    expect(result).toHaveLength(2)
   })
 })
