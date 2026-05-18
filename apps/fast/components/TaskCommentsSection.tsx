@@ -47,7 +47,13 @@ function highlightMentions(html: string): string {
             for (const p of parts) {
                 if (p.isMention) {
                     const span = document.createElement('span');
-                    span.className = 'px-1.5 py-0.5 rounded font-medium bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 hover:underline cursor-pointer';
+                    // pointer-events-auto is load-bearing: an ancestor in the
+                    // task detail modal portal cascade applies pointer-events:
+                    // none in some browser/Strict-Mode combos, which kills
+                    // both React delegation AND native listeners on the badge.
+                    // Explicit auto reverses it so the badge is clickable
+                    // even when the surrounding tree opts out.
+                    span.className = 'px-1.5 py-0.5 rounded font-medium bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 hover:underline cursor-pointer pointer-events-auto';
                     span.setAttribute('data-mention', p.text.slice(1));
                     span.textContent = p.text;
                     frag.appendChild(span);
@@ -442,35 +448,19 @@ export function TaskCommentsSection({
         setEmojiPickerMode(null);
     };
 
-    // Mention badge click handler — opens the lightweight UserProfilePopover
-    // anchored under the clicked badge. Lazy-fetches mentionUsers if the
-    // list isn't already loaded (viewers who haven't typed @ themselves
-    // won't have it cached yet). Logs a warning when the handle doesn't
-    // map to any active user — likely a deleted account or a typo from
-    // before the mention popover existed.
-    const handleMentionBadgeClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        // .closest() walks up from the click target so a click on any
-        // inner element of the badge (future-proof in case the badge
-        // ever gains nested spans / icons) still resolves to the data-
-        // mention anchor. The current implementation paints a single
-        // span with only a text child, but the defensive lookup costs
-        // nothing and removes a class of silent-failure bugs.
-        const mentionBadge = (e.target as HTMLElement | null)?.closest?.('[data-mention]') as HTMLElement | null;
-        if (!mentionBadge) return;
-        e.preventDefault();
-        e.stopPropagation();
+    // Open the UserProfilePopover for the clicked badge. Pulled out of the
+    // React event handler so the same code is reachable from a native
+    // addEventListener path — see the useEffect below.
+    const openProfilePopoverForBadge = useCallback((mentionBadge: HTMLElement) => {
         const rawHandle = mentionBadge.getAttribute('data-mention') || '';
-        // highlightMentions strips the leading '@' before storing the
-        // handle, but a defensive slice keeps us robust if a future
-        // renderer ever stores the '@' itself.
         const cleanedHandle = rawHandle.startsWith('@') ? rawHandle.slice(1) : rawHandle;
         if (!cleanedHandle) return;
         const rect = mentionBadge.getBoundingClientRect();
         // Case-insensitive compare. The mention regex accepts mixed-case
-        // handles (`@alfiano.mahardika`, `@Alfiano.Mahardika`, etc.),
-        // but `user.name.replace(/\s+/g, '.')` preserves the canonical
-        // casing of the stored user row. Lowercasing both sides means
-        // the lookup matches regardless of what the author typed.
+        // handles (`@alfiano.mahardika`, `@Alfiano.Mahardika`, etc.), but
+        // `user.name.replace(/\s+/g, '.')` preserves the canonical casing
+        // of the stored user row. Lowercasing both sides matches
+        // regardless of what the author typed.
         const needle = cleanedHandle.toLowerCase();
         const findUser = (list: typeof mentionUsers) =>
             list.find(u => u.name.replace(/\s+/g, '.').toLowerCase() === needle);
@@ -493,7 +483,54 @@ export function TaskCommentsSection({
             .catch((err) => {
                 console.warn('Mention user fetch failed:', err);
             });
+    }, [mentionUsers]);
+
+    // React-level delegation kept as a fallback — fires when the modal
+    // tree doesn't intercept. In environments where it gets swallowed
+    // (capture-phase listeners in the modal portal cascade), the native
+    // listeners attached in the useEffect below take over.
+    const handleMentionBadgeClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        const mentionBadge = (e.target as HTMLElement | null)?.closest?.('[data-mention]') as HTMLElement | null;
+        if (!mentionBadge) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openProfilePopoverForBadge(mentionBadge);
     };
+
+    // Container for the rendered comment list — the useEffect below scopes
+    // its querySelectorAll to this subtree so we don't pick up unrelated
+    // [data-mention] elements rendered by some future caller.
+    const commentsListRef = useRef<HTMLDivElement | null>(null);
+
+    // Belt-and-suspenders native click delegation. When the comment list
+    // re-renders, find every `[data-mention]` span inside it and attach a
+    // native click listener directly on the badge element. Bypasses any
+    // ancestor `e.stopPropagation()` / `pointer-events` weirdness in the
+    // modal portal cascade — the listener fires on the target itself
+    // before bubble phase even starts, so it cannot be blocked by an
+    // upstream React synthetic-event delegation issue. The handler still
+    // routes through openProfilePopoverForBadge so the lookup + lazy
+    // fetch + popover open logic stays single-sourced.
+    useEffect(() => {
+        const container = commentsListRef.current;
+        if (!container) return;
+        const badges = Array.from(container.querySelectorAll<HTMLElement>('[data-mention]'));
+        const handlers = new Map<HTMLElement, EventListener>();
+        for (const badge of badges) {
+            const handler: EventListener = (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                openProfilePopoverForBadge(badge);
+            };
+            badge.addEventListener('click', handler);
+            handlers.set(badge, handler);
+        }
+        return () => {
+            for (const [badge, handler] of handlers) {
+                badge.removeEventListener('click', handler);
+            }
+        };
+    }, [comments, openProfilePopoverForBadge]);
 
     // Click-outside dismiss for the UserProfilePopover. Uses mousedown so
     // a click on a different mention badge re-opens immediately at the new
@@ -939,7 +976,7 @@ export function TaskCommentsSection({
             </p>
 
             {comments.length > 0 && (
-                <div className={`space-y-3 mb-3 overflow-y-auto ${size === 'regular' ? 'max-h-[28rem]' : 'max-h-80'}`}>
+                <div ref={commentsListRef} className={`space-y-3 mb-3 overflow-y-auto ${size === 'regular' ? 'max-h-[28rem]' : 'max-h-80'}`}>
                     {comments.map(c => {
                         const isEditing = editingId === c.id;
                         const editable = canEdit(c);
