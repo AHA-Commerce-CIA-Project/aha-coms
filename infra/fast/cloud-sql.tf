@@ -57,7 +57,15 @@ resource "google_sql_database_instance" "fast" {
     disk_autoresize_limit = 0
 
     deletion_protection_enabled = false
-    connector_enforcement       = "NOT_REQUIRED"
+
+    # Every client (Cloud Run via the /cloudsql socket, GHA workflows
+    # via cloud-sql-proxy, operator laptops via the same proxy CLI)
+    # already transits a Cloud SQL connector; `REQUIRED` makes that
+    # the only permitted ingress at the instance level. Combined with
+    # `ssl_mode = "ENCRYPTED_ONLY"` below and the absence of any
+    # `authorized_networks` block, raw psql against the instance's
+    # public IP is now rejected at three independent layers.
+    connector_enforcement = "REQUIRED"
 
     backup_configuration {
       enabled                        = true
@@ -73,19 +81,19 @@ resource "google_sql_database_instance" "fast" {
 
     ip_configuration {
       ipv4_enabled = true
-      ssl_mode     = "ALLOW_UNENCRYPTED_AND_ENCRYPTED"
+      ssl_mode     = "ENCRYPTED_ONLY"
 
-      # Inherited from the legacy aha-fast provisioning — the
-      # 0.0.0.0/0 entry is wide open and a known follow-up worth
-      # filing once the operator can confirm which laptop/runner
-      # ranges still need direct IP access (the GHA workflow
-      # already uses cloud-sql-proxy + WIF, so this allow-all is
-      # likely vestigial). Recorded verbatim to keep the import
-      # plan clean; do not tighten without a separate commit.
-      authorized_networks {
-        name  = "all"
-        value = "0.0.0.0/0"
-      }
+      # No `authorized_networks` block. The legacy aha-fast
+      # provisioning carried `0.0.0.0/0` "all" — wide open to the
+      # internet — alongside `ssl_mode = ALLOW_UNENCRYPTED_AND_ENCRYPTED`
+      # and `connector_enforcement = NOT_REQUIRED`, meaning the
+      # instance accepted plaintext psql from any IP that knew the
+      # password. The 2026-05-18 audit confirmed every real client
+      # (Cloud Run /cloudsql socket, the three GHA deploy workflows,
+      # the apps/fast backfill script) already transits the Cloud
+      # SQL Auth Proxy, so the allow-all was vestigial. Removing the
+      # block, requiring SSL, and enforcing the connector closes the
+      # surface without breaking any known path.
     }
 
     location_preference {
