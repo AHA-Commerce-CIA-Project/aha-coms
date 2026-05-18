@@ -35,12 +35,33 @@ const PUBLIC_PATH_PREFIXES = [
     '/api/heartbeat',
 ];
 
+// Path patterns that need a regex match instead of a fixed prefix —
+// specifically the public task tracker's per-task comments endpoint, where
+// the task id is dynamic. PR #16 allowlisted /track (the page) and
+// /api/request (the initial task lookup) but missed the comments
+// list/post endpoint that the page calls after the task resolves, so
+// guests hit the email link, see the task, and find an empty comments
+// section + "Failed to send comment" on reply. The route handler in
+// apps/fast/app/api/tasks/[id]/comments/route.ts already enforces token
+// vs session auth before reading anything; the middleware just needs to
+// let the request reach the handler. The regex anchors `comments` at the
+// end of the path so the sub-endpoints — /comments/<commentId> (PATCH /
+// DELETE) and /comments/<commentId>/reactions (POST) — stay session-only.
+const PUBLIC_PATH_PATTERNS: RegExp[] = [
+    /^\/api\/tasks\/[^/]+\/comments$/,
+];
+
 const PORTAL_SIGNIN_ORIGIN = 'https://aha-coms.web.app';
 
 function isPublic(pathname: string): boolean {
-    return PUBLIC_PATH_PREFIXES.some(
-        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-    );
+    if (
+        PUBLIC_PATH_PREFIXES.some(
+            (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+        )
+    ) {
+        return true;
+    }
+    return PUBLIC_PATH_PATTERNS.some((pat) => pat.test(pathname));
 }
 
 export function middleware(req: NextRequest) {
