@@ -145,11 +145,12 @@ export function TaskCommentsSection({
     // the hook destructure further down.)
     const [mentionUsers, setMentionUsers] = useState<{ id: string; name: string; email: string; image: string | null; role?: string | null; teamName?: string | null }[]>([]);
 
-    // Click-to-open profile card on rendered @mention badges. Single
-    // stable handler on the comments list parent (no per-badge useEffect
-    // rebinding race like PR #42 had); portalled popover rendered via
+    // Click-to-open profile card on rendered @mention badges. The hook
+    // installs a single native click listener on `mentionContainerRef`
+    // (no React synthetic-event involvement — see the hook for why
+    // that matters in modal contexts). Portalled popover rendered via
     // {mentionPopoverElement} below.
-    const { onMentionContainerClick, popoverElement: mentionPopoverElement } = useMentionPopover();
+    const { containerRef: mentionContainerRef, popoverElement: mentionPopoverElement } = useMentionPopover();
     const [mentionQuery, setMentionQuery] = useState<string | null>(null);
     const [mentionAnchor, setMentionAnchor] = useState<number>(0); // selectionStart of the '@'
     const [mentionActiveIdx, setMentionActiveIdx] = useState(0);
@@ -814,7 +815,7 @@ export function TaskCommentsSection({
             </p>
 
             {comments.length > 0 && (
-                <div onClick={onMentionContainerClick} className={`space-y-3 mb-3 overflow-y-auto ${size === 'regular' ? 'max-h-[28rem]' : 'max-h-80'}`}>
+                <div ref={mentionContainerRef} className={`space-y-3 mb-3 overflow-y-auto ${size === 'regular' ? 'max-h-[28rem]' : 'max-h-80'}`}>
                     {comments.map(c => {
                         const isEditing = editingId === c.id;
                         const editable = canEdit(c);
