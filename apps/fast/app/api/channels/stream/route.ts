@@ -95,8 +95,8 @@ export async function GET(request: NextRequest) {
                 }
             };
 
-            // Check every 500ms — lightweight indexed queries
-            const interval = setInterval(check, 500);
+            // Check every 2s — lightweight indexed queries
+            const interval = setInterval(check, 2000);
 
             // Clean up when client disconnects
             request.signal.addEventListener('abort', () => {
