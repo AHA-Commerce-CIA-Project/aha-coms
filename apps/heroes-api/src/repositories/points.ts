@@ -1,4 +1,4 @@
-import { eq, and, count, desc, ilike, gte, lte } from 'drizzle-orm'
+import { eq, and, desc, ilike, gte, lte, sql } from 'drizzle-orm'
 import { achievementPoints, pointCategories, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -71,7 +71,7 @@ export async function listPoints(opts: ListPointsOpts, tx?: DbClient) {
       .limit(opts.limit)
       .offset(offset),
     db
-      .select({ total: count() })
+      .select({ total: sql<number>`count(*)::int` })
       .from(achievementPoints)
       .where(where),
   ])

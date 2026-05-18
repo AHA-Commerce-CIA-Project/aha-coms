@@ -1,4 +1,4 @@
-import { eq, and, count, sql, desc } from 'drizzle-orm'
+import { eq, and, sql, desc } from 'drizzle-orm'
 import { pointSummaries, heroesProfiles, achievementPoints, pointCategories } from '@coms-portal/heroes-shared/db/schema'
 import { withRLS } from '../repositories/base'
 import { getPointImpactSettings } from './settings-cache'
@@ -68,7 +68,7 @@ export async function getLeaderboard(
     // Run count and paginated query in parallel
     const [countResult, rows] = await Promise.all([
       db
-        .select({ total: count() })
+        .select({ total: sql<number>`count(*)::int` })
         .from(pointSummaries)
         .innerJoin(heroesProfiles, eq(pointSummaries.userId, heroesProfiles.id))
         .where(whereConditions),

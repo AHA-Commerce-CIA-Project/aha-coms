@@ -1,4 +1,4 @@
-import { eq, count, desc } from 'drizzle-orm'
+import { eq, desc, sql } from 'drizzle-orm'
 import { challenges, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -41,7 +41,7 @@ export async function listByAchievement(
       .orderBy(desc(challenges.createdAt))
       .limit(opts.limit)
       .offset(offset),
-    db.select({ total: count() }).from(challenges).where(where),
+    db.select({ total: sql<number>`count(*)::int` }).from(challenges).where(where),
   ])
 
   return { rows, total }

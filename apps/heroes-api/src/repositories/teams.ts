@@ -1,4 +1,4 @@
-import { eq, count, ilike, and, sql } from 'drizzle-orm'
+import { eq, ilike, and, sql } from 'drizzle-orm'
 import { taxonomyCache, heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -42,7 +42,7 @@ export async function listTeams(
       .orderBy(taxonomyCache.value)
       .limit(opts.limit)
       .offset(offset),
-    db.select({ total: count() }).from(taxonomyCache).where(where),
+    db.select({ total: sql<number>`count(*)::int` }).from(taxonomyCache).where(where),
   ])
 
   return { rows, total }
@@ -67,7 +67,7 @@ export async function getTeamMembers(teamKey: string, tx?: DbClient) {
 export async function getTeamMemberCount(teamKey: string, tx?: DbClient) {
   const db = getDb(tx)
   const [{ total }] = await db
-    .select({ total: count() })
+    .select({ total: sql<number>`count(*)::int` })
     .from(heroesProfiles)
     .where(and(eq(heroesProfiles.teamKey, teamKey), eq(heroesProfiles.isActive, true)))
   return total

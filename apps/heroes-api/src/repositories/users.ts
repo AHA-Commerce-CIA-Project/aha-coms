@@ -1,4 +1,4 @@
-import { eq, and, ilike, count } from 'drizzle-orm'
+import { eq, and, ilike, sql } from 'drizzle-orm'
 import { heroesProfiles, emailCache } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -66,7 +66,7 @@ export async function listUsers(opts: ListUsersOpts, tx?: DbClient) {
       .orderBy(heroesProfiles.name)
       .limit(opts.limit)
       .offset(offset),
-    db.select({ total: count() }).from(heroesProfiles).where(where),
+    db.select({ total: sql<number>`count(*)::int` }).from(heroesProfiles).where(where),
   ])
 
   const rows: UserRow[] = rawRows.map((r) => ({

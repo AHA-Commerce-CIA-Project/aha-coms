@@ -1,4 +1,4 @@
-import { eq, desc, count } from 'drizzle-orm'
+import { eq, desc, sql } from 'drizzle-orm'
 import { sheetSyncJobs } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -51,7 +51,7 @@ export async function listJobs(
       .orderBy(desc(sheetSyncJobs.createdAt))
       .limit(opts.limit)
       .offset(offset),
-    db.select({ total: count() }).from(sheetSyncJobs),
+    db.select({ total: sql<number>`count(*)::int` }).from(sheetSyncJobs),
   ])
   return {
     jobs,

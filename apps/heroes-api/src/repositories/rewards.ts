@@ -1,4 +1,4 @@
-import { eq, asc, count } from 'drizzle-orm'
+import { eq, asc, sql } from 'drizzle-orm'
 import { rewards } from '@coms-portal/heroes-shared/db/schema'
 import type { DbClient } from './base'
 import { getDb } from './base'
@@ -21,7 +21,7 @@ export async function listRewards(opts: ListRewardsOpts, tx?: DbClient) {
       .orderBy(asc(rewards.name))
       .limit(opts.limit)
       .offset(offset),
-    db.select({ total: count() }).from(rewards),
+    db.select({ total: sql<number>`count(*)::int` }).from(rewards),
   ])
 
   return { rows, total }
