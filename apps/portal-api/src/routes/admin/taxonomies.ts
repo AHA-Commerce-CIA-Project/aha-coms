@@ -4,7 +4,7 @@ import { taxonomyEditLocks } from '~/db/schema/taxonomy-edit-locks'
 import { eq } from 'drizzle-orm'
 import { requireRole } from '~/middleware/rbac'
 import {
-  listAllTaxonomyIds,
+  getTaxonomyEntryCounts,
   listTaxonomyEntries,
   upsertTaxonomyEntry,
   bulkUpsertTaxonomyEntries,
@@ -56,15 +56,7 @@ export const adminTaxonomiesRoutes = new Elysia({ prefix: '/taxonomies' })
   .get(
     '/',
     async () => {
-      const ids = await listAllTaxonomyIds()
-
-      const taxonomies = await Promise.all(
-        ids.map(async (taxonomyId) => {
-          const entries = await listTaxonomyEntries(taxonomyId)
-          return { taxonomyId, entryCount: entries.length }
-        }),
-      )
-
+      const taxonomies = await getTaxonomyEntryCounts()
       return { taxonomies }
     },
   )

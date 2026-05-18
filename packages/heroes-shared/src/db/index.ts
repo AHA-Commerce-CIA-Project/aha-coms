@@ -24,25 +24,46 @@ function initDb() {
       path: socketDir + '/.s.PGSQL.5432',
     }),
 
-    // --- Pool sizing (db-f1-micro: max_connections=40, minus ~3 reserved = 37 usable) ---
-    // 15 per instance × 2 max instances = 30, leaves 7 headroom for migrations/admin
-    max: Number(process.env.DB_POOL_MAX) || 15,
+    // --- Pool sizing -----------------------------------------------------
+    // coms-aha-heroes-db (db-f1-micro): Postgres max_connections = 25, of
+    // which superuser_reserved_connections = 3 (Postgres default) — leaving
+    // ~22 open paths for app-role users (coms_aha_heroes_app,
+    // coms_portal_app). The instance is shared with the `coms_portal`
+    // database on the same backend. Worst-case fleet draw with every Cloud
+    // Run service at max_instance_count:
+    //
+    //   heroes-api   3 × 2 max instances = 6
+    //   heroes-web   3 × 2 max instances = 6
+    //   portal-api   3 × 2 max instances = 6
+    //   portal-web   3 × 2 max instances = 6
+    //                                     —
+    //                                    24 theoretical, vs 22 app-bucket
+    //
+    // The -2 paper deficit is tempered by four caveats:
+    //   (a) simultaneous max-scale across all four services is theoretical
+    //       — Cloud Run scaling is gradual, traffic distributes unevenly;
+    //   (b) the aha-fast-db audit observed 24 backends on its own
+    //       db-f1-micro without server-side rejection, suggesting Cloud
+    //       SQL's enforcement of the superuser reservation is more
+    //       permissive than stock Postgres;
+    //   (c) migrations (`bun db:push`) borrow their own connection during
+    //       deploy — covered by typical headroom but not guaranteed at peak;
+    //   (d) DB_POOL_MAX env override lets ops dial each service to max:2
+    //       (16 fleet worst case) without a redeploy.
+    //
+    // Prior shape was max=15 sized against a phantom max_connections=40
+    // ceiling (db-f1-micro default has always been 25 — see commits ed9c754
+    // and 67fd193 confirming the live `databaseFlags=null` state). At
+    // max=15 a single (heroes-api + heroes-web) pair could exceed 25 on
+    // its own; the fleet's worst-case draw was 72 against a 25 ceiling.
+    max: Number(process.env.DB_POOL_MAX) || 3,
 
-    // --- Aggressive serverless timeouts ---
-    // Kill idle connections fast — Cloud Run may freeze the instance at any moment.
-    // 5s idle keeps the pool warm for burst traffic without hoarding connections.
-    idle_timeout: 5,
-    // Fail fast on connect — don't let a hung Cloud SQL proxy stall the request.
+    // Fail fast on connect — don't let a hung Cloud SQL proxy stall a request.
     connect_timeout: 5,
-    // Force connection recycling every 5 minutes. Cloud Run instances are ephemeral;
-    // long-lived connections risk hitting Cloud SQL's own idle-disconnect (10 min)
-    // and producing "connection terminated unexpectedly" errors on the next query.
-    max_lifetime: 300,
 
-    // --- Serverless essentials ---
-    // Disable named prepared statements. In serverless/pooled environments,
-    // a recycled connection may not have the prepared statement the client expects,
-    // causing "prepared statement does not exist" errors.
+    // Disable named prepared statements. In serverless/pooled environments
+    // a recycled connection may not hold the prepared statement the client
+    // expects, producing "prepared statement does not exist" errors.
     prepare: false,
 
     // Graceful shutdown: let in-flight queries finish (matches Cloud Run's SIGTERM grace)
