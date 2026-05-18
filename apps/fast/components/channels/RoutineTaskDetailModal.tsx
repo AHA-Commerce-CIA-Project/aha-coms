@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { isHtml, sanitizeRichText } from '@/lib/sanitize';
+import { useAuth } from '@/lib/auth/use-auth';
 
 // Reuses the same shape /api/tasks/[id]/card returns. Kept in this file so
 // the detail modal stays self-contained and doesn't drag in DOM types from
@@ -64,6 +65,11 @@ interface RoutineTaskDetailModalProps {
 }
 
 export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }: RoutineTaskDetailModalProps) {
+  // isLeader gates the Reassign affordance (leaders/admins can reassign
+  // any task; the claimer can reassign their own). Matches the server-side
+  // gate at /api/tasks/[id]/claim so the UI doesn't dangle a button that
+  // 403s on click.
+  const { isLeader } = useAuth();
   const [snapshot, setSnapshot] = useState<RoutineSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -407,8 +413,20 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
   const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl my-8 overflow-hidden">
+    <div
+      className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto"
+      onClick={(e) => {
+        // Backdrop dismiss: close only when the click originated on the
+        // overlay itself, not on a child element that bubbled up. Matches
+        // the pattern used by ShareNoteModal / DM delete modal / pending
+        // modal across the app.
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl my-8 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-slate-200 flex items-start gap-3">
           <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center flex-shrink-0 shadow-sm">
@@ -522,11 +540,14 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
                       </div>
                       {!claimedByMe && !isDone && <Lock className="w-3.5 h-3.5 text-slate-400" />}
                       {isDone && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                      {/* Reassign — visible only while the task is active. The
-                          server enforces the actual permission (leader OR
-                          current assignee), so we show the affordance broadly
-                          and let the API return 403 for non-eligible callers. */}
-                      {!isDone && (
+                      {/* Reassign — visible only when the viewer can
+                          actually perform it (matches the server-side
+                          gate at /api/tasks/[id]/claim: claimer OR leader
+                          OR admin). Hiding rather than relying on a 403
+                          stops non-eligible members from clicking a
+                          dead-end button. `isLeader` from useAuth is
+                          true for both `leader` and `admin` roles. */}
+                      {!isDone && (claimedByMe || isLeader) && (
                         <div className="relative" ref={pickerRef}>
                           <button
                             type="button"
