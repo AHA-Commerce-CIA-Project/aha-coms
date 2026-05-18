@@ -54,27 +54,22 @@ export async function GET(request: NextRequest) {
                     const now = new Date();
                     if (now.getTime() - lastConvoCheck.getTime() > 3000) {
                         lastConvoCheck = now;
-                        const participants = await prisma.conversationParticipant.findMany({
-                            where: { userId },
-                            select: { conversationId: true, lastReadAt: true },
-                        });
-                        let totalUnread = 0;
-                        for (const p of participants) {
-                            const unread = await prisma.directMessage.count({
-                                where: {
-                                    conversationId: p.conversationId,
-                                    senderId: { not: userId },
-                                    createdAt: { gt: p.lastReadAt || new Date(0) },
-                                },
-                            });
-                            totalUnread += unread;
-                        }
+                        const result = await prisma.$queryRaw<{ total: bigint }[]>`
+                            SELECT COUNT(*)::int AS total
+                            FROM conversation_participants cp
+                            JOIN direct_messages dm
+                              ON dm.conversation_id = cp.conversation_id
+                              AND dm.sender_id != cp.user_id
+                              AND dm.created_at > COALESCE(cp.last_read_at, '1970-01-01'::timestamptz)
+                            WHERE cp.user_id = ${userId}
+                        `;
+                        const totalUnread = Number(result[0]?.total ?? 0);
                         send('unread', { totalUnread });
                     }
                 } catch {}
             };
 
-            const interval = setInterval(check, 500);
+            const interval = setInterval(check, 2000);
             request.signal.addEventListener('abort', () => {
                 alive = false;
                 clearInterval(interval);

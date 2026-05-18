@@ -344,6 +344,7 @@ model Notification {
   data      Json?
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  @@index([userId, createdAt])
   @@map("notifications")
 }
 
@@ -709,6 +710,7 @@ model ChannelReadStatus {
   lastReadAt DateTime @default(now()) @map("last_read_at") @db.Timestamptz(6)
 
   @@unique([channelId, userId])
+  @@index([userId])
   @@map("channel_read_status")
 }
 
