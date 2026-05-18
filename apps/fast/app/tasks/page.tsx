@@ -124,7 +124,7 @@ function MyTasksContent() {
     const [claimedFilter, setClaimedFilter] = useState<'all' | 'inProgress' | 'pending' | 'done' | 'overdue' | 'archive'>('all');
     const [notes, setNotes] = useState<any[]>([]);
     const [editingNote, setEditingNote] = useState<any | null>(null);
-    const [showAllNotes, setShowAllNotes] = useState(false);
+    const [notesExpanded, setNotesExpanded] = useState(false);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [shareNoteOpen, setShareNoteOpen] = useState(false);
     const [creatingNote, setCreatingNote] = useState(false);
@@ -1507,50 +1507,52 @@ function MyTasksContent() {
                 </div>
             )}
 
-            {/* ═══ My Notes (Google Keep Style) — full-width 3×2 grid since
-                the calendar widget moved to the dashboard. ═══ */}
+            {/* ═══ My Notes — header row with inline + Add Note button; the
+                grid shows the first NOTES_PREVIEW_COUNT and expands inline
+                via the footer toggle instead of opening a modal. ═══ */}
             <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex justify-between items-center">
                     <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                         <StickyNote className="w-6 h-6 text-amber-500" />
                         My Notes
+                        <span className="ml-1 text-xs font-medium text-slate-400">
+                            {sortedNotes.length} note{sortedNotes.length !== 1 ? 's' : ''}
+                        </span>
                     </h2>
-                    <span className="text-xs text-slate-400">{sortedNotes.length} note{sortedNotes.length !== 1 ? 's' : ''}</span>
+                    <button
+                        onClick={handleAddNewNote}
+                        disabled={creatingNote}
+                        className="inline-flex items-center gap-1.5 w-auto px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-all disabled:opacity-50"
+                    >
+                        {creatingNote ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" /> Creating…
+                            </>
+                        ) : (
+                            <>
+                                <Plus className="w-4 h-4" /> Add Note
+                            </>
+                        )}
+                    </button>
                 </div>
 
-                {/* ── Add New Note button — opens the auto-saving edit modal with a blank note ── */}
-                <button
-                    onClick={handleAddNewNote}
-                    disabled={creatingNote}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-white border-2 border-dashed border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/40 text-indigo-600 font-semibold rounded-2xl transition-all disabled:opacity-50"
-                >
-                    {creatingNote ? (
-                        <>
-                            <Loader2 className="w-4 h-4 animate-spin" /> Creating…
-                        </>
-                    ) : (
-                        <>
-                            <Plus className="w-4 h-4" /> Add new note
-                        </>
-                    )}
-                </button>
-
                 {/* ── Notes grid — 3 cols × 2 rows on desktop, 2 cols on tablet,
-                    1 col on mobile. flex-col on each card so the action footer
-                    pins to the bottom and rows stay visually aligned. ── */}
+                    1 col on mobile. Description uses line-clamp-5 with
+                    overflow-hidden for a clean ellipsis; footer pins to the
+                    card bottom via mt-auto so rows stay aligned naturally. ── */}
                 {sortedNotes.length > 0 ? (
                     <>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {sortedNotes.slice(0, NOTES_PREVIEW_COUNT).map(note => {
+                            {(notesExpanded ? sortedNotes : sortedNotes.slice(0, NOTES_PREVIEW_COUNT)).map(note => {
                                 const colors = noteColors[note.color] || noteColors.default;
                                 return (
                                     <div key={note.id} onClick={() => setEditingNote({ ...note })}
-                                        className={`${colors.bg} border-2 ${colors.border} rounded-2xl p-4 cursor-pointer group relative transition-all hover:shadow-lg hover:-translate-y-0.5 flex flex-col min-h-[180px]`}>
+                                        className={`${colors.bg} border-2 ${colors.border} rounded-2xl p-4 cursor-pointer group relative transition-all hover:shadow-lg hover:-translate-y-0.5 flex flex-col`}>
                                         {note.pinned && <Pin className="w-3.5 h-3.5 text-slate-400 absolute top-3 right-3 rotate-45" />}
                                         {note.title && <h3 className="text-lg font-bold text-slate-900 mb-2 pr-6 line-clamp-2">{note.title}</h3>}
-                                        {note.content && <div className="flex-1 text-sm text-slate-600 line-clamp-6 leading-relaxed [&_b]:font-bold [&_i]:italic [&_u]:underline [&_strike]:line-through [&_a]:text-indigo-600 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-1 [&_li]:mb-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: linkifyHtml(note.content) }} />}
-                                        {!note.title && !note.content && <p className="flex-1 text-xs text-slate-300 italic">Empty note</p>}
-                                        <div className="flex items-center gap-1 mt-3 pt-2 border-t border-slate-200/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {note.content && <div className="text-sm text-slate-600 line-clamp-5 overflow-hidden leading-relaxed [&_b]:font-bold [&_i]:italic [&_u]:underline [&_strike]:line-through [&_a]:text-indigo-600 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-1 [&_li]:mb-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: linkifyHtml(note.content) }} />}
+                                        {!note.title && !note.content && <p className="text-xs text-slate-300 italic">Empty note</p>}
+                                        <div className="flex items-center gap-1 mt-auto pt-3 border-t border-slate-200/40 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button onClick={e => { e.stopPropagation(); handlePinNote(note); }}
                                                 className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title={note.pinned ? 'Unpin' : 'Pin'}>
                                                 {note.pinned ? <PinOff className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
@@ -1566,14 +1568,21 @@ function MyTasksContent() {
                             })}
                         </div>
 
-                        {/* View all notes — opens modal */}
+                        {/* Inline expand/collapse toggle — replaces the old
+                            full-width pill + "All Notes" popup so the user
+                            just keeps scrolling. */}
                         {sortedNotes.length > NOTES_PREVIEW_COUNT && (
-                            <button
-                                onClick={() => setShowAllNotes(true)}
-                                className="w-full py-2.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors border border-indigo-100"
-                            >
-                                View all {sortedNotes.length} notes
-                            </button>
+                            <div className="flex justify-center pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setNotesExpanded(v => !v)}
+                                    className="text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors"
+                                >
+                                    {notesExpanded
+                                        ? 'Show less ↑'
+                                        : `Show all ${sortedNotes.length} notes ↓`}
+                                </button>
+                            </div>
                         )}
                     </>
                 ) : (
@@ -1602,6 +1611,7 @@ function MyTasksContent() {
                                 onChange={(html) => setEditingNote({ ...editingNote, content: html })}
                                 placeholder="Write something..."
                                 minHeight="300px"
+                                toolbarBg={noteColors[editingNote.color]?.bg || 'bg-white'}
                             />
                         </div>
                         <div className="px-6 pb-2">
@@ -1646,49 +1656,6 @@ function MyTasksContent() {
                                     Done
                                 </button>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* View All Notes Modal */}
-            {showAllNotes && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowAllNotes(false)}>
-                    <div onClick={e => e.stopPropagation()}
-                        className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-                            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                                <StickyNote className="w-5 h-5 text-amber-500" />
-                                All Notes ({sortedNotes.length})
-                            </h3>
-                            <button onClick={() => setShowAllNotes(false)} className="p-1 text-slate-400 hover:text-slate-600">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-                            {sortedNotes.map(note => {
-                                const colors = noteColors[note.color] || noteColors.default;
-                                return (
-                                    <div key={note.id} onClick={() => { setShowAllNotes(false); setEditingNote({ ...note }); }}
-                                        className={`${colors.bg} border-2 ${colors.border} rounded-2xl p-4 cursor-pointer group relative transition-all hover:shadow-lg hover:-translate-y-0.5`}>
-                                        {note.pinned && <Pin className="w-3.5 h-3.5 text-slate-400 absolute top-3 right-3 rotate-45" />}
-                                        {note.title && <h3 className="text-lg font-bold text-slate-900 mb-2 pr-6">{note.title}</h3>}
-                                        {note.content && <div className="text-base text-slate-600 leading-relaxed [&_b]:font-bold [&_i]:italic [&_u]:underline [&_strike]:line-through [&_a]:text-indigo-600 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-1 [&_li]:mb-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: linkifyHtml(note.content) }} />}
-                                        {!note.title && !note.content && <p className="text-xs text-slate-300 italic">Empty note</p>}
-                                        <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-200/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={e => { e.stopPropagation(); handlePinNote(note); }}
-                                                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title={note.pinned ? 'Unpin' : 'Pin'}>
-                                                {note.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                                            </button>
-                                            <button onClick={e => { e.stopPropagation(); handleDeleteNote(note.id); }}
-                                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete">
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                            <span className="ml-auto text-[10px] text-slate-400">{new Date(note.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
                         </div>
                     </div>
                 </div>

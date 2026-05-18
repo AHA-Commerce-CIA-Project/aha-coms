@@ -9,6 +9,10 @@ interface RichEditorProps {
     onChange: (html: string) => void;
     placeholder?: string;
     minHeight?: string;
+    // Tailwind bg utility used as the toolbar's opaque backdrop while it is
+    // sticky. Must match the surrounding container so scrolling content does
+    // not bleed through the formatting controls.
+    toolbarBg?: string;
 }
 
 function execCmd(command: string, value?: string) {
@@ -82,7 +86,7 @@ function sanitizePastedHtml(html: string): string {
     return wrapper.innerHTML;
 }
 
-export function RichEditor({ value, onChange, placeholder = 'Write your note...', minHeight = '100px' }: RichEditorProps) {
+export function RichEditor({ value, onChange, placeholder = 'Write your note...', minHeight = '100px', toolbarBg = 'bg-white' }: RichEditorProps) {
     const editorRef = useRef<HTMLDivElement>(null);
     const isInitialized = useRef(false);
     const [activeFormats, setActiveFormats] = useState<Record<string, boolean>>({});
@@ -346,8 +350,11 @@ export function RichEditor({ value, onChange, placeholder = 'Write your note...'
 
     return (
         <div>
-            {/* Toolbar */}
-            <div className="flex items-center gap-0.5 pb-2 mb-2 border-b border-slate-100">
+            {/* Toolbar — sticks to the top of the scrolling ancestor so the
+                formatting controls stay reachable on long notes. The opaque
+                toolbarBg keeps the editor body from bleeding through. */}
+            <div className={`sticky top-0 z-10 flex items-center gap-0.5 pt-1 pb-2 mb-2 border-b border-slate-100 ${toolbarBg}`}>
+
                 {toolbarBtn('bold', 'B', 'Bold (Ctrl+B)', 'font-bold')}
                 {toolbarBtn('italic', 'I', 'Italic (Ctrl+I)', 'italic')}
                 {toolbarBtn('underline', 'U', 'Underline (Ctrl+U)', 'underline')}
