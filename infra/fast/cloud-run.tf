@@ -160,13 +160,17 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
   template {
     service_account = google_service_account.fast_web_runtime.email
 
-    # Always-warm + idle-throttled + sticky shape. The legacy `aha-fast-app`
-    # ran with `minScale=1 + cpu-throttling=false + sessionAffinity=true`;
-    # T80's initial migration preserved that triplet conservatively under
-    # the principle "the migration's job is to move the app, not silently
-    # retune it." FU-21's always-warm audit (2026-05-14) revisited that
-    # conservatism with an actual codebase audit and found Op-7's two
-    # stated reasons for `cpu_idle = false` did not apply:
+    # Scale-to-zero + idle-throttled + sticky shape. The legacy
+    # `aha-fast-app` ran with `minScale=1 + cpu-throttling=false +
+    # sessionAffinity=true`; T80's initial migration preserved that
+    # triplet conservatively under the principle "the migration's job
+    # is to move the app, not silently retune it." FU-21's always-warm
+    # audit (2026-05-14) flipped cpu_idle to true; the 2026-05-18
+    # DB-connection audit then stepped min_instance_count from 1 to 0
+    # to reclaim the 1-3 idle Prisma conns the always-warm instance
+    # held against db-f1-micro's 25-conn ceiling. Op-7's two stated
+    # reasons for `cpu_idle = false` (still relevant context) did not
+    # apply, per the FU-21 codebase walk:
     #   1. "Prisma connection pool maintenance between requests" — the
     #      lib/db.ts singleton is `new PrismaClient(...)` with no
     #      module-load setInterval. The pool's idle-eviction timer is
@@ -188,11 +192,16 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
     # That concern is unrelated to cpu_idle.
     #
     # Why each setting matters for fast post-audit:
-    #   • min_instance_count = 1 — Next.js 15 + Prisma cold-start is
-    #     3–5s (React 19 + lightningcss + sharp + Prisma engine init);
-    #     for a low-traffic admin app, scale-to-zero means most user
-    #     hits eat a cold start. Cost: ~$2.50/mo for the always-warm
-    #     instance's allocated memory (CPU is now idle-throttled).
+    #   • min_instance_count = 0 — stepped down from 1 on 2026-05-18
+    #     during the DB-connection audit. With db-f1-micro's 25-conn
+    #     ceiling under recurrent deploy-window pressure, the operator
+    #     chose to give back the 1-3 idle Prisma conns the always-warm
+    #     instance held in exchange for the ~$2.50/mo savings. The
+    #     3–5s cold-start cost (Next.js 15 + React 19 + lightningcss +
+    #     sharp + Prisma engine init, unchanged since FU-21's walk)
+    #     now lands on the first user after any 15+ min quiet window;
+    #     SSE clients with active streams keep instances alive through
+    #     business hours regardless of this setting.
     #   • cpu_idle = true — flipped from `false` by the FU-21 audit.
     #     CPU released between requests. First request after a quiet
     #     window pays ~50–200ms wakeup latency; subsequent requests
@@ -214,7 +223,7 @@ resource "google_cloud_run_v2_service" "coms_fast_web" {
     #     spike-window cost grows ~pro-rata with how often we touch the
     #     new 4th–5th instances.
     scaling {
-      min_instance_count = 1
+      min_instance_count = 0
       max_instance_count = 5
     }
 
