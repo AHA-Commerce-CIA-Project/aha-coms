@@ -10,6 +10,58 @@ import { isHtml, sanitizeRichText } from '@/lib/sanitize';
 import { useCustomEmojiMap } from '@/lib/customEmojis';
 import { renderShortcodes } from '@/lib/renderShortcodes';
 
+// Wrap @Handle.Name mentions in a styled badge for display. HTML-safe:
+// walks only text nodes, skips <a> descendants so an email-anchor like
+// `mailto:foo@bar.com` doesn't get its local part eaten. Mentions must
+// be preceded by whitespace or the start of the text node so mid-word
+// `@` (typically inside emails / file paths) is left alone. The data-
+// mention attribute marks the badge for future click handlers without
+// committing to a profile route today.
+function highlightMentions(html: string): string {
+    if (!html || !html.includes('@')) return html;
+    if (typeof window === 'undefined') return html;
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    const MENTION_RE = /(^|\s)(@[A-Za-z][A-Za-z0-9._-]*)/g;
+    const walk = (node: Node) => {
+        if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === 'A') return;
+        if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent || '';
+            if (!text.includes('@')) return;
+            MENTION_RE.lastIndex = 0;
+            let match: RegExpExecArray | null;
+            const parts: { text: string; isMention: boolean }[] = [];
+            let lastIdx = 0;
+            while ((match = MENTION_RE.exec(text)) !== null) {
+                const start = match.index + match[1].length;
+                const end = MENTION_RE.lastIndex;
+                if (start > lastIdx) parts.push({ text: text.slice(lastIdx, start), isMention: false });
+                parts.push({ text: match[2], isMention: true });
+                lastIdx = end;
+            }
+            if (lastIdx === 0) return;
+            if (lastIdx < text.length) parts.push({ text: text.slice(lastIdx), isMention: false });
+            const frag = document.createDocumentFragment();
+            for (const p of parts) {
+                if (p.isMention) {
+                    const span = document.createElement('span');
+                    span.className = 'px-1.5 py-0.5 rounded font-medium bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 hover:underline cursor-pointer';
+                    span.setAttribute('data-mention', p.text.slice(1));
+                    span.textContent = p.text;
+                    frag.appendChild(span);
+                } else {
+                    frag.appendChild(document.createTextNode(p.text));
+                }
+            }
+            node.parentNode?.replaceChild(frag, node);
+            return;
+        }
+        Array.from(node.childNodes).forEach(walk);
+    };
+    walk(wrapper);
+    return wrapper.innerHTML;
+}
+
 interface CommentAttachment {
     url: string;
     name?: string;
@@ -117,7 +169,13 @@ export function TaskCommentsSection({
     const composerRef = useRef<HTMLDivElement>(null);
     const editRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    // Emoji picker + @mention popover are shared between the new-comment
+    // composer and the edit-in-place composer. Tracking which one is active
+    // lets us anchor the popover to the right editor and insert into the
+    // right state on selection. `null` means the picker is closed.
+    type ComposerMode = 'new' | 'edit';
+    const [emojiPickerMode, setEmojiPickerMode] = useState<ComposerMode | null>(null);
+    const [mentionMode, setMentionMode] = useState<ComposerMode | null>(null);
     // Tracks which comment is currently requesting an emoji to react with.
     // null = no picker open. Only one picker is active at a time.
     const [reactionPickerCommentId, setReactionPickerCommentId] = useState<string | null>(null);
@@ -353,39 +411,43 @@ export function TaskCommentsSection({
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
-    // Insert text at the current caret in the composer using execCommand.
+    // Insert text at the current caret in whichever composer is active.
     // Works on contenteditable selection without us tracking offsets.
-    const insertAtCursor = (text: string) => {
-        composerRef.current?.focus();
+    const insertAtCursor = (text: string, mode: ComposerMode = 'new') => {
+        const ref = mode === 'edit' ? editRef : composerRef;
+        const setState = mode === 'edit' ? setEditingDraft : setDraft;
+        ref.current?.focus();
         document.execCommand('insertText', false, text);
         // Sync state from DOM so subsequent draft persistence sees the new content.
-        if (composerRef.current) setDraft(composerRef.current.innerHTML);
+        if (ref.current) setState(ref.current.innerHTML);
     };
 
     const handleEmojiSelect = (emoji: string) => {
-        insertAtCursor(emoji);
-        setShowEmojiPicker(false);
+        insertAtCursor(emoji, emojiPickerMode ?? 'new');
+        setEmojiPickerMode(null);
     };
 
-    // Detect @<query> immediately before the caret. Operates on the current
-    // text node's content via the Selection API (composer is contenteditable
-    // now, so there's no selectionStart/selectionEnd to read).
-    const updateMentionState = () => {
-        const editor = composerRef.current;
-        if (!editor) { setMentionQuery(null); return; }
+    // Detect @<query> immediately before the caret in whichever composer
+    // is active. Operates on the current text node's content via the
+    // Selection API (composer is contenteditable now, so there's no
+    // selectionStart/selectionEnd to read).
+    const updateMentionState = (mode: ComposerMode = 'new') => {
+        const editor = (mode === 'edit' ? editRef : composerRef).current;
+        const clear = () => { setMentionQuery(null); setMentionMode(null); };
+        if (!editor) { clear(); return; }
         const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) { setMentionQuery(null); return; }
+        if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) { clear(); return; }
         const range = sel.getRangeAt(0);
-        if (!editor.contains(range.startContainer)) { setMentionQuery(null); return; }
-        if (range.startContainer.nodeType !== Node.TEXT_NODE) { setMentionQuery(null); return; }
+        if (!editor.contains(range.startContainer)) { clear(); return; }
+        if (range.startContainer.nodeType !== Node.TEXT_NODE) { clear(); return; }
 
         const textBefore = (range.startContainer.textContent || '').slice(0, range.startOffset);
         const at = textBefore.lastIndexOf('@');
-        if (at < 0) { setMentionQuery(null); return; }
+        if (at < 0) { clear(); return; }
         const head = textBefore.slice(at + 1);
-        if (/\s/.test(head)) { setMentionQuery(null); return; }
+        if (/\s/.test(head)) { clear(); return; }
         const charBefore = at > 0 ? textBefore[at - 1] : ' ';
-        if (!/\s/.test(charBefore) && at !== 0) { setMentionQuery(null); return; }
+        if (!/\s/.test(charBefore) && at !== 0) { clear(); return; }
 
         if (mentionUsers.length === 0) {
             fetch('/fast/api/chat/users').then(r => r.ok ? r.json() : []).then(setMentionUsers).catch(() => {});
@@ -393,6 +455,7 @@ export function TaskCommentsSection({
         setMentionAnchor(at);
         setMentionQuery(head);
         setMentionActiveIdx(0);
+        setMentionMode(mode);
     };
 
     const filteredMentionUsers = mentionQuery === null
@@ -403,8 +466,10 @@ export function TaskCommentsSection({
 
     // Replace the in-flight @<query> in the current text node with @<handle>.
     // The mentionAnchor index is offsets WITHIN the text node where '@' sits.
-    const selectMention = (user: { id: string; name: string }) => {
-        const editor = composerRef.current;
+    const selectMention = (user: { id: string; name: string }, mode: ComposerMode = 'new') => {
+        const ref = mode === 'edit' ? editRef : composerRef;
+        const setState = mode === 'edit' ? setEditingDraft : setDraft;
+        const editor = ref.current;
         if (!editor) return;
         const sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return;
@@ -421,7 +486,8 @@ export function TaskCommentsSection({
         sel.removeAllRanges();
         sel.addRange(newRange);
         setMentionQuery(null);
-        setDraft(editor.innerHTML);
+        setMentionMode(null);
+        setState(editor.innerHTML);
     };
 
     // Markdown shortcut: typing "1." / "1" / "1)" / "-" / "*" + space at the
@@ -572,15 +638,15 @@ export function TaskCommentsSection({
 
     const handleComposerKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         // Mention autocomplete keyboard nav takes precedence when the popover is showing.
-        if (mentionQuery !== null && filteredMentionUsers.length > 0) {
+        if (mentionMode === 'new' && mentionQuery !== null && filteredMentionUsers.length > 0) {
             if (e.key === 'ArrowDown') { e.preventDefault(); setMentionActiveIdx(i => (i + 1) % filteredMentionUsers.length); return; }
             if (e.key === 'ArrowUp') { e.preventDefault(); setMentionActiveIdx(i => (i - 1 + filteredMentionUsers.length) % filteredMentionUsers.length); return; }
             if (e.key === 'Enter' || e.key === 'Tab') {
                 e.preventDefault();
-                selectMention(filteredMentionUsers[mentionActiveIdx]);
+                selectMention(filteredMentionUsers[mentionActiveIdx], 'new');
                 return;
             }
-            if (e.key === 'Escape') { e.preventDefault(); setMentionQuery(null); return; }
+            if (e.key === 'Escape') { e.preventDefault(); setMentionQuery(null); setMentionMode(null); return; }
         }
         // Markdown list shortcut on Space — same flow as the channel composer.
         if (e.key === ' ' && composerRef.current) {
@@ -700,6 +766,19 @@ export function TaskCommentsSection({
     };
 
     const handleEditKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        // Mention autocomplete keyboard nav for the edit composer — mirrors
+        // the new-composer block above, scoped to mentionMode === 'edit' so
+        // both composers' arrow-key handling stays independent.
+        if (mentionMode === 'edit' && mentionQuery !== null && filteredMentionUsers.length > 0) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setMentionActiveIdx(i => (i + 1) % filteredMentionUsers.length); return; }
+            if (e.key === 'ArrowUp') { e.preventDefault(); setMentionActiveIdx(i => (i - 1 + filteredMentionUsers.length) % filteredMentionUsers.length); return; }
+            if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                selectMention(filteredMentionUsers[mentionActiveIdx], 'edit');
+                return;
+            }
+            if (e.key === 'Escape') { e.preventDefault(); setMentionQuery(null); setMentionMode(null); return; }
+        }
         if (e.key === ' ' && editRef.current) {
             if (tryMarkdownListShortcut(editRef.current)) {
                 e.preventDefault();
@@ -844,19 +923,53 @@ export function TaskCommentsSection({
                                     </div>
 
                                     {isEditing ? (
-                                        <div className="w-full">
+                                        <div className="w-full relative">
                                             <div
                                                 ref={editRef}
                                                 contentEditable
                                                 suppressContentEditableWarning
-                                                onInput={(e) => setEditingDraft((e.currentTarget as HTMLDivElement).innerHTML)}
+                                                onInput={(e) => { setEditingDraft((e.currentTarget as HTMLDivElement).innerHTML); updateMentionState('edit'); }}
+                                                onKeyUp={() => updateMentionState('edit')}
+                                                onClick={() => updateMentionState('edit')}
                                                 onPaste={pasteHandler('edit')}
                                                 onKeyDown={handleEditKeyDown}
-                                                data-placeholder="Edit comment. Enter = save, Shift+Enter = new line, Esc = cancel"
+                                                data-placeholder="Edit comment. Enter = save, Shift+Enter = new line, Esc = cancel, @ to mention"
                                                 className={`w-full bg-white border border-indigo-300 rounded-xl px-3 py-2 ${bodyTextClass} text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:my-0.5 [&_a]:text-indigo-600 [&_a]:underline`}
                                                 style={{ minHeight: '44px', maxHeight: '200px', overflowY: 'auto' }}
                                             />
                                             {renderAttachmentStrip(editingAttachments, (idx) => setEditingAttachments(prev => prev.filter((_, i) => i !== idx)))}
+
+                                            {/* @mention popover for the edit composer — same layout
+                                                as the new-composer popover but anchored here so the
+                                                arrow keys + click target this row. */}
+                                            {mentionMode === 'edit' && mentionQuery !== null && filteredMentionUsers.length > 0 && (
+                                                <div className="absolute bottom-full left-0 mb-1 w-[260px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                                                    <div className="py-1 max-h-[240px] overflow-y-auto">
+                                                        {filteredMentionUsers.map((u, idx) => (
+                                                            <button
+                                                                key={u.id}
+                                                                type="button"
+                                                                onMouseDown={e => { e.preventDefault(); selectMention(u, 'edit'); }}
+                                                                className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${idx === mentionActiveIdx ? 'bg-indigo-50' : 'hover:bg-indigo-50'}`}
+                                                            >
+                                                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden">
+                                                                    {u.image ? (
+                                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                                        <img src={u.image} alt={u.name} className="w-6 h-6 rounded-full object-cover" />
+                                                                    ) : (
+                                                                        u.name.charAt(0).toUpperCase()
+                                                                    )}
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <div className="text-xs font-semibold text-slate-800 truncate">{u.name}</div>
+                                                                    <div className="text-[10px] text-slate-500 truncate">{u.email}</div>
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <div className="flex items-center gap-1.5 mt-1.5">
                                                 <button
                                                     onClick={() => saveEdit(c.id)}
@@ -871,6 +984,39 @@ export function TaskCommentsSection({
                                                 >
                                                     <XIcon className="w-3 h-3" /> Cancel
                                                 </button>
+                                                {/* Mini action row — emoji + @ buttons to match the
+                                                    new-comment composer. File attachments and the
+                                                    formatting toolbar are intentionally not duplicated
+                                                    here (per the brief's "icon/emoji + @ mentions"
+                                                    scope); paste-an-image still works via pasteHandler. */}
+                                                <div className="ml-auto flex items-center gap-0.5">
+                                                    <div className="relative">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEmojiPickerMode(emojiPickerMode === 'edit' ? null : 'edit')}
+                                                            disabled={editSaving}
+                                                            className="p-1 text-slate-400 hover:text-amber-500 hover:bg-slate-100 rounded transition-colors disabled:opacity-40"
+                                                            title="Insert emoji"
+                                                        >
+                                                            <Smile className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <EmojiPicker
+                                                            open={emojiPickerMode === 'edit'}
+                                                            onClose={() => setEmojiPickerMode(null)}
+                                                            onSelect={handleEmojiSelect}
+                                                            position="above"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => insertAtCursor('@', 'edit')}
+                                                        disabled={editSaving}
+                                                        className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded transition-colors disabled:opacity-40"
+                                                        title="Tag a user"
+                                                    >
+                                                        <AtSign className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     ) : (
@@ -884,7 +1030,7 @@ export function TaskCommentsSection({
                                                 isHtml(c.message) ? (
                                                     <div
                                                         className={`${bodyTextClass} text-slate-800 leading-relaxed break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-100 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono`}
-                                                        dangerouslySetInnerHTML={{ __html: renderShortcodes(linkifyHtml(sanitizeRichText(c.message)), customEmojiMap) }}
+                                                        dangerouslySetInnerHTML={{ __html: highlightMentions(renderShortcodes(linkifyHtml(sanitizeRichText(c.message)), customEmojiMap)) }}
                                                     />
                                                 ) : (
                                                     <div className={`${bodyTextClass} text-slate-800 leading-relaxed whitespace-pre-wrap break-words [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700`}>
@@ -897,7 +1043,7 @@ export function TaskCommentsSection({
                                                                 className="block max-w-md max-h-72 my-2 rounded-xl border border-slate-200 cursor-zoom-in hover:opacity-95 hover:shadow-md transition-all"
                                                             />
                                                         ) : (
-                                                            <span key={`text-${i}`} dangerouslySetInnerHTML={{ __html: linkifyText(p.content || '') }} />
+                                                            <span key={`text-${i}`} dangerouslySetInnerHTML={{ __html: highlightMentions(linkifyText(p.content || '')) }} />
                                                         ))}
                                                     </div>
                                                 )
@@ -1062,9 +1208,9 @@ export function TaskCommentsSection({
                         ref={composerRef}
                         contentEditable={!sending}
                         suppressContentEditableWarning
-                        onInput={(e) => { setDraft((e.currentTarget as HTMLDivElement).innerHTML); updateMentionState(); }}
-                        onKeyUp={() => updateMentionState()}
-                        onClick={() => updateMentionState()}
+                        onInput={(e) => { setDraft((e.currentTarget as HTMLDivElement).innerHTML); updateMentionState('new'); }}
+                        onKeyUp={() => updateMentionState('new')}
+                        onClick={() => updateMentionState('new')}
                         onPaste={pasteHandler('new')}
                         onKeyDown={handleComposerKeyDown}
                         data-placeholder="Write a comment — Enter to send, @ to mention, Ctrl+V to paste a screenshot"
@@ -1078,8 +1224,9 @@ export function TaskCommentsSection({
                         </div>
                     )}
 
-                    {/* @mention popover — anchored to the composer, rendered above */}
-                    {mentionQuery !== null && filteredMentionUsers.length > 0 && (
+                    {/* @mention popover — anchored to the new-comment composer. Gated
+                        on mode so it doesn't double-render alongside the edit-row popover. */}
+                    {mentionMode === 'new' && mentionQuery !== null && filteredMentionUsers.length > 0 && (
                         <div className="absolute bottom-full left-0 mb-1 w-[260px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
                             <div className="py-1 max-h-[240px] overflow-y-auto">
                                 {filteredMentionUsers.map((u, idx) => (
@@ -1128,7 +1275,7 @@ export function TaskCommentsSection({
                         <div className="relative">
                             <button
                                 type="button"
-                                onClick={() => setShowEmojiPicker(v => !v)}
+                                onClick={() => setEmojiPickerMode(emojiPickerMode === 'new' ? null : 'new')}
                                 disabled={sending}
                                 className="p-1 text-slate-400 hover:text-amber-500 hover:bg-slate-100 rounded transition-colors disabled:opacity-40"
                                 title="Insert emoji"
@@ -1136,8 +1283,8 @@ export function TaskCommentsSection({
                                 <Smile className="w-3.5 h-3.5" />
                             </button>
                             <EmojiPicker
-                                open={showEmojiPicker}
-                                onClose={() => setShowEmojiPicker(false)}
+                                open={emojiPickerMode === 'new'}
+                                onClose={() => setEmojiPickerMode(null)}
                                 onSelect={handleEmojiSelect}
                                 position="above"
                             />
