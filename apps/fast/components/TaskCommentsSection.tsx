@@ -445,17 +445,35 @@ export function TaskCommentsSection({
     // Mention badge click handler — opens the lightweight UserProfilePopover
     // anchored under the clicked badge. Lazy-fetches mentionUsers if the
     // list isn't already loaded (viewers who haven't typed @ themselves
-    // won't have it cached yet). Quiet no-op if the handle doesn't map to
-    // any active user — likely a stale mention from a deleted account.
+    // won't have it cached yet). Logs a warning when the handle doesn't
+    // map to any active user — likely a deleted account or a typo from
+    // before the mention popover existed.
     const handleMentionBadgeClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        const target = e.target as HTMLElement | null;
-        const handle = target?.getAttribute('data-mention');
-        if (!handle) return;
+        // .closest() walks up from the click target so a click on any
+        // inner element of the badge (future-proof in case the badge
+        // ever gains nested spans / icons) still resolves to the data-
+        // mention anchor. The current implementation paints a single
+        // span with only a text child, but the defensive lookup costs
+        // nothing and removes a class of silent-failure bugs.
+        const mentionBadge = (e.target as HTMLElement | null)?.closest?.('[data-mention]') as HTMLElement | null;
+        if (!mentionBadge) return;
         e.preventDefault();
         e.stopPropagation();
-        const rect = target!.getBoundingClientRect();
+        const rawHandle = mentionBadge.getAttribute('data-mention') || '';
+        // highlightMentions strips the leading '@' before storing the
+        // handle, but a defensive slice keeps us robust if a future
+        // renderer ever stores the '@' itself.
+        const cleanedHandle = rawHandle.startsWith('@') ? rawHandle.slice(1) : rawHandle;
+        if (!cleanedHandle) return;
+        const rect = mentionBadge.getBoundingClientRect();
+        // Case-insensitive compare. The mention regex accepts mixed-case
+        // handles (`@alfiano.mahardika`, `@Alfiano.Mahardika`, etc.),
+        // but `user.name.replace(/\s+/g, '.')` preserves the canonical
+        // casing of the stored user row. Lowercasing both sides means
+        // the lookup matches regardless of what the author typed.
+        const needle = cleanedHandle.toLowerCase();
         const findUser = (list: typeof mentionUsers) =>
-            list.find(u => u.name.replace(/\s+/g, '.') === handle);
+            list.find(u => u.name.replace(/\s+/g, '.').toLowerCase() === needle);
         const cached = findUser(mentionUsers);
         if (cached) {
             setProfilePopover({ user: cached, rect: { left: rect.left, top: rect.top, bottom: rect.bottom } });
@@ -466,9 +484,15 @@ export function TaskCommentsSection({
             .then((list) => {
                 setMentionUsers(list);
                 const u = findUser(list);
-                if (u) setProfilePopover({ user: u, rect: { left: rect.left, top: rect.top, bottom: rect.bottom } });
+                if (u) {
+                    setProfilePopover({ user: u, rect: { left: rect.left, top: rect.top, bottom: rect.bottom } });
+                } else {
+                    console.warn('Mention user lookup failed for handle:', cleanedHandle);
+                }
             })
-            .catch(() => {});
+            .catch((err) => {
+                console.warn('Mention user fetch failed:', err);
+            });
     };
 
     // Click-outside dismiss for the UserProfilePopover. Uses mousedown so
@@ -479,7 +503,10 @@ export function TaskCommentsSection({
         const onDown = (ev: MouseEvent) => {
             const t = ev.target as HTMLElement | null;
             if (t?.closest('[data-userprofile-popover]')) return;
-            if (t?.getAttribute('data-mention')) return;
+            // Use closest() here too so a click on any inner element of
+            // a mention badge still counts as "re-anchor, don't close".
+            // Mirrors the click-handler upstream which uses .closest().
+            if (t?.closest('[data-mention]')) return;
             setProfilePopover(null);
         };
         document.addEventListener('mousedown', onDown);
