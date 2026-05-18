@@ -21,7 +21,9 @@ import {
   X,
 } from 'lucide-react';
 import { isHtml, sanitizeRichText } from '@/lib/sanitize';
+import { linkifyText } from '@/lib/linkify';
 import { useAuth } from '@/lib/auth/use-auth';
+import { highlightMentions, useMentionPopover } from '@/lib/mentions';
 
 // Reuses the same shape /api/tasks/[id]/card returns. Kept in this file so
 // the detail modal stays self-contained and doesn't drag in DOM types from
@@ -70,6 +72,10 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
   // gate at /api/tasks/[id]/claim so the UI doesn't dangle a button that
   // 403s on click.
   const { isLeader } = useAuth();
+  // Mention badges + click-to-open profile card for the thread replies
+  // below. Same shared hook the task-comment surface uses (see
+  // TaskCommentsSection.tsx).
+  const { onMentionContainerClick, popoverElement: mentionPopoverElement } = useMentionPopover();
   const [snapshot, setSnapshot] = useState<RoutineSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -905,7 +911,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
                   </div>
 
                   {replies.length > 0 && (
-                    <div className="space-y-2 mb-3 max-h-[260px] overflow-y-auto">
+                    <div onClick={onMentionContainerClick} className="space-y-2 mb-3 max-h-[260px] overflow-y-auto">
                       {replies.map((r) => (
                         <div key={r.id} className="flex items-start gap-2">
                           {r.sender.image ? (
@@ -923,17 +929,27 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
                             {isHtml(r.content) ? (
                               // Comments arrive from the same composer as the
                               // channel thread, so they can include mention
-                              // chips and other rich-text HTML. Sanitize and
-                              // render so chips/formatting appear styled
-                              // instead of as raw <span> source.
+                              // chips and other rich-text HTML. Sanitize +
+                              // highlightMentions so chips and formatting
+                              // appear styled, and @mentions become
+                              // clickable badges (the parent's onClick
+                              // delegates via the useMentionPopover hook).
                               <div
                                 className="text-sm text-slate-700 break-words leading-relaxed [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_strike]:line-through [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:bg-slate-200 [&_code]:text-rose-600 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono"
-                                dangerouslySetInnerHTML={{ __html: sanitizeRichText(r.content) }}
+                                dangerouslySetInnerHTML={{ __html: highlightMentions(sanitizeRichText(r.content)) }}
                               />
                             ) : (
-                              <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
-                                {r.content}
-                              </p>
+                              // Plain-text reply: pipe through linkifyText
+                              // FIRST so any `<` / `>` / etc. get HTML-
+                              // escaped before highlightMentions sets it
+                              // as innerHTML. Without the escape step a
+                              // reply containing literal `<script>` would
+                              // execute. linkifyText also converts bare
+                              // URLs to anchors as a bonus.
+                              <div
+                                className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed [&_a]:text-indigo-600 [&_a]:underline [&_a:hover]:text-indigo-700"
+                                dangerouslySetInnerHTML={{ __html: highlightMentions(linkifyText(r.content)) }}
+                              />
                             )}
                           </div>
                         </div>
@@ -976,6 +992,10 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
           )}
         </div>
       </div>
+      {/* Floating user-profile card for clicked @mentions. Portalled to
+          document.body inside the hook so the modal's overflow/clip
+          rules don't truncate it. Renders null when no badge is open. */}
+      {mentionPopoverElement}
     </div>
   );
 }
