@@ -173,9 +173,14 @@ export default function TeamInboxPage() {
     const [pickerSearch, setPickerSearch] = useState('');
     // Forward-to-channel modal payload. Mirrors the pattern in /nexus.
     const [forwardData, setForwardData] = useState<ForwardPayload | null>(null);
-    // Show archived tasks toggle — defaults to off so the Completed column
-    // stays uncluttered. Persisted in URL params via the API.
-    const [showArchived, setShowArchived] = useState(false);
+    // Archive view toggle — when true, the four-column Kanban is replaced
+    // by a single-column archived-only list. When false, archived rows are
+    // filtered out of the regular buckets. Toggled by clicking the
+    // ARCHIVED metric chip (on) or any other metric chip (off).
+    const [showArchivedOnly, setShowArchivedOnly] = useState(false);
+    // Free-text filter applied to title + plain-text description before
+    // bucketing. Client-side only; the API doesn't get a search param.
+    const [searchQuery, setSearchQuery] = useState('');
     // Mark-as-Pending modal — opened from the 3-dot menu. Free-text reason
     // plus a structured tag so reporting can group blockers later.
     const [pendingModalTask, setPendingModalTask] = useState<InboxTask | null>(null);
@@ -216,15 +221,18 @@ export default function TeamInboxPage() {
         }
     };
 
-    const fetchInbox = useCallback(async (teamId?: string | null, withArchived?: boolean) => {
+    const fetchInbox = useCallback(async (teamId?: string | null) => {
         setLoading(true);
         setError(null);
         try {
-            const params = new URLSearchParams();
+            // Always include archived rows so the ARCHIVED metric chip has
+            // an accurate count and the archive-only view has data the
+            // moment the user toggles into it. The client filters them
+            // out of the regular buckets when not in archive-only mode.
+            const params = new URLSearchParams({ showArchived: '1' });
             if (teamId) params.set('teamId', teamId);
-            if (withArchived ?? showArchived) params.set('showArchived', '1');
             const qs = params.toString();
-            const url = qs ? `/fast/api/team-inbox?${qs}` : '/fast/api/team-inbox';
+            const url = `/fast/api/team-inbox?${qs}`;
             const res = await fetch(url);
             // Parse the body as text first so a server-side crash (which often
             // returns an empty body or HTML error page) doesn't blow up the
@@ -246,7 +254,7 @@ export default function TeamInboxPage() {
         } finally {
             setLoading(false);
         }
-    }, [selectedTeamId, showArchived]);
+    }, [selectedTeamId]);
 
     useEffect(() => { fetchInbox(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -401,12 +409,11 @@ export default function TeamInboxPage() {
         setPendingId(task.id);
         setActionError(null);
         const snapshot = tasks;
-        // Optimistic: drop the task from the visible list when not showing archived.
-        if (!showArchived) {
-            setTasks((prev) => prev.filter((t) => t.id !== task.id));
-        } else {
-            setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, archivedByMe: true } : t)));
-        }
+        // Optimistic: flip the archive flag in place. The bucketing pass
+        // downstream filters archived rows out of the regular columns when
+        // showArchivedOnly is false and into the archive-only view when
+        // it's true, so the task slides between views without a refetch.
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, archivedByMe: true } : t)));
         try {
             const res = await fetch(`/fast/api/tasks/${task.id}/personal-archive`, { method: 'POST' });
             if (!res.ok) {
@@ -679,19 +686,17 @@ export default function TeamInboxPage() {
                     <h1 className="text-xl font-bold text-slate-800">Task Inbox</h1>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                    <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 px-2.5 py-2 rounded-lg cursor-pointer hover:border-slate-300">
-                        <input
-                            type="checkbox"
-                            checked={showArchived}
-                            onChange={(e) => {
-                                const v = e.target.checked;
-                                setShowArchived(v);
-                                fetchInbox(selectedTeamId, v);
-                            }}
-                            className="w-3.5 h-3.5 accent-indigo-600"
-                        />
-                        Show archived
-                    </label>
+                    {/* Client-side title + description filter. Applies before
+                        bucketing so the metric counts also reflect what the
+                        user is looking at, not the full unfiltered set. */}
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search tasks…"
+                        aria-label="Search tasks"
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 w-44 sm:w-56"
+                    />
                     {isMaster && teams.length > 0 && (
                         <select
                             value={selectedTeamId || ''}
@@ -762,9 +767,26 @@ export default function TeamInboxPage() {
                 // stats strip, empty state, and kanban all reflect the selected
                 // tab. Routine reminders are detected via the routineTemplate
                 // relation surfaced by /api/team-inbox.
-                const visibleTasks = tasks.filter(t =>
+                const pillFiltered = tasks.filter(t =>
                     activeTab === 'routine' ? !!t.routineTemplate : !t.routineTemplate,
                 );
+
+                // Apply the search filter against title + plain-text description.
+                // Client-side so it tracks live with every keystroke.
+                const q = searchQuery.trim().toLowerCase();
+                const searched = q
+                    ? pillFiltered.filter(t => {
+                          if (t.title?.toLowerCase().includes(q)) return true;
+                          if (t.description && htmlToPlainText(t.description).toLowerCase().includes(q)) return true;
+                          return false;
+                      })
+                    : pillFiltered;
+
+                // Split off the archived rows so the regular four-column
+                // Kanban never sees them and the ARCHIVED chip / dedicated
+                // view always have their full set.
+                const archivedTasks = searched.filter(t => t.archivedByMe);
+                const visibleTasks = searched.filter(t => !t.archivedByMe);
 
                 // Bucket tasks into 4 mutually-exclusive columns. Overdue takes
                 // precedence over the regular status — a P1 that's past its
@@ -792,7 +814,8 @@ export default function TeamInboxPage() {
                     else if (t.status === 'todo' && !t.assignee) buckets.unclaimed.push(t);
                     else buckets.inProgress.push(t);
                 }
-                const total = visibleTasks.length;
+                const archivedCount = archivedTasks.length;
+                const total = visibleTasks.length + archivedCount;
 
                 if (total === 0) {
                     const isRoutineTab = activeTab === 'routine';
@@ -826,28 +849,53 @@ export default function TeamInboxPage() {
 
                 return (
                     <>
-                        {/* Stats strip — visual summary: Total + 4 buckets + Pending. */}
+                        {/* Stats strip — 4 buckets + Pending + Archived.
+                            Each chip is a button: clicking the four column
+                            chips or the Pending chip returns the view to the
+                            Kanban (showArchivedOnly = false); clicking the
+                            ARCHIVED chip switches to the full-width archive-
+                            only list. The current mode gets a ring so it
+                            reads as the selected segment. */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                            <div className="rounded-2xl bg-white border border-slate-200 p-4">
-                                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Total</div>
-                                <div className="text-2xl font-bold text-slate-900">{total}</div>
-                            </div>
                             {columns.map(c => (
-                                <div key={c.key} className={`rounded-2xl bg-white border border-slate-200 p-4`}>
+                                <button
+                                    key={c.key}
+                                    type="button"
+                                    onClick={() => setShowArchivedOnly(false)}
+                                    aria-pressed={!showArchivedOnly}
+                                    className={`text-left rounded-2xl bg-white border ${!showArchivedOnly ? 'border-slate-200 hover:border-slate-300' : 'border-slate-100 hover:border-slate-200'} p-4 transition-colors`}
+                                >
                                     <div className="flex items-center gap-1.5 mb-1">
                                         <c.icon className={`w-3.5 h-3.5 ${c.iconClass}`} />
                                         <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{c.label}</span>
                                     </div>
                                     <div className={`text-2xl font-bold ${c.iconClass}`}>{buckets[c.key].length}</div>
-                                </div>
+                                </button>
                             ))}
-                            <div className="rounded-2xl bg-white border border-amber-200 p-4">
+                            <button
+                                type="button"
+                                onClick={() => setShowArchivedOnly(false)}
+                                aria-pressed={!showArchivedOnly}
+                                className={`text-left rounded-2xl bg-white border ${!showArchivedOnly ? 'border-amber-200 hover:border-amber-300' : 'border-amber-100 hover:border-amber-200'} p-4 transition-colors`}
+                            >
                                 <div className="flex items-center gap-1.5 mb-1">
                                     <PauseCircle className="w-3.5 h-3.5 text-amber-500" />
                                     <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Pending</span>
                                 </div>
                                 <div className="text-2xl font-bold text-amber-500">{pendingCount}</div>
-                            </div>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowArchivedOnly(true)}
+                                aria-pressed={showArchivedOnly}
+                                className={`text-left rounded-2xl bg-white border ${showArchivedOnly ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-slate-300'} p-4 transition-colors`}
+                            >
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <Archive className="w-3.5 h-3.5 text-slate-500" />
+                                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Archived</span>
+                                </div>
+                                <div className="text-2xl font-bold text-slate-700">{archivedCount}</div>
+                            </button>
                         </div>
 
                         {/* Action error toast — non-blocking, auto-dismisses after 4s. */}
@@ -857,12 +905,72 @@ export default function TeamInboxPage() {
                             </div>
                         )}
 
-                        {/* Kanban — 4 columns, responsive (1 col mobile / 2 col tablet / 4 col desktop).
-                            Drag a card from one column header onto another to advance status:
-                              Unclaimed → In Progress (= claim, anyone)
-                              In Progress → Completed (assignee only)
-                              Completed → In Progress (assignee only, undo)
-                            Overdue stays a derived bucket — drops onto it are no-ops. */}
+                        {/* Archived-only view replaces the Kanban when the
+                            ARCHIVED metric chip is selected. Minimal layout —
+                            archived rows are historical; the goal is browse +
+                            restore, not act-on. The four-column Kanban is the
+                            default view for everything else. */}
+                        {showArchivedOnly ? (
+                            <div className="rounded-2xl bg-white border border-slate-200 p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                        <Archive className="w-4 h-4 text-slate-500" /> Archived
+                                        <span className="text-xs font-medium text-slate-400">({archivedCount})</span>
+                                    </h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowArchivedOnly(false)}
+                                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                                    >
+                                        ← Back to all
+                                    </button>
+                                </div>
+                                {archivedTasks.length === 0 ? (
+                                    <p className="text-sm text-slate-400 text-center py-12">
+                                        {q ? 'No archived tasks match your search.' : 'No archived tasks yet.'}
+                                    </p>
+                                ) : (
+                                    <div className="divide-y divide-slate-100">
+                                        {archivedTasks.map(t => (
+                                            <div key={t.id} className="flex items-center justify-between gap-3 py-3">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openDetail(t)}
+                                                            className="text-sm font-semibold text-slate-800 hover:text-indigo-600 truncate text-left"
+                                                        >
+                                                            {t.title}
+                                                        </button>
+                                                        {t.taskToken && (
+                                                            <span className="text-[10px] font-mono text-slate-400 flex-shrink-0">#{t.taskToken}</span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 truncate">
+                                                        {t.assignee?.name ? `Completed by ${t.assignee.name}` : 'Unassigned'}
+                                                        {t.completedAt ? ` · ${formatRelative(t.completedAt)}` : ''}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleUnarchive(t)}
+                                                    disabled={pendingId === t.id}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-lg transition-colors disabled:opacity-50"
+                                                >
+                                                    <ArchiveRestore className="w-3.5 h-3.5" /> Restore
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                        /* Kanban — 4 columns, responsive (1 col mobile / 2 col tablet / 4 col desktop).
+                           Drag a card from one column header onto another to advance status:
+                             Unclaimed → In Progress (= claim, anyone)
+                             In Progress → Completed (assignee only)
+                             Completed → In Progress (assignee only, undo)
+                           Overdue stays a derived bucket — drops onto it are no-ops. */
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 items-start">
                             {columns.map(col => {
                                 const isDropTarget = col.key !== 'overdue';
@@ -972,7 +1080,7 @@ export default function TeamInboxPage() {
                                                             }
                                                         }}
                                                         title={isPaused && t.pendingReason ? `Paused: ${t.pendingReason}` : (!draggable && t.assignee ? `Claimed by ${t.assignee.name} — only they can move this card` : undefined)}
-                                                        className={`text-left block w-full rounded-xl bg-white border ${isPaused ? 'border-amber-300 bg-amber-50/50' : isOverdueCard ? 'border-rose-200' : 'border-slate-200'} hover:shadow-md ${col.ringClass} transition-all p-3 ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${isDragging ? 'opacity-40' : ''} ${isPending ? 'opacity-60 pointer-events-none' : ''} ${archived ? 'opacity-70' : ''}`}
+                                                        className={`text-left block w-full rounded-xl bg-white border ${isPaused ? 'border-amber-300 bg-amber-50/50' : isDone ? 'border-emerald-300 bg-emerald-50/40' : isOverdueCard ? 'border-rose-200' : 'border-slate-200'} hover:shadow-md ${col.ringClass} transition-all p-3 ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${isDragging ? 'opacity-40' : ''} ${isPending ? 'opacity-60 pointer-events-none' : ''} ${archived ? 'opacity-70' : ''}`}
                                                     >
                                                         {/* Top row — assigner + relative time + 3-dot menu */}
                                                         <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -1340,6 +1448,7 @@ export default function TeamInboxPage() {
                                 );
                             })}
                         </div>
+                        )}
                     </>
                 );
             })()}
