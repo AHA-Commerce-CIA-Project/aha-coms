@@ -2,12 +2,13 @@
 
 import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks, Eye, ExternalLink } from 'lucide-react';
+import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks, Eye, ExternalLink, Plus } from 'lucide-react';
 import { useAuth } from '@/lib/auth/use-auth';
 import { htmlToPlainText } from '@/lib/sanitize';
 import { PageTabs } from '@/components/PageTabs';
 import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';
 import { TeamInboxTaskModal, type TeamInboxTask } from '@/components/TeamInboxTaskModal';
+import { CreatePersonalCardModal } from '@/components/CreatePersonalCardModal';
 import { RoutineTaskDetailModal } from '@/components/channels/RoutineTaskDetailModal';
 
 interface Attachment {
@@ -190,6 +191,11 @@ function TeamInboxContent() {
     const [pickerSearch, setPickerSearch] = useState('');
     // Forward-to-channel modal payload. Mirrors the pattern in /nexus.
     const [forwardData, setForwardData] = useState<ForwardPayload | null>(null);
+    // CreatePersonalCardModal open/close — the "+ Create Card" button in
+    // the toolbar drives this. Distinct from the leader-only Create Task
+    // wizard at /tasks; this one self-assigns.
+    const [createCardOpen, setCreateCardOpen] = useState(false);
+
     // Archive view toggle — when true, the four-column Kanban is replaced
     // by a single-column archived-only list. When false, archived rows are
     // filtered out of the regular buckets. Toggled by clicking the
@@ -735,6 +741,13 @@ function TeamInboxContent() {
                             {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </select>
                     )}
+                    <button
+                        type="button"
+                        onClick={() => setCreateCardOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+                    >
+                        <Plus className="w-4 h-4" /> Create Card
+                    </button>
                 </div>
             </div>
 
@@ -998,23 +1011,19 @@ function TeamInboxContent() {
                             actionable beyond Restore. */}
                         {showArchivedOnly ? (
                             <div className="space-y-3">
-                                {/* Sub-header — Back to all + sort dropdown. */}
+                                {/* Sub-header — title + sort dropdown. The
+                                    "← Back to all" text button was removed in
+                                    PR #49: the Archived metric chip now
+                                    toggles (PR #47), so a second click on the
+                                    chip is the canonical way out — keeping
+                                    two redundant exits cluttered the row. */}
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex items-center gap-3">
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowArchivedOnly(false)}
-                                            className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-                                        >
-                                            ← Back to all
-                                        </button>
-                                        <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                            <Archive className="w-4 h-4 text-slate-500" /> Archived
-                                            <span className="text-xs font-medium text-slate-400">
-                                                ({archivedTasks.length}{archivedTasks.length !== archivedAll.length ? ` of ${archivedAll.length}` : ''})
-                                            </span>
-                                        </h3>
-                                    </div>
+                                    <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                        <Archive className="w-4 h-4 text-slate-500" /> Archived
+                                        <span className="text-xs font-medium text-slate-400">
+                                            ({archivedTasks.length}{archivedTasks.length !== archivedAll.length ? ` of ${archivedAll.length}` : ''})
+                                        </span>
+                                    </h3>
                                     <label className="inline-flex items-center gap-1.5 text-xs text-slate-500">
                                         <span className="font-medium">Sort</span>
                                         <select
@@ -1079,7 +1088,9 @@ function TeamInboxContent() {
                                                     </p>
                                                     <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
                                                         <span className="truncate">
-                                                            {t.assignee?.name ? `Done by ${t.assignee.name.split(' ')[0]}` : 'Unassigned'}
+                                                            {t.assignee?.name
+                                                                ? `Done by ${t.assignee.name.split(' ').slice(0, 2).join(' ')}`
+                                                                : 'Unassigned'}
                                                         </span>
                                                         {t.taskToken && (
                                                             <span className="font-mono text-[10px] text-slate-400 flex-shrink-0">#{t.taskToken}</span>
@@ -1615,6 +1626,12 @@ function TeamInboxContent() {
                 isTaskForward={forwardData?.isTaskForward}
                 taskToken={forwardData?.taskToken}
                 taskId={forwardData?.taskId}
+            />
+
+            <CreatePersonalCardModal
+                open={createCardOpen}
+                onClose={() => setCreateCardOpen(false)}
+                onCreated={() => fetchInbox(selectedTeamId)}
             />
 
             {/* Task-detail modal — opened by the View Details button on
