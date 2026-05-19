@@ -3,10 +3,10 @@
   import { base } from '$app/paths'
   import { page } from '$app/stores'
   import { signInWithPopup, signOut, getIdToken } from 'firebase/auth'
-  import { ArrowLeft } from '@lucide/svelte'
+  import { ArrowLeft, Eye, EyeOff } from '@lucide/svelte'
   import { clientAuth, googleProvider } from '$lib/firebase'
   import { api } from '$lib/api'
-  import { requestOtp, verifyOtp } from '$lib/auth'
+  import { requestOtp, verifyOtp, passwordSignIn, requestPasswordReset } from '$lib/auth'
   import {
     readHandoffIntent,
     stashIntent,
@@ -17,11 +17,18 @@
   import StarField from '$lib/components/login/StarField.svelte'
   import { Input, Label, Button } from '@coms-portal/ui-svelte/primitives'
 
-  type Step = 'choose' | 'email' | 'otp'
+  type Step = 'choose' | 'email' | 'otp' | 'password'
+  // The user picks their sign-in method on the choose step. The email step's
+  // behaviour and the routing decision after it both depend on this. Distinct
+  // from the handoff `intent` used by completeLogin (app-launch redirect).
+  type SignInMethod = 'code' | 'password'
 
   let step = $state<Step>('choose')
+  let signInMethod = $state<SignInMethod>('code')
   let email = $state('')
   let otp = $state('')
+  let password = $state('')
+  let showPassword = $state(false)
   let error = $state<string | null>(null)
   let wrongLoginPath = $state(false)
   let inactiveUser = $state(false)
@@ -30,6 +37,11 @@
   let resendAt = $state<number | null>(null)
   let now = $state(Date.now())
   let tickHandle: ReturnType<typeof setInterval> | null = null
+  // Spec 06 PR F: drives whether the password step shows "Use code instead".
+  // Set true when the server confirms OTP is possible for this email; false
+  // when the server says PASSWORD_ONLY (and we know OTP is refused).
+  let canFallbackToOtp = $state(false)
+  let forgotSent = $state(false)
 
   const redirectTo = $derived($page.url.searchParams.get('redirect') ?? `${base}/dashboard`)
   const resendSecondsLeft = $derived(
@@ -84,7 +96,8 @@
     }
   }
 
-  function goToEmailStep() {
+  function goToEmailStep(method: SignInMethod) {
+    signInMethod = method
     error = null
     wrongLoginPath = false
     step = 'email'
@@ -100,20 +113,39 @@
   function backToEmail() {
     if (loading) return
     otp = ''
+    password = ''
+    showPassword = false
     error = null
     inactiveUser = false
     attemptsRemaining = null
     resendAt = null
+    canFallbackToOtp = false
+    forgotSent = false
     step = 'email'
   }
 
-  async function handleSendCode(e: SubmitEvent) {
+  async function handleEmailSubmit(e: SubmitEvent) {
     e.preventDefault()
     error = null
     wrongLoginPath = false
+    canFallbackToOtp = false
     loading = true
     try {
-      const result = await requestOtp(email)
+      // Method = password: the user explicitly chose password sign-in. Route
+      // straight to the password step without a server round-trip. Workspace
+      // users who picked password by mistake will see INVALID_CREDENTIALS at
+      // sign-in time; they can Back out and pick Google instead.
+      if (signInMethod === 'password') {
+        canFallbackToOtp = true
+        password = ''
+        step = 'password'
+        return
+      }
+
+      // Method = code: the user explicitly chose the code path. Pass
+      // force_otp=true so the server doesn't divert HAS_PASSWORD identities
+      // to the password step against the user's stated preference.
+      const result = await requestOtp(email, { forceOtp: true })
       switch (result.kind) {
         case 'sent':
           resendAt = Date.now() + 60_000
@@ -122,6 +154,21 @@
         case 'wrong_login_path':
           wrongLoginPath = true
           error = result.message
+          return
+        case 'password_only':
+          // OTP refused for admin-created credential bags. Bounce to password
+          // step with the OTP fallback hidden — code is not an option here.
+          canFallbackToOtp = false
+          password = ''
+          step = 'password'
+          return
+        case 'has_password':
+          // Defensive: with force_otp=true the server should fall through to
+          // 'sent' for HAS_PASSWORD identities, so this branch shouldn't fire.
+          // If it ever does, surface the password step as a graceful fallback.
+          canFallbackToOtp = true
+          password = ''
+          step = 'password'
           return
         case 'rate_limited':
           if (result.retryAfter) {
@@ -133,6 +180,77 @@
           error = 'Something went wrong. Please try again.'
           return
       }
+    } finally {
+      loading = false
+    }
+  }
+
+  async function handlePasswordSubmit(e: SubmitEvent) {
+    e.preventDefault()
+    if (!password || loading) return
+    error = null
+    loading = true
+    try {
+      const result = await passwordSignIn(email, password)
+      switch (result.kind) {
+        case 'signed_in':
+          await completeLogin()
+          return
+        case 'invalid_credentials':
+          error = result.message || 'Invalid email or password.'
+          password = ''
+          return
+        case 'inactive_user':
+          inactiveUser = true
+          error = result.message || 'This account is no longer active.'
+          return
+        case 'locked_out':
+          error = result.retryAfter
+            ? `${result.message} Try again in ${Math.ceil(result.retryAfter / 60)} minute(s).`
+            : result.message || 'Account is locked. Try again later.'
+          return
+        case 'rate_limited':
+          error = result.message
+          return
+        case 'network_error':
+          error = 'Something went wrong. Please try again.'
+          return
+      }
+    } finally {
+      loading = false
+    }
+  }
+
+  async function handleUseCodeInstead() {
+    if (loading) return
+    error = null
+    loading = true
+    try {
+      const result = await requestOtp(email, { forceOtp: true })
+      if (result.kind === 'sent') {
+        resendAt = Date.now() + 60_000
+        password = ''
+        step = 'otp'
+        return
+      }
+      if (result.kind === 'rate_limited') {
+        if (result.retryAfter) resendAt = Date.now() + result.retryAfter * 1000
+        error = result.message
+        return
+      }
+      error = result.kind === 'network_error' ? 'Something went wrong. Please try again.' : 'Unable to send a code right now.'
+    } finally {
+      loading = false
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (loading) return
+    error = null
+    loading = true
+    try {
+      await requestPasswordReset(email)
+      forgotSent = true
     } finally {
       loading = false
     }
@@ -226,6 +344,19 @@
       wrongLoginPath = false
     }
   }
+
+  // Spec 06 PR F: workspace identities can also use password sign-in. When the
+  // email-step's OTP request returns WRONG_LOGIN_PATH, surface this CTA so the
+  // user can switch over without re-typing the email.
+  function switchToPasswordFromWorkspaceError() {
+    if (loading) return
+    signInMethod = 'password'
+    error = null
+    wrongLoginPath = false
+    canFallbackToOtp = false
+    password = ''
+    step = 'password'
+  }
 </script>
 
 <div class="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0a0e2a]">
@@ -300,15 +431,27 @@
           </div>
         </div>
 
-        <Button
-          type="button"
-          onclick={goToEmailStep}
-          disabled={loading}
-          variant="outline"
-          class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#3B68E5] focus:ring-offset-2 disabled:opacity-50"
-        >
-          Sign in with email
-        </Button>
+        <div class="space-y-3">
+          <Button
+            type="button"
+            onclick={() => goToEmailStep('code')}
+            disabled={loading}
+            variant="outline"
+            class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#3B68E5] focus:ring-offset-2 disabled:opacity-50"
+          >
+            Sign in with email code
+          </Button>
+
+          <Button
+            type="button"
+            onclick={() => goToEmailStep('password')}
+            disabled={loading}
+            variant="outline"
+            class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#3B68E5] focus:ring-offset-2 disabled:opacity-50"
+          >
+            Sign in with email + password
+          </Button>
+        </div>
       {:else if step === 'email'}
         <Button
           type="button"
@@ -321,7 +464,13 @@
           Back
         </Button>
         <h3 class="mb-1 text-lg font-semibold text-[#1a1a1a]">Enter your email</h3>
-        <p class="mb-5 text-sm text-gray-500">We'll send you a one-time sign-in code.</p>
+        <p class="mb-5 text-sm text-gray-500">
+          {#if signInMethod === 'password'}
+            Enter the email for your account, then we'll ask for your password.
+          {:else}
+            We'll send you a one-time sign-in code.
+          {/if}
+        </p>
 
         {#if error}
           <div class="mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-600 ring-1 ring-red-100">
@@ -342,11 +491,21 @@
                 </svg>
                 Sign in with Google
               </Button>
+
+              <Button
+                type="button"
+                onclick={switchToPasswordFromWorkspaceError}
+                disabled={loading}
+                variant="outline"
+                class="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Use email + password instead
+              </Button>
             {/if}
           </div>
         {/if}
 
-        <form onsubmit={handleSendCode} class="space-y-5">
+        <form onsubmit={handleEmailSubmit} class="space-y-5">
           <div>
             <Label for="login-email" class="mb-1 block text-sm font-medium text-gray-700">
               Email
@@ -375,13 +534,110 @@
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Sending…
+                {signInMethod === 'password' ? 'Continuing…' : 'Sending…'}
               </span>
             {:else}
-              Send code
+              {signInMethod === 'password' ? 'Continue' : 'Send code'}
             {/if}
           </Button>
         </form>
+      {:else if step === 'password'}
+        <Button
+          type="button"
+          variant="ghost"
+          onclick={backToEmail}
+          disabled={loading}
+          class="-ml-2 mb-3 flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        >
+          <ArrowLeft class="h-4 w-4" />
+          Back
+        </Button>
+        <h3 class="mb-1 text-lg font-semibold text-[#1a1a1a]">Enter your password</h3>
+        <p class="mb-5 text-sm text-gray-500">
+          Signing in as <span class="font-medium text-gray-700">{email}</span>.
+        </p>
+
+        {#if error}
+          <div class="mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-600 ring-1 ring-red-100">
+            {error}
+          </div>
+        {/if}
+        {#if forgotSent}
+          <div class="mb-5 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 ring-1 ring-emerald-100">
+            If this email is registered, you'll receive a password-reset link shortly.
+          </div>
+        {/if}
+
+        <form onsubmit={handlePasswordSubmit} class="space-y-5">
+          <div>
+            <Label for="login-password" class="mb-1 block text-sm font-medium text-gray-700">
+              Password
+            </Label>
+            <div class="relative">
+              <Input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                required
+                bind:value={password}
+                disabled={loading || inactiveUser}
+                autocomplete="current-password"
+                class="block w-full rounded-md border border-gray-300 px-4 py-3 pr-12 text-sm shadow-sm placeholder-gray-400 transition-all focus:border-[#3B68E5] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#3B68E5]/20"
+              />
+              <button
+                type="button"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                onclick={() => (showPassword = !showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                tabindex={-1}
+              >
+                {#if showPassword}
+                  <EyeOff class="h-4 w-4" />
+                {:else}
+                  <Eye class="h-4 w-4" />
+                {/if}
+              </button>
+            </div>
+          </div>
+
+          <Button
+            type="submit"
+            disabled={loading || inactiveUser || password.length === 0}
+            class="btn-gradient-blue w-full rounded-lg px-4 py-3 text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#3B68E5] focus:ring-offset-2 disabled:opacity-50"
+          >
+            {#if loading}
+              <span class="flex items-center justify-center gap-2">
+                <svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Signing in…
+              </span>
+            {:else}
+              Sign in
+            {/if}
+          </Button>
+        </form>
+
+        <div class="mt-4 flex items-center justify-between text-sm">
+          <button
+            type="button"
+            onclick={handleForgotPassword}
+            disabled={loading}
+            class="text-[#3B68E5] hover:text-[#2E50B3] disabled:opacity-50"
+          >
+            Forgot password?
+          </button>
+          {#if canFallbackToOtp}
+            <button
+              type="button"
+              onclick={handleUseCodeInstead}
+              disabled={loading}
+              class="text-[#3B68E5] hover:text-[#2E50B3] disabled:opacity-50"
+            >
+              Use code instead
+            </button>
+          {/if}
+        </div>
       {:else}
         <Button
           type="button"

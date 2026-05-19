@@ -137,6 +137,103 @@ export async function updateGipUserEmail(uid: string, newEmail: string): Promise
   }
 }
 
+/**
+ * GIP-side password sign-in error codes worth distinguishing from the
+ * generic-bad-credentials path.
+ *
+ * INVALID_CREDENTIALS — bad password / unknown email / generic mismatch.
+ * USER_DISABLED       — GIP-side `disableUser=true` (the portal's own
+ *                       `identity_users.status` is a separate gate).
+ * INVALID_EMAIL       — malformed email passed through to GIP.
+ */
+export type GipPasswordSignInError =
+  | { code: 'INVALID_CREDENTIALS' }
+  | { code: 'USER_DISABLED' }
+  | { code: 'INVALID_EMAIL' }
+  | { code: 'UNKNOWN'; raw: string }
+
+export class GipSignInError extends Error {
+  constructor(public detail: GipPasswordSignInError) {
+    super(detail.code)
+    this.name = 'GipSignInError'
+  }
+}
+
+/**
+ * Sign in with email + password against GIP REST `accounts:signInWithPassword`.
+ * Returns the GIP-side localId on success. Throws `GipSignInError` with a
+ * structured detail on the documented failure modes.
+ */
+export async function signInWithPassword(
+  email: string,
+  password: string,
+): Promise<{ localId: string }> {
+  const accessToken = await getAccessToken()
+  const res = await fetch(`${GIP_BASE}/accounts:signInWithPassword`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ email, password, returnSecureToken: false }),
+  })
+  if (res.ok) {
+    const data = (await res.json()) as { localId: string }
+    return { localId: data.localId }
+  }
+  const raw = await res.text()
+  // GIP returns { error: { message: "INVALID_LOGIN_CREDENTIALS" | "USER_DISABLED" | ... } }
+  let code: GipPasswordSignInError['code'] = 'UNKNOWN'
+  try {
+    const parsed = JSON.parse(raw) as { error?: { message?: string } }
+    const msg = parsed.error?.message ?? ''
+    if (
+      msg === 'INVALID_LOGIN_CREDENTIALS' ||
+      msg === 'EMAIL_NOT_FOUND' ||
+      msg === 'INVALID_PASSWORD'
+    ) {
+      code = 'INVALID_CREDENTIALS'
+    } else if (msg === 'USER_DISABLED') {
+      code = 'USER_DISABLED'
+    } else if (msg === 'INVALID_EMAIL') {
+      code = 'INVALID_EMAIL'
+    }
+  } catch {
+    // Non-JSON body — fall through to UNKNOWN
+  }
+  if (code === 'UNKNOWN') {
+    throw new GipSignInError({ code: 'UNKNOWN', raw })
+  }
+  throw new GipSignInError({ code })
+}
+
+/**
+ * Update a GIP user's password via the Identity Toolkit REST API.
+ * Used by POST /api/auth/password/set for both the first-set and change-
+ * password modes.
+ */
+export async function updateGipUserPassword(
+  uid: string,
+  newPassword: string,
+): Promise<void> {
+  const accessToken = await getAccessToken()
+  const res = await fetch(
+    `${GIP_BASE}/projects/${PROJECT_ID}/accounts:update`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ localId: uid, password: newPassword }),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`updateGipUserPassword failed (${res.status}): ${body}`)
+  }
+}
+
 /** Disable or enable a GIP user account. */
 export async function setGipUserDisabled(uid: string, disabled: boolean): Promise<void> {
   const accessToken = await getAccessToken()

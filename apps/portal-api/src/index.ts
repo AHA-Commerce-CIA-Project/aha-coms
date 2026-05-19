@@ -5,11 +5,13 @@ import { requestIdPlugin } from './middleware/request-id'
 import { handleApiError } from './middleware/api-error-handler'
 import { probeHealth } from './services/health'
 import { authRoutes } from './routes/auth'
+import { passwordSetRoutes } from './routes/auth/password-set'
 import { oneTimeAuthRoutes } from './routes/auth/one-time'
 import { meEmailRoutes } from './routes/me-emails'
 import { meSessionRoutes } from './routes/me-sessions'
 import { userinfoRoutes } from './routes/userinfo'
 import { employeeRoutes } from './routes/employees'
+import { identityRoutes } from './routes/identities'
 import { teamRoutes } from './routes/teams'
 import { appRoutes } from './routes/apps'
 import { accessRoutes } from './routes/access'
@@ -97,6 +99,9 @@ export const app = new Elysia({ prefix: '/api' })
   // Public, unauthenticated — JWKS + OIDC discovery (Rev 2 §01 + §02)
   .use(wellKnownRoutes)
   .use(authRoutes)
+  // Spec 06 PR F — password-set sits behind authPlugin and so cannot live in
+  // authRoutes (which mixes guarded and unguarded endpoints).
+  .use(passwordSetRoutes)
   .use(oneTimeAuthRoutes)
   .use(meEmailRoutes)
   .use(meSessionRoutes)
@@ -109,6 +114,7 @@ export const app = new Elysia({ prefix: '/api' })
     app
       .use(authPlugin)
       .use(employeeRoutes)
+      .use(identityRoutes)
       .use(teamRoutes)
       .use(appRoutes)
       .use(accessRoutes)

@@ -42,6 +42,10 @@ export type AuditAction =
   | 'delete_taxonomy_entry'
   | 'bulk_rebroadcast_provisioning'
   | 'bulk_rebroadcast_provisioning_failure'
+  // Spec 06 PR F — portal password auth
+  | 'create_identity_with_password'
+  | 'password_set'
+  | 'password_signin_lockout'
 
 export type AuditTargetType = 'user' | 'team' | 'app' | 'personal_email_sync' | 'employee_info_sync' | 'alias_collision_queue' | 'app_user_config' | 'taxonomy_entry'
 

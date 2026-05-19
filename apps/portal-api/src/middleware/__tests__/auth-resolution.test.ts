@@ -100,6 +100,7 @@ const baseSessionUser = {
   gipUid: 'gip-123',
   name: 'Handers',
   portalRole: 'admin' as const,
+  passwordSetupRequired: false,
 }
 
 describe('resolveAuthUser', () => {
@@ -122,6 +123,7 @@ describe('resolveAuthUser', () => {
       portalRole: 'admin',
       teamIds: ['team-1'],
       apps: ['portal'],
+      passwordSetupRequired: false,
     })
   })
 

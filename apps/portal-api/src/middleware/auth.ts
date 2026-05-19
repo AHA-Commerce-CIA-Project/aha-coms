@@ -20,6 +20,12 @@ export interface AuthUser {
   portalRole: PortalClaims['portalRole'] | 'super_admin'
   teamIds: string[]
   apps: string[]
+  /**
+   * Spec 06 PR F §1: forwarded from the underlying SessionUser. Tells the
+   * portal-web `(authed)` layout to redirect to /onboarding/set-password
+   * until the user POSTs to /api/auth/password/set.
+   */
+  passwordSetupRequired: boolean
 }
 
 export class AuthResolutionError extends Error {
@@ -78,6 +84,7 @@ export async function resolveAuthUser(sessionUser: SessionUser): Promise<AuthUse
     portalRole: sessionUser.portalRole as AuthUser['portalRole'],
     teamIds,
     apps: appSlugs,
+    passwordSetupRequired: sessionUser.passwordSetupRequired,
   }
 }
 
@@ -104,7 +111,14 @@ export const authPlugin = new Elysia({ name: 'auth-plugin' }).derive(
     try {
       const authUser = await resolveAuthUser(sessionUser)
       // Expose sessionId so logout and other routes know which session to revoke
-      return { authUser, sessionId: sessionUser.sessionId }
+      return {
+        authUser,
+        sessionId: sessionUser.sessionId,
+        // Spec 06 PR F §1: propagate the per-session forced-set flag so route
+        // handlers can apply the belt-and-suspenders gate alongside the layout
+        // guard.
+        passwordSetupRequired: sessionUser.passwordSetupRequired,
+      }
     } catch (error) {
       if (error instanceof AuthResolutionError) {
         throw status(error.statusCode, { message: error.message })

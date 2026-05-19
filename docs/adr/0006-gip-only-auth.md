@@ -75,3 +75,40 @@ Lives in its own spec document (`spec/NN-fast-onboarding.md`, written when aha-f
 - Integration contract §§ 1, 2.
 - ADR 0005 (JWT stateless sessions) — defines what apps do with the tokens GIP mints via portal.
 - aha-fast's `prisma/schema.prisma` — the Better Auth tables that this ADR replaces.
+
+## Addendum 2026-05-19 — Spec 06 PR F (portal password auth)
+
+Spec 06 PR F (`docs/spec/06-portal-password-auth.md`) adds email + password as a
+first-class authentication method on portal-web, alongside Google sign-in and
+the personal-email OTP flow. The ADR's posture is unchanged in essence:
+
+- GIP remains the **sole** identity backend. The new flow uses GIP's existing
+  `accounts:signInWithPassword` and `accounts:update` REST endpoints — no new
+  identity store, no parallel credential vault.
+- Portal continues to mint its own session cookies on success (same
+  `authMethod`-shaped payload as the OIDC and OTP paths; the new literal
+  value is `'password'`).
+- Policy enforcement (minimum length, lockout, rate limits) lives on the
+  portal side. The ADR's "no app runs its own credential provider" rule
+  still holds — none of the five apps see passwords. Only portal-api
+  speaks to GIP's password endpoints. Server-side policy is length-only
+  (≥12 chars, no composition rules — matches NIST SP 800-63B / OWASP
+  ASVS L2); the portal-web meter uses zxcvbn-ts for pattern-aware UI
+  feedback.
+
+The only material change is a **usage shift inside GIP's existing
+capability**: GIP's password field, previously written only as a transient
+random UUID during employee provisioning followed by an immediate
+`generatePasswordResetLink` email, now also gets written with admin- or
+user-supplied values. No new GIP feature; no new identity store.
+
+PR F also introduces the `password_only_auth` flag on `identity_users` for
+admin-created credential bags (test accounts, shared admin logins,
+sub-admin identities). Those identities refuse OTP and the public
+forgot-password flow — admin-side recovery is a follow-up beyond PR F's
+scope, tracked in `tasks/todo.md`.
+
+Refer to `docs/spec/06-portal-password-auth.md` for the implementation
+details, policy choices, and rollout discipline (the
+`FORCE_PASSWORD_SETUP_ENABLED` feature flag for the aggressive first-login
+rollout).

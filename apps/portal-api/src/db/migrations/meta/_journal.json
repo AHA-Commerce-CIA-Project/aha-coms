@@ -253,6 +253,13 @@
       "when": 1778571508290,
       "tag": "0035_naive_solo",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1779172368636,
+      "tag": "0036_spec06_prf_password_columns",
+      "breakpoints": true
     }
   ]
 }

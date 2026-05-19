@@ -15,6 +15,7 @@ import { db } from '~/db'
 import { authSessions, identityUsers, sessionRevocations } from '~/db/schema'
 import type { AuthMethod, SessionRevokedReason } from '~/db/schema'
 import { logger } from '~/logger'
+import { FORCE_PASSWORD_SETUP_ENABLED } from '~/config'
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -26,6 +27,13 @@ export interface SessionUser {
   gipUid: string | null
   name: string
   portalRole: 'employee' | 'admin' | 'super_admin'
+  /**
+   * Spec 06 PR F §1 — true when `identity_users.password_set_at IS NULL` AND
+   * the `FORCE_PASSWORD_SETUP_ENABLED` env flag is on at session-mint time.
+   * The portal-web (authed) layout reads this to gate every route except
+   * `/onboarding/set-password`.
+   */
+  passwordSetupRequired: boolean
   // emails are NOT included here; they're resolved separately by /userinfo, /me etc.
   // teamIds and apps are also resolved by callers via existing services.
 }
@@ -44,6 +52,7 @@ export interface CreatePortalSessionArgs {
 export const SESSION_TTL_MS: Record<AuthMethod, number> = {
   workspace_oidc: 14 * 24 * 60 * 60 * 1000, // 14 days
   personal_otp: 14 * 24 * 60 * 60 * 1000,   // 14 days
+  password: 14 * 24 * 60 * 60 * 1000,       // 14 days — same as OTP; Spec 06 PR F
   admin_bypass: 60 * 60 * 1000,              // 1 hour — short-lived; avoids lingering support sessions
 }
 
@@ -181,6 +190,7 @@ export async function validateSession(sessionId: string): Promise<SessionUser | 
       name: identityUsers.name,
       portalRole: identityUsers.portalRole,
       identityStatus: identityUsers.status,
+      passwordSetAt: identityUsers.passwordSetAt,
     })
     .from(authSessions)
     .innerJoin(identityUsers, eq(authSessions.identityUserId, identityUsers.id))
@@ -221,6 +231,7 @@ export async function validateSession(sessionId: string): Promise<SessionUser | 
     gipUid: row.gipUid ?? null,
     name: row.name,
     portalRole: row.portalRole as SessionUser['portalRole'],
+    passwordSetupRequired: FORCE_PASSWORD_SETUP_ENABLED && row.passwordSetAt === null,
   }
 }
 

@@ -2,7 +2,7 @@ import { pgTable, uuid, varchar, timestamp, index } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { identityUsers } from './identity-users'
 
-export const AUTH_METHODS = ['workspace_oidc', 'personal_otp', 'admin_bypass'] as const
+export const AUTH_METHODS = ['workspace_oidc', 'personal_otp', 'password', 'admin_bypass'] as const
 export type AuthMethod = (typeof AUTH_METHODS)[number]
 
 export const SESSION_REVOKED_REASONS = [

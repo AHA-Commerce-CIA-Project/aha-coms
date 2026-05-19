@@ -50,6 +50,7 @@ export const meSessionRoutes = new Elysia({ prefix: '/me/sessions' })
               authMethod: t.Union([
                 t.Literal('workspace_oidc'),
                 t.Literal('personal_otp'),
+                t.Literal('password'),
                 t.Literal('admin_bypass'),
               ]),
               deviceLabel: t.Union([t.String(), t.Null()]),

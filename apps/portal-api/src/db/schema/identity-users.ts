@@ -25,6 +25,11 @@ export const identityUsers = pgTable('identity_users', {
   status: varchar('status', { length: 20 }).notNull().default('active'),
   provisioningStatus: varchar('provisioning_status', { length: 20 }).notNull().default('ready'),
   provisioningError: text('provisioning_error'),
+  // Spec 06 PR F — portal password auth
+  notes: text('notes'),
+  passwordSetAt: timestamp('password_set_at', { withTimezone: true }),
+  passwordOnlyAuth: boolean('password_only_auth').notNull().default(false),
+  passwordLockoutUntil: timestamp('password_lockout_until', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })

@@ -7,6 +7,7 @@ import {
   FileText,
   GitMerge,
   Tags,
+  KeyRound,
   type LucideIcon,
 } from '@lucide/svelte'
 
@@ -32,6 +33,7 @@ export const BASE_NAV: NavItem[] = [
 // a manifest ships a non-empty configSchema.
 export const ADMIN_NAV: NavItem[] = [
   { href: `${base}/admin/employees`, label: 'Employees', icon: Users },
+  { href: `${base}/admin/identities`, label: 'Identities', icon: KeyRound },
   { href: `${base}/admin/teams`, label: 'Teams', icon: Building2 },
   { href: `${base}/admin/apps`, label: 'Apps', icon: AppWindow },
   { href: `${base}/admin/aliases`, label: 'Alias Queue', icon: GitMerge },
