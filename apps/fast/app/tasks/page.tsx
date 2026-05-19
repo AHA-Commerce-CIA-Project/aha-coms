@@ -224,18 +224,13 @@ function MyTasksContent() {
             const map = new Map<string, any>();
             if (nexusRes.ok) {
                 const all = await nexusRes.json();
-                // Two populations from one nexus call: tasks I own
-                // (assignee_id === me) feed the Direct Tasks tab, and
-                // unclaimed/non-routine cards feed the Open Queue tab.
-                // Routine-spawned rows are dropped here as well as in
-                // the client-side queue filter so they can't sneak into
-                // either tab from this endpoint.
-                for (const t of all.filter((t: any) =>
-                    !t.routine_template_id && !t.routineTemplateId && (
-                        t.assignee_id === user?.id
-                        || t.assignee_id == null
-                    ),
-                )) map.set(t.id, t);
+                // /tasks now shows only tasks I personally own — the
+                // Open Queue tab semantics flipped to "claimed channel
+                // queue tasks", so unclaimed rows belong on /nexus
+                // (the dedicated Task Queue surface) instead of
+                // bleeding in here. Filter pre-2026-05-19 widened to
+                // include assignee_id==null; reverted now.
+                for (const t of all.filter((t: any) => t.assignee_id === user?.id)) map.set(t.id, t);
             }
             if (directRes.ok) {
                 const directTasks = await directRes.json();
@@ -673,34 +668,36 @@ function MyTasksContent() {
     // 24h "HH:MM" — matches Indonesian business convention.
     const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // PR #55 canonical client-side split — mirrors the API
-    // populations:
+    // Canonical client-side split — both tabs gate on assignee=me
+    // (the page only ever ingests my tasks now) and partition by the
+    // channel + source pair so every owned task lands in exactly one
+    // tab:
     //
-    //   Direct Tasks: assigneeId === me AND (target_channel_id IS NULL
-    //                 OR source === 'direct_assign'). This re-merges
-    //                 the historical leader-assigned direct requests
-    //                 (channel-less) and the new self-created personal
-    //                 cards (channel-less, source='direct_assign')
-    //                 onto one tab, plus channel-claimed Direct Assign
-    //                 cards I own.
+    //   Direct Tasks: target_channel_id IS NULL OR source === 'direct_assign'.
+    //                 Picks up channel-less direct requests (from any
+    //                 division — the prior source-IN restriction was
+    //                 dropping legitimate rows from sibling teams) plus
+    //                 channel-posted Direct Assign cards I claimed.
     //
-    //   Open Queue:   assigneeId IS NULL AND routine_template_id IS
-    //                 NULL. Strictly unclaimed cards available for me
-    //                 to grab. Routine reminders are excluded
-    //                 explicitly so TEAM-type spawned tasks (which
-    //                 have null assigneeId but are claimed per-
-    //                 checklist-item) don't bleed in.
+    //   Open Queue:   source !== 'direct_assign' AND target_channel_id != null.
+    //                 Tasks that originated from a channel queue (form
+    //                 routes / leader-posted queue cards / etc.) and
+    //                 that I have claimed. The "isDirectAssign === false"
+    //                 half of the rule is explicit so a leader-posted
+    //                 Direct Assign with a channel doesn't double-count
+    //                 across both tabs.
     //
-    // Routine reminders with explicit assigneeId (INDIVIDUAL-type)
-    // never reach the Open Queue here because of the assignee_id NULL
-    // gate — they live in Direct Tasks alongside the rest of "tasks I
-    // own" for the assignee.
+    // The two predicates are mutually exclusive (channel-null XOR
+    // channel-set; direct_assign forces Direct Tasks regardless of
+    // channel), so no task can render in both tabs simultaneously.
     const directRequestTasks = claimedTasksMatchingFilter.filter(t =>
         t.assignee_id === user?.id
         && (t.target_channel_id == null || t.source === 'direct_assign'),
     );
     const queueTasks = claimedTasksMatchingFilter.filter(t =>
-        !t.assignee_id && !t.routine_template_id,
+        t.assignee_id === user?.id
+        && t.source !== 'direct_assign'
+        && t.target_channel_id != null,
     );
 
     return (

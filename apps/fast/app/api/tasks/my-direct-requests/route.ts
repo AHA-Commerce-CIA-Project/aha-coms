@@ -3,34 +3,20 @@ import { prisma } from '@/lib/db';
 import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET — Direct Tasks for the current user. Powers the "Direct Tasks"
-// tab on /tasks. The canonical rule (PR #55) is:
+// tab on /tasks. Canonical rule, restated 2026-05-19:
 //
 //     assigneeId === me
 //   AND status IN [active whitelist]
 //   AND (targetChannelId IS NULL OR source = 'direct_assign')
 //
-// expressed as the union of three populations:
-//
-//   • Leader-assigned direct requests — source='direct_request' and
-//     always channel-less per /api/tasks's writer shape; picked up via
-//     the channel-null branch.
-//   • Self-created personal cards (Create Card flow) — source=
-//     'direct_assign', channel-less; picked up by either branch.
-//   • Channel-posted Direct Assign cards the caller has claimed —
-//     source='direct_assign' with a non-null targetChannelId; picked
-//     up via the direct-assign branch.
-//
-// Queue / form / DM / routine-spawned tasks are explicitly out: those
-// surfaces have their own tabs (Open Queue, routine inboxes), and
-// historically a few of them carried no targetChannelId which would
-// have over-included them under a pure "channel-null" predicate.
-//
-// History note: PR #53 layered on `requesterEmail = session.user.email`
-// to keep leader-posted direct_assigns out, but the session-cached
-// email and the freshly-read DB requesterEmail could diverge by case,
-// dropping freshly created cards. PR #54 removed it. PR #55 restates
-// the rule in the user-stated canonical form (channel-null OR
-// direct-assign) so the predicate aligns 1:1 with the brief.
+// The rule is intentionally source-agnostic. The previous shape gated
+// on source IN ('direct_request', 'direct_assign'), which silently
+// dropped historical direct-from-other-division tasks that had a
+// different source value but still satisfied the channel-null
+// invariant. The mutually-exclusive client-side Open Queue rule at
+// /tasks (assignee=me AND source != direct_assign AND channelId
+// != null) catches the channel-attached non-direct tasks, so every
+// task the caller owns lands in exactly one tab.
 //
 // Status whitelist matches the existing test assertion; on-hold
 // (status='pending') stays visible per the 2026-05-13 fix documented
@@ -56,21 +42,21 @@ export async function GET() {
             // here, on-hold tasks vanish from the assignee's own list while
             // still showing for admins via /api/tasks/direct-requests-all.
             status: { in: ['in-progress', 'review', 'done', 'pending_completion_details', 'pending'] },
-            // direct_request + direct_assign cover every task the caller
-            // owns under the "Direct" umbrella. Other sources (queue,
-            // form, routine) live in their own surfaces and shouldn't
-            // bleed into Direct Tasks.
-            source: { in: ['direct_request', 'direct_assign'] },
-            // Canonical rule from the PR #55 brief — "channelId IS NULL
-            // OR isDirectAssign". Restated against the schema: leave
-            // every channel-less direct row in (direct_request always
-            // qualifies; self-created direct_assign personal cards
-            // qualify here too) and additionally pull in channel-
-            // posted Direct Assign cards by their source. Without this
-            // OR, channel-claimed direct_assigns where the caller is
-            // the assignee would slip through but historical channel-
-            // less direct_requests would too — so it doubles as a
-            // belt-and-braces guard.
+            // Canonical rule from the current brief, literal: a Direct
+            // Task is anything the caller owns where
+            //   targetChannelId IS NULL OR source = 'direct_assign'.
+            // No outer source restriction — the prior PR limited this
+            // to source IN ('direct_request', 'direct_assign') and
+            // dropped legitimate non-channel rows from sibling
+            // divisions on the floor. The two-tab split is now
+            // mutually exclusive with the Open Queue rule (assignee=me
+            // AND source != direct_assign AND channelId != null)
+            // applied client-side at /tasks; every owned task lands in
+            // exactly one tab.
+            //
+            // Channel-attached, non-direct-assign tasks claimed by the
+            // caller flow through /api/nexus into the same /tasks page
+            // and feed the Open Queue tab via that client filter.
             OR: [
                 { targetChannelId: null },
                 { source: 'direct_assign' },
