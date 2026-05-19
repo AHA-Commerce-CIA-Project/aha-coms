@@ -1,10 +1,19 @@
 # Spec 05: aha-fast Onboarding
 
-> Status: draft (authored 2026-05-13)
+> Status: **sealed 2026-05-14 (CP21 crossed).** Authored 2026-05-13; all ten phases executed by 2026-05-14's eight-step operator walk against `https://aha-coms.web.app/fast/*`. Fast is the React-side reference implementation for the integration contract. Two carryovers survive the seal as deferred work, recorded in *Carryovers* below.
 > Type: one-shot (executable plan; document dies once executed)
 > Owner: TBD
 > Prerequisites: Spec 01 (Monorepo Consolidation) complete; Spec 02 (Heroes Cleanup) sealed through CP11; fast's in-flight feature work frozen on `alifm17/aha-fast@main`
-> Targets: integration contract §§ 1–9 and §§ 11–14; ADR 0002 (cross-framework UI fork), 0003 (single-origin PWA), 0004 (Firebase Hosting routing), 0005 (stateless JWT sessions — with the T31 reality-check that `__session` is opaque, not JWT), 0006 (GIP-only auth), 0009 (Bun for package management), 0010 (OpenTofu over Terraform)
+> Targets: integration contract §§ 1–9 and §§ 11–14; ADR 0002 (cross-framework UI fork), 0003 (single-origin PWA), 0004 (Firebase Hosting routing), 0005 (stateless JWT sessions — with the T31 reality-check that `__session` is opaque, not JWT), 0006 (GIP-only auth), 0009 (Bun for package management), 0010 (OpenTofu over Terraform), 0011 (fast keeps Prisma — open-question §1 resolution)
+
+## Carryovers from the seal
+
+Two threads stayed open when CP21 crossed; both are tracked in `tasks/todo.md` and neither blocks the contract claim:
+
+1. **T64 (PK promotion).** Sub-phase (c)'s destructive `DROP TABLE` for `Session` / `Account` / `Verification` sealed 2026-05-14; the matching promotion of `User.portal_sub` to primary key remains deferred until the next operator window decides between rename-to-`fast_profiles` and in-place repurposing of `User`. Fast already reads `portal_sub` as the join key everywhere it matters; the constraint flip is cosmetic-plus-rigour, not load-bearing.
+2. **T71 (Phase 5 closer marker).** A one-line documentation marker cross-referencing ADR 0011 from Phase 5's "SKIPPED" notice; cosmetic.
+
+Six post-walk findings (F2, F5, F9, F11, F14, plus one cross-spec item) deferred from the operator walk are catalogued in `tasks/todo.md`; none are scope-of-Spec-05.
 
 ## Objective
 

@@ -1,10 +1,17 @@
 # Spec 02: Heroes Integration Cleanup
 
-> Status: draft
+> Status: **sealed 2026-05-13 (CP11 crossed).** All six phases executed end-to-end; T47's smoke walk closed every contract-gate section (§§ 1–9 + 11–14). Heroes is the reference implementation for the Svelte half of the contract. The known notifications deviation (§10) is preserved and flagged below. This document is the historical execution record; consult `tasks/todo.md` for per-task seal notes.
 > Type: one-shot (executable plan; document dies once executed)
 > Owner: TBD
 > Prerequisites: Spec 01 (Monorepo Consolidation) complete
 > Targets: integration contract §§ 1, 2, 3, 5; ADR 0003, 0005, 0006
+
+## Reality-check on the auth model
+
+Two of the spec body's framings diverged from what shipped and are worth recording here so the body reads honestly:
+
+1. **Portal's session cookie is opaque, not a JWT.** The success criteria and Phase 2 narrative speak of "portal-issued JWTs verified per request." T31 surfaced that portal mints `__session` as an opaque cookie; verification is via `GET /api/userinfo` introspection against portal-api over the shared origin, not via cryptographic JWT validation. ADR 0005's title survives (sessions are still stateless at the app side — apps hold no session rows); the wire shape is cookie-then-introspect, not signed-token-self-verify. Spec 05's frontmatter carries the same reality-check.
+2. **Phase 4 step 20's `AnyIcon` cast cleanup** landed via a different route. The cast came from `lucide-svelte ^0.460`'s Svelte 4 class-component types vs. chrome's Svelte 5 `Component` shape; T42 retired the workaround by sweeping the workspace from `lucide-svelte` → `@lucide/svelte` (Svelte 5 native package). All 49 import sites flipped; the `AnyIcon` alias and 26 cast sites in heroes' `(authed)/+layout.svelte` are gone, alongside the two `as never` casts in portal-web's layout. The "version-skew artefact" framing in step 20 was the right diagnosis at a different layer than the spec anticipated.
 
 ## Objective
 

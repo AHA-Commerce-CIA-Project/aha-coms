@@ -1,9 +1,17 @@
 # Spec 01: Monorepo Consolidation
 
-> Status: draft
+> Status: **sealed 2026-05-12 (CP5 crossed).** All six phases executed; the polyrepo of seven git remotes is now a single Bun workspace at `aha-coms/`. This document is preserved as the historical execution record; consult `tasks/todo.md` for the per-task seal notes and `tasks/plan.md` for cross-spec context.
 > Type: one-shot (executable plan; document dies once executed)
 > Owner: TBD
 > Targets: ADR 0001, integration contract §§ 1–13
+
+## What shipped vs. what this spec proposed
+
+The spec body below reflects the plan as authored. Three structural details diverged during execution and are recorded here so the body reads honestly:
+
+1. **`infra/` lives at the monorepo root**, not nested under each app (`apps/<app>/infra/`). Per the standing principle "per-app resources by default" (see `tasks/plan.md`), the layout is `infra/{heroes,portal,fast}/` with each subdirectory carrying its own Tofu state. The Phase 3 example showing `apps/heroes/infra/` was superseded.
+2. **Deploys run through GitHub Actions**, not Cloud Build. Each service has a `.github/workflows/deploy-<service>.yml` with path filters + WIF auth. Phase 4's "Cloud Build" wording is the original proposal; the executed shape is GHA. The path-filter discipline the phase prescribed survived intact.
+3. **The Firebase Hosting site is named `aha-coms`** (not `aha-coms-staging`) and carries **four rewrites**, not three — `/heroes/api/**` precedes `/heroes/**`, `/api/**` precedes the catch-all. The trailing `-staging` suffix was dropped at T18 because there is no separate staging tier: all four Cloud Run services run as `environment = "prod"` and the routing layer fronts prod directly.
 
 ## Objective
 
