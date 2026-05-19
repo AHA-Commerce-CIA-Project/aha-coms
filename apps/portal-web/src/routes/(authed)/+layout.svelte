@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, setContext } from 'svelte'
   import { page } from '$app/stores'
-  import { api } from '$lib/api'
   import { hasPortalRole } from '@coms-portal/shared'
   import { ServiceBar, Sidebar, MobileTopBar, MobileBottomNav, SlideOverNav } from '@coms-portal/ui-svelte/chrome'
   import { AccountWidget } from '@coms-portal/account-widget-svelte'
@@ -15,7 +14,7 @@
   // present. The `?? null` keeps the type honest without introducing a runtime
   // branch the loading skeleton used to handle.
   const user = $derived(data.user ?? null)
-  let apps = $state<{ slug: string; name: string }[]>([])
+  const apps = $derived(data.dashboardApps ?? [])
   let sidebarCollapsed = $state(true)
   let menuOpen = $state(false)
   let theme = $state<'light' | 'dark'>('dark')
@@ -92,10 +91,6 @@
       document.documentElement.classList.add('dark')
       theme = 'dark'
     }
-
-    // Load apps for ServiceBar (best-effort — bar renders empty if this fails)
-    const { data: appsData } = await api.api.v1.dashboard.get()
-    if (appsData) apps = appsData
 
     // Intercept handoff intents
     const intent = readHandoffIntent($page.url) ?? popStashedIntent()
