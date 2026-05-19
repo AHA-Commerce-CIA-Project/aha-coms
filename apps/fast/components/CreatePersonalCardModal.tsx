@@ -348,20 +348,17 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                 className="w-full max-w-2xl bg-white border-0 sm:border border-slate-200 rounded-none sm:rounded-3xl shadow-2xl flex flex-col h-full max-h-screen sm:h-auto sm:max-h-[92vh]"
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Header */}
+                {/* Header — PR #55 removed the redundant Plus icon-tile that
+                    used to sit left of the title so the header reads as a
+                    clean single-column heading + helper line. */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
-                            <Plus className="w-4 h-4 text-indigo-600" />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-slate-800">Create Personal Card</h2>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                                {isLeader
-                                    ? 'Self-assigned by default. Pick an assignee in Step 1 to delegate.'
-                                    : 'Self-assigned task. Lands in your Direct Tasks tab and Team Inbox.'}
-                            </p>
-                        </div>
+                    <div>
+                        <h2 className="text-lg font-bold text-slate-800">Create Personal Card</h2>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                            {isLeader
+                                ? 'Self-assigned by default. Pick an assignee in Step 1 to delegate.'
+                                : 'Self-assigned task. Lands in your Direct Tasks tab and Team Inbox.'}
+                        </p>
                     </div>
                     <button
                         type="button"
@@ -901,11 +898,21 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
             </div>
 
             {/* Brand-code dropdown portal — rendered to document.body so
-                the menu can escape the modal body's overflow-y-auto clip.
-                Position is recomputed via getBoundingClientRect on the
-                input, with a window-level click backdrop to dismiss. */}
+                the menu can escape the modal body's overflow-y-auto
+                clip. Wrapped in an event-isolating shell because React
+                portals still bubble synthetic events through the React
+                parent tree: without this shell, clicking a brand item
+                (or the dismiss backdrop) bubbles up to the modal's
+                outer backdrop and triggers onClose, abruptly tearing
+                down the whole modal mid-selection. The shell consumes
+                onMouseDown + onClick so the dropdown's interactions
+                stay self-contained; the inner backdrop still closes
+                just the dropdown via its own handler. */}
             {brandSearchOpen && brandMenuRect && typeof document !== 'undefined' && createPortal(
-                <>
+                <div
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                >
                     <div
                         className="fixed inset-0 z-[110]"
                         onClick={() => setBrandSearchOpen(false)}
@@ -933,7 +940,7 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                             ))
                         )}
                     </div>
-                </>,
+                </div>,
                 document.body,
             )}
 
