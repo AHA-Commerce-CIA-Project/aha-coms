@@ -23,6 +23,7 @@
     DialogFooter,
   } from '@coms-portal/ui-svelte/primitives'
   import { createQuery, createMutation, useQueryClient } from '@tanstack/svelte-query'
+  import { browser } from '$app/environment'
 
   const queryClient = useQueryClient()
 
@@ -51,7 +52,9 @@
     createQuery({
       queryKey: ['admin', 'taxonomies', selectedTaxonomyId, 'entries'],
       queryFn: () => adminApi.listTaxonomyEntries(selectedTaxonomyId),
-      enabled: !!selectedTaxonomyId,
+      // AND with `browser` so the per-query override doesn't shadow the
+      // global "no SSR" rule set on QueryClient defaults.
+      enabled: browser && !!selectedTaxonomyId,
     })
   )
 
