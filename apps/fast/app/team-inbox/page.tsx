@@ -42,6 +42,13 @@ interface InboxTask {
     // ISO timestamp when this row was personally-archived; null when the
     // user hasn't archived it. Drives the Archive view's sort dropdown.
     archivedAt?: string | null;
+    // True when the task is past the rolling auto-archive window (24h for
+    // routine reminders, 72h for standard tasks). Computed server-side
+    // in /api/team-inbox so the cutoff respects server time. Mutually
+    // independent of `archivedByMe` — a task can be either, both, or
+    // neither. The client treats them the same way: hide from the
+    // Kanban columns, surface in the Archive view.
+    autoArchivedByAge?: boolean;
     pendingReason?: string | null;
     pendingTag?: string | null;
     pendedAt?: string | null;
@@ -793,8 +800,16 @@ export default function TeamInboxPage() {
                 // Split off the archived rows so the regular four-column
                 // Kanban never sees them and the ARCHIVED chip / dedicated
                 // view always have their full set.
-                const archivedAll = searched.filter(t => t.archivedByMe);
-                const visibleTasks = searched.filter(t => !t.archivedByMe);
+                // A row counts as archived when EITHER the viewer
+                // personally archived it (`archivedByMe`) OR the
+                // server has aged it out per the rolling-window rule
+                // (`autoArchivedByAge` — 24h routine / 72h standard).
+                // The two reasons are independent and the kanban
+                // doesn't care which fired; both flow to the Archive
+                // view via the same set.
+                const isArchivedRow = (t: InboxTask) => !!t.archivedByMe || !!t.autoArchivedByAge;
+                const archivedAll = searched.filter(isArchivedRow);
+                const visibleTasks = searched.filter(t => !isArchivedRow(t));
 
                 // Sort + timeframe filter for the Archive view. archivedAt
                 // is an ISO string from /api/team-inbox; missing values
@@ -1044,16 +1059,29 @@ export default function TeamInboxPage() {
                                                     </div>
                                                     <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
                                                         <span className="text-[10px] text-slate-400 truncate">
-                                                            Archived {t.archivedAt ? formatRelative(t.archivedAt) : '—'}
+                                                            {t.archivedByMe
+                                                                ? `Archived ${t.archivedAt ? formatRelative(t.archivedAt) : '—'}`
+                                                                : t.autoArchivedByAge
+                                                                ? `Auto-archived · completed ${t.completedAt ? formatRelative(t.completedAt) : '—'}`
+                                                                : `Archived ${t.archivedAt ? formatRelative(t.archivedAt) : '—'}`}
                                                         </span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleUnarchive(t)}
-                                                            disabled={pendingId === t.id}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-md transition-colors disabled:opacity-50 flex-shrink-0"
-                                                        >
-                                                            <ArchiveRestore className="w-3 h-3" /> Restore
-                                                        </button>
+                                                        {/* Restore only restores PERSONAL archives. Auto-
+                                                            archived rows have no archive record to
+                                                            negate — clicking Restore would either 404
+                                                            or just bounce back into the archive on the
+                                                            next render. Hide for those rows; the user
+                                                            can verify completion via the card click
+                                                            instead. */}
+                                                        {t.archivedByMe && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleUnarchive(t)}
+                                                                disabled={pendingId === t.id}
+                                                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-md transition-colors disabled:opacity-50 flex-shrink-0"
+                                                            >
+                                                                <ArchiveRestore className="w-3 h-3" /> Restore
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
