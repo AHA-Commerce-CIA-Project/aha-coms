@@ -3,17 +3,38 @@
 // hit an HTTP endpoint). Idempotent: runs that fire after a template has
 // already spawned its Task for the current period are a no-op.
 //
-// Time handling: every comparison runs in the template's IANA timezone (e.g.
-// "Asia/Jakarta"). Cloud Run runs UTC; we use native Intl APIs to project
-// the current UTC instant into the template's wall-clock, then convert
-// computed wall-clock moments back to UTC for storage / dedup.
+// Time handling — PR #62 audit:
 //
-// Rolling-window guarantee: the spawn check is `now >= dueAt AND no Task
-// exists with routineTemplateId = template AND createdAt >= periodStart`.
+//   Cloud Run's Node runtime reports UTC for both `new Date()` and every
+//   raw Date getter (`getHours`, `getDay`, etc). Comparing the WIB-stored
+//   `deadlineTime = "17:10"` against the server's native UTC clock would
+//   silently mismatch — 17:10 WIB is 10:10 UTC, and a naïve check would
+//   either fire seven hours early (treating 17:10 as UTC) or never fire
+//   (since the UTC wall-clock never reads 17:10 during WIB business
+//   hours). All wall-clock arithmetic in this file routes through
+//   `date-fns-tz`'s `toZonedTime` / `fromZonedTime` so the math is
+//   explicitly anchored to the template's IANA tz (defaults to
+//   Asia/Jakarta).
+//
+// Rolling-window guarantee — the spawn check is:
+//
+//   spawn iff
+//       now >= dueAt for the current period in the template's tz
+//     AND no Task exists with routineTemplateId = template
+//         AND createdAt >= periodStart
+//
 // That's a rolling window from `dueAt` through the end of the period, so
-// a cron run delayed by minutes (cold start, retry, etc.) still fires the
-// template for the right period — and the period-dedup keeps it from
-// double-posting if the cron runs multiple times after dueAt.
+// a cron run delayed by minutes (cold start, retry, exact `* * * * *`
+// tick that landed at 17:09:55 instead of 17:10:00, etc) still fires
+// the template for the right period — and the period-dedup keeps it
+// from double-posting if the cron runs multiple times after dueAt.
+//
+// Day-of-week mapping — for weekly templates the database stores
+// `deadlineDay` as 1=Mon..7=Sun (ISO weekday). date-fns-tz's zoned
+// Date reports JS-style 0=Sun..6=Sat via `getDay()`; the helper below
+// remaps Sunday from 0 to 7 so the comparison against `deadlineDay`
+// stays in the ISO space. The Tuesday@17:10 regression test in
+// routine-scheduler.test.ts pins this mapping byte-for-byte.
 //
 // Observability: each invocation logs one summary line + per-template
 // status. Look for `[routine-scheduler]` in Cloud Run logs to confirm
@@ -22,15 +43,13 @@
 // per-template `tz` projection so a timezone mismatch is debuggable
 // from logs alone (no need to repro locally).
 
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { prisma } from '@/lib/db';
 import { getOrCreateSystemBot } from '@/lib/system-bot';
 
 type Frequency = 'daily' | 'weekly' | 'monthly';
 
-// ---------- Timezone helpers (Intl-based, no extra dep) ----------
-
-// Map Intl weekday strings to ISO weekday numbers (1=Mon..7=Sun).
-const WEEKDAY: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+// ---------- Timezone helpers (date-fns-tz backed) ----------
 
 interface ZonedWallClock {
   year: number;
@@ -38,40 +57,51 @@ interface ZonedWallClock {
   day: number; // 1-31
   hour: number; // 0-23
   minute: number; // 0-59
-  weekday: number; // 1-7 (Mon=1)
+  weekday: number; // 1-7 (Mon=1, Sun=7) — ISO convention to match DB `deadlineDay`
 }
 
-/** What wall-clock does this UTC instant correspond to in the given IANA tz? */
+/**
+ * Project a UTC instant into the wall-clock it represents in the given
+ * IANA timezone. `toZonedTime` returns a Date whose calendar getters
+ * (`getFullYear`, `getMonth`, …) already report the zoned values, so we
+ * just read them off directly.
+ *
+ * The weekday remap is the critical bit: date-fns / native JS report
+ * Sunday as 0, but `deadlineDay` is stored as 1..7 (Mon=1, Sun=7). The
+ * `=== 0 ? 7 : jsDow` branch keeps the comparison space consistent —
+ * `wallClockInTz(tuesday-utc, 'Asia/Jakarta').weekday === 2` regardless
+ * of where on Earth the server happens to be.
+ */
 export function wallClockInTz(at: Date, tz: string): ZonedWallClock {
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    weekday: 'short',
-    hourCycle: 'h23',
-  });
-  const parts = fmt.formatToParts(at);
-  const pick = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  const zoned = toZonedTime(at, tz);
+  const jsDow = zoned.getDay(); // 0=Sun .. 6=Sat
+  const isoWeekday = jsDow === 0 ? 7 : jsDow;
   return {
-    year: parseInt(pick('year'), 10),
-    month: parseInt(pick('month'), 10),
-    day: parseInt(pick('day'), 10),
-    hour: parseInt(pick('hour'), 10),
-    minute: parseInt(pick('minute'), 10),
-    weekday: WEEKDAY[pick('weekday')] ?? 1,
+    year: zoned.getFullYear(),
+    month: zoned.getMonth() + 1, // JS months are 0-based; we store 1-based
+    day: zoned.getDate(),
+    hour: zoned.getHours(),
+    minute: zoned.getMinutes(),
+    weekday: isoWeekday,
   };
 }
 
 /**
- * Convert a wall-clock time IN THE GIVEN TZ to the matching UTC Date.
- * Uses the well-known Intl trick: assume the wall-clock as if it were UTC,
- * ask Intl what wall-clock that UTC reads as in the target tz, and the
- * difference is the offset to apply. Handles DST correctly for non-fixed
- * zones; Asia/Jakarta has no DST so it's effectively `-7h`.
+ * Inverse of `wallClockInTz`: given a wall-clock interpreted IN `tz`,
+ * return the matching UTC instant.
+ *
+ * We construct a Date whose UTC getters return the requested calendar
+ * fields (via `Date.UTC(...)`); `fromZonedTime` then interprets those
+ * fields as wall-clock IN `tz` and returns the corresponding UTC
+ * Date. Because we set the calendar fields via `Date.UTC(...)`, the
+ * computation is independent of the system's local timezone — Cloud
+ * Run UTC and a developer's PST laptop produce the same UTC instant
+ * for the same inputs.
+ *
+ * Asia/Jakarta has no DST so the conversion is effectively `-7h`; the
+ * code routes through `fromZonedTime` anyway so other configured
+ * timezones (e.g. a future template with `Asia/Tokyo` or
+ * `America/New_York`) get correct DST-aware arithmetic for free.
  */
 export function zonedWallClockToUtc(
   year: number,
@@ -81,11 +111,8 @@ export function zonedWallClockToUtc(
   minute: number,
   tz: string,
 ): Date {
-  const candidateUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
-  const wc = wallClockInTz(new Date(candidateUtc), tz);
-  const wcAsUtc = Date.UTC(wc.year, wc.month - 1, wc.day, wc.hour, wc.minute, 0);
-  const offset = candidateUtc - wcAsUtc; // ms to add to candidate so its TZ wall-clock matches the requested one
-  return new Date(candidateUtc + offset);
+  const wallClock = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  return fromZonedTime(wallClock, tz);
 }
 
 // ---------- Period math (TZ-aware) ----------
