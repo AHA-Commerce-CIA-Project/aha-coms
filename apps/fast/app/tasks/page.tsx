@@ -668,36 +668,43 @@ function MyTasksContent() {
     // 24h "HH:MM" — matches Indonesian business convention.
     const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    // Canonical client-side split — both tabs gate on assignee=me
-    // (the page only ever ingests my tasks now) and partition by the
-    // channel + source pair so every owned task lands in exactly one
-    // tab:
+    // Source-based split — partitions every owned task into exactly
+    // one of the two My Tasks sub-tabs:
     //
-    //   Direct Tasks: target_channel_id IS NULL OR source === 'direct_assign'.
-    //                 Picks up channel-less direct requests (from any
-    //                 division — the prior source-IN restriction was
-    //                 dropping legitimate rows from sibling teams) plus
-    //                 channel-posted Direct Assign cards I claimed.
+    //   Direct Tasks: source IN ('direct_request', 'direct_assign')
+    //                 OR routine_template_id IS NOT NULL.
+    //                 Three populations land here: leader-created
+    //                 direct requests, personal Create Card rows,
+    //                 and routine reminders (the source='queue'
+    //                 cron-spawned variant that the user wants in
+    //                 this tab alongside the rest of "things
+    //                 explicitly targeted at me").
     //
-    //   Open Queue:   source !== 'direct_assign' AND target_channel_id != null.
-    //                 Tasks that originated from a channel queue (form
-    //                 routes / leader-posted queue cards / etc.) and
-    //                 that I have claimed. The "isDirectAssign === false"
-    //                 half of the rule is explicit so a leader-posted
-    //                 Direct Assign with a channel doesn't double-count
-    //                 across both tabs.
+    //   Open Queue:   source NOT IN ('direct_request', 'direct_assign')
+    //                 AND routine_template_id IS NULL.
+    //                 Tasks that originated from a public form/queue
+    //                 (or DM / partner_relations / etc.) and that I
+    //                 have claimed.
     //
-    // The two predicates are mutually exclusive (channel-null XOR
-    // channel-set; direct_assign forces Direct Tasks regardless of
-    // channel), so no task can render in both tabs simultaneously.
+    // Earlier today's channel-based split looked tidy on paper but
+    // misread the data: leader-direct Partner Requests like
+    // "Update MBR SCHO-M" carry target_channel_id = NULL, so the
+    // channel-null branch swept them into Direct Tasks and left Open
+    // Queue empty. Source is the only column that cleanly partitions
+    // the two user-facing categories.
     const directRequestTasks = claimedTasksMatchingFilter.filter(t =>
         t.assignee_id === user?.id
-        && (t.target_channel_id == null || t.source === 'direct_assign'),
+        && (
+            t.source === 'direct_request'
+            || t.source === 'direct_assign'
+            || t.routine_template_id != null
+        ),
     );
     const queueTasks = claimedTasksMatchingFilter.filter(t =>
         t.assignee_id === user?.id
+        && t.source !== 'direct_request'
         && t.source !== 'direct_assign'
-        && t.target_channel_id != null,
+        && t.routine_template_id == null,
     );
 
     return (

@@ -3,20 +3,32 @@ import { prisma } from '@/lib/db';
 import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET — Direct Tasks for the current user. Powers the "Direct Tasks"
-// tab on /tasks. Canonical rule, restated 2026-05-19:
+// tab on /tasks. Canonical rule, restated 2026-05-19 (second pass):
 //
 //     assigneeId === me
 //   AND status IN [active whitelist]
-//   AND (targetChannelId IS NULL OR source = 'direct_assign')
+//   AND source IN ('direct_request', 'direct_assign')
 //
-// The rule is intentionally source-agnostic. The previous shape gated
-// on source IN ('direct_request', 'direct_assign'), which silently
-// dropped historical direct-from-other-division tasks that had a
-// different source value but still satisfied the channel-null
-// invariant. The mutually-exclusive client-side Open Queue rule at
-// /tasks (assignee=me AND source != direct_assign AND channelId
-// != null) catches the channel-attached non-direct tasks, so every
-// task the caller owns lands in exactly one tab.
+// Earlier today we tried a channel-based split (targetChannelId IS
+// NULL OR source = 'direct_assign'), but empirically the
+// direct_request rows that the prior brief wanted in "Open Queue"
+// (claimed Partner Requests like "Update MBR SCHO-M" / "[SOFT-M]")
+// all carry targetChannelId = NULL — so the channel-null branch
+// over-included them in Direct Tasks and Open Queue rendered empty.
+// The discriminator that actually maps to the user's mental model
+// is source, not channel: leader-assigned direct requests and
+// personal cards are explicitly "direct"; everything else (queue
+// form submissions, dm-spawned, routines) is "claimed public" and
+// lands in Open Queue via /api/nexus + the client-side filter at
+// /tasks.
+//
+// Routine task instances (routineTemplateId IS NOT NULL) carry
+// source='queue' so they don't land here — they flow through
+// /api/nexus and get bucketed to Direct Tasks via a routine-aware
+// branch in the client-side filter. That keeps this endpoint focused
+// on its primary load (leader-direct + personal-card rows) and lets
+// the routine carve-out live next to the rest of the tab-split logic
+// where it's easier to evolve.
 //
 // Status whitelist matches the existing test assertion; on-hold
 // (status='pending') stays visible per the 2026-05-13 fix documented
@@ -42,25 +54,12 @@ export async function GET() {
             // here, on-hold tasks vanish from the assignee's own list while
             // still showing for admins via /api/tasks/direct-requests-all.
             status: { in: ['in-progress', 'review', 'done', 'pending_completion_details', 'pending'] },
-            // Canonical rule from the current brief, literal: a Direct
-            // Task is anything the caller owns where
-            //   targetChannelId IS NULL OR source = 'direct_assign'.
-            // No outer source restriction — the prior PR limited this
-            // to source IN ('direct_request', 'direct_assign') and
-            // dropped legitimate non-channel rows from sibling
-            // divisions on the floor. The two-tab split is now
-            // mutually exclusive with the Open Queue rule (assignee=me
-            // AND source != direct_assign AND channelId != null)
-            // applied client-side at /tasks; every owned task lands in
-            // exactly one tab.
-            //
-            // Channel-attached, non-direct-assign tasks claimed by the
-            // caller flow through /api/nexus into the same /tasks page
-            // and feed the Open Queue tab via that client filter.
-            OR: [
-                { targetChannelId: null },
-                { source: 'direct_assign' },
-            ],
+            // Source-based partition — the only schema field that
+            // reliably distinguishes "directly assigned to me" from
+            // "claimed off a public queue". Empirically the channel
+            // column is null on both populations so it can't be the
+            // discriminator.
+            source: { in: ['direct_request', 'direct_assign'] },
         },
         include: {
             assignee: { select: { name: true } },
