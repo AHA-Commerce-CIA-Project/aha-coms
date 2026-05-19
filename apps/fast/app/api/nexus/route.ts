@@ -114,6 +114,15 @@ export async function GET() {
         assigned_team_id: t.assignedTeamId,
         assigned_team: t.assignedTeam ? { id: t.assignedTeam.id, name: t.assignedTeam.name } : null,
         source: t.source,
+        // Surface target_channel_id + routine_template_id under their
+        // snake_case alias so /tasks page can apply the PR #55
+        // canonical client filter (Direct Tasks vs Open Queue) without
+        // a second round-trip. The spread above already includes the
+        // camelCase versions from Prisma; these explicit aliases keep
+        // the response shape consistent with sibling endpoints
+        // (my-direct-requests, etc.) that frontend code reads.
+        target_channel_id: t.targetChannelId,
+        routine_template_id: t.routineTemplateId,
         direct_assignee_id: t.directAssigneeId,
         is_recurring: t.isRecurring,
         recurrence_type: t.recurrenceType,

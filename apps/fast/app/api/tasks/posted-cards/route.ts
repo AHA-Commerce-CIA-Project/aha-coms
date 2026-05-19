@@ -10,20 +10,24 @@ import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 // "Command Center" view so initiators have one place to track everything
 // they've asked for.
 //
-// Filter: requesterEmail = me.email AND source != 'queue' AND the
-// task isn't a personal Create-Card row that the user authored for
-// themselves. The queue source is reserved for public form submissions
-// where the requester is typically an external partner who happens to
-// share an email with someone on the platform — those don't belong in
-// a personal tracker. Self-assigned personal cards (source='direct_assign'
-// + assigneeId = me) are excluded post-PR #53 because they now have a
-// dedicated home in My Tasks → Direct Tasks; surfacing them here as
-// well duplicated them across two views and made "asked for by me"
-// feel mixed with "owed to myself". Channel-deleted cards still show
-// up so initiators don't lose visibility on tasks whose source message
-// was removed (the previous shape filtered them out via
-// channelMessageId non-null; the frontend's "Channel Request" badge
-// already degrades gracefully when target_channel_id is null).
+// PR #55 canonical rule for "My Request":
+//
+//     requesterEmail === me.email AND targetChannelId IS NOT NULL
+//
+// "My Request" is the channel-initiated requests command center —
+// every task the caller posted into a team channel (whether the
+// channel itself has since been deleted is fine; the
+// target_channel_id column is left intact under the SetNull cascade,
+// only the relation FK clears, so the row still satisfies the IS NOT
+// NULL predicate here). Channel-less tasks (Create Card personals,
+// queue form submissions, leader-direct-requests routed via DM)
+// belong to their own surfaces.
+//
+// The PR #53/#54 NOT-AND escape hatch that excluded self-assigned
+// personal cards is no longer necessary: those cards never had a
+// targetChannelId in the first place, so the channel predicate
+// already drops them. Cleaner query, same observable set, no risk of
+// the predicate silently dropping a legitimate row.
 export async function GET() {
     const session = await requireFastAuth();
     if (!session) {
@@ -41,19 +45,13 @@ export async function GET() {
     const tasks = await prisma.task.findMany({
         where: {
             requesterEmail: me.email,
-            source: { not: 'queue' },
-            // Exclude self-assigned personal cards — they own a slot in
-            // My Tasks → Direct Tasks instead. Two predicates instead of
-            // one because a leader can legitimately direct-assign a task
-            // to themselves on someone else's behalf; only when the
-            // assignee == requester (both me) does it qualify as
-            // "personal" for routing purposes.
-            NOT: {
-                AND: [
-                    { source: 'direct_assign' },
-                    { assigneeId: session.user.id },
-                ],
-            },
+            // Channel-initiated only — the canonical PR #55 rule. The
+            // implicit corollaries: Create Card personals (no channel),
+            // queue form submissions (no channel), and leader-direct
+            // requests routed via DM (no channel) all drop out. Each of
+            // those populations has its own home (Direct Tasks, the
+            // queue page, DMs respectively).
+            targetChannelId: { not: null },
         },
         orderBy: { createdAt: 'desc' },
         include: {

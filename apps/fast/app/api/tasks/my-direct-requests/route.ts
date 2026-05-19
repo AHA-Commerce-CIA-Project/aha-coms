@@ -2,28 +2,35 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
-// GET — Direct Tasks for the current user. Powers the "Direct Tasks" tab
-// on /tasks (was "Direct Requests" pre-PR #53). Returns every task the
-// caller currently owns as assignee whose source is one of the two
-// "direct" flavours:
+// GET — Direct Tasks for the current user. Powers the "Direct Tasks"
+// tab on /tasks. The canonical rule (PR #55) is:
 //
-//   • direct_request  — leader-assigned tasks (the original shape;
-//                        existing test in route.test.ts covers the
-//                        status whitelist).
-//   • direct_assign   — channel-posted Direct Assign cards that the
-//                        caller has claimed, plus self-assigned
-//                        personal cards created via /api/tasks/self.
+//     assigneeId === me
+//   AND status IN [active whitelist]
+//   AND (targetChannelId IS NULL OR source = 'direct_assign')
 //
-// PR #53 layered on an additional `requesterEmail = session.user.email`
-// predicate to keep leader-posted direct_assigns where someone else is
-// the requester out of the bucket. That predicate turned out to be
-// fragile: the session cache holds the cookie-resolved email, and any
-// case / whitespace divergence from the row's stored requesterEmail
-// drops the row silently — exactly the "new personal cards don't show
-// up" symptom this PR is fixing. Dropping the email check is also a
-// better semantic fit for the renamed tab: "Direct Tasks" should mean
-// every task I personally own as the assignee, regardless of who
-// originally requested it.
+// expressed as the union of three populations:
+//
+//   • Leader-assigned direct requests — source='direct_request' and
+//     always channel-less per /api/tasks's writer shape; picked up via
+//     the channel-null branch.
+//   • Self-created personal cards (Create Card flow) — source=
+//     'direct_assign', channel-less; picked up by either branch.
+//   • Channel-posted Direct Assign cards the caller has claimed —
+//     source='direct_assign' with a non-null targetChannelId; picked
+//     up via the direct-assign branch.
+//
+// Queue / form / DM / routine-spawned tasks are explicitly out: those
+// surfaces have their own tabs (Open Queue, routine inboxes), and
+// historically a few of them carried no targetChannelId which would
+// have over-included them under a pure "channel-null" predicate.
+//
+// History note: PR #53 layered on `requesterEmail = session.user.email`
+// to keep leader-posted direct_assigns out, but the session-cached
+// email and the freshly-read DB requesterEmail could diverge by case,
+// dropping freshly created cards. PR #54 removed it. PR #55 restates
+// the rule in the user-stated canonical form (channel-null OR
+// direct-assign) so the predicate aligns 1:1 with the brief.
 //
 // Status whitelist matches the existing test assertion; on-hold
 // (status='pending') stays visible per the 2026-05-13 fix documented
@@ -54,6 +61,20 @@ export async function GET() {
             // form, routine) live in their own surfaces and shouldn't
             // bleed into Direct Tasks.
             source: { in: ['direct_request', 'direct_assign'] },
+            // Canonical rule from the PR #55 brief — "channelId IS NULL
+            // OR isDirectAssign". Restated against the schema: leave
+            // every channel-less direct row in (direct_request always
+            // qualifies; self-created direct_assign personal cards
+            // qualify here too) and additionally pull in channel-
+            // posted Direct Assign cards by their source. Without this
+            // OR, channel-claimed direct_assigns where the caller is
+            // the assignee would slip through but historical channel-
+            // less direct_requests would too — so it doubles as a
+            // belt-and-braces guard.
+            OR: [
+                { targetChannelId: null },
+                { source: 'direct_assign' },
+            ],
         },
         include: {
             assignee: { select: { name: true } },
@@ -92,6 +113,11 @@ export async function GET() {
         due_date: t.dueDate,
         assignee_id: t.assigneeId,
         source: t.source,
+        // Surface targetChannelId + routineTemplateId so the /tasks
+        // page can apply the PR #55 canonical client filter without a
+        // second round-trip.
+        target_channel_id: t.targetChannelId,
+        routine_template_id: t.routineTemplateId,
         direct_assignee_id: t.directAssigneeId,
         created_at: t.createdAt.toISOString(),
         claimed_at: t.claimedAt?.toISOString() || null,

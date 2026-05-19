@@ -458,12 +458,18 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
                                             />
                                             {/* Dropdown menu portal — render to body so
                                                 the modal body's overflow-y-auto can't
-                                                clip the bottom of the list. Position
-                                                anchors off the input rect via
-                                                getBoundingClientRect (recomputed on
-                                                scroll/resize via the effect above). */}
+                                                clip the bottom of the list. Wrapped in
+                                                an event-isolating shell because React
+                                                portal children still bubble synthetic
+                                                events through the React parent tree;
+                                                without it the item-click would bubble
+                                                up to this modal's backdrop and tear
+                                                the whole form down. */}
                                             {brandSearchOpen && brandMenuRect && typeof document !== 'undefined' && createPortal(
-                                                <>
+                                                <div
+                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
                                                     <div className="fixed inset-0 z-[110]" onClick={() => setBrandSearchOpen(false)} />
                                                     <div
                                                         className="fixed z-[111] bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto"
@@ -490,7 +496,7 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
                                                             ));
                                                         })()}
                                                     </div>
-                                                </>,
+                                                </div>,
                                                 document.body,
                                             )}
                                         </div>
