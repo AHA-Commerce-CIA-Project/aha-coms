@@ -74,8 +74,10 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
   const { isLeader } = useAuth();
   // Mention badges + click-to-open profile card for the thread replies
   // below. Same shared hook the task-comment surface uses (see
-  // TaskCommentsSection.tsx).
-  const { onMentionContainerClick, popoverElement: mentionPopoverElement } = useMentionPopover();
+  // TaskCommentsSection.tsx). The hook installs a native click
+  // listener on `mentionContainerRef`, so the modal's own
+  // backdrop-defeating wrapper can't swallow the click.
+  const { containerRef: mentionContainerRef, popoverElement: mentionPopoverElement } = useMentionPopover();
   const [snapshot, setSnapshot] = useState<RoutineSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -911,7 +913,7 @@ export function RoutineTaskDetailModal({ open, taskId, currentUserId, onClose }:
                   </div>
 
                   {replies.length > 0 && (
-                    <div onClick={onMentionContainerClick} className="space-y-2 mb-3 max-h-[260px] overflow-y-auto">
+                    <div ref={mentionContainerRef} className="space-y-2 mb-3 max-h-[260px] overflow-y-auto">
                       {replies.map((r) => (
                         <div key={r.id} className="flex items-start gap-2">
                           {r.sender.image ? (

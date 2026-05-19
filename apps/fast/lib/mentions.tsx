@@ -22,7 +22,7 @@
 //     useEffect rebinding race) and renders `popoverElement` anywhere
 //     inside its tree (it portals to document.body internally).
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Send as SendIcon } from 'lucide-react';
@@ -118,16 +118,25 @@ interface ProfilePopoverState {
 
 export interface UseMentionPopoverResult {
     /**
-     * Attach to the PARENT container of every rendered comment / reply.
-     * One stable listener — survives re-renders without rebinding (so no
-     * race window like the per-badge useEffect approach in PR #42).
+     * Attach to the PARENT container of every rendered comment / reply
+     * via `ref={containerRef}`. The hook registers a single native
+     * `click` listener on the container during its lifetime; React's
+     * synthetic event delegation is bypassed entirely, so:
      *
-     * Catches clicks bubbling up from `[data-mention]` descendants.
-     * Calls `e.preventDefault()` and clears any in-progress text
-     * selection so a rapid double-click doesn't spill into the rich-
-     * text editor and trigger the Underline formatting button.
+     *   - Ancestors with `onClick={e => e.stopPropagation()}` (e.g.
+     *     the task detail modal's inner wrapper to defeat backdrop-
+     *     click-to-close) cannot swallow the click — the native
+     *     listener fires during bubble at the container, BEFORE the
+     *     synthetic event reaches the ancestor.
+     *   - One binding for the lifetime of the consumer; never re-binds
+     *     on comments rerender. No race window like the per-badge
+     *     useEffect approach in PR #42.
+     *
+     * The listener filters via `closest('[data-mention]')`, so non-
+     * mention clicks inside the container fall through unaffected
+     * (the consumer's normal handlers still work).
      */
-    onMentionContainerClick: (e: React.MouseEvent<HTMLElement>) => void;
+    containerRef: RefObject<HTMLDivElement | null>;
     /**
      * Portal-rendered popover element. Render anywhere inside the
      * consumer's tree — it portals to document.body internally so
@@ -170,20 +179,42 @@ export function useMentionPopover(): UseMentionPopoverResult {
             });
     }, [mentionUsers]);
 
-    const onMentionContainerClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
-        const badge = (e.target as HTMLElement | null)?.closest?.('[data-mention]') as HTMLElement | null;
-        if (!badge) return;
-        e.preventDefault();
-        e.stopPropagation();
-        // Defuse the rapid-click selection bug: even with select-none on
-        // the badge, the browser can still start a selection on adjacent
-        // text that spills into the rich-text editor below and trips its
-        // Cmd+U / Cmd+B / etc. heuristics. Clearing all ranges here is
-        // belt to select-none's suspenders.
-        if (typeof window !== 'undefined') {
-            window.getSelection()?.removeAllRanges();
-        }
-        openProfilePopoverForBadge(badge);
+    // Native click listener attached directly to the container ref.
+    // Bypasses React's synthetic event delegation entirely: in the task
+    // detail modal at apps/fast/app/tasks/page.tsx:1108 (and the parallel
+    // /nexus modal), the inner wrapper has `onClick={e =>
+    // e.stopPropagation()}` to defeat backdrop-click-to-close. That
+    // stopPropagation also stops React's synthetic delegation at the
+    // root container — any React onClick handler we install at the
+    // container level never fires for clicks inside the modal. A native
+    // listener attached directly to the container, by contrast, fires
+    // during bubble at the container BEFORE the synthetic system gets
+    // involved, so it cannot be swallowed by upstream React handlers.
+    //
+    // One listener, one binding, no rebinding race — different from
+    // PR #42's per-badge approach which re-bound on every comments
+    // rerender and left a window where clicks fell on the floor.
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        const onClick = (ev: MouseEvent) => {
+            const target = ev.target as HTMLElement | null;
+            const badge = target?.closest?.('[data-mention]') as HTMLElement | null;
+            if (!badge) return;
+            // Belt-and-suspenders against rapid-click text selection
+            // spilling into the rich-text editor and tripping its
+            // Cmd+U / Cmd+B heuristics. select-none on the badge is
+            // the suspenders; this is the belt.
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (typeof window !== 'undefined') {
+                window.getSelection()?.removeAllRanges();
+            }
+            openProfilePopoverForBadge(badge);
+        };
+        container.addEventListener('click', onClick);
+        return () => container.removeEventListener('click', onClick);
     }, [openProfilePopoverForBadge]);
 
     // Click-outside dismiss. Allows clicks on other mention badges to
@@ -214,7 +245,7 @@ export function useMentionPopover(): UseMentionPopoverResult {
           )
         : null;
 
-    return { onMentionContainerClick, popoverElement };
+    return { containerRef, popoverElement };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
