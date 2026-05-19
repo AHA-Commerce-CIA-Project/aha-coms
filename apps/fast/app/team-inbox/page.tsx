@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks, Eye, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/lib/auth/use-auth';
@@ -146,7 +146,14 @@ function deadlineState(dueIso: string | null): { label: string; tone: 'ok' | 'so
     return { label: `Due in ${days}d`, tone: 'ok' };
 }
 
-export default function TeamInboxPage() {
+// Inner content as a separate function so the default export can wrap
+// it in <Suspense>. Required because we read `useSearchParams()` to
+// seed `showArchivedOnly` from the URL (PR #47's deep-link feature),
+// and Next.js refuses to statically prerender any page that calls
+// useSearchParams outside a Suspense boundary — it bailed the prod
+// build for PR #47 with `Error occurred prerendering page
+// /team-inbox`. Mirrors the existing pattern in /track/page.tsx.
+function TeamInboxContent() {
     const { profile, isLeader } = useAuth();
     const router = useRouter();
     const isMaster = profile?.role === 'admin';
@@ -1727,5 +1734,24 @@ export default function TeamInboxPage() {
             )}
 
         </div>
+    );
+}
+
+// Default export wraps TeamInboxContent in <Suspense> so Next.js can
+// statically prerender the page shell while letting the inner
+// useSearchParams() call defer to client-side. Fallback mirrors the
+// in-content loading spinner so users don't see a layout shift on
+// the hand-off.
+export default function TeamInboxPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="flex items-center justify-center py-16">
+                    <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+            }
+        >
+            <TeamInboxContent />
+        </Suspense>
     );
 }
