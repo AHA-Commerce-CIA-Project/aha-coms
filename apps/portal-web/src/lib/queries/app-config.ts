@@ -1,11 +1,14 @@
 import { createQuery, createMutation, useQueryClient } from '@tanstack/svelte-query'
+import { browser } from '$app/environment'
 import { adminApi } from '$lib/admin-api'
 
 export function createAppConfigQuery(appId: string, filter: string) {
   return createQuery({
     queryKey: ['app-config', appId, filter],
     queryFn: () => adminApi.listAppConfig(appId, filter),
-    enabled: !!appId,
+    // AND with `browser` so the per-query override doesn't shadow the
+    // global "no SSR" rule set on QueryClient defaults.
+    enabled: browser && !!appId,
   })
 }
 
