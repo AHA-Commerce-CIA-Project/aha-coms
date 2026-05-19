@@ -53,17 +53,50 @@ const CROSS_APP_FALLBACK: CrossAppEntry[] = [
     { slug: 'heroes', label: 'HEROES', url: 'https://aha-coms.web.app/heroes/', icon: Trophy },
 ];
 
-// FAST in-app sub-routes shown in the dropdown that opens off the FAST
-// cross-app pill while the user is inside fast. Mirrors what the
-// Sidebar + BottomNav surface — duplicates them here at the top of the
-// page so navigation is reachable without scrolling. Order matches the
-// brief's listed sequence.
-const FAST_SUB_ROUTES: { label: string; href: string }[] = [
-    { label: 'My Tasks',    href: '/tasks' },
-    { label: 'My Request',  href: '/my-request' },
-    { label: 'Task Queue',  href: '/nexus' },
-    { label: 'Task Inbox',  href: '/team-inbox' },
-    { label: 'AHA Orbit',   href: '/orbit' },
+// FAST top-nav mega menu. Two tiers:
+//   • Tier-1 (vertical primary list inside the FAST dropdown) varies
+//     by role — members see Dashboard / Task / Message; leader-tier
+//     callers (Leader / Master / Admin per useAuth().isLeader)
+//     additionally see Analytics + Activity Log.
+//   • Tier-2 flies out to the right on hover when the Tier-1 item is
+//     a `group` — Task and Message are the only groups today.
+//
+// Definitions stay declarative so role-gated additions / future
+// sub-routes don't have to touch the render path.
+type FastTier2Item = { label: string; href: string };
+type FastTier1Item =
+    | { kind: 'link'; key: string; label: string; href: string }
+    | { kind: 'group'; key: string; label: string; children: FastTier2Item[] };
+
+const FAST_MENU_BASE: FastTier1Item[] = [
+    { kind: 'link', key: 'dashboard', label: 'Dashboard', href: '/dashboard' },
+    {
+        kind: 'group',
+        key: 'task',
+        label: 'Task',
+        children: [
+            { label: 'My Task',    href: '/tasks' },
+            { label: 'My Request', href: '/my-request' },
+            { label: 'Task Queue', href: '/nexus' },
+            { label: 'Task Inbox', href: '/team-inbox' },
+            { label: 'AHA Orbit',  href: '/orbit' },
+        ],
+    },
+    {
+        kind: 'group',
+        key: 'message',
+        label: 'Message',
+        children: [
+            { label: 'Channels',       href: '/channels' },
+            { label: 'Direct Message', href: '/messages' },
+            { label: 'Later',          href: '/later' },
+        ],
+    },
+];
+
+const FAST_MENU_LEADER_EXTRA: FastTier1Item[] = [
+    { kind: 'link', key: 'analytics', label: 'Analytics', href: '/analytics' },
+    { kind: 'link', key: 'activity',  label: 'Activity Log', href: '/activity-log' },
 ];
 
 const PORTAL_ORIGIN =
@@ -137,6 +170,13 @@ export function TopNav() {
     // not the in-app modules row).
     const [fastDropdownOpen, setFastDropdownOpen] = useState(false);
     const fastDropdownCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Tier-2 flyout state — keys off the group's `key` ('task' / 'message')
+    // so only one flyout can be open at a time. Separate timer because the
+    // flyout needs its own hover-grace so the cursor can travel from the
+    // Tier-1 row across the small gap into the Tier-2 panel without the
+    // panel closing mid-traversal.
+    const [fastFlyoutKey, setFastFlyoutKey] = useState<string | null>(null);
+    const fastFlyoutCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const notifRef = useRef<HTMLDivElement>(null);
     const accountRef = useRef<HTMLDivElement>(null);
 
@@ -394,11 +434,16 @@ export function TopNav() {
                     const isActive = app.slug === 'fast';
                     const PillIcon = app.icon;
                     if (isActive) {
-                        // FAST pill becomes a dropdown trigger inside fast.
-                        // Hover opens; click also opens (so touch devices
-                        // and keyboard users have an affordance). 200ms
-                        // close timer on mouseleave gives the cursor time
-                        // to enter the menu without flicker.
+                        // FAST pill becomes a tiered mega-menu trigger inside
+                        // fast. Hover opens; click toggles. 200ms close
+                        // timers on both tiers give the cursor time to
+                        // traverse between the trigger, the Tier-1 panel,
+                        // and the Tier-2 flyout without the menu folding
+                        // up mid-traversal. The Tier-2 flyout is also
+                        // closable explicitly (mouse-enter on a non-group
+                        // Tier-1 row drops the flyout), so the menu never
+                        // stays in a dual-open state with a stale flyout
+                        // pointing at the wrong column.
                         const openFast = () => {
                             if (fastDropdownCloseTimer.current) {
                                 clearTimeout(fastDropdownCloseTimer.current);
@@ -408,8 +453,31 @@ export function TopNav() {
                         };
                         const scheduleFastClose = () => {
                             if (fastDropdownCloseTimer.current) clearTimeout(fastDropdownCloseTimer.current);
-                            fastDropdownCloseTimer.current = setTimeout(() => setFastDropdownOpen(false), 200);
+                            fastDropdownCloseTimer.current = setTimeout(() => {
+                                setFastDropdownOpen(false);
+                                setFastFlyoutKey(null);
+                            }, 200);
                         };
+                        const openFlyout = (key: string) => {
+                            if (fastFlyoutCloseTimer.current) {
+                                clearTimeout(fastFlyoutCloseTimer.current);
+                                fastFlyoutCloseTimer.current = null;
+                            }
+                            setFastFlyoutKey(key);
+                        };
+                        const scheduleFlyoutClose = () => {
+                            if (fastFlyoutCloseTimer.current) clearTimeout(fastFlyoutCloseTimer.current);
+                            fastFlyoutCloseTimer.current = setTimeout(() => setFastFlyoutKey(null), 200);
+                        };
+                        // Compose the role-gated Tier-1 list once per
+                        // render. Leader / Master / Admin all flip
+                        // isLeader=true (see use-auth.tsx:153 — admin is
+                        // a strict subset of leader for this check), so a
+                        // single boolean covers the three privileged
+                        // tiers from the brief.
+                        const fastMenu: FastTier1Item[] = isLeader
+                            ? [...FAST_MENU_BASE, ...FAST_MENU_LEADER_EXTRA]
+                            : FAST_MENU_BASE;
                         return (
                             <div
                                 key={app.slug}
@@ -438,31 +506,115 @@ export function TopNav() {
                                     />
                                 </button>
                                 {fastDropdownOpen && (
+                                    // Tier-1 panel. z-[999] keeps the menu
+                                    // above every layout canvas surface
+                                    // (modal portals at z-95 / z-100 stay
+                                    // above only when explicitly opened on
+                                    // top — see CreatePersonalCardModal).
+                                    // Solid bg-white ensures the layered
+                                    // structure can't bleed through any
+                                    // semi-transparent ancestor.
                                     <div
                                         role="menu"
                                         onMouseEnter={openFast}
                                         onMouseLeave={scheduleFastClose}
-                                        className="absolute top-full left-0 mt-1 min-w-[180px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden"
+                                        className="absolute top-full left-0 mt-1 min-w-[200px] bg-white border border-slate-200 rounded-xl shadow-xl z-[999] overflow-visible"
                                     >
                                         <div className="py-1">
-                                            {FAST_SUB_ROUTES.map(route => {
-                                                const itemActive = pathname === route.href
-                                                    || pathname?.startsWith(route.href + '/');
+                                            {fastMenu.map(item => {
+                                                if (item.kind === 'link') {
+                                                    const isItemActive = pathname === item.href
+                                                        || pathname?.startsWith(item.href + '/');
+                                                    return (
+                                                        <Link
+                                                            key={item.key}
+                                                            href={item.href}
+                                                            role="menuitem"
+                                                            onMouseEnter={() => setFastFlyoutKey(null)}
+                                                            onClick={() => {
+                                                                setFastDropdownOpen(false);
+                                                                setFastFlyoutKey(null);
+                                                            }}
+                                                            className={cn(
+                                                                'block px-4 py-2 text-sm font-medium transition-colors',
+                                                                isItemActive
+                                                                    ? 'bg-indigo-50 text-indigo-700'
+                                                                    : 'text-slate-700 hover:bg-slate-50',
+                                                            )}
+                                                        >
+                                                            {item.label}
+                                                        </Link>
+                                                    );
+                                                }
+                                                // Group — Tier-1 row plus
+                                                // a side flyout when this
+                                                // group is the active one.
+                                                const isFlyoutOpen = fastFlyoutKey === item.key;
+                                                const isGroupActive = item.children.some(c =>
+                                                    pathname === c.href || pathname?.startsWith(c.href + '/'),
+                                                );
                                                 return (
-                                                    <Link
-                                                        key={route.href}
-                                                        href={route.href}
-                                                        role="menuitem"
-                                                        onClick={() => setFastDropdownOpen(false)}
-                                                        className={cn(
-                                                            'block px-4 py-2 text-sm font-medium transition-colors',
-                                                            itemActive
-                                                                ? 'bg-indigo-50 text-indigo-700'
-                                                                : 'text-slate-700 hover:bg-slate-50',
-                                                        )}
+                                                    <div
+                                                        key={item.key}
+                                                        className="relative"
+                                                        onMouseEnter={() => openFlyout(item.key)}
+                                                        onMouseLeave={scheduleFlyoutClose}
                                                     >
-                                                        {route.label}
-                                                    </Link>
+                                                        <button
+                                                            type="button"
+                                                            aria-haspopup="menu"
+                                                            aria-expanded={isFlyoutOpen}
+                                                            className={cn(
+                                                                'w-full flex items-center justify-between px-4 py-2 text-sm font-medium transition-colors',
+                                                                isFlyoutOpen || isGroupActive
+                                                                    ? 'bg-indigo-50 text-indigo-700'
+                                                                    : 'text-slate-700 hover:bg-slate-50',
+                                                            )}
+                                                        >
+                                                            <span>{item.label}</span>
+                                                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                                                        </button>
+                                                        {isFlyoutOpen && (
+                                                            // Tier-2 flyout. Sits to the right of
+                                                            // the Tier-1 row; pl-1 gives a tiny
+                                                            // pointer-events bridge so cursor
+                                                            // travel from row → panel doesn't
+                                                            // exit the menu region. z-[1000]
+                                                            // sits just above the Tier-1 panel.
+                                                            <div
+                                                                role="menu"
+                                                                onMouseEnter={() => openFlyout(item.key)}
+                                                                onMouseLeave={scheduleFlyoutClose}
+                                                                className="absolute left-full top-0 pl-1 z-[1000]"
+                                                            >
+                                                                <div className="bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[200px]">
+                                                                    {item.children.map(c => {
+                                                                        const isChildActive = pathname === c.href
+                                                                            || pathname?.startsWith(c.href + '/');
+                                                                        return (
+                                                                            <Link
+                                                                                key={c.href}
+                                                                                href={c.href}
+                                                                                role="menuitem"
+                                                                                onClick={() => {
+                                                                                    setFastDropdownOpen(false);
+                                                                                    setFastFlyoutKey(null);
+                                                                                }}
+                                                                                className={cn(
+                                                                                    'block px-4 py-2 text-sm font-medium transition-colors',
+                                                                                    isChildActive
+                                                                                        ? 'bg-indigo-50 text-indigo-700'
+                                                                                        : 'text-slate-700 hover:bg-slate-50',
+                                                                                )}
+                                                                            >
+                                                                                {c.label}
+                                                                            </Link>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 );
                                             })}
                                         </div>

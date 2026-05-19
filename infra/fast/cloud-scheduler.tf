@@ -29,7 +29,17 @@ resource "google_project_service" "cloud_scheduler" {
   disable_on_destroy = false
 }
 
-# ── The job itself. */5 * * * * UTC is the simplest correct shape:
+# ── The job itself. `* * * * *` UTC = every minute. Tightened from
+#    the initial */5 after a 2026-05-19 report of a 16:40 WIB template
+#    failing to post by 16:42: with a 5-minute cadence, if the cron
+#    tick just before 16:40 fired at 16:39:55 and computed
+#    `now < dueAt`, the next firing window opens at 16:44:55 — a
+#    ~5-minute dead-zone after the due moment. Dropping to every
+#    minute caps the worst-case "due time → bot posts" latency at
+#    ~60 seconds. Cost is negligible (Cloud Scheduler's first three
+#    jobs in a project are free; beyond that it's $0.10 per million
+#    invocations, and 1440 invocations/day is well inside the noise).
+#
 #    Asia/Jakarta has no DST, so a UTC cadence runs at the same WIB
 #    wall-clock cadence forever; and the application-level time math
 #    in apps/fast/lib/routine-scheduler.ts projects `now` into each
@@ -40,8 +50,8 @@ resource "google_cloud_scheduler_job" "routine_scheduler" {
   project          = var.project_id
   name             = "coms-fast-routine-scheduler"
   region           = var.region
-  description      = "Fires /fast/api/cron/routine-scheduler every 5 minutes so routine task templates spawn their channel-card Tasks on schedule."
-  schedule         = "*/5 * * * *"
+  description      = "Fires /fast/api/cron/routine-scheduler every minute so routine task templates spawn their channel-card Tasks within ~60s of their scheduled deadline."
+  schedule         = "* * * * *"
   time_zone        = "Etc/UTC"
   attempt_deadline = "180s"
 
