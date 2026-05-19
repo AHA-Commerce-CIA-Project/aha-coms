@@ -16,6 +16,21 @@ import crypto from 'crypto';
 // in the "In Progress" column rather than "Unclaimed" (which would
 // confusingly invite teammates to claim something the creator already
 // owns).
+//
+// Payload shape (post the 2-step wizard refactor in PR #51):
+//   title:         required string
+//   description:   optional string (sanitised)
+//   urgency:       P1 | P2 | P3 | P4 | 5-minute (defaults to P3)
+//   dueDate:       optional ISO date string (YYYY-MM-DD); converted to
+//                  end-of-day WIB for storage, matching the convention
+//                  /api/tasks uses for leader-created tasks
+//   referenceUrls: optional string[] — http(s) only, stored in
+//                  customFields.referenceUrls (no separate column)
+//
+// `type` and `targetChannelId` (in the v1 endpoint) were intentionally
+// dropped: every personal card is a Standard Task implicitly, and the
+// review screen shows a "Self-Assigned" pill in place of a channel/brand
+// tag relation.
 export async function POST(request: NextRequest) {
     const session = await requireFastAuth();
     if (!session) {
@@ -23,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, urgency, targetChannelId } = body;
+    const { title, description, urgency, dueDate, referenceUrls } = body;
 
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
         return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -42,6 +57,36 @@ export async function POST(request: NextRequest) {
     if (!caller) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+
+    // Compute deadline at end-of-day WIB — same shape as
+    // /api/tasks/route.ts:64-85 so personal cards and leader-assigned
+    // cards order identically in the inbox's Deadline column.
+    let computedDueDate: Date | null = null;
+    if (dueDate && typeof dueDate === 'string') {
+        const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+        const selectedDate = new Date(dueDate);
+        if (!isNaN(selectedDate.getTime())) {
+            const deadlineWIB = Date.UTC(
+                selectedDate.getUTCFullYear(),
+                selectedDate.getUTCMonth(),
+                selectedDate.getUTCDate(),
+                23, 59, 59,
+            );
+            computedDueDate = new Date(deadlineWIB - WIB_OFFSET_MS);
+        }
+    }
+
+    // Reference URLs — http(s) only. Stored in customFields rather than
+    // a dedicated column so we don't need a Prisma migration; the inbox
+    // task-detail modal already reads customFields.referenceUrls for
+    // leader-created tasks, so personal cards land in the same render
+    // path with no consumer change.
+    const safeReferenceUrls: string[] = Array.isArray(referenceUrls)
+        ? referenceUrls
+            .filter((u): u is string => typeof u === 'string')
+            .map((u) => u.trim())
+            .filter((u) => /^https?:\/\//i.test(u))
+        : [];
 
     const taskToken = crypto.randomBytes(4).toString('hex').toUpperCase();
 
@@ -66,8 +111,9 @@ export async function POST(request: NextRequest) {
             source: 'direct_assign',
             assigneeId: caller.id,
             assignedTeamId: caller.teamId,
-            targetChannelId: targetChannelId || null,
             claimedAt: new Date(),
+            dueDate: computedDueDate,
+            customFields: { fileUrls: [], referenceUrls: safeReferenceUrls },
             taskToken,
         },
         select: { id: true, taskToken: true, title: true },
