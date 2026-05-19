@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks, Eye, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/lib/auth/use-auth';
 import { htmlToPlainText } from '@/lib/sanitize';
@@ -186,8 +186,14 @@ export default function TeamInboxPage() {
     // Archive view toggle — when true, the four-column Kanban is replaced
     // by a single-column archived-only list. When false, archived rows are
     // filtered out of the regular buckets. Toggled by clicking the
-    // ARCHIVED metric chip (on) or any other metric chip (off).
-    const [showArchivedOnly, setShowArchivedOnly] = useState(false);
+    // ARCHIVED metric chip; also seeded from the `?showArchivedOnly=1`
+    // URL param so deep-links from the channel card's "Open in Team
+    // Inbox" button on an archived task land directly in the archive
+    // view instead of the default Kanban.
+    const initialSearchParams = useSearchParams();
+    const [showArchivedOnly, setShowArchivedOnly] = useState(
+        initialSearchParams?.get('showArchivedOnly') === '1'
+    );
     // Sort/filter applied inside the Archive view. Defaults to "Newest
     // Archived" so the row the user just archived sits at the top.
     type ArchiveSort = 'newest' | 'oldest' | 'last30' | 'all';
@@ -937,9 +943,15 @@ export default function TeamInboxPage() {
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setShowArchivedOnly(true)}
+                                onClick={() => setShowArchivedOnly((v) => !v)}
                                 aria-pressed={showArchivedOnly}
-                                title={searchHitsArchivedOnly ? `Your search matches ${archivedCount} archived task${archivedCount === 1 ? '' : 's'} — click to view.` : undefined}
+                                title={
+                                    showArchivedOnly
+                                        ? 'Click to return to all columns'
+                                        : searchHitsArchivedOnly
+                                        ? `Your search matches ${archivedCount} archived task${archivedCount === 1 ? '' : 's'} — click to view.`
+                                        : undefined
+                                }
                                 className={`text-left rounded-2xl bg-white border p-4 transition-colors ${
                                     showArchivedOnly
                                         ? 'border-indigo-300 ring-2 ring-indigo-100'
@@ -1032,7 +1044,16 @@ export default function TeamInboxPage() {
                                             return (
                                                 <div
                                                     key={t.id}
-                                                    className="rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all p-3 flex flex-col gap-2 opacity-95"
+                                                    onClick={() => openDetail(t)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault();
+                                                            openDetail(t);
+                                                        }
+                                                    }}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    className="rounded-xl bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-md transition-all p-3 flex flex-col gap-2 opacity-95 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400"
                                                 >
                                                     <div className="flex items-center justify-between gap-2">
                                                         <span className="text-xs font-semibold text-slate-700 truncate">{requesterLabel}</span>
@@ -1042,13 +1063,13 @@ export default function TeamInboxPage() {
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openDetail(t)}
-                                                        className="text-sm font-bold text-slate-900 hover:text-indigo-600 text-left line-clamp-2"
-                                                    >
+                                                    {/* Title is plain text inside the clickable wrapper —
+                                                        nesting a <button> here would steal focus + click
+                                                        from the wrapper and re-introduce the dead-zone
+                                                        bug this PR is fixing. */}
+                                                    <p className="text-sm font-bold text-slate-900 line-clamp-2">
                                                         {t.title}
-                                                    </button>
+                                                    </p>
                                                     <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
                                                         <span className="truncate">
                                                             {t.assignee?.name ? `Done by ${t.assignee.name.split(' ')[0]}` : 'Unassigned'}
@@ -1075,7 +1096,7 @@ export default function TeamInboxPage() {
                                                         {t.archivedByMe && (
                                                             <button
                                                                 type="button"
-                                                                onClick={() => handleUnarchive(t)}
+                                                                onClick={(e) => { e.stopPropagation(); handleUnarchive(t); }}
                                                                 disabled={pendingId === t.id}
                                                                 className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-md transition-colors disabled:opacity-50 flex-shrink-0"
                                                             >

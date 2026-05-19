@@ -110,12 +110,24 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
   const isClaimed = !!snapshot?.assignee && status !== 'todo';
   const isDone = status === 'done';
   const isPending = status === 'pending';
-  // Status overrides priority for completion-states. A green "Completed"
-  // banner reads as resolution at a glance; an amber "On hold" banner
-  // matches the pending colour everywhere else in the app. Active tasks
-  // (todo / in-progress / unclaimed) keep the priority palette so the
-  // colour still encodes urgency.
-  const headerBanner = isDone
+  // Auto-archived-by-age: matches the server-side rolling-window rule
+  // in /api/team-inbox (PR #45). DirectAssign cards in channels are
+  // always Standard Tasks (Routine tasks render via RoutineTaskCard),
+  // so we use the 72h window here. Computed client-side from
+  // completed_at so the card transitions from "Completed" green to
+  // "Archived" gray the moment the threshold is crossed without
+  // waiting for a backend roundtrip.
+  const STANDARD_ARCHIVE_WINDOW_MS = 72 * 60 * 60 * 1000;
+  const isArchivedByAge = isDone
+    && !!snapshot?.completed_at
+    && (Date.now() - new Date(snapshot.completed_at).getTime()) >= STANDARD_ARCHIVE_WINDOW_MS;
+  // Status drives the header banner and status chip. Archive (72h+
+  // since completion) wins over Done (≤72h). Order in this ternary
+  // matters — archive sits at the top so it overrides the green-
+  // Completed branch.
+  const headerBanner = isArchivedByAge
+    ? 'from-slate-400 to-slate-500'
+    : isDone
     ? 'from-emerald-500 to-emerald-600'
     : isPending
     ? 'from-amber-400 to-amber-500'
@@ -173,7 +185,11 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
           <span className={`inline-flex items-center px-2 py-0.5 text-[11px] font-bold rounded ${theme.pill} ${theme.pillText}`}>
             {theme.label}
           </span>
-          {isDone ? (
+          {isArchivedByAge ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded bg-gray-100 text-gray-700">
+              <CheckCircle2 className="w-3 h-3" /> Archived
+            </span>
+          ) : isDone ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded bg-emerald-100 text-emerald-700">
               <CheckCircle2 className="w-3 h-3" /> Completed
             </span>
@@ -242,7 +258,7 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
               {canOpenInTeamInbox && (
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); router.push('/team-inbox'); }}
+                  onClick={(e) => { e.stopPropagation(); router.push(isArchivedByAge ? '/team-inbox?showArchivedOnly=1' : '/team-inbox'); }}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
                 >
                   Open in Team Inbox <ExternalLink className="w-3 h-3" />
@@ -263,7 +279,7 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
               {canOpenInTeamInbox && (
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); router.push('/team-inbox'); }}
+                  onClick={(e) => { e.stopPropagation(); router.push(isArchivedByAge ? '/team-inbox?showArchivedOnly=1' : '/team-inbox'); }}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
                 >
                   Open in Team Inbox <ExternalLink className="w-3 h-3" />
