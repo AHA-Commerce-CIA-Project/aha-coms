@@ -224,3 +224,126 @@ describe('spawnTaskIfDue — past-due sweep behaviour', () => {
     expect(createMock).toHaveBeenCalledTimes(1);
   });
 });
+
+// ------------------------------------------------------------------
+// Weekly + day-of-week regression battery. The 2026-05-19 brief
+// surfaced the exact scenario: a weekly template scheduled for
+// Tuesday 17:10 WIB that failed to fire by 17:12. These tests pin
+// the day-of-week mapping (ISO 1..7 with Sun=7) and the weekly
+// past-due sweep so a regression in either piece fails CI.
+// ------------------------------------------------------------------
+
+function makeWeeklyTemplate(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'tpl-weekly',
+    name: 'Tuesday standup',
+    description: null,
+    isActive: true,
+    channelId: 'ch-1',
+    teamId: null,
+    frequency: 'weekly',
+    // 2 = Tuesday in the ISO mapping the DB stores (Mon=1, Sun=7).
+    deadlineDay: 2,
+    deadlineTime: '17:10',
+    timezone: 'Asia/Jakarta',
+    type: 'INDIVIDUAL',
+    isTeamWide: false,
+    mentionTarget: null,
+    referenceUrls: [],
+    checklistItems: [],
+    ...overrides,
+  };
+}
+
+describe('spawnTaskIfDue — weekly Tuesday@17:10 WIB regression', () => {
+  beforeEach(() => {
+    findUniqueMock.mockReset();
+    findFirstMock.mockReset();
+    createMock.mockReset();
+    findFirstMock.mockImplementation(async () => null);
+    createMock.mockImplementation(async () => ({ id: 'task-new', title: 'spawned' }));
+    messageCreateMock.mockImplementation(async () => ({ id: 'msg-new' }));
+    taskUpdateMock.mockImplementation(async () => ({ id: 'task-new' }));
+    channelUpdateMock.mockImplementation(async () => ({ id: 'ch-1' }));
+    channelFindUniqueMock.mockImplementation(async () => ({ name: 'general', isPrivate: false }));
+    notificationCreateManyMock.mockImplementation(async () => ({ count: 0 }));
+  });
+
+  it('fires at 17:12 WIB Tuesday — the exact scenario from the brief', async () => {
+    // 2026-05-19 was a Tuesday. 17:12 WIB = 10:12 UTC. A cron tick at
+    // this moment should spawn the template because:
+    //   • dueAt = 2026-05-19T10:10:00.000Z (Tuesday 17:10 WIB)
+    //   • now (10:12 UTC) > dueAt
+    //   • no existing task in current week period
+    findUniqueMock.mockImplementationOnce(async () => makeWeeklyTemplate());
+    const now = new Date('2026-05-19T10:12:00Z');
+
+    const result = await spawnTaskIfDue('tpl-weekly', now);
+
+    expect(result.status).toBe('spawned');
+    expect(result.tz).toBe('Asia/Jakarta');
+    expect(result.dueAtUtc).toBe('2026-05-19T10:10:00.000Z');
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips on Monday because dueAt for the current week is still in the future', async () => {
+    // 2026-05-18 was a Monday. 17:10 WIB = 10:10 UTC. dueAt for the
+    // week is Tuesday 17:10 WIB; now is one day earlier so we wait.
+    findUniqueMock.mockImplementationOnce(async () => makeWeeklyTemplate());
+    const now = new Date('2026-05-18T10:10:00Z');
+
+    const result = await spawnTaskIfDue('tpl-weekly', now);
+
+    expect(result.status).toBe('skipped_not_due');
+  });
+
+  it('catches up on Wednesday if the Tuesday cron run was missed (no existing task in the week)', async () => {
+    // 2026-05-20 is Wednesday. Tuesday's dueAt has passed and no task
+    // was spawned for the week yet — rolling-window sweep fires now.
+    findUniqueMock.mockImplementationOnce(async () => makeWeeklyTemplate());
+    const now = new Date('2026-05-20T08:00:00Z');
+
+    const result = await spawnTaskIfDue('tpl-weekly', now);
+
+    expect(result.status).toBe('spawned');
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('dedupes within the same ISO week — Wednesday catch-up cancels if Tuesday already spawned', async () => {
+    findUniqueMock.mockImplementationOnce(async () => makeWeeklyTemplate());
+    findFirstMock.mockImplementationOnce(async () => ({ id: 'task-tue' }));
+    const now = new Date('2026-05-20T08:00:00Z'); // Wednesday
+
+    const result = await spawnTaskIfDue('tpl-weekly', now);
+
+    expect(result.status).toBe('skipped_already_fired');
+    expect(result.taskId).toBe('task-tue');
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('Sunday templates use ISO weekday 7 (date-fns getDay returns 0 — the remap is the critical bit)', async () => {
+    // Sunday 12:00 WIB = 05:00 UTC. Template fires Sunday at 12:00.
+    findUniqueMock.mockImplementationOnce(async () =>
+      makeWeeklyTemplate({ deadlineDay: 7, deadlineTime: '12:00' }),
+    );
+    // 2026-05-24 = Sunday. 12:01 WIB = 05:01 UTC.
+    const now = new Date('2026-05-24T05:01:00Z');
+
+    const result = await spawnTaskIfDue('tpl-weekly', now);
+
+    expect(result.status).toBe('spawned');
+    expect(result.dueAtUtc).toBe('2026-05-24T05:00:00.000Z');
+  });
+
+  it('Friday at 23:59 WIB is still inside the same ISO week as the Tuesday spawn — dedup holds', async () => {
+    findUniqueMock.mockImplementationOnce(async () => makeWeeklyTemplate());
+    findFirstMock.mockImplementationOnce(async () => ({ id: 'task-tue' }));
+    // 2026-05-22 = Friday. 23:59 WIB = 16:59 UTC.
+    const now = new Date('2026-05-22T16:59:00Z');
+
+    const result = await spawnTaskIfDue('tpl-weekly', now);
+
+    expect(result.status).toBe('skipped_already_fired');
+    expect(createMock).not.toHaveBeenCalled();
+  });
+});
