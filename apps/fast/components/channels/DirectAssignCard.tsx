@@ -27,6 +27,10 @@ interface TaskSnapshot {
   assignee: { id: string; name: string; image: string | null; team_id: string | null } | null;
   requester_name: string | null;
   due_date: string | null;
+  // True when the viewer has personally archived the task (UserArchivedTask
+  // row exists for this user). Server-computed per-viewer so different
+  // channel members see their own archive state independently.
+  archived_by_me?: boolean;
 }
 
 interface DirectAssignCardProps {
@@ -121,11 +125,23 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
   const isArchivedByAge = isDone
     && !!snapshot?.completed_at
     && (Date.now() - new Date(snapshot.completed_at).getTime()) >= STANDARD_ARCHIVE_WINDOW_MS;
-  // Status drives the header banner and status chip. Archive (72h+
-  // since completion) wins over Done (≤72h). Order in this ternary
+  // Per-viewer manual archive. When the viewer hits "Archive" on the
+  // Task Inbox kanban card's 3-dot menu, /api/tasks/[id]/card returns
+  // archived_by_me=true for subsequent fetches by this user — so on
+  // the next 15s poll, the channel card flips to the same gray
+  // Archived state that age-archived tasks show. Lag is bounded by
+  // the poll interval (~15s); not instant, but acceptable for a
+  // historical state that doesn't change again afterwards.
+  const isArchivedByMe = !!snapshot?.archived_by_me;
+  // Combined archive flag — either age-based (global) or personal-
+  // archive (per-viewer) triggers the gray "Archived" presentation.
+  const isArchived = isArchivedByAge || isArchivedByMe;
+  // Status drives the header banner and status chip. Archive (either
+  // 72h+ since completion OR personally archived by viewer) wins over
+  // Done (≤72h, not personally archived). Order in this ternary
   // matters — archive sits at the top so it overrides the green-
   // Completed branch.
-  const headerBanner = isArchivedByAge
+  const headerBanner = isArchived
     ? 'from-slate-400 to-slate-500'
     : isDone
     ? 'from-emerald-500 to-emerald-600'
@@ -185,7 +201,7 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
           <span className={`inline-flex items-center px-2 py-0.5 text-[11px] font-bold rounded ${theme.pill} ${theme.pillText}`}>
             {theme.label}
           </span>
-          {isArchivedByAge ? (
+          {isArchived ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded bg-gray-100 text-gray-700">
               <CheckCircle2 className="w-3 h-3" /> Archived
             </span>
@@ -258,7 +274,7 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
               {canOpenInTeamInbox && (
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); router.push(isArchivedByAge ? '/team-inbox?showArchivedOnly=1' : '/team-inbox'); }}
+                  onClick={(e) => { e.stopPropagation(); router.push(isArchived ? "/team-inbox?showArchivedOnly=1" : "/team-inbox"); }}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
                 >
                   Open in Team Inbox <ExternalLink className="w-3 h-3" />
@@ -279,7 +295,7 @@ export function DirectAssignCard({ taskId, previewTitle, previewBody, currentUse
               {canOpenInTeamInbox && (
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); router.push(isArchivedByAge ? '/team-inbox?showArchivedOnly=1' : '/team-inbox'); }}
+                  onClick={(e) => { e.stopPropagation(); router.push(isArchived ? "/team-inbox?showArchivedOnly=1" : "/team-inbox"); }}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
                 >
                   Open in Team Inbox <ExternalLink className="w-3 h-3" />

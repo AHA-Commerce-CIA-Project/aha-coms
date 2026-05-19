@@ -40,6 +40,16 @@ export async function GET(
             // the "Open in Team Inbox" affordance — visible only when the
             // viewer and the claimer are on the same team.
             assignee: { select: { id: true, name: true, image: true, teamId: true } },
+            // Per-viewer personal-archive marker so the channel card's
+            // DirectAssignCard can flip its banner+badge to the same
+            // gray "Archived" state that auto-archived (72h+ completed)
+            // tasks show. Only this viewer's UserArchivedTask row is
+            // pulled — `take: 1` keeps the payload terse.
+            personalArchives: {
+                where: { userId: session.user.id },
+                select: { id: true },
+                take: 1,
+            },
             requesterName: true,
             dueDate: true,
             checklistItems: {
@@ -83,6 +93,10 @@ export async function GET(
             : null,
         requester_name: task.requesterName,
         due_date: task.dueDate?.toISOString() || null,
+        // True when this viewer has personally archived the task. Drives
+        // the gray "Archived" state on the channel card alongside
+        // age-based auto-archive (computed client-side from completed_at).
+        archived_by_me: task.personalArchives.length > 0,
         // Only return checklist for routine tasks — direct-assign/queue cards
         // never render one, so omitting it keeps the payload terse.
         checklist_items: task.type
