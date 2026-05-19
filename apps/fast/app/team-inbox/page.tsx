@@ -2,8 +2,9 @@
 
 import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks, Eye, ExternalLink, Plus } from 'lucide-react';
+import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks, Eye, ExternalLink, Plus, LayoutGrid, List as ListIcon } from 'lucide-react';
 import { useAuth } from '@/lib/auth/use-auth';
+import { cn } from '@/lib/utils';
 import { htmlToPlainText } from '@/lib/sanitize';
 import { PageTabs } from '@/components/PageTabs';
 import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelModal';
@@ -195,6 +196,12 @@ function TeamInboxContent() {
     // the toolbar drives this. Distinct from the leader-only Create Task
     // wizard at /tasks; this one self-assigns.
     const [createCardOpen, setCreateCardOpen] = useState(false);
+
+    // Layout switcher between the four-column Kanban (`board`) and the
+    // dense single-table view (`list`). Tracked per-session; not
+    // persisted to localStorage today (could add if there's a real ask).
+    type ViewMode = 'board' | 'list';
+    const [viewMode, setViewMode] = useState<ViewMode>('board');
 
     // Archive view toggle — when true, the four-column Kanban is replaced
     // by a single-column archived-only list. When false, archived rows are
@@ -741,6 +748,43 @@ function TeamInboxContent() {
                             {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </select>
                     )}
+                    {/* Segmented Board/List toggle. Sits right of the team
+                        selector so the primary "Create Card" CTA stays
+                        rightmost / most prominent. */}
+                    <div className="inline-flex items-center bg-white border border-slate-200 rounded-lg p-0.5" role="tablist" aria-label="View mode">
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={viewMode === 'board'}
+                            onClick={() => setViewMode('board')}
+                            className={cn(
+                                'inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors',
+                                viewMode === 'board'
+                                    ? 'bg-indigo-50 text-indigo-700'
+                                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50',
+                            )}
+                            title="Board view (Kanban)"
+                        >
+                            <LayoutGrid className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Board</span>
+                        </button>
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={viewMode === 'list'}
+                            onClick={() => setViewMode('list')}
+                            className={cn(
+                                'inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors',
+                                viewMode === 'list'
+                                    ? 'bg-indigo-50 text-indigo-700'
+                                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50',
+                            )}
+                            title="List view (table)"
+                        >
+                            <ListIcon className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">List</span>
+                        </button>
+                    </div>
                     <button
                         type="button"
                         onClick={() => setCreateCardOpen(true)}
@@ -1000,16 +1044,123 @@ function TeamInboxContent() {
                             </div>
                         )}
 
-                        {/* Archived-only view replaces the Kanban when the
-                            ARCHIVED metric chip is selected. Now a responsive
-                            grid of compact cards (was a stretched single-
-                            column list) so the rows are scannable side-by-
-                            side. Cards are stripped-down versions of the
-                            Kanban card — same header strip + token + title +
-                            assignee/archive metadata — minus drag-and-drop
-                            and the 3-dot menu since archived rows aren't
-                            actionable beyond Restore. */}
-                        {showArchivedOnly ? (
+                        {/* Render gate: List view trumps Board/Archive when the
+                            user picked it. Inside list mode we still respect
+                            the Archived chip — the table just sources from
+                            archivedTasks instead of visibleTasks. */}
+                        {viewMode === 'list' ? (() => {
+                            const rows = showArchivedOnly ? archivedTasks : visibleTasks;
+                            if (rows.length === 0) {
+                                return (
+                                    <div className="rounded-2xl bg-white border border-slate-200 px-6 py-12 text-center">
+                                        <Inbox className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                                        <p className="text-sm text-slate-400">
+                                            {showArchivedOnly
+                                                ? (q ? 'No archived tasks match your search.' : 'No archived tasks yet.')
+                                                : (q ? 'No tasks match your search.' : 'No tasks in your inbox.')}
+                                        </p>
+                                    </div>
+                                );
+                            }
+                            return (
+                                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-slate-50">
+                                                <tr className="border-b border-slate-200">
+                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Token</th>
+                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Priority</th>
+                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Title</th>
+                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Requester</th>
+                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Submitted</th>
+                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Deadline</th>
+                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Status</th>
+                                                    {isMaster && (
+                                                        <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Team</th>
+                                                    )}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {rows.map(t => {
+                                                    const tone = (t.urgency && PRIORITY_TONE[t.urgency]) || PRIORITY_TONE.P3;
+                                                    const isRoutine = !!t.routineTemplate;
+                                                    const requesterLabel = isRoutine ? 'AHABOT' : (t.requesterName || '—');
+                                                    const isDone = t.status === 'done';
+                                                    const isPaused = t.status === 'pending';
+                                                    const statusLabel = isDone ? 'Completed'
+                                                        : isPaused ? 'Pending'
+                                                        : t.status === 'todo' && !t.assignee ? 'Unclaimed'
+                                                        : 'In Progress';
+                                                    const statusClass = isDone
+                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                        : isPaused
+                                                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                        : t.status === 'todo' && !t.assignee
+                                                        ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                                        : 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                                                    const deadline = (isDone || isPaused) ? null : deadlineState(t.dueDate);
+                                                    return (
+                                                        <tr
+                                                            key={t.id}
+                                                            onClick={() => openDetail(t)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                                    e.preventDefault();
+                                                                    openDetail(t);
+                                                                }
+                                                            }}
+                                                            tabIndex={0}
+                                                            className="hover:bg-slate-50 cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400"
+                                                        >
+                                                            <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">
+                                                                {t.taskToken ? `#${t.taskToken}` : '—'}
+                                                            </td>
+                                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                                {t.urgency && (
+                                                                    <span className={`inline-flex text-[10px] font-bold px-1.5 py-0.5 rounded border ${tone.bg} ${tone.text} ${tone.border}`}>
+                                                                        {t.urgency}
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <span className="text-sm font-medium text-slate-800 line-clamp-1">{t.title}</span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
+                                                                {requesterLabel}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                                                                {formatRelative(t.createdAt)}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs whitespace-nowrap">
+                                                                {deadline ? (
+                                                                    <span className={
+                                                                        deadline.tone === 'overdue' ? 'text-rose-600 font-semibold'
+                                                                        : deadline.tone === 'soon' ? 'text-amber-600 font-semibold'
+                                                                        : 'text-slate-600'
+                                                                    }>{deadline.label}</span>
+                                                                ) : (
+                                                                    <span className="text-slate-400">—</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                                <span className={`inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border ${statusClass}`}>
+                                                                    {statusLabel}
+                                                                </span>
+                                                            </td>
+                                                            {isMaster && (
+                                                                <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                                                                    {t.assignedTeam?.name || '—'}
+                                                                </td>
+                                                            )}
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            );
+                        })() : showArchivedOnly ? (
                             <div className="space-y-3">
                                 {/* Sub-header — title + sort dropdown. The
                                     "← Back to all" text button was removed in
