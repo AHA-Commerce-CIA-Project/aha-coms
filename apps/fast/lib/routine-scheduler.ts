@@ -434,39 +434,86 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
 /**
  * Run the scheduler over every active template. Returns a per-template
  * summary the cron endpoint can log/return.
+ *
+ * Defense-in-depth: this function never throws to the caller. The
+ * top-level try/catch absorbs any DB / Intl / unexpected runtime
+ * failure and emits one structured `CRON ROUTINE FAILED` log line so
+ * the Cloud Run terminal carries a readable stack trace. The cron
+ * endpoint also catches at its layer (route.ts) — that's the second
+ * line of defense, in case this function ever gets misused outside
+ * its current single caller.
+ *
+ * Per-template defense: spawnTaskIfDue has its own try/catch around
+ * the spawn transaction (returns `status: 'error'` on failure), but
+ * the read-side calls before the transaction (`findUnique`,
+ * `findFirst`, `getOrCreateSystemBot`) can still throw. We wrap the
+ * per-template call here so one template's failure can't abort the
+ * sweep — every other active template still gets a chance to fire.
+ *
+ * No auth context required. The cron path is headless: it does not
+ * call `requireFastAuth` anywhere (audited 2026-05-19), does not
+ * read `session` / `currentUser` from anything, and the system-bot
+ * row used as the message author is created idempotently from the
+ * server-side prisma client.
  */
 export async function runScheduler(now: Date = new Date()): Promise<SpawnResult[]> {
   const runNowUtc = now.toISOString();
-  const templates = await prisma.routineTaskTemplate.findMany({
-    where: { isActive: true },
-    select: { id: true, name: true },
-  });
+  try {
+    const templates = await prisma.routineTaskTemplate.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+    });
 
-  console.log(`[routine-scheduler] run start runNowUtc=${runNowUtc} activeTemplates=${templates.length}`);
+    console.log(`[routine-scheduler] run start runNowUtc=${runNowUtc} activeTemplates=${templates.length}`);
 
-  const results: SpawnResult[] = [];
-  // Sequential — keeps log output coherent and avoids hammering the DB with
-  // a stampede of transactions. Templates are O(tens), not O(thousands).
-  for (const t of templates) {
-    const result = await spawnTaskIfDue(t.id, now);
-    // One log line per template so a missed/skipped fire is visible
-    // in Cloud Run logs without trawling through a JSON payload. The
-    // `dueAtUtc` and `tz` fields make it possible to verify timezone
-    // alignment without re-running locally.
-    console.log(
-      `[routine-scheduler] template=${t.id} name="${t.name}" status=${result.status}`
-      + ` tz=${result.tz ?? '-'} dueAtUtc=${result.dueAtUtc ?? '-'}`
-      + (result.taskId ? ` taskId=${result.taskId}` : '')
-      + (result.error ? ` error="${result.error}"` : ''),
-    );
-    results.push(result);
+    const results: SpawnResult[] = [];
+    // Sequential — keeps log output coherent and avoids hammering the DB with
+    // a stampede of transactions. Templates are O(tens), not O(thousands).
+    for (const t of templates) {
+      let result: SpawnResult;
+      try {
+        result = await spawnTaskIfDue(t.id, now);
+      } catch (err: any) {
+        // Read-path throw (template lookup, period-dedup query, bot
+        // upsert, mention resolution) — never let it abort the sweep.
+        // Log a full stack trace so the operator can read it directly
+        // from Cloud Run logs.
+        console.error(`CRON ROUTINE FAILED for template=${t.id}:`, err);
+        result = {
+          templateId: t.id,
+          status: 'error',
+          error: err?.message || 'unknown',
+        };
+      }
+      // One log line per template so a missed/skipped fire is visible
+      // in Cloud Run logs without trawling through a JSON payload. The
+      // `dueAtUtc` and `tz` fields make it possible to verify timezone
+      // alignment without re-running locally.
+      console.log(
+        `[routine-scheduler] template=${t.id} name="${t.name}" status=${result.status}`
+        + ` tz=${result.tz ?? '-'} dueAtUtc=${result.dueAtUtc ?? '-'}`
+        + (result.taskId ? ` taskId=${result.taskId}` : '')
+        + (result.error ? ` error="${result.error}"` : ''),
+      );
+      results.push(result);
+    }
+
+    const summary = results.reduce<Record<string, number>>((acc, r) => {
+      acc[r.status] = (acc[r.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    console.log(`[routine-scheduler] run end runNowUtc=${runNowUtc} summary=${JSON.stringify(summary)}`);
+
+    return results;
+  } catch (err: any) {
+    // Top-level guard. Anything that throws before / outside the
+    // per-template loop (initial findMany, etc.) lands here. We log
+    // the full stack trace as a single structured line so it's easy
+    // to grep out of Cloud Run logs, and return an empty result set
+    // rather than re-throwing — the cron endpoint reports the empty
+    // summary back to Cloud Scheduler which retries per the
+    // retry_config in cloud-scheduler.tf.
+    console.error('CRON ROUTINE FAILED at top level:', err);
+    return [];
   }
-
-  const summary = results.reduce<Record<string, number>>((acc, r) => {
-    acc[r.status] = (acc[r.status] ?? 0) + 1;
-    return acc;
-  }, {});
-  console.log(`[routine-scheduler] run end runNowUtc=${runNowUtc} summary=${JSON.stringify(summary)}`);
-
-  return results;
 }
