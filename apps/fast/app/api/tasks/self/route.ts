@@ -17,7 +17,7 @@ import crypto from 'crypto';
 // confusingly invite teammates to claim something the creator already
 // owns).
 //
-// Payload shape (post PR #52 — Step 1 toggle + paste-to-attach):
+// Payload shape (post PR #53 — 3-step wizard with conditional request type):
 //   title:         required string
 //   description:   optional string (sanitised)
 //   urgency:       P1 | P2 | P3 | P4 | 5-minute (defaults to P3)
@@ -30,6 +30,20 @@ import crypto from 'crypto';
 //                  uploaded via /fast/api/upload, stored in
 //                  customFields.fileUrls so the task-detail modal
 //                  renders thumbnails the same way leader-created tasks do
+//   requestType:   optional 'self' | 'internal' | 'fix_request' |
+//                  'google_sheets' | 'other'. Defaults to 'self' so
+//                  cards created without the Step 1 "Include request
+//                  details" toggle stay categorised as personal — but
+//                  the My Tasks → Direct Tasks query bucket picks up
+//                  every source='direct_assign' card assigned to the
+//                  caller regardless of this value, so re-classifying
+//                  doesn't accidentally hide the card.
+//   brandCode:     optional string — only meaningful when
+//                  requestType='fix_request' (Partner Request).
+//                  Stored as a "[BRAND]" prefix on the task title, the
+//                  same convention CreateTaskWizard uses for leader-
+//                  created Partner Requests so brand-filtering surfaces
+//                  light up the same way without a Prisma migration.
 //
 // `type` and `targetChannelId` (in the v1 endpoint) were intentionally
 // dropped: every personal card is a Standard Task implicitly, and the
@@ -42,7 +56,23 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, urgency, dueDate, referenceUrls, fileUrls } = body;
+    const { title, description, urgency, dueDate, referenceUrls, fileUrls, requestType, brandCode } = body;
+
+    // requestType allow-list — matches CreateTaskWizard.REQUEST_TYPES
+    // plus the 'self' literal used by the modal's toggle-off path.
+    // Anything else falls back to 'self' so a stray value can't smuggle
+    // a card into a bucket it shouldn't appear in.
+    const ALLOWED_REQUEST_TYPES = new Set(['self', 'internal', 'fix_request', 'google_sheets', 'other']);
+    const safeRequestType: string = typeof requestType === 'string' && ALLOWED_REQUEST_TYPES.has(requestType)
+        ? requestType
+        : 'self';
+
+    // Brand code only makes sense for Partner Requests — silently drop
+    // it for every other type so a fixture replay can't bleed brand
+    // metadata into an internal card.
+    const safeBrandCode: string | null = safeRequestType === 'fix_request' && typeof brandCode === 'string' && brandCode.trim()
+        ? brandCode.trim().toUpperCase()
+        : null;
 
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
         return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -107,9 +137,15 @@ export async function POST(request: NextRequest) {
 
     const taskToken = crypto.randomBytes(4).toString('hex').toUpperCase();
 
+    // Prefix the title with [BRAND] when this is a Partner Request — same
+    // convention CreateTaskWizard uses (no dedicated brand_code column on
+    // the Task model). Leaves non-Partner titles untouched.
+    const titleClean = title.trim();
+    const finalTitle = safeBrandCode ? `[${safeBrandCode}] ${titleClean}` : titleClean;
+
     const task = await prisma.task.create({
         data: {
-            title: title.trim(),
+            title: finalTitle,
             description: sanitizeRichText(description || ''),
             // Self-as-requester so the inbox card reads "Created by <name>"
             // honestly rather than impersonating someone else. requestType
@@ -118,7 +154,7 @@ export async function POST(request: NextRequest) {
             requesterName: caller.name,
             requesterEmail: caller.email,
             requesterDivision: caller.team?.name || null,
-            requestType: 'self',
+            requestType: safeRequestType,
             urgency: urgency || 'P3',
             // Already in-progress + self-claimed so the card lands in the
             // user's active lane straight away. Routing through 'todo' +

@@ -10,15 +10,20 @@ import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 // "Command Center" view so initiators have one place to track everything
 // they've asked for.
 //
-// Filter is intentionally permissive: requesterEmail = me.email AND
-// source != 'queue'. The queue source is reserved for public form
-// submissions where the requester is typically an external partner who
-// happens to share an email with someone on the platform — those don't
-// belong in a personal tracker. Channel-deleted cards still show up so
-// initiators don't lose visibility on tasks whose source message was
-// removed (the previous shape filtered them out via channelMessageId
-// non-null; the frontend's "Channel Request" badge already degrades
-// gracefully when target_channel_id is null).
+// Filter: requesterEmail = me.email AND source != 'queue' AND the
+// task isn't a personal Create-Card row that the user authored for
+// themselves. The queue source is reserved for public form submissions
+// where the requester is typically an external partner who happens to
+// share an email with someone on the platform — those don't belong in
+// a personal tracker. Self-assigned personal cards (source='direct_assign'
+// + assigneeId = me) are excluded post-PR #53 because they now have a
+// dedicated home in My Tasks → Direct Tasks; surfacing them here as
+// well duplicated them across two views and made "asked for by me"
+// feel mixed with "owed to myself". Channel-deleted cards still show
+// up so initiators don't lose visibility on tasks whose source message
+// was removed (the previous shape filtered them out via
+// channelMessageId non-null; the frontend's "Channel Request" badge
+// already degrades gracefully when target_channel_id is null).
 export async function GET() {
     const session = await requireFastAuth();
     if (!session) {
@@ -37,6 +42,18 @@ export async function GET() {
         where: {
             requesterEmail: me.email,
             source: { not: 'queue' },
+            // Exclude self-assigned personal cards — they own a slot in
+            // My Tasks → Direct Tasks instead. Two predicates instead of
+            // one because a leader can legitimately direct-assign a task
+            // to themselves on someone else's behalf; only when the
+            // assignee == requester (both me) does it qualify as
+            // "personal" for routing purposes.
+            NOT: {
+                AND: [
+                    { source: 'direct_assign' },
+                    { assigneeId: session.user.id },
+                ],
+            },
         },
         orderBy: { createdAt: 'desc' },
         include: {
