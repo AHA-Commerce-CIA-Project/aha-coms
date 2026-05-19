@@ -22,12 +22,16 @@
 
 export type PasswordStrengthTier = 'weak' | 'fair' | 'strong'
 
-const MIN_LENGTH = 12
+// Authoritative minimum length — mirrored on the server in
+// apps/portal-api/src/services/password-policy.ts (PASSWORD_MIN_LENGTH).
+// Importing here keeps client-side input `minlength` attributes from drifting
+// when the server policy moves.
+export const PASSWORD_MIN_LENGTH = 12
 const STRONG_LENGTH = 16
 
 export function scorePasswordStrength(pwd: string): PasswordStrengthTier {
   if (typeof pwd !== 'string') return 'weak'
-  if (pwd.length < MIN_LENGTH) return 'weak'
+  if (pwd.length < PASSWORD_MIN_LENGTH) return 'weak'
   if (pwd.length >= STRONG_LENGTH) return 'strong'
   return 'fair'
 }

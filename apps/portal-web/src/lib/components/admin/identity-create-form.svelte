@@ -2,6 +2,7 @@
   import { adminApi } from '$lib/admin-api'
   import { Button, Input, Label } from '@coms-portal/ui-svelte/primitives'
   import { Eye, EyeOff } from '@lucide/svelte'
+  import { PASSWORD_MIN_LENGTH } from '@coms-portal/shared'
   import PasswordStrengthMeter from '$lib/components/password-strength-meter.svelte'
 
   let { onCreated }: { onCreated?: () => void } = $props()
@@ -85,7 +86,7 @@
         type={showPassword ? 'text' : 'password'}
         bind:value={password}
         required
-        minlength={8}
+        minlength={PASSWORD_MIN_LENGTH}
         maxlength={256}
         autocomplete="new-password"
         class="w-full pr-9"
@@ -105,7 +106,7 @@
     </div>
     <PasswordStrengthMeter {password} userInputs={[name, email]} />
     <p class="mt-1 text-[10px] text-muted-foreground">
-      Minimum 8 characters with at least one letter and one digit. Server enforces the minimum.
+      Minimum {PASSWORD_MIN_LENGTH} characters. No composition rules — the strength meter flags weak patterns. Server enforces the minimum.
     </p>
   </div>
 

@@ -22,6 +22,13 @@
 
   setContext('user', () => user)
 
+  // Onboarding pages (e.g. /onboarding/set-password) are blocking gates the
+  // hooks.server.ts guard routes users to. They need to feel like a modal
+  // step the user cannot navigate away from — so we suppress chrome
+  // (sidebar, top bar, mobile nav) for the entire /onboarding/* subtree
+  // while keeping the auth boundary intact.
+  const isOnboarding = $derived($page.url.pathname.startsWith('/onboarding/'))
+
   // Service bar: portal first, then the registered apps the user can reach
   const services = $derived([
     { slug: 'portal', label: 'COMS' },
@@ -99,7 +106,9 @@
   })
 </script>
 
-{#if user}
+{#if user && isOnboarding}
+  {@render children()}
+{:else if user}
   <div class="app-bg min-h-screen {sidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded'}">
     <ServiceBar
       {services}
