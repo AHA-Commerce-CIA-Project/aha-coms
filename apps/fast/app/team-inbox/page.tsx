@@ -1371,6 +1371,15 @@ function TeamInboxContent() {
                                                 const isMenuOpen = menuOpenId === t.id;
                                                 const isPickerOpen = assignPickerForId === t.id;
                                                 const archived = !!t.archivedByMe;
+                                                // Personal Create-Card rows have no source channel,
+                                                // so the wrapper's "click to jump to channel"
+                                                // navigation has nowhere meaningful to land. Freeze
+                                                // the wrapper for those rows: no onClick, no
+                                                // keyboard activation, no role=button. The two
+                                                // explicit action buttons inside the card (View
+                                                // Details + the conditional Go to Channel) remain
+                                                // the only interactive surfaces.
+                                                const isPersonal = !t.targetChannel;
                                                 return (
                                                     <div
                                                         key={t.id}
@@ -1385,17 +1394,17 @@ function TeamInboxContent() {
                                                             setDraggingId(null);
                                                             setDragOverColumn(null);
                                                         } : undefined}
-                                                        onClick={() => openTaskInChannel(t)}
-                                                        role="button"
-                                                        tabIndex={0}
-                                                        onKeyDown={(e) => {
+                                                        onClick={isPersonal ? undefined : () => openTaskInChannel(t)}
+                                                        role={isPersonal ? undefined : 'button'}
+                                                        tabIndex={isPersonal ? -1 : 0}
+                                                        onKeyDown={isPersonal ? undefined : (e) => {
                                                             if (e.key === 'Enter' || e.key === ' ') {
                                                                 e.preventDefault();
                                                                 openTaskInChannel(t);
                                                             }
                                                         }}
                                                         title={isPaused && t.pendingReason ? `Paused: ${t.pendingReason}` : (!draggable && t.assignee ? `Claimed by ${t.assignee.name} — only they can move this card` : undefined)}
-                                                        className={`text-left block w-full rounded-xl bg-white border ${isPaused ? 'border-amber-300 bg-amber-50/50' : isDone ? 'border-emerald-300 bg-emerald-50/40' : isOverdueCard ? 'border-rose-200' : 'border-slate-200'} hover:shadow-md ${col.ringClass} transition-all p-3 ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${isDragging ? 'opacity-40' : ''} ${isPending ? 'opacity-60 pointer-events-none' : ''} ${archived ? 'opacity-70' : ''}`}
+                                                        className={`text-left block w-full rounded-xl bg-white border ${isPaused ? 'border-amber-300 bg-amber-50/50' : isDone ? 'border-emerald-300 bg-emerald-50/40' : isOverdueCard ? 'border-rose-200' : 'border-slate-200'} hover:shadow-md ${col.ringClass} transition-all p-3 ${draggable ? 'cursor-grab active:cursor-grabbing' : isPersonal ? 'cursor-default' : 'cursor-pointer'} ${isDragging ? 'opacity-40' : ''} ${isPending ? 'opacity-60 pointer-events-none' : ''} ${archived ? 'opacity-70' : ''}`}
                                                     >
                                                         {/* Top row — assigner + relative time + 3-dot menu */}
                                                         <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -1710,9 +1719,14 @@ function TeamInboxContent() {
                                                             </button>
                                                         )}
 
-                                                        {/* In-progress + mine — two secondary actions in place of Mark Complete:
-                                                            View Details opens the modal locally (no navigation), Go to Channel
-                                                            jumps to the channel and scroll-targets the source message. */}
+                                                        {/* In-progress + mine — two secondary actions in
+                                                            place of Mark Complete: View Details opens
+                                                            the modal locally (no navigation); Go to
+                                                            Channel jumps to the channel and scroll-
+                                                            targets the source message. The Go to
+                                                            Channel button is hidden entirely for
+                                                            personal Create-Card rows since there is no
+                                                            source channel to jump to. */}
                                                         {showQuickInspect && (
                                                             <div className="flex items-center gap-1.5 mb-2">
                                                                 <button
@@ -1723,23 +1737,27 @@ function TeamInboxContent() {
                                                                     <Eye className="w-3.5 h-3.5" />
                                                                     View Details
                                                                 </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => { e.stopPropagation(); openTaskInChannel(t); }}
-                                                                    className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
-                                                                >
-                                                                    <ExternalLink className="w-3.5 h-3.5" />
-                                                                    Go to Channel
-                                                                </button>
+                                                                {!isPersonal && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => { e.stopPropagation(); openTaskInChannel(t); }}
+                                                                        className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
+                                                                    >
+                                                                        <ExternalLink className="w-3.5 h-3.5" />
+                                                                        Go to Channel
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         )}
 
                                                         {/* Footer — channel + assignee. Personal cards
-                                                            (Create Card flow) have no targetChannel — show
-                                                            "# Personal" as a static label rather than the
-                                                            old "# —" placeholder, and freeze pointer events
-                                                            so the badge can't be hovered or click-traversed
-                                                            as if it were a channel link. */}
+                                                            (Create Card flow) have no targetChannel —
+                                                            show "# Self-Assigned" as a static label so
+                                                            the row visually mirrors the Self-Assigned
+                                                            pill the create-card review screen shows,
+                                                            and freeze pointer events on the badge so it
+                                                            can't be hovered or click-traversed as if it
+                                                            were a channel link. */}
                                                         <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
                                                             {t.targetChannel ? (
                                                                 <span className="text-[10px] text-slate-500 inline-flex items-center gap-1 truncate">
@@ -1747,7 +1765,7 @@ function TeamInboxContent() {
                                                                 </span>
                                                             ) : (
                                                                 <span className="text-[10px] text-slate-400 inline-flex items-center gap-1 truncate pointer-events-none select-none">
-                                                                    <Hash className="w-3 h-3" /> Personal
+                                                                    <Hash className="w-3 h-3" /> Self-Assigned
                                                                 </span>
                                                             )}
                                                             {t.assignee ? (

@@ -148,7 +148,7 @@ function MyTasksContent() {
         }
     }, [user]);
 
-    // Auto-refresh My Tasks / Direct Requests so incoming tasks show up without a manual reload.
+    // Auto-refresh My Tasks / Direct Tasks so incoming tasks show up without a manual reload.
     // Poll every 15s while the tab is visible; refetch immediately when the tab regains focus.
     useEffect(() => {
         if (!user) return;
@@ -726,7 +726,7 @@ function MyTasksContent() {
                                 className={`px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 ${claimTab === 'direct' ? 'bg-white shadow-md text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
                             >
                                 <UserPlus className="w-4 h-4" />
-                                Direct Requests
+                                Direct Tasks
                                 {directRequestTasks.length > 0 && (
                                     <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full font-bold">{directRequestTasks.length}</span>
                                 )}
