@@ -76,6 +76,24 @@ export async function GET(request: NextRequest) {
         ? tasks
         : tasks.filter(t => t.personalArchives.length === 0);
 
+    // Rolling auto-archive window for completed tasks. Routine reminders
+    // (spawned by AHABOT, identified by routineTemplateId) age out after
+    // 24h; standard tasks age out after 72h. The cutoff is computed once
+    // per request against the server clock — no DB write, no schema
+    // change. The client treats `autoArchivedByAge` rows identically to
+    // personally-archived rows: hidden from the regular Kanban columns,
+    // surfaced in the Archive view so Leaders can still review work.
+    const now = Date.now();
+    const ROUTINE_WINDOW_MS = 24 * 60 * 60 * 1000;
+    const STANDARD_WINDOW_MS = 72 * 60 * 60 * 1000;
+    const isAutoArchivedByAge = (t: { status: string; completedAt: Date | null; routineTemplateId: string | null }): boolean => {
+        if (t.status !== 'done') return false;
+        if (!t.completedAt) return false;
+        const ageMs = now - t.completedAt.getTime();
+        const window = t.routineTemplateId ? ROUTINE_WINDOW_MS : STANDARD_WINDOW_MS;
+        return ageMs >= window;
+    };
+
     const data = visibleTasks.map(t => ({
         id: t.id,
         title: t.title,
@@ -103,6 +121,12 @@ export async function GET(request: NextRequest) {
         // isn't archived for this user. The Task Inbox uses it to sort the
         // dedicated Archive view (Newest/Oldest/Last 30 days/All time).
         archivedAt: t.personalArchives[0]?.archivedAt?.toISOString() ?? null,
+        // True when the task has aged past the auto-archive window for
+        // its type (24h routine / 72h standard). Mutually independent of
+        // archivedByMe — a task can be either, both, or neither. The
+        // client filters BOTH out of the Kanban columns; the Archive
+        // view shows the union so nothing reviewable disappears.
+        autoArchivedByAge: isAutoArchivedByAge(t),
         pendingReason: t.pendingReason,
         pendingTag: t.pendingTag,
         pendedAt: t.pendedAt,
