@@ -1,34 +1,26 @@
 'use client';
 
-// 3-step wizard for personal card creation. Mirrors CreateTaskWizard
-// structurally so the two modals read as one design system; the only
-// real difference is that personal cards are self-assigned, so there
-// is no Assignee picker in Step 1. The Step 1 "Include request
-// details" toggle behaves the same way it does in CreateTaskWizard —
-// off keeps Step 1 to just Title + Toggle, on reveals Request Type +
-// conditional Brand Code (only for Partner Request) + relabels the
-// Title field as "Request Title / Subject" so the card matches the
-// shape leader-assigned tasks carry into the inbox.
-//
-// Steps:
-//   Step 1 — Card Details:
-//     • Title (always visible, required)
-//     • Include-request-details toggle
-//     • When toggle ON: Request Type radio, Brand Code (Partner only)
-//   Step 2 — Priority & Description:
-//     • Priority pills (P1-P4 + 5 Min)
-//     • Preferred Deadline
-//     • Description (with paste-to-attach screenshots and drop)
-//     • URL/Link chip list
-//   Step 3 — Review & Submit:
-//     • Read-only summary with a Self-Assigned pill in place of the
-//       channel/brand metadata. Image previews use the uploaded
-//       remote URL (not the local blob) so they survive the step
-//       transition that previously rendered a broken thumbnail.
+// 3-step wizard for Create Card. Mirrors CreateTaskWizard structurally —
+// same step labels, same priority pills, same Include-request-details
+// toggle — adapted for the self-assign-by-default flow. PR #54 layered
+// on:
+//   • a real DB-backed brand-code combobox (was a placeholder input),
+//     with the dropdown menu rendered via React portal so it can't be
+//     clipped by the modal body's overflow-y-auto scroll container;
+//   • a click-to-zoom ImageLightbox on Step 2 thumbnails;
+//   • an optional Assignee picker in Step 1 visible only to
+//     Leader/Master/Admin callers — standard members never see the
+//     field and their submission always self-assigns;
+//   • the "Request Type" header relabelled to "Task Type" per the
+//     brief; the redundant "← Edit details" link on Step 3 is gone
+//     since the footer Back button already covers that path.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronLeft, ChevronRight, ExternalLink, ImageIcon, Loader2, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth/use-auth';
+import { ImageLightbox } from '@/components/ImageLightbox';
 
 interface CreatePersonalCardModalProps {
     open: boolean;
@@ -39,9 +31,6 @@ interface CreatePersonalCardModalProps {
     onCreated?: (taskId: string) => void;
 }
 
-// Same enum + labels as CreateTaskWizard.REQUEST_TYPES so the two
-// surfaces stay in sync. Partner Request (fix_request) is the only
-// type that requires a Brand Code — mirroring the leader-create flow.
 const REQUEST_TYPES = [
     { value: 'internal',      label: 'Internal Task' },
     { value: 'fix_request',   label: 'Partner Request' },
@@ -66,26 +55,26 @@ const PRIORITY_LEVELS: {
 
 const STEP_LABELS = ['Card Details', 'Priority & Description', 'Review & Submit'];
 const STEP_SUBTITLES = [
-    'Title is required. Toggle on to add a request type, brand code, or partner subject.',
+    'Title is required. Toggle on to add a task type, brand code, or assignee.',
     'How urgent is this and describe the details',
     'Review the card before creating',
 ];
 
 interface UploadedImage { url: string; preview: string; }
+interface MemberOption { id: string; name: string; }
 
 export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePersonalCardModalProps) {
+    const { user, isLeader } = useAuth();
+
     const [currentStep, setCurrentStep] = useState(1);
     const [highestStepReached, setHighestStepReached] = useState(1);
     const [stepErrors, setStepErrors] = useState<string[]>([]);
 
-    // formData mirrors CreateTaskWizard's shape minus assigneeId. When
-    // the Include-details toggle is OFF we treat requestType='self' as
-    // the implicit signal so the inbox + My Tasks routing logic
-    // continues to bucket the card correctly.
     const [formData, setFormData] = useState({
         title: '',
         requestType: 'internal',
         brandCode: '',
+        assigneeId: '',
         urgency: 'P3',
         dueDate: '',
         description: '',
@@ -96,17 +85,27 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Image upload state — ported from CreateTaskWizard. Each upload
-    // returns a remote URL plus a local object-URL preview. The remote
-    // URL is the source of truth for the Step 3 review thumbnail; the
-    // local preview is only used as a fast fallback while the upload
-    // is still in flight (PR #52 used the blob URL on review which
-    // broke once the modal re-mounted the image on step change).
     const [images, setImages] = useState<UploadedImage[]>([]);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+    // Brand code combobox — list comes from /api/brand-codes (the same
+    // Google Sheets-backed list CreateTaskWizard consumes). The menu is
+    // rendered via a React portal to document.body so it isn't clipped
+    // by the modal body's `overflow-y-auto`; position is computed from
+    // the input's bounding rect every time we open.
+    const [brandCodes, setBrandCodes] = useState<string[]>([]);
+    const [brandSearchOpen, setBrandSearchOpen] = useState(false);
+    const [brandMenuRect, setBrandMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+    const brandInputRef = useRef<HTMLInputElement>(null);
+
+    // Same shape for the assignee picker — also portal-rendered so the
+    // dropdown isn't clipped. Members list is the caller's team only,
+    // matching CreateTaskWizard's source.
+    const [members, setMembers] = useState<MemberOption[]>([]);
 
     useEffect(() => {
         if (!open) return;
@@ -117,6 +116,7 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
             title: '',
             requestType: 'internal',
             brandCode: '',
+            assigneeId: '',
             urgency: 'P3',
             dueDate: '',
             description: '',
@@ -129,7 +129,31 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
         setUploadError(null);
         setIsDragOver(false);
         setError(null);
-    }, [open]);
+        setBrandSearchOpen(false);
+        setLightboxUrl(null);
+
+        // Hydrate the brand list on every open so a Sheets edit shows up
+        // without a hard reload. /api/brand-codes is cached server-side
+        // for 10 minutes, so the fetch is cheap even with frequent opens.
+        fetch('/fast/api/brand-codes')
+            .then((r) => (r.ok ? r.json() : []))
+            .then(setBrandCodes)
+            .catch(() => setBrandCodes([]));
+
+        // Only fetch the teammates list when the caller can pick an
+        // assignee — saves a round-trip for standard members who never
+        // see the picker.
+        if (isLeader) {
+            fetch('/fast/api/teammates')
+                .then((r) => (r.ok ? r.json() : []))
+                .then((list: { id: string; name: string }[]) => {
+                    setMembers((list || []).map((u) => ({ id: u.id, name: u.name })));
+                })
+                .catch(() => setMembers([]));
+        } else {
+            setMembers([]);
+        }
+    }, [open, isLeader]);
 
     useEffect(() => {
         if (!open) return;
@@ -139,6 +163,30 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
     }, [open, submitting, onClose]);
+
+    // Recompute the brand-menu portal position when the dropdown opens
+    // or the viewport resizes / scrolls — `fixed` positioning means we
+    // anchor off the live bounding rect, not the page coordinates.
+    useEffect(() => {
+        if (!brandSearchOpen) return;
+        const recompute = () => {
+            const el = brandInputRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            setBrandMenuRect({
+                top: rect.bottom + 4,
+                left: rect.left,
+                width: rect.width,
+            });
+        };
+        recompute();
+        window.addEventListener('resize', recompute);
+        window.addEventListener('scroll', recompute, true);
+        return () => {
+            window.removeEventListener('resize', recompute);
+            window.removeEventListener('scroll', recompute, true);
+        };
+    }, [brandSearchOpen]);
 
     const uploadImage = useCallback(async (file: File) => {
         setUploading(true);
@@ -229,9 +277,6 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
     };
 
     const handleSubmit = async () => {
-        // Re-validate the whole flow in case the user jumped back via the
-        // "Edit details" link and changed something that newly invalidates
-        // Step 1.
         const step1Errs = validateStep(1);
         if (step1Errs.length > 0) {
             setStepErrors(step1Errs);
@@ -241,6 +286,12 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
         setSubmitting(true);
         setError(null);
         try {
+            // assigneeId only goes on the wire when the leader picked a
+            // non-self target. The API enforces the role gate too —
+            // the client-side filter is just to keep payloads clean.
+            const targetedAssigneeId = isLeader && formData.assigneeId && formData.assigneeId !== user?.id
+                ? formData.assigneeId
+                : undefined;
             const res = await fetch('/fast/api/tasks/self', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -251,15 +302,11 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                     dueDate: formData.dueDate || undefined,
                     referenceUrls: formData.referenceUrls,
                     fileUrls: images.map((i) => i.url),
-                    // When the toggle is OFF the card is implicitly
-                    // "self-categorised" — keep requestType='self' so the
-                    // existing inbox routing keeps working. When ON, pass
-                    // through whatever the user picked, plus the brand
-                    // code if they chose Partner Request.
                     requestType: includeRequestDetails ? formData.requestType : 'self',
                     brandCode: includeRequestDetails && formData.requestType === 'fix_request'
                         ? formData.brandCode.trim().toUpperCase()
                         : undefined,
+                    assigneeId: targetedAssigneeId,
                 }),
             });
             const data = await res.json().catch(() => ({}));
@@ -286,11 +333,11 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
 
     const activePriority = PRIORITY_LEVELS.find((p) => p.value === formData.urgency);
     const activeRequestType = REQUEST_TYPES.find((r) => r.value === formData.requestType);
-    // Re-bind the title input label depending on whether the user opted
-    // into the full request-shape — when off, just "Title"; when on,
-    // mirror CreateTaskWizard's "Request Title / Subject" so the field
-    // reads identically to the leader-create flow.
     const titleLabel = includeRequestDetails ? 'Request Title / Subject' : 'Title';
+    const filteredBrands = brandCodes.filter((c) =>
+        !formData.brandCode || c.toLowerCase().includes(formData.brandCode.toLowerCase()),
+    );
+    const selectedAssignee = members.find((m) => m.id === formData.assigneeId);
 
     return (
         <div
@@ -310,7 +357,9 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                         <div>
                             <h2 className="text-lg font-bold text-slate-800">Create Personal Card</h2>
                             <p className="text-xs text-slate-500 mt-0.5">
-                                Self-assigned task. Lands in your Direct Tasks tab and Team Inbox.
+                                {isLeader
+                                    ? 'Self-assigned by default. Pick an assignee in Step 1 to delegate.'
+                                    : 'Self-assigned task. Lands in your Direct Tasks tab and Team Inbox.'}
                             </p>
                         </div>
                     </div>
@@ -324,8 +373,7 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                     </button>
                 </div>
 
-                {/* Step indicator — three steps, same shape as
-                    CreateTaskWizard so the two flows look identical. */}
+                {/* Step indicator */}
                 <div className="px-6 pt-5">
                     <div className="flex items-center justify-between">
                         {STEP_LABELS.map((label, idx) => {
@@ -373,7 +421,6 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                     <p className="text-xs text-slate-500 mt-0.5">{STEP_SUBTITLES[currentStep - 1]}</p>
                 </div>
 
-                {/* Body */}
                 <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-5">
                     {stepErrors.length > 0 && (
                         <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 text-sm">
@@ -404,10 +451,6 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                                 />
                             </div>
 
-                            {/* Include-request-details toggle — same shape as
-                                CreateTaskWizard:382. When OFF we collapse Step
-                                1 to just Title + this switch; the card lands
-                                with default Priority P3 and no deadline. */}
                             <label className="flex items-start gap-3 cursor-pointer group">
                                 <div className="relative mt-0.5">
                                     <input
@@ -422,7 +465,7 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                                 <div>
                                     <span className="text-sm text-slate-700 font-medium">Include request details</span>
                                     <p className="text-xs text-slate-400">
-                                        Optional — request type and brand code (for Partner Request).
+                                        Optional — task type and brand code (for Partner Request).
                                         Step 2 captures priority, description, and links regardless.
                                     </p>
                                 </div>
@@ -431,7 +474,10 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                             {includeRequestDetails && (
                                 <>
                                     <div className="space-y-2">
-                                        <label className="text-sm text-slate-500 font-medium">Request Type</label>
+                                        {/* PR #54: label renamed from "Request Type" to "Task Type"
+                                            per the brief — the field still maps to formData.requestType
+                                            internally so the API contract stays unchanged. */}
+                                        <label className="text-sm text-slate-500 font-medium">Task Type</label>
                                         <div className="flex flex-wrap gap-3">
                                             {REQUEST_TYPES.map((rt) => (
                                                 <label key={rt.value} className="flex items-center gap-2 cursor-pointer">
@@ -450,15 +496,17 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                                     </div>
 
                                     {formData.requestType === 'fix_request' && (
-                                        <div className="space-y-1.5">
+                                        <div className="space-y-1.5 relative">
                                             <label className="text-sm text-slate-500 font-medium">
                                                 Brand Code <span className="text-rose-500">*</span>
                                             </label>
                                             <input
+                                                ref={brandInputRef}
                                                 type="text"
                                                 value={formData.brandCode}
                                                 onChange={(e) => setFormData({ ...formData, brandCode: e.target.value.toUpperCase() })}
-                                                placeholder="e.g. ACME01"
+                                                onFocus={() => setBrandSearchOpen(true)}
+                                                placeholder="Type or search brand code..."
                                                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                                             />
                                             <p className="text-xs text-slate-400">
@@ -467,6 +515,35 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                                         </div>
                                     )}
                                 </>
+                            )}
+
+                            {/* Optional assignee picker — Leader/Master/Admin only.
+                                Standard members never see this control and their
+                                submissions always self-assign. The default option
+                                "Myself" preserves the historical Create Card
+                                behaviour so leaders aren't forced to pick a target
+                                every time. */}
+                            {isLeader && (
+                                <div className="space-y-1.5">
+                                    <label className="text-sm text-slate-500 font-medium">
+                                        Assignee <span className="text-slate-400">(Optional)</span>
+                                    </label>
+                                    <select
+                                        value={formData.assigneeId}
+                                        onChange={(e) => setFormData({ ...formData, assigneeId: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                    >
+                                        <option value="">Myself ({user?.name || 'Me'})</option>
+                                        {members
+                                            .filter((m) => m.id !== user?.id)
+                                            .map((m) => (
+                                                <option key={m.id} value={m.id}>{m.name}</option>
+                                            ))}
+                                    </select>
+                                    <p className="text-xs text-slate-400">
+                                        Defaults to yourself. Pick a teammate to delegate — the card lands directly in their Direct Tasks lane, in-progress and claimed.
+                                    </p>
+                                </div>
                             )}
                         </>
                     )}
@@ -546,17 +623,25 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                                         <div className="flex flex-wrap gap-2 p-3 border-b border-slate-200">
                                             {images.map((img, idx) => (
                                                 <div key={`img-${idx}`} className="relative group">
-                                                    {/* Step 2 thumbnail — prefer the remote
-                                                        URL (already uploaded) but fall back
-                                                        to the local blob so the thumbnail
-                                                        renders instantly while the upload
-                                                        is still in flight. */}
-                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                    <img
-                                                        src={img.url || img.preview}
-                                                        alt={`Attachment ${idx + 1}`}
-                                                        className="h-16 w-auto rounded-lg border border-slate-200 object-cover"
-                                                    />
+                                                    {/* Wrap thumbnail in a button so it
+                                                        announces as activatable and so
+                                                        keyboard focus opens the lightbox
+                                                        too. Prefer the remote URL — the
+                                                        blob fallback only matters while
+                                                        an upload is mid-flight. */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setLightboxUrl(img.url || img.preview)}
+                                                        className="block focus:outline-none focus:ring-2 focus:ring-indigo-400 rounded-lg"
+                                                        title="Click to preview"
+                                                    >
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img
+                                                            src={img.url || img.preview}
+                                                            alt={`Attachment ${idx + 1}`}
+                                                            className="h-16 w-auto rounded-lg border border-slate-200 object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
+                                                        />
+                                                    </button>
                                                     <button
                                                         type="button"
                                                         onClick={() => removeImageAt(idx)}
@@ -664,7 +749,10 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                     {currentStep === 3 && (
                         <>
                             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-200 rounded-full text-xs font-semibold text-indigo-700">
-                                <Check className="w-3 h-3" /> Self-Assigned
+                                <Check className="w-3 h-3" />
+                                {selectedAssignee && selectedAssignee.id !== user?.id
+                                    ? `Assigned to ${selectedAssignee.name}`
+                                    : 'Self-Assigned'}
                             </div>
 
                             <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
@@ -678,7 +766,7 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                                 {includeRequestDetails && (
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
-                                            <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Request Type</div>
+                                            <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Task Type</div>
                                             <div className="text-sm font-medium text-slate-800">
                                                 {activeRequestType?.label || formData.requestType}
                                             </div>
@@ -723,19 +811,20 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                                         <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-1">Attachments</div>
                                         <div className="flex flex-wrap gap-2">
                                             {images.map((img, i) => (
-                                                // Review thumbnail — use the uploaded remote
-                                                // URL so the image still renders even if the
-                                                // local blob preview was somehow revoked
-                                                // (the prior PR #52 implementation only
-                                                // referenced img.preview here and showed a
-                                                // broken thumbnail on Review for some users).
-                                                // eslint-disable-next-line @next/next/no-img-element
-                                                <img
+                                                <button
                                                     key={`review-img-${i}`}
-                                                    src={img.url || img.preview}
-                                                    alt={`Attachment ${i + 1}`}
-                                                    className="h-14 w-auto rounded-lg border border-slate-200 object-cover"
-                                                />
+                                                    type="button"
+                                                    onClick={() => setLightboxUrl(img.url || img.preview)}
+                                                    className="block focus:outline-none focus:ring-2 focus:ring-indigo-400 rounded-lg"
+                                                    title="Click to preview"
+                                                >
+                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                    <img
+                                                        src={img.url || img.preview}
+                                                        alt={`Attachment ${i + 1}`}
+                                                        className="h-14 w-auto rounded-lg border border-slate-200 object-cover hover:opacity-90 cursor-zoom-in"
+                                                    />
+                                                </button>
                                             ))}
                                         </div>
                                     </div>
@@ -755,19 +844,15 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                                     </div>
                                 )}
                             </div>
-
-                            <button
-                                type="button"
-                                onClick={() => setCurrentStep(1)}
-                                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-                            >
-                                ← Edit details
-                            </button>
+                            {/* PR #54: the "← Edit details" text link that used to
+                                live here is gone — the footer Back button already
+                                covers the same flow, and the duplicate
+                                affordance read as visual clutter on Review. */}
                         </>
                     )}
                 </div>
 
-                {/* Footer — Back/Next on steps 1-2, Back/Create Card on step 3 */}
+                {/* Footer */}
                 <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-slate-200">
                     {currentStep > 1 ? (
                         <button
@@ -814,6 +899,51 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                     )}
                 </div>
             </div>
+
+            {/* Brand-code dropdown portal — rendered to document.body so
+                the menu can escape the modal body's overflow-y-auto clip.
+                Position is recomputed via getBoundingClientRect on the
+                input, with a window-level click backdrop to dismiss. */}
+            {brandSearchOpen && brandMenuRect && typeof document !== 'undefined' && createPortal(
+                <>
+                    <div
+                        className="fixed inset-0 z-[110]"
+                        onClick={() => setBrandSearchOpen(false)}
+                    />
+                    <div
+                        className="fixed z-[111] bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto"
+                        style={{
+                            top: brandMenuRect.top,
+                            left: brandMenuRect.left,
+                            width: brandMenuRect.width,
+                        }}
+                    >
+                        {filteredBrands.length === 0 ? (
+                            <p className="px-4 py-3 text-sm text-slate-400">No matching brand codes</p>
+                        ) : (
+                            filteredBrands.map((code) => (
+                                <button
+                                    key={code}
+                                    type="button"
+                                    onClick={() => { setFormData({ ...formData, brandCode: code }); setBrandSearchOpen(false); }}
+                                    className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                                >
+                                    {code}
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </>,
+                document.body,
+            )}
+
+            {/* Image lightbox — opens when a thumbnail (Step 2 or Step 3)
+                is clicked; closes via Esc, the X button, or backdrop. */}
+            <ImageLightbox
+                src={lightboxUrl}
+                onClose={() => setLightboxUrl(null)}
+                images={images.map((i) => i.url || i.preview)}
+            />
         </div>
     );
 }

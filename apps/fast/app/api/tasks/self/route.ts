@@ -44,6 +44,12 @@ import crypto from 'crypto';
 //                  same convention CreateTaskWizard uses for leader-
 //                  created Partner Requests so brand-filtering surfaces
 //                  light up the same way without a Prisma migration.
+//   assigneeId:    optional string — Leaders/Masters/Admins can target
+//                  a teammate from Step 1 of the Create Card flow. When
+//                  unset (the standard-member path) the card lands on
+//                  the caller. The API enforces the role gate so a
+//                  payload from a non-leader caller can't smuggle in
+//                  an assigneeId targeting someone else.
 //
 // `type` and `targetChannelId` (in the v1 endpoint) were intentionally
 // dropped: every personal card is a Standard Task implicitly, and the
@@ -56,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, urgency, dueDate, referenceUrls, fileUrls, requestType, brandCode } = body;
+    const { title, description, urgency, dueDate, referenceUrls, fileUrls, requestType, brandCode, assigneeId } = body;
 
     // requestType allow-list — matches CreateTaskWizard.REQUEST_TYPES
     // plus the 'self' literal used by the modal's toggle-off path.
@@ -84,12 +90,35 @@ export async function POST(request: NextRequest) {
             id: true,
             name: true,
             email: true,
+            role: true,
             teamId: true,
             team: { select: { name: true } },
         },
     });
     if (!caller) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Optional leader-only override: a Leader/Master/Admin can pick a
+    // different assignee from the Create Card Step 1 picker. Non-leader
+    // callers silently fall back to self-assignment regardless of what
+    // they send so a crafted payload can't drop a task on a teammate's
+    // queue without authority. Resolve the target user up-front so we
+    // can stamp the assignedTeamId from THEIR team row (not the caller's
+    // — the team-inbox bucket reads off this column).
+    const callerIsLeader = caller.role === 'leader' || caller.role === 'admin';
+    let resolvedAssigneeId = caller.id;
+    let resolvedAssignedTeamId: string | null = caller.teamId;
+    if (callerIsLeader && typeof assigneeId === 'string' && assigneeId && assigneeId !== caller.id) {
+        const targetUser = await prisma.user.findUnique({
+            where: { id: assigneeId },
+            select: { id: true, teamId: true },
+        });
+        if (!targetUser) {
+            return NextResponse.json({ error: 'Assignee not found' }, { status: 404 });
+        }
+        resolvedAssigneeId = targetUser.id;
+        resolvedAssignedTeamId = targetUser.teamId;
     }
 
     // Compute deadline at end-of-day WIB — same shape as
@@ -156,14 +185,15 @@ export async function POST(request: NextRequest) {
             requesterDivision: caller.team?.name || null,
             requestType: safeRequestType,
             urgency: urgency || 'P3',
-            // Already in-progress + self-claimed so the card lands in the
-            // user's active lane straight away. Routing through 'todo' +
-            // unclaimed would surface a dead "Claim" button to teammates
-            // for a task the creator already owns.
+            // Already in-progress + claimed-by-target so the card lands
+            // in the assignee's active lane straight away. Routing
+            // through 'todo' + unclaimed would surface a dead "Claim"
+            // button to teammates for a task the leader already owns
+            // (or that the user self-claimed).
             status: 'in-progress',
             source: 'direct_assign',
-            assigneeId: caller.id,
-            assignedTeamId: caller.teamId,
+            assigneeId: resolvedAssigneeId,
+            assignedTeamId: resolvedAssignedTeamId,
             claimedAt: new Date(),
             dueDate: computedDueDate,
             customFields: { fileUrls: safeFileUrls, referenceUrls: safeReferenceUrls },

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
     X, Send, Loader2, Check,
     ChevronLeft, ChevronRight, Pencil, ImagePlus, FileText, ExternalLink, Paperclip, Smile,
@@ -69,6 +70,12 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
     const [members, setMembers] = useState<MemberOption[]>([]);
     const [brandCodes, setBrandCodes] = useState<string[]>([]);
     const [brandSearchOpen, setBrandSearchOpen] = useState(false);
+    // Brand-menu portal anchoring — same pattern as
+    // CreatePersonalCardModal. The dropdown renders to document.body so
+    // the modal body's overflow-y-auto can't clip it; recompute the
+    // anchor rect on open and on viewport scroll/resize.
+    const [brandMenuRect, setBrandMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+    const brandInputRef = useRef<HTMLInputElement>(null);
 
     const [formData, setFormData] = useState({
         assigneeId: '',
@@ -136,6 +143,27 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
     }, [open, submitting, onClose]);
+
+    useEffect(() => {
+        if (!brandSearchOpen) return;
+        const recompute = () => {
+            const el = brandInputRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            setBrandMenuRect({
+                top: rect.bottom + 4,
+                left: rect.left,
+                width: rect.width,
+            });
+        };
+        recompute();
+        window.addEventListener('resize', recompute);
+        window.addEventListener('scroll', recompute, true);
+        return () => {
+            window.removeEventListener('resize', recompute);
+            window.removeEventListener('scroll', recompute, true);
+        };
+    }, [brandSearchOpen]);
 
     const uploadImage = useCallback(async (file: File) => {
         setUploading(true);
@@ -420,6 +448,7 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
                                         <div className="space-y-2 relative">
                                             <label className="text-sm text-slate-500 font-medium">Brand Code <span className="text-rose-500">*</span></label>
                                             <input
+                                                ref={brandInputRef}
                                                 type="text"
                                                 value={formData.brandCode}
                                                 onChange={(e) => setFormData({ ...formData, brandCode: e.target.value.toUpperCase() })}
@@ -427,13 +456,29 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
                                                 placeholder="Type or search brand code..."
                                                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                                             />
-                                            {brandSearchOpen && (
+                                            {/* Dropdown menu portal — render to body so
+                                                the modal body's overflow-y-auto can't
+                                                clip the bottom of the list. Position
+                                                anchors off the input rect via
+                                                getBoundingClientRect (recomputed on
+                                                scroll/resize via the effect above). */}
+                                            {brandSearchOpen && brandMenuRect && typeof document !== 'undefined' && createPortal(
                                                 <>
-                                                    <div className="fixed inset-0 z-30" onClick={() => setBrandSearchOpen(false)} />
-                                                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-40 max-h-48 overflow-y-auto">
-                                                        {brandCodes
-                                                            .filter((c) => !formData.brandCode || c.toLowerCase().includes(formData.brandCode.toLowerCase()))
-                                                            .map((code) => (
+                                                    <div className="fixed inset-0 z-[110]" onClick={() => setBrandSearchOpen(false)} />
+                                                    <div
+                                                        className="fixed z-[111] bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto"
+                                                        style={{
+                                                            top: brandMenuRect.top,
+                                                            left: brandMenuRect.left,
+                                                            width: brandMenuRect.width,
+                                                        }}
+                                                    >
+                                                        {(() => {
+                                                            const matches = brandCodes.filter((c) => !formData.brandCode || c.toLowerCase().includes(formData.brandCode.toLowerCase()));
+                                                            if (matches.length === 0) {
+                                                                return <p className="px-4 py-3 text-sm text-slate-400">No matching brand codes</p>;
+                                                            }
+                                                            return matches.map((code) => (
                                                                 <button
                                                                     key={code}
                                                                     type="button"
@@ -442,12 +487,11 @@ export function CreateTaskWizard({ open, onClose, onSubmitted }: CreateTaskWizar
                                                                 >
                                                                     {code}
                                                                 </button>
-                                                            ))}
-                                                        {brandCodes.filter((c) => !formData.brandCode || c.toLowerCase().includes(formData.brandCode.toLowerCase())).length === 0 && (
-                                                            <p className="px-4 py-3 text-sm text-slate-400">No matching brand codes</p>
-                                                        )}
+                                                            ));
+                                                        })()}
                                                     </div>
-                                                </>
+                                                </>,
+                                                document.body,
                                             )}
                                         </div>
                                     )}

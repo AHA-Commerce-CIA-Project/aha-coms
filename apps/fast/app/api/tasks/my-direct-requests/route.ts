@@ -3,23 +3,31 @@ import { prisma } from '@/lib/db';
 import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET — Direct Tasks for the current user. Powers the "Direct Tasks" tab
-// on /tasks (was "Direct Requests" pre-PR #53). Two task populations
-// roll up into this bucket:
+// on /tasks (was "Direct Requests" pre-PR #53). Returns every task the
+// caller currently owns as assignee whose source is one of the two
+// "direct" flavours:
 //
-//   1. Leader-assigned direct-request tasks where the caller is the
-//      assignee — source='direct_request'. Original shape; tested in
-//      route.test.ts (the status whitelist is the load-bearing piece).
-//   2. Self-assigned personal cards created via /api/tasks/self —
-//      source='direct_assign', requesterEmail = caller.email, and the
-//      caller is also the assignee. Before PR #53 these landed only in
-//      the /my-request Command Center, which was wrong: a self-assigned
-//      task is not a "request from me" — it's a direct task I owe
-//      myself. The expansion below pulls them into the same query so
-//      they show up alongside leader-assigned direct tasks.
+//   • direct_request  — leader-assigned tasks (the original shape;
+//                        existing test in route.test.ts covers the
+//                        status whitelist).
+//   • direct_assign   — channel-posted Direct Assign cards that the
+//                        caller has claimed, plus self-assigned
+//                        personal cards created via /api/tasks/self.
 //
-// Both populations share the same status whitelist so on-hold cards
-// stay visible (matches the 2026-05-13 fix documented in the test
-// file at apps/fast/app/api/tasks/my-direct-requests/route.test.ts).
+// PR #53 layered on an additional `requesterEmail = session.user.email`
+// predicate to keep leader-posted direct_assigns where someone else is
+// the requester out of the bucket. That predicate turned out to be
+// fragile: the session cache holds the cookie-resolved email, and any
+// case / whitespace divergence from the row's stored requesterEmail
+// drops the row silently — exactly the "new personal cards don't show
+// up" symptom this PR is fixing. Dropping the email check is also a
+// better semantic fit for the renamed tab: "Direct Tasks" should mean
+// every task I personally own as the assignee, regardless of who
+// originally requested it.
+//
+// Status whitelist matches the existing test assertion; on-hold
+// (status='pending') stays visible per the 2026-05-13 fix documented
+// in apps/fast/app/api/tasks/my-direct-requests/route.test.ts.
 export async function GET() {
     const session = await requireFastAuth();
     if (!session) {
@@ -41,18 +49,11 @@ export async function GET() {
             // here, on-hold tasks vanish from the assignee's own list while
             // still showing for admins via /api/tasks/direct-requests-all.
             status: { in: ['in-progress', 'review', 'done', 'pending_completion_details', 'pending'] },
-            // Source OR — direct_request (leader-assigned) OR direct_assign
-            // where the caller is also the requester (self-assigned Create
-            // Card flow). Anything else (queue / form / routine) lives in
-            // its own surface and shouldn't bleed in here. The
-            // requesterEmail predicate keeps leader-created direct_assigns
-            // (where someone else is the requester and the caller is the
-            // claimer) out of this bucket — those still surface in the
-            // Team Inbox channel feed, not under Direct Tasks.
-            OR: [
-                { source: 'direct_request' },
-                { source: 'direct_assign', requesterEmail: { equals: session.user.email } },
-            ],
+            // direct_request + direct_assign cover every task the caller
+            // owns under the "Direct" umbrella. Other sources (queue,
+            // form, routine) live in their own surfaces and shouldn't
+            // bleed into Direct Tasks.
+            source: { in: ['direct_request', 'direct_assign'] },
         },
         include: {
             assignee: { select: { name: true } },
