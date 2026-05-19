@@ -178,7 +178,19 @@ async function otpRequestHandler(
       return {
         status,
         headers,
-        body: { error: 'WRONG_LOGIN_PATH', message: 'This email is for Google sign-in. Use the "Sign in with Google" button.' },
+        body: { error: 'WRONG_LOGIN_PATH', message: 'This email uses Google sign-in or password. Use the "Sign in with Google" button below, or go back and pick "Sign in with email + password".' },
+      }
+    case 'password_only':
+      return {
+        status,
+        headers,
+        body: { error: 'PASSWORD_ONLY', message: 'This account uses a password only. Please enter it on the next step.' },
+      }
+    case 'has_password':
+      return {
+        status,
+        headers,
+        body: { error: 'HAS_PASSWORD', message: 'This account uses a password. Please enter it on the next step, or click "Use code instead" to receive a one-time code.' },
       }
     case 'rate_limited_email':
       status = 429
@@ -327,6 +339,29 @@ describe('POST /auth/otp/request', () => {
 
     expect(sentResult.status).toBe(unknownResult.status)
     expect(JSON.stringify(sentResult.body)).toBe(JSON.stringify(unknownResult.body))
+  })
+
+  // Spec 06 PR F — PASSWORD_ONLY + HAS_PASSWORD short-circuits.
+  test('password-only identity → 200 with PASSWORD_ONLY error code', async () => {
+    requestOtpStub = async () => ({ outcome: 'password_only' })
+
+    const result = await otpRequestHandler('tools-bot@internal')
+
+    expect(result.status).toBe(200)
+    const body = result.body as Record<string, unknown>
+    expect(body.error).toBe('PASSWORD_ONLY')
+    expect(typeof body.message).toBe('string')
+  })
+
+  test('identity with password set → 200 with HAS_PASSWORD error code', async () => {
+    requestOtpStub = async () => ({ outcome: 'has_password' })
+
+    const result = await otpRequestHandler('alice@gmail.com')
+
+    expect(result.status).toBe(200)
+    const body = result.body as Record<string, unknown>
+    expect(body.error).toBe('HAS_PASSWORD')
+    expect(typeof body.message).toBe('string')
   })
 })
 

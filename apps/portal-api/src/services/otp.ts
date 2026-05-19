@@ -51,6 +51,14 @@ export type RequestOtpArgs = {
    * Branching, rate-limit, and supersede semantics are identical for both.
    */
   template?: OtpTemplateKind
+  /**
+   * Spec 06 PR F: if `true`, an identity with `password_set_at IS NOT NULL`
+   * (but `password_only_auth = FALSE`) still receives an OTP code rather than
+   * the `HAS_PASSWORD` short-circuit. Used by the login page's "Use code
+   * instead" fallback link. Has no effect on PASSWORD_ONLY identities — they
+   * always refuse OTP.
+   */
+  forceOtp?: boolean
   /** Clock injection for testing. Defaults to `() => new Date()`. */
   now?: () => Date
 }
@@ -61,6 +69,9 @@ export type RequestOtpResult =
   | { outcome: 'rate_limited_ip' }
   | { outcome: 'unknown_email' }
   | { outcome: 'wrong_login_path' }
+  // Spec 06 PR F additions
+  | { outcome: 'password_only' }
+  | { outcome: 'has_password' }
 
 export type VerifyOtpArgs = {
   email: string
@@ -159,6 +170,31 @@ export async function requestOtp(args: RequestOtpArgs): Promise<RequestOtpResult
     // User typed workspace email at OTP screen
     await logOutcome(emailNormalized, requestIp, 'wrong_login_path')
     return { outcome: 'wrong_login_path' }
+  }
+
+  // Spec 06 PR F: per-identity gates for password-bearing identities.
+  // Look up the parent identity row to read password_only_auth + password_set_at.
+  const ownerRows = await db
+    .select({
+      passwordOnlyAuth: identityUsers.passwordOnlyAuth,
+      passwordSetAt: identityUsers.passwordSetAt,
+    })
+    .from(identityUsers)
+    .where(eq(identityUsers.id, emailRow.identityUserId))
+    .limit(1)
+  const owner = ownerRows[0]
+
+  if (owner?.passwordOnlyAuth === true) {
+    // Admin-created credential bag — OTP is disabled for this identity.
+    await logOutcome(emailNormalized, requestIp, 'password_only')
+    return { outcome: 'password_only' }
+  }
+
+  // Password is set but the account is not password-only: caller may either
+  // route the user to the password step OR pass forceOtp=true to fall back.
+  if (owner?.passwordSetAt && !args.forceOtp) {
+    await logOutcome(emailNormalized, requestIp, 'has_password')
+    return { outcome: 'has_password' }
   }
 
   // kind === 'personal' (or any future personal-like kind)

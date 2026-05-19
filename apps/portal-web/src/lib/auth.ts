@@ -27,6 +27,9 @@ export async function fetchMe(): Promise<SessionUser | null> {
 export type OtpRequestResult =
   | { kind: 'sent'; message: string }
   | { kind: 'wrong_login_path'; message: string }
+  // Spec 06 PR F — short-circuit outcomes routing the user to the password step
+  | { kind: 'password_only'; message: string }
+  | { kind: 'has_password'; message: string }
   | { kind: 'rate_limited'; message: string; retryAfter: number | null }
   | { kind: 'network_error' }
 
@@ -36,14 +39,29 @@ export type OtpVerifyResult =
   | { kind: 'inactive_user'; message: string }
   | { kind: 'network_error' }
 
+// Spec 06 PR F — password sign-in
+export type PasswordSignInResult =
+  | { kind: 'signed_in' }
+  | { kind: 'invalid_credentials'; message: string }
+  | { kind: 'inactive_user'; message: string }
+  | { kind: 'locked_out'; message: string; retryAfter: number | null }
+  | { kind: 'rate_limited'; message: string; retryAfter: number | null }
+  | { kind: 'network_error' }
+
 const GENERIC_RATE_LIMITED_MSG = 'Too many requests. Please try again later.'
 
-export async function requestOtp(email: string): Promise<OtpRequestResult> {
+export async function requestOtp(
+  email: string,
+  options: { forceOtp?: boolean } = {},
+): Promise<OtpRequestResult> {
   try {
     const res = await fetch('/api/auth/otp/request', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: email.trim() }),
+      body: JSON.stringify({
+        email: email.trim(),
+        ...(options.forceOtp ? { force_otp: true } : {}),
+      }),
     })
     const body = (await res.json().catch(() => ({}))) as {
       error?: string
@@ -62,10 +80,117 @@ export async function requestOtp(email: string): Promise<OtpRequestResult> {
     if (body.error === 'WRONG_LOGIN_PATH') {
       return { kind: 'wrong_login_path', message: body.message ?? '' }
     }
+    if (body.error === 'PASSWORD_ONLY') {
+      return { kind: 'password_only', message: body.message ?? '' }
+    }
+    if (body.error === 'HAS_PASSWORD') {
+      return { kind: 'has_password', message: body.message ?? '' }
+    }
     return { kind: 'sent', message: body.message ?? '' }
   } catch (e) {
     console.error('[auth] requestOtp failed', e)
     return { kind: 'network_error' }
+  }
+}
+
+export async function passwordSignIn(
+  email: string,
+  password: string,
+): Promise<PasswordSignInResult> {
+  try {
+    const res = await fetch('/api/auth/password/sign-in', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password }),
+    })
+    const body = (await res.json().catch(() => ({}))) as {
+      ok?: true
+      error?: string
+      message?: string
+    }
+    if (res.ok && body.ok === true) return { kind: 'signed_in' }
+    const retryHeader = res.headers.get('retry-after')
+    const retryAfter = retryHeader ? Number.parseInt(retryHeader, 10) : null
+    if (res.status === 401 && body.error === 'INVALID_CREDENTIALS') {
+      return { kind: 'invalid_credentials', message: body.message ?? '' }
+    }
+    if (res.status === 403 && body.error === 'INACTIVE_USER') {
+      return { kind: 'inactive_user', message: body.message ?? '' }
+    }
+    if (res.status === 423 && body.error === 'LOCKED_OUT') {
+      return {
+        kind: 'locked_out',
+        message: body.message ?? '',
+        retryAfter: Number.isFinite(retryAfter) ? retryAfter : null,
+      }
+    }
+    if (res.status === 429) {
+      return {
+        kind: 'rate_limited',
+        message: body.message ?? GENERIC_RATE_LIMITED_MSG,
+        retryAfter: Number.isFinite(retryAfter) ? retryAfter : null,
+      }
+    }
+    return { kind: 'network_error' }
+  } catch (e) {
+    console.error('[auth] passwordSignIn failed', e)
+    return { kind: 'network_error' }
+  }
+}
+
+export type PasswordSetResult =
+  | { kind: 'ok' }
+  | { kind: 'weak_password'; message: string }
+  | { kind: 'current_password_required'; message: string }
+  | { kind: 'current_password_invalid'; message: string }
+  | { kind: 'network_error'; message: string }
+
+export async function setPassword(
+  newPassword: string,
+  currentPassword?: string,
+): Promise<PasswordSetResult> {
+  try {
+    const res = await fetch('/api/auth/password/set', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        newPassword,
+        ...(currentPassword ? { currentPassword } : {}),
+      }),
+    })
+    const body = (await res.json().catch(() => ({}))) as {
+      ok?: true
+      error?: string
+      message?: string
+    }
+    if (res.ok && body.ok === true) return { kind: 'ok' }
+    if (body.error === 'WEAK_PASSWORD') {
+      return { kind: 'weak_password', message: body.message ?? '' }
+    }
+    if (body.error === 'CURRENT_PASSWORD_REQUIRED') {
+      return { kind: 'current_password_required', message: body.message ?? '' }
+    }
+    if (body.error === 'CURRENT_PASSWORD_INVALID') {
+      return { kind: 'current_password_invalid', message: body.message ?? '' }
+    }
+    return { kind: 'network_error', message: body.message ?? `HTTP ${res.status}` }
+  } catch (e) {
+    console.error('[auth] setPassword failed', e)
+    return { kind: 'network_error', message: e instanceof Error ? e.message : 'Network error' }
+  }
+}
+
+export async function requestPasswordReset(email: string): Promise<{ ok: boolean }> {
+  try {
+    const res = await fetch('/api/auth/password/forgot', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: email.trim() }),
+    })
+    return { ok: res.ok }
+  } catch (e) {
+    console.error('[auth] requestPasswordReset failed', e)
+    return { ok: false }
   }
 }
 

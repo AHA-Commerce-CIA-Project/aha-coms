@@ -50,3 +50,14 @@ export const CORS_ALLOWED_ORIGINS = (() => {
  * Env fallback: undefined
  */
 export const SESSION_COOKIE_DOMAIN = process.env.SESSION_COOKIE_DOMAIN
+
+/**
+ * Spec 06 PR F §1 — gate the aggressive first-login forced-set rollout.
+ * Defaults to `false` so the schema migration + service code can ship without
+ * triggering the prompt suite-wide. Flip to `true` (truthy env value) once
+ * portal-web's onboarding/set-password route is live.
+ */
+export const FORCE_PASSWORD_SETUP_ENABLED = (() => {
+  const v = (process.env.FORCE_PASSWORD_SETUP_ENABLED ?? '').toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes'
+})()

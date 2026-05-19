@@ -21,6 +21,19 @@ function redirectToLogin(intendedUrl: URL): Response {
   })
 }
 
+// Spec 06 PR F §1: the one route that's reachable while
+// `passwordSetupRequired === true`.
+const SET_PASSWORD_PATH = `${base}/onboarding/set-password`
+
+function redirectToSetPassword(intendedUrl: URL): Response {
+  const intended = intendedUrl.pathname + intendedUrl.search
+  const target = `${SET_PASSWORD_PATH}?redirectTo=${encodeURIComponent(intended)}`
+  return new Response(null, {
+    status: 303,
+    headers: { location: target },
+  })
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
   const isAuthedRoute = event.route.id?.startsWith(AUTHED_PREFIX)
 
@@ -49,6 +62,17 @@ export const handle: Handle = async ({ event, resolve }) => {
       }
 
       event.locals.user = user
+
+      // Spec 06 PR F §1: belt-and-suspenders forced-set gate. Any authed route
+      // EXCEPT /onboarding/set-password redirects there until the user sets a
+      // password. The per-route handlers also re-check the flag (defence in
+      // depth against direct POST bypass attempts).
+      if (
+        user.passwordSetupRequired === true &&
+        event.url.pathname !== SET_PASSWORD_PATH
+      ) {
+        return redirectToSetPassword(event.url)
+      }
     } catch {
       return redirectToLogin(event.url)
     }

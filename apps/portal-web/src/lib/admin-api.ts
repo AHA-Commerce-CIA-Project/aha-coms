@@ -307,6 +307,48 @@ export const adminApi = {
       body: JSON.stringify(body),
     })
   },
+  // Spec 06 PR F — admin-created password-only identities. Returns a
+  // discriminated union so the form can surface the structured 400/409 errors
+  // (weak password / duplicate email) inline without losing the body content.
+  async createIdentity(body: {
+    name: string
+    email: string
+    password: string
+    notes?: string
+  }): Promise<
+    | { kind: 'created'; id: string; gipUid: string }
+    | { kind: 'weak_password'; message: string }
+    | { kind: 'duplicate_email'; message: string }
+    | { kind: 'forbidden' }
+    | { kind: 'network_error'; message: string }
+  > {
+    let res: Response
+    try {
+      res = await fetch(`/api/v1/identities/`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    } catch (e) {
+      return { kind: 'network_error', message: e instanceof Error ? e.message : 'Network error' }
+    }
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    if (res.ok) {
+      return {
+        kind: 'created',
+        id: String(json.id ?? ''),
+        gipUid: String(json.gipUid ?? ''),
+      }
+    }
+    if (res.status === 400 && json.error === 'WEAK_PASSWORD') {
+      return { kind: 'weak_password', message: String(json.message ?? '') }
+    }
+    if (res.status === 409 && json.error === 'DUPLICATE_EMAIL') {
+      return { kind: 'duplicate_email', message: String(json.message ?? '') }
+    }
+    if (res.status === 403) return { kind: 'forbidden' }
+    return { kind: 'network_error', message: `HTTP ${res.status}` }
+  },
   updateEmployee(
     id: string,
     body: {

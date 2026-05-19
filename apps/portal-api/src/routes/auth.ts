@@ -32,6 +32,9 @@ import {
 } from '../services/sessions'
 import { getDisplayEmail } from '../services/email-resolution'
 import { requestOtp, verifyOtp } from '../services/otp'
+import { attemptPasswordSignIn } from '../services/password-signin'
+import { logAudit } from '../services/audit'
+import { generatePasswordResetLink } from '../gip-admin'
 
 const SELF_AUDIENCE = PORTAL_ORIGIN
 
@@ -568,6 +571,10 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           // is the only signal the web client gets — `portalRole` stays collapsed so
           // existing consumers of /api/auth/me are unaffected.
           capabilities: { canIssueOneTimeLoginLinks: isSuperAdmin },
+          // Spec 06 PR F §1: gates the portal-web `(authed)` layout. When
+          // `true`, every route except /onboarding/set-password redirects
+          // there until the user POSTs to /api/auth/password/set.
+          passwordSetupRequired: sessionUser.passwordSetupRequired,
         }
       } catch {
         set.status = 401
@@ -583,6 +590,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           portalRole: t.String(),
           apps: t.Array(t.String()),
           capabilities: t.Object({ canIssueOneTimeLoginLinks: t.Boolean() }),
+          passwordSetupRequired: t.Boolean(),
         }),
         401: t.Object({ message: t.String() }),
       },
@@ -730,15 +738,29 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
         ?? request.headers.get('x-real-ip')
         ?? 'unknown'
-      const result = await requestOtp({ email: body.email, requestIp })
+      const result = await requestOtp({
+        email: body.email,
+        requestIp,
+        forceOtp: body.force_otp === true,
+      })
       switch (result.outcome) {
         case 'sent':
         case 'unknown_email':
           // Q7g enumeration resistance: same shape for both.
           return { message: "If this email is registered, you'll receive a code shortly. The code is valid for 10 minutes." }
         case 'wrong_login_path':
-          // 200 with structured error — frontend uses error code to render "Switch to Google sign-in" CTA.
-          return { error: 'WRONG_LOGIN_PATH' as const, message: 'This email is for Google sign-in. Use the "Sign in with Google" button.' }
+          // 200 with structured error — frontend uses the error code to render
+          // both a "Sign in with Google" CTA and (post Spec 06 PR F) a "Use
+          // email + password instead" CTA, since workspace identities can also
+          // sign in with a password once one is set.
+          return { error: 'WRONG_LOGIN_PATH' as const, message: 'This email uses Google sign-in or password. Use the "Sign in with Google" button below, or go back and pick "Sign in with email + password".' }
+        case 'password_only':
+          // Spec 06 PR F: admin-created credential bag — OTP is disabled.
+          return { error: 'PASSWORD_ONLY' as const, message: 'This account uses a password only. Please enter it on the next step.' }
+        case 'has_password':
+          // Spec 06 PR F: password is set; route the user to the password step,
+          // or pass force_otp=true to receive a one-time code anyway.
+          return { error: 'HAS_PASSWORD' as const, message: 'This account uses a password. Please enter it on the next step, or click "Use code instead" to receive a one-time code.' }
         case 'rate_limited_email':
           set.status = 429
           set.headers['retry-after'] = '60'
@@ -749,7 +771,10 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }
     },
     {
-      body: t.Object({ email: t.String({ format: 'email', maxLength: 255 }) }),
+      body: t.Object({
+        email: t.String({ format: 'email', maxLength: 255 }),
+        force_otp: t.Optional(t.Boolean()),
+      }),
     },
   )
 
@@ -801,3 +826,129 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }),
     },
   )
+
+  /**
+   * POST /api/auth/password/sign-in
+   * Sign in with email + password — Spec 06 PR F §3 + §4.
+   *
+   * Outcomes / status codes:
+   *   200 — { ok: true }, session cookie set
+   *   401 — { error: 'INVALID_CREDENTIALS' }
+   *   403 — { error: 'INACTIVE_USER' }
+   *   423 — { error: 'LOCKED_OUT' } with Retry-After
+   *   429 — { error: 'RATE_LIMITED' } with Retry-After (per-email) or plain (per-IP)
+   */
+  .post(
+    '/password/sign-in',
+    async ({ body, request, set, cookie }) => {
+      const requestIp =
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        ?? request.headers.get('x-real-ip')
+        ?? 'unknown'
+
+      const result = await attemptPasswordSignIn({
+        email: body.email,
+        password: body.password,
+        requestIp,
+      })
+
+      switch (result.outcome) {
+        case 'invalid_credentials':
+          set.status = 401
+          return { error: 'INVALID_CREDENTIALS' as const, message: 'Invalid email or password.' }
+        case 'inactive_user':
+          set.status = 403
+          return { error: 'INACTIVE_USER' as const, message: 'This account is no longer active.' }
+        case 'rate_limited_email':
+          set.status = 429
+          set.headers['retry-after'] = String(result.retryAfterSeconds)
+          return { error: 'RATE_LIMITED' as const, message: 'Too many attempts. Please wait a moment before trying again.' }
+        case 'rate_limited_ip':
+          set.status = 429
+          return { error: 'RATE_LIMITED' as const, message: 'Too many requests. Please try again later.' }
+        case 'locked_out':
+          set.status = 423
+          set.headers['retry-after'] = String(result.retryAfterSeconds)
+          // Best-effort audit hook: the lockout event was triggered earlier;
+          // record the user-facing block here so the audit row has the actor.
+          try {
+            await logAudit({
+              actorId: '00000000-0000-0000-0000-000000000000',
+              action: 'password_signin_lockout',
+              targetType: 'user',
+              targetId: '00000000-0000-0000-0000-000000000000',
+              details: { email: body.email, retryAfterSeconds: result.retryAfterSeconds },
+              actorIp: requestIp,
+            })
+          } catch {
+            // Audit failure must not surface to the client.
+          }
+          return { error: 'LOCKED_OUT' as const, message: 'Too many failed attempts. Please try again later.' }
+        case 'signed_in': {
+          const { sessionId, expiresAt } = await createPortalSession({
+            identityUserId: result.identityUserId,
+            authMethod: 'password',
+            emailUsed: result.emailNormalized,
+            request,
+          })
+          cookie[SESSION_COOKIE_OPTIONS.name].set({
+            value: sessionId,
+            path: SESSION_COOKIE_OPTIONS.path,
+            httpOnly: SESSION_COOKIE_OPTIONS.httpOnly,
+            secure: SESSION_COOKIE_OPTIONS.secure,
+            sameSite: SESSION_COOKIE_OPTIONS.sameSite,
+            maxAge: Math.floor((expiresAt.getTime() - Date.now()) / 1000),
+          })
+          return { ok: true as const }
+        }
+      }
+    },
+    {
+      body: t.Object({
+        email: t.String({ format: 'email', maxLength: 255 }),
+        password: t.String({ minLength: 1, maxLength: 256 }),
+      }),
+    },
+  )
+
+  /**
+   * POST /api/auth/password/forgot
+   *
+   * Issue a GIP-side password-reset email. Enumeration-resistant: always
+   * returns 200, regardless of whether the email exists or is password-only
+   * (admin-created credential bags refuse reset on the GIP side — admin must
+   * rotate via the planned admin-side action in a future PR).
+   */
+  .post(
+    '/password/forgot',
+    async ({ body }) => {
+      // Pre-check: if the email maps to a password_only_auth identity, skip
+      // sending entirely. The response shape is still 200 with the generic
+      // message so callers can't distinguish.
+      const emailNormalized = body.email.toLowerCase().trim()
+      try {
+        const emailRow = await db.query.identityUserEmails.findFirst({
+          where: eq(identityUserEmails.emailNormalized, emailNormalized),
+          columns: { identityUserId: true },
+        })
+        const owner = emailRow
+          ? await db.query.identityUsers.findFirst({
+              where: eq(identityUsers.id, emailRow.identityUserId),
+              columns: { passwordOnlyAuth: true },
+            })
+          : null
+        if (emailRow && owner && owner.passwordOnlyAuth !== true) {
+          await generatePasswordResetLink(body.email)
+        }
+      } catch (e) {
+        logger.warn({ err: e }, '[password/forgot] reset link issuance failed')
+      }
+      return { message: "If this email is registered, you'll receive a password-reset link shortly." }
+    },
+    {
+      body: t.Object({
+        email: t.String({ format: 'email', maxLength: 255 }),
+      }),
+    },
+  )
+
