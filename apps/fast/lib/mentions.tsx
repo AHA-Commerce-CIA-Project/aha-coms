@@ -22,7 +22,7 @@
 //     useEffect rebinding race) and renders `popoverElement` anywhere
 //     inside its tree (it portals to document.body internally).
 
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useState, type ReactNode, type RefCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Send as SendIcon } from 'lucide-react';
@@ -119,24 +119,34 @@ interface ProfilePopoverState {
 export interface UseMentionPopoverResult {
     /**
      * Attach to the PARENT container of every rendered comment / reply
-     * via `ref={containerRef}`. The hook registers a single native
-     * `click` listener on the container during its lifetime; React's
-     * synthetic event delegation is bypassed entirely, so:
+     * via `ref={containerRef}`. The hook registers a native click
+     * listener on the container the moment React mounts the node — and
+     * cleans it up if the node ever unmounts/remounts (e.g. a
+     * conditional render that gates the comments list on
+     * `comments.length > 0`).
      *
-     *   - Ancestors with `onClick={e => e.stopPropagation()}` (e.g.
-     *     the task detail modal's inner wrapper to defeat backdrop-
-     *     click-to-close) cannot swallow the click — the native
-     *     listener fires during bubble at the container, BEFORE the
-     *     synthetic event reaches the ancestor.
-     *   - One binding for the lifetime of the consumer; never re-binds
-     *     on comments rerender. No race window like the per-badge
-     *     useEffect approach in PR #42.
+     * This is a CALLBACK ref, not a RefObject. Reason: PR #44 used a
+     * RefObject + useEffect with `[openProfilePopoverForBadge]` as the
+     * dep. The comments list lives inside `{comments.length > 0 && …}`,
+     * so the ref node didn't exist on initial render — useEffect
+     * bailed silently, and ref-mutation later doesn't re-fire effects.
+     * The listener stayed unattached forever unless `mentionUsers`
+     * happened to update (which it didn't for view-only sessions), so
+     * every mention click fell on the floor. Callback refs fix this:
+     * React calls the ref function with the node on mount and with
+     * null on unmount, so we can attach/cleanup in lockstep with the
+     * DOM lifecycle.
+     *
+     * The listener runs in CAPTURE phase (`{ capture: true }`) so it
+     * fires before any descendant or ancestor has a chance to call
+     * `stopPropagation()` on the bubble. Together: callback ref +
+     * capture phase = listener gets attached at the right time AND
+     * cannot be swallowed by anything else in the click chain.
      *
      * The listener filters via `closest('[data-mention]')`, so non-
-     * mention clicks inside the container fall through unaffected
-     * (the consumer's normal handlers still work).
+     * mention clicks fall through unaffected.
      */
-    containerRef: RefObject<HTMLDivElement | null>;
+    containerRef: RefCallback<HTMLDivElement>;
     /**
      * Portal-rendered popover element. Render anywhere inside the
      * consumer's tree — it portals to document.body internally so
@@ -179,43 +189,60 @@ export function useMentionPopover(): UseMentionPopoverResult {
             });
     }, [mentionUsers]);
 
-    // Native click listener attached directly to the container ref.
-    // Bypasses React's synthetic event delegation entirely: in the task
-    // detail modal at apps/fast/app/tasks/page.tsx:1108 (and the parallel
-    // /nexus modal), the inner wrapper has `onClick={e =>
-    // e.stopPropagation()}` to defeat backdrop-click-to-close. That
-    // stopPropagation also stops React's synthetic delegation at the
-    // root container — any React onClick handler we install at the
-    // container level never fires for clicks inside the modal. A native
-    // listener attached directly to the container, by contrast, fires
-    // during bubble at the container BEFORE the synthetic system gets
-    // involved, so it cannot be swallowed by upstream React handlers.
+    // Track the container DOM node via state so the listener-attach
+    // effect re-runs when the node mounts/unmounts. A plain useRef
+    // would not trigger an effect re-run when the comments list
+    // appears after first render — see PR #44's regression: the list
+    // is gated on `comments.length > 0`, so the node only existed
+    // AFTER the first fetch resolved, but useEffect had already run
+    // and bailed with a null ref. Listener stayed unattached forever.
+    const [containerNode, setContainerNode] = useState<HTMLDivElement | null>(null);
+    const containerRef = useCallback<RefCallback<HTMLDivElement>>((node) => {
+        setContainerNode(node);
+    }, []);
+
+    // Native click listener attached directly to the container node in
+    // CAPTURE phase. Two reasons capture (not bubble):
     //
-    // One listener, one binding, no rebinding race — different from
-    // PR #42's per-badge approach which re-bound on every comments
-    // rerender and left a window where clicks fell on the floor.
-    const containerRef = useRef<HTMLDivElement | null>(null);
+    //   1. Defence in depth — if any descendant component ever calls
+    //      `e.stopPropagation()` in its own bubble handler (a comment
+    //      row, a rich-text wrapper, anything React Strict Mode might
+    //      remount mid-flight), the bubble can be killed before
+    //      reaching the container. Capture-phase listeners on the
+    //      container fire on the way DOWN, so nothing further down
+    //      the tree gets to stop them.
+    //
+    //   2. The task detail modal at apps/fast/app/tasks/page.tsx:1108
+    //      has `onClick={e => e.stopPropagation()}` to defeat
+    //      backdrop-click-to-close. Even though that handler is on
+    //      an ANCESTOR (above the container in the tree), the prior
+    //      bubble-phase listener was robust against it; capture
+    //      retains that robustness AND adds defence against
+    //      descendant stoppers.
+    //
+    // Effect re-runs whenever `containerNode` or `openProfilePopoverForBadge`
+    // change, so the listener attaches the moment React mounts the
+    // comments list and cleans up on unmount.
     useEffect(() => {
-        const container = containerRef.current;
-        if (!container) return;
+        if (!containerNode) return;
         const onClick = (ev: MouseEvent) => {
             const target = ev.target as HTMLElement | null;
             const badge = target?.closest?.('[data-mention]') as HTMLElement | null;
             if (!badge) return;
+            ev.preventDefault();
+            ev.stopPropagation();
             // Belt-and-suspenders against rapid-click text selection
             // spilling into the rich-text editor and tripping its
             // Cmd+U / Cmd+B heuristics. select-none on the badge is
             // the suspenders; this is the belt.
-            ev.preventDefault();
-            ev.stopPropagation();
             if (typeof window !== 'undefined') {
                 window.getSelection()?.removeAllRanges();
             }
             openProfilePopoverForBadge(badge);
         };
-        container.addEventListener('click', onClick);
-        return () => container.removeEventListener('click', onClick);
-    }, [openProfilePopoverForBadge]);
+        containerNode.addEventListener('click', onClick, { capture: true });
+        return () => containerNode.removeEventListener('click', onClick, { capture: true });
+    }, [containerNode, openProfilePopoverForBadge]);
 
     // Click-outside dismiss. Allows clicks on other mention badges to
     // re-anchor the popover instead of doing close-then-open flicker.
