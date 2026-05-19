@@ -17,7 +17,7 @@ import crypto from 'crypto';
 // confusingly invite teammates to claim something the creator already
 // owns).
 //
-// Payload shape (post the 2-step wizard refactor in PR #51):
+// Payload shape (post PR #52 — Step 1 toggle + paste-to-attach):
 //   title:         required string
 //   description:   optional string (sanitised)
 //   urgency:       P1 | P2 | P3 | P4 | 5-minute (defaults to P3)
@@ -26,6 +26,10 @@ import crypto from 'crypto';
 //                  /api/tasks uses for leader-created tasks
 //   referenceUrls: optional string[] — http(s) only, stored in
 //                  customFields.referenceUrls (no separate column)
+//   fileUrls:      optional string[] — pasted/dropped image URLs already
+//                  uploaded via /fast/api/upload, stored in
+//                  customFields.fileUrls so the task-detail modal
+//                  renders thumbnails the same way leader-created tasks do
 //
 // `type` and `targetChannelId` (in the v1 endpoint) were intentionally
 // dropped: every personal card is a Standard Task implicitly, and the
@@ -38,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, urgency, dueDate, referenceUrls } = body;
+    const { title, description, urgency, dueDate, referenceUrls, fileUrls } = body;
 
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
         return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -88,6 +92,19 @@ export async function POST(request: NextRequest) {
             .filter((u) => /^https?:\/\//i.test(u))
         : [];
 
+    // Uploaded image URLs from the modal's paste/drop flow. These are
+    // already-stored URLs returned by /fast/api/upload — http(s)-only
+    // filter is the safety net against a malicious payload bypassing
+    // the upload endpoint. Stored under customFields.fileUrls so the
+    // task-detail modal renders the same attachment strip it renders
+    // for leader-created tasks.
+    const safeFileUrls: string[] = Array.isArray(fileUrls)
+        ? fileUrls
+            .filter((u): u is string => typeof u === 'string')
+            .map((u) => u.trim())
+            .filter((u) => /^https?:\/\//i.test(u))
+        : [];
+
     const taskToken = crypto.randomBytes(4).toString('hex').toUpperCase();
 
     const task = await prisma.task.create({
@@ -113,7 +130,7 @@ export async function POST(request: NextRequest) {
             assignedTeamId: caller.teamId,
             claimedAt: new Date(),
             dueDate: computedDueDate,
-            customFields: { fileUrls: [], referenceUrls: safeReferenceUrls },
+            customFields: { fileUrls: safeFileUrls, referenceUrls: safeReferenceUrls },
             taskToken,
         },
         select: { id: true, taskToken: true, title: true },

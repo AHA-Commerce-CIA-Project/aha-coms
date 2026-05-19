@@ -14,6 +14,7 @@ import {
     UserPlus,
     CheckCircle2,
     ChevronRight,
+    ChevronDown,
     AtSign,
     MessageSquare,
     ClipboardList,
@@ -50,6 +51,19 @@ const iconForSlug = (slug: string): any => {
 const CROSS_APP_FALLBACK: CrossAppEntry[] = [
     { slug: 'fast', label: 'FAST', url: 'https://aha-coms.web.app/fast', icon: Zap },
     { slug: 'heroes', label: 'HEROES', url: 'https://aha-coms.web.app/heroes/', icon: Trophy },
+];
+
+// FAST in-app sub-routes shown in the dropdown that opens off the FAST
+// cross-app pill while the user is inside fast. Mirrors what the
+// Sidebar + BottomNav surface — duplicates them here at the top of the
+// page so navigation is reachable without scrolling. Order matches the
+// brief's listed sequence.
+const FAST_SUB_ROUTES: { label: string; href: string }[] = [
+    { label: 'My Tasks',    href: '/tasks' },
+    { label: 'My Request',  href: '/my-request' },
+    { label: 'Task Queue',  href: '/nexus' },
+    { label: 'Task Inbox',  href: '/team-inbox' },
+    { label: 'AHA Orbit',   href: '/orbit' },
 ];
 
 const PORTAL_ORIGIN =
@@ -117,6 +131,12 @@ export function TopNav() {
     const [notifTab, setNotifTab] = useState<'all' | 'dms'>('all');
     const [hoveredModule, setHoveredModule] = useState<string | null>(null);
     const hoverCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // FAST cross-app pill is also a sub-route dropdown when this app is
+    // the active one. Separate state from `hoveredModule` because the
+    // FAST dropdown opens off a different container (the cross-app row,
+    // not the in-app modules row).
+    const [fastDropdownOpen, setFastDropdownOpen] = useState(false);
+    const fastDropdownCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const notifRef = useRef<HTMLDivElement>(null);
     const accountRef = useRef<HTMLDivElement>(null);
 
@@ -360,8 +380,12 @@ export function TopNav() {
 
             {/* Cross-app pills — leave fast for COMS / Heroes via real URLs.
                 FAST is always marked active here since this bar only renders
-                inside fast. Plain `<a>` (not next/link) because the targets
-                are other origins served by Firebase Hosting rewrites. */}
+                inside fast. The FAST pill is special: it's the current app,
+                so clicking the pill's URL would be a no-op navigation —
+                instead the pill is the trigger for a sub-route dropdown
+                (My Tasks / My Request / Task Queue / Task Inbox / AHA Orbit).
+                Other apps stay plain `<a>` (next/link can't cross origins;
+                they're served via Firebase Hosting rewrites). */}
             <nav
                 aria-label="Switch app"
                 className="flex items-center gap-1 mr-2 sm:mr-4 shrink-0"
@@ -369,16 +393,93 @@ export function TopNav() {
                 {crossApps.map(app => {
                     const isActive = app.slug === 'fast';
                     const PillIcon = app.icon;
+                    if (isActive) {
+                        // FAST pill becomes a dropdown trigger inside fast.
+                        // Hover opens; click also opens (so touch devices
+                        // and keyboard users have an affordance). 200ms
+                        // close timer on mouseleave gives the cursor time
+                        // to enter the menu without flicker.
+                        const openFast = () => {
+                            if (fastDropdownCloseTimer.current) {
+                                clearTimeout(fastDropdownCloseTimer.current);
+                                fastDropdownCloseTimer.current = null;
+                            }
+                            setFastDropdownOpen(true);
+                        };
+                        const scheduleFastClose = () => {
+                            if (fastDropdownCloseTimer.current) clearTimeout(fastDropdownCloseTimer.current);
+                            fastDropdownCloseTimer.current = setTimeout(() => setFastDropdownOpen(false), 200);
+                        };
+                        return (
+                            <div
+                                key={app.slug}
+                                className="relative"
+                                onMouseEnter={openFast}
+                                onMouseLeave={scheduleFastClose}
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => setFastDropdownOpen(v => !v)}
+                                    aria-haspopup="menu"
+                                    aria-expanded={fastDropdownOpen}
+                                    aria-current="page"
+                                    className={cn(
+                                        'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-bold uppercase tracking-wide rounded-full transition-colors whitespace-nowrap',
+                                        'bg-white text-[#0F0E7F] shadow-sm',
+                                    )}
+                                >
+                                    {PillIcon && <PillIcon className="w-3.5 h-3.5" />}
+                                    {app.label}
+                                    <ChevronDown
+                                        className={cn(
+                                            'w-3.5 h-3.5 transition-transform',
+                                            fastDropdownOpen && 'rotate-180',
+                                        )}
+                                    />
+                                </button>
+                                {fastDropdownOpen && (
+                                    <div
+                                        role="menu"
+                                        onMouseEnter={openFast}
+                                        onMouseLeave={scheduleFastClose}
+                                        className="absolute top-full left-0 mt-1 min-w-[180px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden"
+                                    >
+                                        <div className="py-1">
+                                            {FAST_SUB_ROUTES.map(route => {
+                                                const itemActive = pathname === route.href
+                                                    || pathname?.startsWith(route.href + '/');
+                                                return (
+                                                    <Link
+                                                        key={route.href}
+                                                        href={route.href}
+                                                        role="menuitem"
+                                                        onClick={() => setFastDropdownOpen(false)}
+                                                        className={cn(
+                                                            'block px-4 py-2 text-sm font-medium transition-colors',
+                                                            itemActive
+                                                                ? 'bg-indigo-50 text-indigo-700'
+                                                                : 'text-slate-700 hover:bg-slate-50',
+                                                        )}
+                                                    >
+                                                        {route.label}
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    }
+                    // Non-FAST pills (HEROES, future apps) stay as plain
+                    // cross-origin links — no dropdown here.
                     return (
                         <a
                             key={app.slug}
                             href={app.url}
-                            aria-current={isActive ? 'page' : undefined}
                             className={cn(
                                 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-bold uppercase tracking-wide rounded-full transition-colors whitespace-nowrap',
-                                isActive
-                                    ? 'bg-white text-[#0F0E7F] shadow-sm'
-                                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                                'text-white/80 hover:text-white hover:bg-white/10',
                             )}
                         >
                             {PillIcon && <PillIcon className="w-3.5 h-3.5" />}

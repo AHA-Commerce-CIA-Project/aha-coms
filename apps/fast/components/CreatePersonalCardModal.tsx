@@ -1,23 +1,22 @@
 'use client';
 
-// 2-step wizard for personal card creation. Mirrors CreateTaskWizard's
-// step indicator + priority pill layout + URL adder pattern but trimmed
-// for self-assign: no assignee picker (always current user), no brand
-// code, no channel target (replaced by a "Self-Assigned" review-screen
-// badge), no Type selector (every personal card is a Standard Task
-// implicitly — Routine Reminders need the Orbit Template flow which
-// captures frequency/channel/mention).
+// 2-step wizard for personal card creation. Step 1 mirrors
+// CreateTaskWizard's Step 1 layout — Title + an "Include request
+// details" toggle that expands the rest of the form (Priority,
+// Deadline, Description, URL adder) — minus CreateTaskWizard's
+// Assignee picker since personal cards always self-assign. Step 2 is
+// the read-only review with a Self-Assigned pill in place of the
+// channel/brand metadata.
 //
-// Field set per the brief:
-//   Step 1: Title (required), Priority pills (P1-P4 + 5 Min),
-//           Preferred Deadline (optional date), Description (optional),
-//           Add URL/Link (optional, chip list).
-//   Step 2: Read-only review of Step 1 + a "Self-Assigned" pill so the
-//           user sees clearly that this is a personal card, then a final
-//           "+ Create Card" submit.
+// Field set:
+//   Step 1: Title (always visible, required), Include-request-details
+//           toggle, then when expanded: Priority pills (P1-P4 + 5 Min),
+//           Preferred Deadline, Description (with paste/drop image
+//           upload), Add URL/Link chip list.
+//   Step 2: Read-only review + Self-Assigned pill + final submit.
 
-import { useEffect, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, ExternalLink, Loader2, Plus, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Check, ChevronLeft, ChevronRight, ExternalLink, FileText, ImageIcon, Loader2, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CreatePersonalCardModalProps {
@@ -47,11 +46,13 @@ const PRIORITY_LEVELS: {
     { value: '5-minute', label: '5 Min', sublabel: 'Quick Fix',          bg: '',               ring: 'ring-sky-400/30', customStyle: { backgroundColor: '#56CDFC', color: '#ffffff' } },
 ];
 
-const STEP_LABELS = ['Priority & Description', 'Review & Submit'];
+const STEP_LABELS = ['Card Details', 'Review & Submit'];
 const STEP_SUBTITLES = [
-    'Title, priority, deadline, and details for your personal card',
+    'Title is required. Toggle on to add priority, deadline, description, and links.',
     'Review the card before creating',
 ];
+
+interface UploadedImage { url: string; preview: string; }
 
 export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePersonalCardModalProps) {
     const [currentStep, setCurrentStep] = useState(1);
@@ -65,9 +66,22 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
         description: '',
         referenceUrls: [] as string[],
     });
+    // Mirrors CreateTaskWizard's toggle — when off, Step 1 collapses to
+    // just Title + this switch. Step 2 review honours the toggle by
+    // hiding the optional sections that were never filled in.
+    const [includeRequestDetails, setIncludeRequestDetails] = useState(false);
     const [newUrlInput, setNewUrlInput] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Image upload state — ported from CreateTaskWizard's pattern. Each
+    // upload returns a remote URL plus a local object-URL preview so the
+    // thumbnail renders immediately without a round-trip.
+    const [images, setImages] = useState<UploadedImage[]>([]);
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+    const [isDragOver, setIsDragOver] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Reset every time the modal opens — no carry-over from a prior open.
     useEffect(() => {
@@ -76,7 +90,12 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
         setHighestStepReached(1);
         setStepErrors([]);
         setFormData({ title: '', urgency: 'P3', dueDate: '', description: '', referenceUrls: [] });
+        setIncludeRequestDetails(false);
         setNewUrlInput('');
+        setImages([]);
+        setUploading(false);
+        setUploadError(null);
+        setIsDragOver(false);
         setError(null);
     }, [open]);
 
@@ -90,6 +109,62 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
     }, [open, submitting, onClose]);
+
+    const uploadImage = useCallback(async (file: File) => {
+        setUploading(true);
+        setUploadError(null);
+        const localPreview = URL.createObjectURL(file);
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await fetch('/fast/api/upload', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Upload failed');
+            setImages((prev) => [...prev, { url: data.url, preview: localPreview }]);
+        } catch (err: any) {
+            setUploadError(err?.message || 'Failed to upload image');
+        } finally {
+            setUploading(false);
+        }
+    }, []);
+
+    const removeImageAt = useCallback((idx: number) => {
+        setImages((prev) => prev.filter((_, i) => i !== idx));
+    }, []);
+
+    const handlePaste = useCallback((e: React.ClipboardEvent) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of Array.from(items)) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const file = item.getAsFile();
+                if (file) uploadImage(file);
+                return;
+            }
+        }
+    }, [uploadImage]);
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                uploadImage(file);
+            } else {
+                setUploadError('Please drop an image file (PNG, JPEG, WebP, or GIF)');
+            }
+        }
+    }, [uploadImage]);
+
+    const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files) return;
+        Array.from(files).forEach((f) => { if (f.type.startsWith('image/')) uploadImage(f); });
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    }, [uploadImage]);
 
     const validateStep1 = (): string[] => {
         const errs: string[] = [];
@@ -136,9 +211,10 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                 body: JSON.stringify({
                     title: formData.title.trim(),
                     description: formData.description.trim() || undefined,
-                    urgency: formData.urgency,
-                    dueDate: formData.dueDate || undefined,
-                    referenceUrls: formData.referenceUrls,
+                    urgency: includeRequestDetails ? formData.urgency : 'P3',
+                    dueDate: includeRequestDetails ? (formData.dueDate || undefined) : undefined,
+                    referenceUrls: includeRequestDetails ? formData.referenceUrls : [],
+                    fileUrls: includeRequestDetails ? images.map((i) => i.url) : [],
                 }),
             });
             const data = await res.json().catch(() => ({}));
@@ -261,7 +337,7 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                         </div>
                     )}
 
-                    {/* ===== STEP 1: Priority & Description ===== */}
+                    {/* ===== STEP 1: Title + (optional) details ===== */}
                     {currentStep === 1 && (
                         <>
                             <div className="space-y-1.5">
@@ -278,126 +354,221 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                                 />
                             </div>
 
-                            {/* Priority pill group — five buttons in one row on
-                                desktop, two-column wrap on mobile. */}
-                            <div className="space-y-2">
-                                <label className="text-sm text-slate-500 font-medium">Priority Level</label>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                    {PRIORITY_LEVELS.map((p) => {
-                                        const isActive = formData.urgency === p.value;
-                                        const useCustomStyle = !!p.customStyle && isActive;
-                                        return (
-                                            <button
-                                                key={p.value}
-                                                type="button"
-                                                onClick={() => setFormData({ ...formData, urgency: p.value })}
-                                                style={useCustomStyle ? p.customStyle : undefined}
-                                                className={cn(
-                                                    'flex flex-col items-center gap-0.5 px-3 py-2.5 rounded-xl border-2 transition-all text-center',
-                                                    isActive
-                                                        ? cn(
-                                                              'text-white border-transparent shadow-md ring-4',
-                                                              p.ring,
-                                                              !p.customStyle && p.bg,
-                                                          )
-                                                        : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300',
-                                                )}
-                                            >
-                                                <span className="text-sm font-bold">{p.label}</span>
-                                                <span className={cn('text-[10px]', isActive ? 'opacity-90' : 'text-slate-400')}>
-                                                    {p.sublabel}
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
+                            {/* Include-request-details toggle — collapsed Step 1
+                                shows only the Title above + this switch.
+                                Identical pattern to CreateTaskWizard:382 so the
+                                two modals read as one design system. */}
+                            <label className="flex items-start gap-3 cursor-pointer group">
+                                <div className="relative mt-0.5">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeRequestDetails}
+                                        onChange={(e) => setIncludeRequestDetails(e.target.checked)}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-10 h-5 bg-slate-200 rounded-full peer-checked:bg-indigo-500 transition-colors" />
+                                    <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5" />
                                 </div>
-                            </div>
+                                <div>
+                                    <span className="text-sm text-slate-700 font-medium">Include request details</span>
+                                    <p className="text-xs text-slate-400">
+                                        Optional — priority, deadline, description (with paste-to-attach), and links.
+                                        Skip if a title is enough.
+                                    </p>
+                                </div>
+                            </label>
 
-                            <div className="space-y-1.5">
-                                <label className="text-sm text-slate-500 font-medium">
-                                    Preferred Deadline <span className="text-slate-400">(Optional)</span>
-                                </label>
-                                <input
-                                    type="date"
-                                    value={formData.dueDate}
-                                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                                    min={minDueDate}
-                                    style={{ colorScheme: 'light' }}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm"
-                                />
-                                <p className="text-xs text-slate-400">
-                                    {formData.urgency === '5-minute'
-                                        ? 'Quick tasks can be set for today'
-                                        : 'Minimum deadline is tomorrow (H+1)'}
-                                </p>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="text-sm text-slate-500 font-medium">
-                                    Request Description <span className="text-slate-400">(Optional)</span>
-                                </label>
-                                <textarea
-                                    value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    rows={4}
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-y"
-                                    placeholder="Notes, links, context…"
-                                />
-                            </div>
-
-                            {/* URL / Link adder — mirrors CreateTaskWizard's
-                                chip-list pattern. Enter inside the input adds
-                                the URL without a click. */}
-                            <div className="space-y-1.5">
-                                <label className="text-sm text-slate-500 font-medium">
-                                    Add URL / Link <span className="text-slate-400">(Optional)</span>
-                                </label>
-                                <div className="space-y-2">
-                                    {formData.referenceUrls.length > 0 && (
-                                        <div className="space-y-1.5">
-                                            {formData.referenceUrls.map((url, i) => (
-                                                <div key={`${url}-${i}`} className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs">
-                                                    <ExternalLink className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                                                    <a href={url} target="_blank" rel="noopener noreferrer" className="truncate flex-1 text-indigo-600 hover:underline">
-                                                        {url}
-                                                    </a>
+                            {includeRequestDetails && (
+                                <>
+                                    {/* Priority pill group — five buttons in one row
+                                        on desktop, two-column wrap on mobile. */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm text-slate-500 font-medium">Priority Level</label>
+                                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                            {PRIORITY_LEVELS.map((p) => {
+                                                const isActive = formData.urgency === p.value;
+                                                const useCustomStyle = !!p.customStyle && isActive;
+                                                return (
                                                     <button
+                                                        key={p.value}
                                                         type="button"
-                                                        onClick={() => setFormData((prev) => ({ ...prev, referenceUrls: prev.referenceUrls.filter((_, idx) => idx !== i) }))}
-                                                        className="text-rose-400 hover:text-rose-600"
-                                                        aria-label="Remove link"
+                                                        onClick={() => setFormData({ ...formData, urgency: p.value })}
+                                                        style={useCustomStyle ? p.customStyle : undefined}
+                                                        className={cn(
+                                                            'flex flex-col items-center gap-0.5 px-3 py-2.5 rounded-xl border-2 transition-all text-center',
+                                                            isActive
+                                                                ? cn(
+                                                                      'text-white border-transparent shadow-md ring-4',
+                                                                      p.ring,
+                                                                      !p.customStyle && p.bg,
+                                                                  )
+                                                                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300',
+                                                        )}
                                                     >
-                                                        <X className="w-3.5 h-3.5" />
+                                                        <span className="text-sm font-bold">{p.label}</span>
+                                                        <span className={cn('text-[10px]', isActive ? 'opacity-90' : 'text-slate-400')}>
+                                                            {p.sublabel}
+                                                        </span>
                                                     </button>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
-                                    )}
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="url"
-                                            value={newUrlInput}
-                                            onChange={(e) => setNewUrlInput(e.target.value)}
-                                            placeholder="https://example.com/reference"
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    addUrl();
-                                                }
-                                            }}
-                                            className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={addUrl}
-                                            disabled={!newUrlInput.trim()}
-                                            className="px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 flex-shrink-0"
-                                        >
-                                            Add
-                                        </button>
                                     </div>
-                                </div>
-                            </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm text-slate-500 font-medium">
+                                            Preferred Deadline <span className="text-slate-400">(Optional)</span>
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={formData.dueDate}
+                                            onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                                            min={minDueDate}
+                                            style={{ colorScheme: 'light' }}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm"
+                                        />
+                                        <p className="text-xs text-slate-400">
+                                            {formData.urgency === '5-minute'
+                                                ? 'Quick tasks can be set for today'
+                                                : 'Minimum deadline is tomorrow (H+1)'}
+                                        </p>
+                                    </div>
+
+                                    {/* Description block — wraps the textarea so
+                                        paste/drop bubble up regardless of where in
+                                        the box the user dropped. Image thumbnails
+                                        render above the textarea once uploaded;
+                                        Click-X removes them client-side. */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm text-slate-500 font-medium">
+                                            Request Description <span className="text-slate-400">(Optional)</span>
+                                        </label>
+                                        <div
+                                            onPaste={handlePaste}
+                                            onDrop={handleDrop}
+                                            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                                            onDragLeave={() => setIsDragOver(false)}
+                                            className={cn(
+                                                'rounded-xl border transition-colors',
+                                                isDragOver
+                                                    ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/30'
+                                                    : 'border-slate-200 bg-slate-50',
+                                            )}
+                                        >
+                                            {images.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 p-3 border-b border-slate-200">
+                                                    {images.map((img, idx) => (
+                                                        <div key={`img-${idx}`} className="relative group">
+                                                            <img
+                                                                src={img.preview}
+                                                                alt={`Attachment ${idx + 1}`}
+                                                                className="h-16 w-auto rounded-lg border border-slate-200 object-cover"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeImageAt(idx)}
+                                                                className="absolute -top-1.5 -right-1.5 p-0.5 bg-slate-700 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                aria-label="Remove image"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            <textarea
+                                                value={formData.description}
+                                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                                rows={4}
+                                                className="w-full px-4 py-3 bg-transparent border-0 rounded-xl text-sm text-slate-800 focus:outline-none resize-y"
+                                                placeholder="Notes, links, context… Paste (Ctrl+V) a screenshot to attach it."
+                                            />
+                                            <div className="flex items-center gap-2 px-3 py-2 border-t border-slate-200 bg-slate-100/60 rounded-b-xl">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-slate-600 hover:text-indigo-600 hover:bg-white rounded-md transition-colors"
+                                                >
+                                                    <ImageIcon className="w-3.5 h-3.5" /> Attach image
+                                                </button>
+                                                <input
+                                                    ref={fileInputRef}
+                                                    type="file"
+                                                    accept="image/*"
+                                                    multiple
+                                                    onChange={handleFileSelect}
+                                                    className="hidden"
+                                                />
+                                                {uploading && (
+                                                    <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                                                        <Loader2 className="w-3 h-3 animate-spin" /> Uploading…
+                                                    </span>
+                                                )}
+                                                <span className="ml-auto text-[11px] text-slate-400">
+                                                    Tip: Ctrl+V to paste a screenshot
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {uploadError && (
+                                            <p className="text-xs text-rose-600">{uploadError}</p>
+                                        )}
+                                    </div>
+
+                                    {/* URL / Link adder — mirrors CreateTaskWizard's
+                                        chip-list pattern. Enter inside the input adds
+                                        the URL without a click. */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm text-slate-500 font-medium">
+                                            Add URL / Link <span className="text-slate-400">(Optional)</span>
+                                        </label>
+                                        <div className="space-y-2">
+                                            {formData.referenceUrls.length > 0 && (
+                                                <div className="space-y-1.5">
+                                                    {formData.referenceUrls.map((url, i) => (
+                                                        <div key={`${url}-${i}`} className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs">
+                                                            <ExternalLink className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                                                            <a href={url} target="_blank" rel="noopener noreferrer" className="truncate flex-1 text-indigo-600 hover:underline">
+                                                                {url}
+                                                            </a>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setFormData((prev) => ({ ...prev, referenceUrls: prev.referenceUrls.filter((_, idx) => idx !== i) }))}
+                                                                className="text-rose-400 hover:text-rose-600"
+                                                                aria-label="Remove link"
+                                                            >
+                                                                <X className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="url"
+                                                    value={newUrlInput}
+                                                    onChange={(e) => setNewUrlInput(e.target.value)}
+                                                    placeholder="https://example.com/reference"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            addUrl();
+                                                        }
+                                                    }}
+                                                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={addUrl}
+                                                    disabled={!newUrlInput.trim()}
+                                                    className="px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 flex-shrink-0"
+                                                >
+                                                    Add
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </>
                     )}
 
@@ -418,40 +589,64 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                                         {formData.title || <span className="text-slate-400">—</span>}
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Priority</div>
-                                        <div className="text-sm font-medium text-slate-800">
-                                            {activePriority?.label}
-                                            {' · '}
-                                            <span className="font-normal text-slate-500">{activePriority?.sublabel}</span>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Preferred Deadline</div>
-                                        <div className="text-sm font-medium text-slate-800">
-                                            {formData.dueDate || <span className="text-slate-400 font-normal">No deadline</span>}
-                                        </div>
-                                    </div>
-                                </div>
-                                {formData.description && (
-                                    <div>
-                                        <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Description</div>
-                                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{formData.description}</p>
-                                    </div>
-                                )}
-                                {formData.referenceUrls.length > 0 && (
-                                    <div>
-                                        <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-1">Links</div>
-                                        <div className="space-y-1">
-                                            {formData.referenceUrls.map((url, i) => (
-                                                <div key={`review-${url}-${i}`} className="flex items-center gap-2 text-xs">
-                                                    <ExternalLink className="w-3 h-3 text-indigo-400 flex-shrink-0" />
-                                                    <span className="truncate text-indigo-600">{url}</span>
+                                {includeRequestDetails ? (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Priority</div>
+                                                <div className="text-sm font-medium text-slate-800">
+                                                    {activePriority?.label}
+                                                    {' · '}
+                                                    <span className="font-normal text-slate-500">{activePriority?.sublabel}</span>
                                                 </div>
-                                            ))}
+                                            </div>
+                                            <div>
+                                                <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Preferred Deadline</div>
+                                                <div className="text-sm font-medium text-slate-800">
+                                                    {formData.dueDate || <span className="text-slate-400 font-normal">No deadline</span>}
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
+                                        {formData.description && (
+                                            <div>
+                                                <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Description</div>
+                                                <p className="text-sm text-slate-700 whitespace-pre-wrap">{formData.description}</p>
+                                            </div>
+                                        )}
+                                        {images.length > 0 && (
+                                            <div>
+                                                <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-1">Attachments</div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {images.map((img, i) => (
+                                                        <img
+                                                            key={`review-img-${i}`}
+                                                            src={img.preview}
+                                                            alt={`Attachment ${i + 1}`}
+                                                            className="h-14 w-auto rounded-lg border border-slate-200 object-cover"
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {formData.referenceUrls.length > 0 && (
+                                            <div>
+                                                <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-1">Links</div>
+                                                <div className="space-y-1">
+                                                    {formData.referenceUrls.map((url, i) => (
+                                                        <div key={`review-${url}-${i}`} className="flex items-center gap-2 text-xs">
+                                                            <ExternalLink className="w-3 h-3 text-indigo-400 flex-shrink-0" />
+                                                            <span className="truncate text-indigo-600">{url}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <p className="text-xs text-slate-500 italic">
+                                        No request details added. The card lands in your inbox with default priority (P3)
+                                        and no deadline.
+                                    </p>
                                 )}
                             </div>
 
@@ -501,7 +696,7 @@ export function CreatePersonalCardModal({ open, onClose, onCreated }: CreatePers
                         <button
                             type="button"
                             onClick={handleSubmit}
-                            disabled={submitting || !formData.title.trim()}
+                            disabled={submitting || !formData.title.trim() || uploading}
                             className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                         >
                             {submitting ? (
