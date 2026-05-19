@@ -801,10 +801,19 @@ function TeamInboxContent() {
 
             {/* Pill switcher — same pattern as /nexus Open Queue / Direct
                 Requests. Splits the inbox so routine reminders don't clutter
-                the standard direct-assigned cards. */}
+                the standard direct-assigned cards. The badge counts
+                strictly reflect ACTIVE rows on the board (Unclaimed +
+                In Progress + Completed + Pending + Overdue). Archived
+                rows — whether manually archived (archivedByMe),
+                auto-archived by the rolling-age cutoff
+                (autoArchivedByAge), or stored with status='archived'
+                — are excluded so the badge number always matches what
+                the user sees in the four Kanban columns. */}
             {(() => {
-                const standardCount = tasks.filter(t => !t.routineTemplate).length;
-                const routineCount = tasks.filter(t => !!t.routineTemplate).length;
+                const isActiveRow = (t: InboxTask) =>
+                    !t.archivedByMe && !t.autoArchivedByAge && t.status !== 'archived';
+                const standardCount = tasks.filter(t => isActiveRow(t) && !t.routineTemplate).length;
+                const routineCount = tasks.filter(t => isActiveRow(t) && !!t.routineTemplate).length;
                 return (
                     <div className="flex justify-center">
                         <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex gap-1">

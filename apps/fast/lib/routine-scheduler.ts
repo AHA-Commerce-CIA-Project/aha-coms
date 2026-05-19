@@ -7,6 +7,20 @@
 // "Asia/Jakarta"). Cloud Run runs UTC; we use native Intl APIs to project
 // the current UTC instant into the template's wall-clock, then convert
 // computed wall-clock moments back to UTC for storage / dedup.
+//
+// Rolling-window guarantee: the spawn check is `now >= dueAt AND no Task
+// exists with routineTemplateId = template AND createdAt >= periodStart`.
+// That's a rolling window from `dueAt` through the end of the period, so
+// a cron run delayed by minutes (cold start, retry, etc.) still fires the
+// template for the right period — and the period-dedup keeps it from
+// double-posting if the cron runs multiple times after dueAt.
+//
+// Observability: each invocation logs one summary line + per-template
+// status. Look for `[routine-scheduler]` in Cloud Run logs to confirm
+// the cron is firing on the expected cadence and to see why a given
+// template was/wasn't spawned. The summary includes `runNowUtc` + the
+// per-template `tz` projection so a timezone mismatch is debuggable
+// from logs alone (no need to repro locally).
 
 import { prisma } from '@/lib/db';
 import { getOrCreateSystemBot } from '@/lib/system-bot';
@@ -144,10 +158,18 @@ export function dueMomentInPeriod(
 
 interface SpawnResult {
   templateId: string;
-  status: 'spawned' | 'skipped_already_fired' | 'skipped_not_due' | 'skipped_no_channel' | 'error';
+  status: 'spawned' | 'skipped_already_fired' | 'skipped_not_due' | 'skipped_no_channel' | 'skipped_inactive' | 'error';
   taskId?: string;
   messageId?: string;
   error?: string;
+  // Surfaced on every result so operator-side debugging from Cloud Run
+  // logs doesn't need a separate trace. `tz` is the template's
+  // configured zone (defaults to Asia/Jakarta); `dueAtUtc` is the
+  // computed fire-moment for the current period in UTC ISO form so
+  // log readers can compare it byte-for-byte against `runNowUtc` from
+  // the run summary.
+  tz?: string;
+  dueAtUtc?: string;
 }
 
 /**
@@ -234,23 +256,29 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
     where: { id: templateId },
     include: { checklistItems: { orderBy: { position: 'asc' } } },
   });
-  if (!template || !template.isActive) {
-    return { templateId, status: 'skipped_not_due' };
+  if (!template) {
+    return { templateId, status: 'skipped_inactive' };
+  }
+  // Default tz to Asia/Jakarta to match the schema default — and so legacy
+  // rows that predate the column have stable behaviour. Resolved up here
+  // so we can stamp it onto every early-return shape, which makes the
+  // Cloud Run logs self-explanatory.
+  const tz = template.timezone || 'Asia/Jakarta';
+  if (!template.isActive) {
+    return { templateId, status: 'skipped_inactive', tz };
   }
   if (!template.channelId) {
     // Channel-card flow only — templates without a channel target stay /orbit-only.
-    return { templateId, status: 'skipped_no_channel' };
+    return { templateId, status: 'skipped_no_channel', tz };
   }
 
   const freq = template.frequency as Frequency;
   if (!['daily', 'weekly', 'monthly'].includes(freq)) {
-    return { templateId, status: 'error', error: `Unsupported frequency: ${freq}` };
+    return { templateId, status: 'error', error: `Unsupported frequency: ${freq}`, tz };
   }
-
-  // Default tz to Asia/Jakarta to match the schema default — and so legacy
-  // rows that predate the column have stable behaviour.
-  const tz = template.timezone || 'Asia/Jakarta';
   const periodStart = startOfPeriod(now, freq, tz);
+  const dueAt = dueMomentInPeriod(now, freq, template.deadlineDay, template.deadlineTime, tz);
+  const dueAtUtc = dueAt.toISOString();
 
   if (!force) {
     // Has this template already fired in the current period? If yes, no-op.
@@ -259,13 +287,17 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
       select: { id: true },
     });
     if (existing) {
-      return { templateId, status: 'skipped_already_fired', taskId: existing.id };
+      return { templateId, status: 'skipped_already_fired', taskId: existing.id, tz, dueAtUtc };
     }
 
     // Not yet at the due moment for this period? Wait for a later run.
-    const dueAt = dueMomentInPeriod(now, freq, template.deadlineDay, template.deadlineTime, tz);
+    // This is the rolling-window check: any cron run with `now >= dueAt`
+    // within the current period will spawn (modulo the existing-task
+    // dedup above). So a cron delayed by a few minutes after 13:00 WIB
+    // still fires for "today"; a cron that hasn't run in a few hours
+    // catches up the moment it does run.
     if (now < dueAt) {
-      return { templateId, status: 'skipped_not_due' };
+      return { templateId, status: 'skipped_not_due', tz, dueAtUtc };
     }
   }
 
@@ -366,9 +398,9 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
       });
     }
 
-    return { templateId, status: 'spawned', taskId: task.id, messageId: message.id };
+    return { templateId, status: 'spawned', taskId: task.id, messageId: message.id, tz, dueAtUtc };
   } catch (err: any) {
-    return { templateId, status: 'error', error: err?.message || 'unknown' };
+    return { templateId, status: 'error', error: err?.message || 'unknown', tz, dueAtUtc };
   }
 }
 
@@ -377,16 +409,37 @@ export async function spawnTaskIfDue(templateId: string, now: Date, force = fals
  * summary the cron endpoint can log/return.
  */
 export async function runScheduler(now: Date = new Date()): Promise<SpawnResult[]> {
+  const runNowUtc = now.toISOString();
   const templates = await prisma.routineTaskTemplate.findMany({
     where: { isActive: true },
-    select: { id: true },
+    select: { id: true, name: true },
   });
+
+  console.log(`[routine-scheduler] run start runNowUtc=${runNowUtc} activeTemplates=${templates.length}`);
 
   const results: SpawnResult[] = [];
   // Sequential — keeps log output coherent and avoids hammering the DB with
   // a stampede of transactions. Templates are O(tens), not O(thousands).
   for (const t of templates) {
-    results.push(await spawnTaskIfDue(t.id, now));
+    const result = await spawnTaskIfDue(t.id, now);
+    // One log line per template so a missed/skipped fire is visible
+    // in Cloud Run logs without trawling through a JSON payload. The
+    // `dueAtUtc` and `tz` fields make it possible to verify timezone
+    // alignment without re-running locally.
+    console.log(
+      `[routine-scheduler] template=${t.id} name="${t.name}" status=${result.status}`
+      + ` tz=${result.tz ?? '-'} dueAtUtc=${result.dueAtUtc ?? '-'}`
+      + (result.taskId ? ` taskId=${result.taskId}` : '')
+      + (result.error ? ` error="${result.error}"` : ''),
+    );
+    results.push(result);
   }
+
+  const summary = results.reduce<Record<string, number>>((acc, r) => {
+    acc[r.status] = (acc[r.status] ?? 0) + 1;
+    return acc;
+  }, {});
+  console.log(`[routine-scheduler] run end runNowUtc=${runNowUtc} summary=${JSON.stringify(summary)}`);
+
   return results;
 }
