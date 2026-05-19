@@ -184,7 +184,7 @@ async function sessionHandler(idToken: string): Promise<SessionHandlerResult> {
       status: 403,
       body: {
         error: 'WRONG_LOGIN_PATH',
-        message: 'This email is registered for code-based sign-in only. Use the email & verification code option.',
+        message: 'This email is registered for personal-account sign-in. Use the email code or email + password option.',
       },
     }
   }

@@ -5,6 +5,7 @@
   import { setPassword } from '$lib/auth'
   import { Card, CardHeader, CardTitle, CardContent, Button, Input, Label } from '@coms-portal/ui-svelte/primitives'
   import { Eye, EyeOff } from '@lucide/svelte'
+  import { PASSWORD_MIN_LENGTH } from '@coms-portal/shared'
   import PasswordStrengthMeter from '$lib/components/password-strength-meter.svelte'
 
   let newPassword = $state('')
@@ -83,7 +84,7 @@
               type={showNew ? 'text' : 'password'}
               bind:value={newPassword}
               required
-              minlength={8}
+              minlength={PASSWORD_MIN_LENGTH}
               maxlength={256}
               autocomplete="new-password"
               class="w-full pr-9"
@@ -118,7 +119,7 @@
               type={showConfirm ? 'text' : 'password'}
               bind:value={confirmPassword}
               required
-              minlength={8}
+              minlength={PASSWORD_MIN_LENGTH}
               maxlength={256}
               autocomplete="new-password"
               class="w-full pr-9"

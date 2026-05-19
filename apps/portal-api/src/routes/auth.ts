@@ -210,11 +210,13 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       const emailRow = emailRows[0]!
 
       if (emailRow.kind === 'personal') {
-        // Q-mismatch: workspace OIDC against personal-kind email — strict-but-helpful 403
+        // Q-mismatch: workspace OIDC against personal-kind email — strict-but-helpful 403.
+        // Personal identities can sign in by email code, or (post-PR-F) by email +
+        // password once one has been set; either is correct, neither is Google.
         set.status = 403
         return {
           error: 'WRONG_LOGIN_PATH' as const,
-          message: 'This email is registered for code-based sign-in only. Use the email & verification code option.',
+          message: 'This email is registered for personal-account sign-in. Use the email code or email + password option.',
         }
       }
 
