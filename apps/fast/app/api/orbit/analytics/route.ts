@@ -79,24 +79,45 @@ export async function GET(request: NextRequest) {
     take: 5,
   });
 
-  const topClaimers = await Promise.all(
-    claimerCounts.map(async (c) => {
-      const user = await prisma.user.findUnique({
-        where: { id: c.claimedBy },
-        select: { name: true, image: true },
-      });
-      const completedCount = await prisma.routineTaskClaim.count({
-        where: { claimedBy: c.claimedBy, status: 'completed', ...(hasDateFilter ? { createdAt: dateFilter } : {}) },
-      });
-      return {
-        name: user?.name || 'Unknown',
-        image: user?.image || null,
-        totalClaims: c._count.id,
-        completedClaims: completedCount,
-        completionRate: c._count.id > 0 ? Math.round((completedCount / c._count.id) * 100) : 0,
-      };
-    })
+  // Batch user lookups and completed-claim counts — two queries for all
+  // top claimers instead of 2×N queries (N+1 fix, T1.14).
+  const topClaimerIds = claimerCounts.map((c) => c.claimedBy);
+
+  const [claimerUsers, completedGrouped] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: topClaimerIds } },
+      select: { id: true, name: true, image: true },
+    }),
+    prisma.routineTaskClaim.groupBy({
+      by: ['claimedBy'],
+      where: {
+        claimedBy: { in: topClaimerIds },
+        status: 'completed',
+        ...(hasDateFilter ? { createdAt: dateFilter } : {}),
+      },
+      _count: { id: true },
+    }),
+  ]);
+
+  const userMap = new Map<string, { id: string; name: string; image: string | null }>(
+    claimerUsers.map((u) => [u.id, u])
   );
+  const completedMap = new Map<string, number>(
+    completedGrouped.map((r) => [r.claimedBy, r._count.id as number])
+  );
+
+  const topClaimers = claimerCounts.map((c) => {
+    const user = userMap.get(c.claimedBy);
+    const completedCount = completedMap.get(c.claimedBy) ?? 0;
+    const totalClaims = c._count.id as number;
+    return {
+      name: user?.name || 'Unknown',
+      image: user?.image || null,
+      totalClaims,
+      completedClaims: completedCount,
+      completionRate: totalClaims > 0 ? Math.round((completedCount / totalClaims) * 100) : 0,
+    };
+  });
 
   // Per-template compliance
   const templateCompliance = templates.map((t) => {

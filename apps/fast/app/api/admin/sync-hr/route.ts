@@ -60,32 +60,48 @@ export async function POST() {
             });
         }
 
-        // 2. Get all existing teams from DB
-        const existingTeams = await prisma.team.findMany();
-        const teamByName = new Map(existingTeams.map(t => [t.name.toLowerCase(), t]));
+        // 2. Get all existing teams from DB — project only id + name (T1.17 Medium fix).
+        const existingTeams = await prisma.team.findMany({
+            select: { id: true, name: true },
+        });
+        const teamByName = new Map<string, { id: string; name: string }>(
+            existingTeams.map(t => [t.name.toLowerCase(), t])
+        );
 
         // 3. Get all existing users from DB
         const existingUsers = await prisma.user.findMany({
             select: { id: true, name: true, teamId: true },
         });
-        const userByNormalizedName = new Map(existingUsers.map(u => [normalize(u.name), u]));
+        const userByNormalizedName = new Map<string, { id: string; name: string; teamId: string | null }>(
+            existingUsers.map(u => [normalize(u.name), u as { id: string; name: string; teamId: string | null }])
+        );
 
         // Track statistics
         let teamsCreated = 0;
         let usersUpdated = 0;
         const unmatchedEmployees: string[] = [];
 
-        // 4. Ensure all teams from the sheet exist in DB
+        // 4. Ensure all teams from the sheet exist in DB — single create per
+        //    missing team (sequential is fine; team count is bounded and small).
         const uniqueTeamNames = [...new Set(employees.map(e => resolveTeamName(e.team)))];
         for (const teamName of uniqueTeamNames) {
             if (!teamByName.has(teamName.toLowerCase())) {
-                const newTeam = await prisma.team.create({ data: { name: teamName } });
+                const newTeam = await prisma.team.create({
+                    data: { name: teamName },
+                    select: { id: true, name: true },
+                });
                 teamByName.set(teamName.toLowerCase(), newTeam);
                 teamsCreated++;
             }
         }
 
-        // 5. Match employees to users and update team assignments
+        // 5. Match employees to users and collect team-change updates.
+        // Batch all user.update calls into a single updateMany per target teamId
+        // instead of one UPDATE per employee (N+1 fix, T1.15b).
+        // Per-employee payloads only diverge on teamId, so grouping by teamId
+        // lets us use updateMany({ where: { id: { in: ids } }, data: { teamId } }).
+        const updatesByTeam = new Map<string, string[]>(); // teamId → userIds
+
         for (const emp of employees) {
             const resolvedTeam = resolveTeamName(emp.team);
             const team = teamByName.get(resolvedTeam.toLowerCase());
@@ -95,17 +111,24 @@ export async function POST() {
             const matchedUser = userByNormalizedName.get(normalizedName);
 
             if (matchedUser) {
-                // Only update if team changed
+                // Only update if team changed.
                 if (matchedUser.teamId !== team.id) {
-                    await prisma.user.update({
-                        where: { id: matchedUser.id },
-                        data: { teamId: team.id },
-                    });
-                    usersUpdated++;
+                    const bucket = updatesByTeam.get(team.id) ?? [];
+                    bucket.push(matchedUser.id);
+                    updatesByTeam.set(team.id, bucket);
                 }
             } else {
                 unmatchedEmployees.push(emp.name);
             }
+        }
+
+        // Issue one updateMany per distinct target teamId.
+        for (const [teamId, userIds] of updatesByTeam) {
+            await prisma.user.updateMany({
+                where: { id: { in: userIds } },
+                data: { teamId },
+            });
+            usersUpdated += userIds.length;
         }
 
         return NextResponse.json({

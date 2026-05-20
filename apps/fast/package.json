@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test": "find . -name '*.test.ts' -not -path './node_modules/*' | xargs -P 4 -I{} bun test {}",
     "db:generate": "prisma generate",
     "db:push": "prisma db push"
   },

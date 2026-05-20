@@ -64,22 +64,68 @@ export async function GET() {
         };
     });
 
-    // Now get unread counts in a separate query for accuracy
+    // Get unread counts in a single batched query per cursor-split.
+    // Conversations where the participant has no lastReadAt cursor can be
+    // counted together (senderId != me AND conversationId IN ids).
+    // Conversations with a cursor each need their own createdAt > cursor
+    // predicate, so we issue one count call per cursor group using OR.
     const conversationIds = conversations.map((c) => c.id);
     const unreadCounts: Record<string, number> = {};
 
-    for (const conv of conversations) {
-        const myParticipant = conv.participants.find((p) => p.userId === userId);
-        const lastReadAt = myParticipant?.lastReadAt;
+    if (conversationIds.length > 0) {
+        // Split into no-cursor and with-cursor buckets.
+        const noCursorIds: string[] = [];
+        const withCursor: Array<{ id: string; lastReadAt: Date }> = [];
 
-        const count = await prisma.directMessage.count({
-            where: {
-                conversationId: conv.id,
-                senderId: { not: userId },
-                ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
-            },
-        });
-        unreadCounts[conv.id] = count;
+        for (const conv of conversations) {
+            const myParticipant = conv.participants.find((p) => p.userId === userId);
+            const lastReadAt = myParticipant?.lastReadAt;
+            if (lastReadAt) {
+                withCursor.push({ id: conv.id, lastReadAt });
+            } else {
+                noCursorIds.push(conv.id);
+            }
+        }
+
+        // Single groupBy for all no-cursor conversations.
+        if (noCursorIds.length > 0) {
+            const grouped = await prisma.directMessage.groupBy({
+                by: ['conversationId'],
+                where: {
+                    conversationId: { in: noCursorIds },
+                    senderId: { not: userId },
+                },
+                _count: { id: true },
+            });
+            for (const row of grouped) {
+                unreadCounts[row.conversationId] = row._count.id;
+            }
+            // Ensure all no-cursor ids are present in the map.
+            for (const id of noCursorIds) {
+                if (!(id in unreadCounts)) unreadCounts[id] = 0;
+            }
+        }
+
+        // Single count using OR for all with-cursor conversations.
+        if (withCursor.length > 0) {
+            const grouped = await prisma.directMessage.groupBy({
+                by: ['conversationId'],
+                where: {
+                    senderId: { not: userId },
+                    OR: withCursor.map(({ id, lastReadAt }) => ({
+                        conversationId: id,
+                        createdAt: { gt: lastReadAt },
+                    })),
+                },
+                _count: { id: true },
+            });
+            for (const row of grouped) {
+                unreadCounts[row.conversationId] = row._count.id;
+            }
+            for (const { id } of withCursor) {
+                if (!(id in unreadCounts)) unreadCounts[id] = 0;
+            }
+        }
     }
 
     const result = data
