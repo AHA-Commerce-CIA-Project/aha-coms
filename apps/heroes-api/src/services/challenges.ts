@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm'
-import { heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
+import { heroesProfiles, notifications } from '@coms-portal/heroes-shared/db/schema'
 import * as challengesRepo from '../repositories/challenges'
 import * as pointsRepo from '../repositories/points'
 import { writeAuditLog } from './audit'
@@ -95,17 +95,18 @@ export async function fileChallenge(
         ),
       )
 
-    for (const hr of hrUsers) {
-      await createNotification(
-        {
+    // Single batched notification INSERT for all HR users
+    if (hrUsers.length > 0) {
+      await db.insert(notifications).values(
+        hrUsers.map((hr) => ({
           branchKey: ctx.actor.branchKey,
           userId: hr.id,
           type: 'challenge_needs_resolution',
           title: `A Penalti challenge has been filed by ${ctx.actor.name} — needs resolution`,
+          body: null,
           entityType: 'challenges',
           entityId: created.id,
-        },
-        db,
+        })),
       )
     }
 

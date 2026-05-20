@@ -22,12 +22,17 @@ export async function listTeams(
 
   const where = and(...conditions)
 
-  const memberCountSubquery = sql<number>`(
-    SELECT COUNT(*)::int
-    FROM ${heroesProfiles}
-    WHERE ${heroesProfiles.teamKey} = ${taxonomyCache.key}
-      AND ${heroesProfiles.isActive} = true
-  )`
+  // T1.9: Replace per-row correlated subquery with a single LEFT JOIN + GROUP BY
+  // aggregating active member counts in one pass over heroesProfiles.
+  const memberCounts = db
+    .select({
+      teamKey: heroesProfiles.teamKey,
+      memberCount: sql<number>`count(*)::int`.as('member_count'),
+    })
+    .from(heroesProfiles)
+    .where(eq(heroesProfiles.isActive, true))
+    .groupBy(heroesProfiles.teamKey)
+    .as('member_counts')
 
   const [rows, [{ total }]] = await Promise.all([
     db
@@ -35,9 +40,10 @@ export async function listTeams(
         id: taxonomyCache.key,
         name: taxonomyCache.value,
         key: taxonomyCache.key,
-        memberCount: memberCountSubquery,
+        memberCount: sql<number>`coalesce(${memberCounts.memberCount}, 0)`,
       })
       .from(taxonomyCache)
+      .leftJoin(memberCounts, eq(memberCounts.teamKey, taxonomyCache.key))
       .where(where)
       .orderBy(taxonomyCache.value)
       .limit(opts.limit)
@@ -48,8 +54,19 @@ export async function listTeams(
   return { rows, total }
 }
 
-export async function getTeamMembers(teamKey: string, tx?: DbClient) {
+const TEAM_MEMBERS_MAX_LIMIT = 200
+const TEAM_MEMBERS_DEFAULT_LIMIT = 50
+
+// T1.10: Add limit + offset pagination; default limit 50, max 200.
+// Clamps limit to [1, 200] and offset to [0, ∞).
+export async function getTeamMembers(
+  teamKey: string,
+  opts: { limit?: number; offset?: number } = {},
+  tx?: DbClient,
+) {
   const db = getDb(tx)
+  const limit = Math.min(Math.max(opts.limit ?? TEAM_MEMBERS_DEFAULT_LIMIT, 1), TEAM_MEMBERS_MAX_LIMIT)
+  const offset = Math.max(opts.offset ?? 0, 0)
   return db
     .select({
       id: heroesProfiles.id,
@@ -62,6 +79,8 @@ export async function getTeamMembers(teamKey: string, tx?: DbClient) {
     .leftJoin(emailCache, eq(heroesProfiles.id, emailCache.portalSub))
     .where(and(eq(heroesProfiles.teamKey, teamKey), eq(heroesProfiles.isActive, true)))
     .orderBy(heroesProfiles.name)
+    .limit(limit)
+    .offset(offset)
 }
 
 export async function getTeamMemberCount(teamKey: string, tx?: DbClient) {

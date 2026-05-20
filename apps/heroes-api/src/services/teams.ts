@@ -38,7 +38,7 @@ export async function getTeamById(id: string, ctx: ServiceContext) {
       throw new TeamNotFoundError(id)
     }
 
-    const members = await teamsRepo.getTeamMembers(id, db)
+    const members = await teamsRepo.getTeamMembers(id, {}, db)
     const memberCount = members.length
 
     return { ...team, members, memberCount }
