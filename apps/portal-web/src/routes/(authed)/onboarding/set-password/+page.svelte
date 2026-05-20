@@ -68,10 +68,20 @@
       <CardTitle>Set a password to continue</CardTitle>
     </CardHeader>
     <CardContent>
-      <p class="mb-4 text-sm text-muted-foreground">
+      <p class="mb-3 text-sm text-muted-foreground">
         This is a one-time setup. After you choose a password, you can sign in with email + password
         in addition to the existing options.
       </p>
+      <div class="mb-4 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+        <p class="mb-1 font-medium text-foreground">Tip: pick a long passphrase, not a short tricky word.</p>
+        <p>
+          Four or more unrelated words read like a sentence but resist guessing — for example
+          <code class="rounded bg-background px-1 py-0.5 font-mono text-[11px]">coffee mountain candle truck</code>
+          or
+          <code class="rounded bg-background px-1 py-0.5 font-mono text-[11px]">silver-river-42-window</code>.
+          Minimum {PASSWORD_MIN_LENGTH} characters. Avoid your name, email, or anything you have used elsewhere.
+        </p>
+      </div>
 
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>
