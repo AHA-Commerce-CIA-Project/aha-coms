@@ -637,7 +637,7 @@ export function ChannelMessageItem({
                             <a
                               href={fwd.taskToken
                                 ? `/nexus?highlight_token=${fwd.taskToken}&open=true`
-                                : `/messages?task=${fwd.taskId}`}
+                                : `/tasks?task=${fwd.taskId}`}
                               className="text-indigo-500 hover:text-indigo-700 font-semibold hover:underline">
                               View task
                             </a>

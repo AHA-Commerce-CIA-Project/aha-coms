@@ -385,7 +385,7 @@ export function MessageThread({
                                                                         <a
                                                                             href={fwd.taskToken
                                                                                 ? `/nexus?highlight_token=${fwd.taskToken}&open=true`
-                                                                                : `/messages?task=${fwd.taskId}`}
+                                                                                : `/tasks?task=${fwd.taskId}`}
                                                                             className="text-indigo-600 hover:text-indigo-700 font-semibold hover:underline"
                                                                         >
                                                                             View task
