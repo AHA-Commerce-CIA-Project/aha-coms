@@ -1,6 +1,6 @@
 import { inArray } from 'drizzle-orm'
-import { db } from '~/db'
-import { appRegistry } from '~/db/schema'
+import { db } from '../db'
+import { appRegistry } from '../db/schema'
 
 /**
  * Launcher + dashboard data source.

@@ -68,8 +68,12 @@ const db = {
   select: () => makeThenable(),
 }
 
-mock.module('~/db', () => ({ db }))
-mock.module('~/db/schema', () => fullSchemaBarrelMock())
+// launcher.ts (the module under test) uses relative imports so portal-web's
+// Vite bundler can resolve it across the workspace boundary; the tsconfig
+// `~/` alias only works inside portal-api's own build. Register both forms
+// so other portal-api tests that share this fixture shape keep working.
+mockSpecs(['../db', '../../db', '~/db'], () => ({ db }))
+mockSpecs(['../db/schema', '../../db/schema', '~/db/schema'], fullSchemaBarrelMock)
 mock.module('drizzle-orm', () => fullDrizzleOrmMock())
 
 // ---------------------------------------------------------------------------
