@@ -118,6 +118,31 @@
 
 <svelte:window onkeydown={handleKeyDown} />
 
+<!-- Inline SVG brand glyphs for known app slugs. Hardcoded inside this
+     shared chrome because the suite only has two app pills (fast,
+     heroes) plus the portal hub anchor, and the icon set is part of
+     the brand identity. Adding new slugs here is the explicit way to
+     extend; spec-02 §Out of Scope still keeps @lucide/svelte out. -->
+{#snippet pillGlyph(slug: string)}
+  {#if slug === 'fast'}
+    <!-- Zap (lightning) — matches the React TopNav's PillIcon for FAST. -->
+    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  {:else if slug === 'heroes'}
+    <!-- Trophy — matches the React TopNav's PillIcon for HEROES and the
+         existing heroes-web brand glyph in MobileTopBar / Sidebar. -->
+    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+    </svg>
+  {/if}
+{/snippet}
+
 <div
   class="fixed top-0 left-0 right-0 z-[70] h-16 hidden md:flex items-center bg-[#0F0E7F] px-4 gap-1 shadow-md"
 >
@@ -164,7 +189,7 @@
           aria-current="page"
           class="{baseTokens} bg-white text-[#0F0E7F] shadow-sm select-none"
         >
-          {svc.label}
+          {@render pillGlyph(svc.slug)}{svc.label}
           <svg class="h-3.5 w-3.5 transition-transform" style:transform={isOpen ? 'rotate(180deg)' : 'rotate(0deg)'} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="6 9 12 15 18 9" />
           </svg>
@@ -175,14 +200,14 @@
             tabindex="-1"
             onmouseenter={() => openFlyout(svc.slug)}
             onmouseleave={scheduleFlyoutClose}
-            class="absolute top-full left-0 mt-2 min-w-[220px] bg-[#0F0E7F] rounded-lg shadow-xl ring-1 ring-white/10 py-1 z-50"
+            class="absolute top-full left-0 mt-2 min-w-[220px] bg-white border border-slate-100 rounded-lg shadow-xl py-1 z-50"
           >
             {#each svc.children ?? [] as child (child.href)}
               <a
                 href={child.href}
                 role="menuitem"
                 onclick={() => { openFlyoutSlug = null }}
-                class="block px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+                class="block px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 hover:text-slate-900 transition-colors"
               >
                 {child.label}
               </a>
@@ -195,7 +220,7 @@
         class="{baseTokens} bg-white text-[#0F0E7F] shadow-sm cursor-default select-none"
         aria-current="page"
       >
-        {svc.label}
+        {@render pillGlyph(svc.slug)}{svc.label}
       </div>
     {:else if hasChildren && svc.href}
       <!-- Inactive cross-app pill WITH children: keeps its anchor for
@@ -218,7 +243,7 @@
           aria-expanded={isOpen}
           class="{baseTokens} text-white/80 bg-white/5 hover:text-white hover:bg-white/15"
         >
-          {svc.label}
+          {@render pillGlyph(svc.slug)}{svc.label}
           <svg class="h-3.5 w-3.5 transition-transform" style:transform={isOpen ? 'rotate(180deg)' : 'rotate(0deg)'} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="6 9 12 15 18 9" />
           </svg>
@@ -229,14 +254,14 @@
             tabindex="-1"
             onmouseenter={() => openFlyout(svc.slug)}
             onmouseleave={scheduleFlyoutClose}
-            class="absolute top-full left-0 mt-2 min-w-[220px] bg-[#0F0E7F] rounded-lg shadow-xl ring-1 ring-white/10 py-1 z-50"
+            class="absolute top-full left-0 mt-2 min-w-[220px] bg-white border border-slate-100 rounded-lg shadow-xl py-1 z-50"
           >
             {#each svc.children ?? [] as child (child.href)}
               <a
                 href={child.href}
                 role="menuitem"
                 onclick={() => { openFlyoutSlug = null }}
-                class="block px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+                class="block px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 hover:text-slate-900 transition-colors"
               >
                 {child.label}
               </a>
@@ -250,7 +275,7 @@
           type="submit"
           class="{baseTokens} text-white/80 bg-white/5 hover:text-white hover:bg-white/15 tap-active"
         >
-          {svc.label}
+          {@render pillGlyph(svc.slug)}{svc.label}
         </button>
       </form>
     {:else}
@@ -258,7 +283,7 @@
         href={svc.href}
         class="{baseTokens} text-white/80 bg-white/5 hover:text-white hover:bg-white/15"
       >
-        {svc.label}
+        {@render pillGlyph(svc.slug)}{svc.label}
       </a>
     {/if}
   {/each}
