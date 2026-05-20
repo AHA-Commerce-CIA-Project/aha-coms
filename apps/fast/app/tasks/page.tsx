@@ -888,7 +888,7 @@ function MyTasksContent() {
                                                     <tr
                                                         key={task.id}
                                                         onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); setTaskComments([]); setCommentText(''); fetchTaskComments(task.id); }}
-                                                        className="cursor-pointer hover:bg-slate-100/30 transition-colors"
+                                                        className="cursor-pointer hover:bg-slate-100/30 dark:hover:bg-slate-800/40 transition-colors"
                                                     >
                                                         <td className="px-4 py-3">
                                                             <span className="font-mono text-sm text-indigo-400">{task.task_token || '\u2014'}</span>
@@ -1063,7 +1063,7 @@ function MyTasksContent() {
                                                     <tr
                                                         key={task.id}
                                                         onClick={() => { setViewTask(task); setShowReassign(false); setReassignTo(''); setTaskComments([]); setCommentText(''); fetchTaskComments(task.id); }}
-                                                        className="cursor-pointer hover:bg-slate-100/30 transition-colors"
+                                                        className="cursor-pointer hover:bg-slate-100/30 dark:hover:bg-slate-800/40 transition-colors"
                                                     >
                                                         <td className="px-4 py-3">
                                                             <span className="font-mono text-sm text-indigo-400">{task.task_token || '\u2014'}</span>

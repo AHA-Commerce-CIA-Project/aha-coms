@@ -902,7 +902,7 @@ function NexusContent() {
                                         {/* "Help wanted" pill — flags rows that surfaced into Open Queue
                                             via the needs_help broadcast (not claimable, helpers welcome). */}
                                         {ticket.needs_help && (
-                                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-500 text-white">
+                                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-500 text-white dark:bg-amber-900/60 dark:text-amber-200">
                                                 🙋 Help wanted
                                             </span>
                                         )}
@@ -991,7 +991,7 @@ function NexusContent() {
                                                     ? 'bg-indigo-50 ring-2 ring-indigo-300 ring-inset'
                                                     : ticket.needs_help
                                                         ? 'bg-amber-50/60 dark:bg-amber-950/30 hover:bg-amber-50 dark:hover:bg-amber-900/40 border-l-4 border-l-amber-400 dark:border-l-amber-500'
-                                                        : 'hover:bg-slate-100/30'
+                                                        : 'hover:bg-slate-100/30 dark:hover:bg-slate-800/40'
                                             }`}
                                         >
                                             <td className="px-4 py-3">
