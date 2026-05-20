@@ -175,7 +175,7 @@ Click each cross-app pill in sequence:
 
 1. Open the account popover → click "Sign out".
 2. The popover closes; `useAuth().signOut()` fires.
-3. Browser hits portal's `/api/auth/sign-out`.
+3. Browser hits portal's `/api/auth/logout` (RP-initiated, with `post_logout_redirect_uri`).
 4. `__session` cookie clears.
 5. Browser redirects to the post-logout destination
    (`https://aha-coms.web.app/`).
