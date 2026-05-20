@@ -627,7 +627,8 @@ export function DmPane() {
 
     const filteredUsers = allUsers.filter(u => {
         if (!userSearch) return true;
-        return u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email || ''.toLowerCase().includes(userSearch.toLowerCase());
+        const q = userSearch.toLowerCase();
+        return u.name.toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
     });
 
     return (
