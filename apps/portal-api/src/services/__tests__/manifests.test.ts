@@ -18,26 +18,32 @@ const mockInsertChain = {
 }
 const mockInsert = mock(() => mockInsertChain)
 
-const mockSelectAll = {
-  from: mock(async () => [
-    {
-      appId: 'app-uuid-heroes',
-      displayName: 'Heroes',
-      configSchema: {
-        role: { type: 'enum', values: ['member', 'captain', 'admin'], default: 'member' },
-        leaderboard_eligible: { type: 'boolean', default: true },
-        starting_points: { type: 'integer', default: 0 },
-      },
-      schemaVersion: 1,
-      registeredAt: new Date(),
-      updatedAt: new Date(),
+const mockManifestRows = [
+  {
+    appId: 'app-uuid-heroes',
+    displayName: 'Heroes',
+    configSchema: {
+      role: { type: 'enum', values: ['member', 'captain', 'admin'], default: 'member' },
+      leaderboard_eligible: { type: 'boolean', default: true },
+      starting_points: { type: 'integer', default: 0 },
     },
-  ]),
+    schemaVersion: 1,
+    registeredAt: new Date(),
+    updatedAt: new Date(),
+  },
+]
+
+const mockSelectAll = {
+  // loadAllManifests now chains .from(...).limit(N) — the mock must return an
+  // object with a .limit() method rather than resolving immediately after from().
+  from: mock(() => ({
+    limit: mock(async () => mockManifestRows),
+  })),
 }
 
 // We need db.select to handle two call shapes: one returns a chain with
 // .from().where().limit() (for registerManifest slug lookup), another returns
-// a chain with just .from() (for loadAllManifests). We track call count.
+// a chain with .from().limit() (for loadAllManifests). We track call count.
 let selectCallCount = 0
 mock.module('~/db', () => ({
   db: {

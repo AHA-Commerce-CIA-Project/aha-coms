@@ -67,7 +67,14 @@ export const appRoutes = new Elysia({ prefix: '/apps' })
   .use(requireRole('admin'))
 
   .get('/', async () => {
-    return db.select().from(appRegistry)
+    // defensive: the app registry is a catalogue of platform-integrated apps
+    // managed by admins. In production today we have ~5 entries; the organisational
+    // ceiling is bounded by the number of distinct products AHA COMS ships — a
+    // number that realistically stays under 50 and would require a deliberate
+    // architectural decision to exceed 100. Cap at 100 to prevent an accidental
+    // full-table scan if the table ever grows unbounded due to soft-deleted rows
+    // or test data accumulation.
+    return db.select().from(appRegistry).limit(100)
   }, { response: { 200: t.Array(t.Any()) } })
 
   .get('/:id', async ({ params, set }) => {

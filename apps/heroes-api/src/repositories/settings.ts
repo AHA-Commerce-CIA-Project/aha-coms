@@ -7,7 +7,13 @@ export type SettingRow = typeof systemSettings.$inferSelect
 
 export async function getAllSettings(tx?: DbClient): Promise<SettingRow[]> {
   const db = getDb(tx)
-  return db.select().from(systemSettings).orderBy(systemSettings.key)
+  // defensive: system_settings holds platform-wide feature flags and
+  // configuration knobs managed by operators. The table is intentionally
+  // small — typically fewer than 20 rows in production, with no realistic
+  // path to exceeding a few dozen. Cap at 100 to guard against an accidental
+  // full-table scan if the table is ever populated with test or migration
+  // artefacts, while comfortably exceeding any foreseeable operational need.
+  return db.select().from(systemSettings).orderBy(systemSettings.key).limit(100)
 }
 
 export async function getSettingByKey(
