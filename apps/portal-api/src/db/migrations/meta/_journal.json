@@ -260,6 +260,13 @@
       "when": 1779172368636,
       "tag": "0036_spec06_prf_password_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1779251675117,
+      "tag": "0037_system_bot_identity",
+      "breakpoints": true
     }
   ]
 }
