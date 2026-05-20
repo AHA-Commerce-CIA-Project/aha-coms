@@ -48,7 +48,7 @@
 </script>
 
 <aside
-  class="fixed top-9 left-0 z-40 hidden md:flex h-[calc(100vh-2.25rem)] flex-col transition-[width] duration-200 bg-card border-r border-border
+  class="fixed top-16 left-0 z-40 hidden md:flex h-[calc(100vh-4rem)] flex-col transition-[width] duration-200 bg-card border-r border-border
     {collapsed ? 'w-16' : 'w-64'}"
   onmouseenter={() => onCollapsedChange?.(false)}
   onmouseleave={() => onCollapsedChange?.(true)}
