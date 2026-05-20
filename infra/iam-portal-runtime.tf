@@ -103,3 +103,22 @@ resource "google_cloud_tasks_queue_iam_member" "portal_runtime_queue_viewer" {
   role     = "roles/cloudtasks.viewer"
   member   = "serviceAccount:${google_service_account.portal_runtime.email}"
 }
+
+# ── Firebase Auth admin ───────────────────────────────────────
+# Spec 06 PR F. `apps/portal-api/src/gip-admin.ts` authenticates Identity
+# Toolkit Admin calls (`/v1/projects/<id>/accounts:update`,
+# `/v1/projects/<id>/accounts:sendOobCode`, etc.) with the runtime SA's ADC
+# token — see `getAccessToken()` at gip-admin.ts:10. Without
+# `roles/firebaseauth.admin` the password-set route at
+# `apps/portal-api/src/routes/auth/password-set.ts:90` throws
+# `INSUFFICIENT_PERMISSION` on `updateGipUserPassword`, which the global
+# onError handler at `apps/portal-api/src/middleware/api-error-handler.ts:47`
+# sanitises into a generic "Internal error" 500. The same role was
+# previously bound only to the orphaned `coms-portal-workspace-sync` SA
+# (see iam-firebase-auth.tf) — that SA's feature was removed but the
+# binding was never relocated to the actual runtime identity.
+resource "google_project_iam_member" "portal_runtime_firebaseauth_admin" {
+  project = var.project_id
+  role    = "roles/firebaseauth.admin"
+  member  = "serviceAccount:${google_service_account.portal_runtime.email}"
+}
