@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MessageSquare, Send as SendIcon, Pencil, X as XIcon, Check, Loader2, Paperclip, Smile, AtSign, ListOrdered, List, Hash, SmilePlus } from 'lucide-react';
+import { MessageSquare, Send as SendIcon, Pencil, X as XIcon, Check, Loader2, Paperclip, Smile, AtSign, ListOrdered, List, Hash, SmilePlus, ChevronDown } from 'lucide-react';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { linkifyText, linkifyHtml } from '@/lib/linkify';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
@@ -236,6 +236,48 @@ export function TaskCommentsSection({
         }, 120);
         return () => clearTimeout(t);
     }, [highlightCommentId, loading, comments]);
+
+    // Comment feed auto-scrolls to the bottom on first load so users see the
+    // newest thread without manual scrolling. The deep-link path above takes
+    // priority — it targets a specific comment in the middle of the feed.
+    // didAutoScrollRef gates this to once per task to avoid yanking the user
+    // back down if they scroll up to read older comments while the feed is
+    // still settling. `feedRef` is paired with mentionContainerRef (a callback
+    // ref from useMentionPopover) via setFeedRef so both consumers see the
+    // same node — mention popover for its native click listener, this code
+    // for scrollHeight/scrollTo access.
+    const feedRef = useRef<HTMLDivElement | null>(null);
+    const setFeedRef = useCallback((el: HTMLDivElement | null) => {
+        feedRef.current = el;
+        mentionContainerRef(el);
+    }, [mentionContainerRef]);
+    const didAutoScrollRef = useRef(false);
+    const [isScrolledUp, setIsScrolledUp] = useState(false);
+
+    useEffect(() => {
+        didAutoScrollRef.current = false;
+        setIsScrolledUp(false);
+    }, [taskId]);
+
+    const scrollFeedToBottom = useCallback((smooth: boolean) => {
+        const el = feedRef.current;
+        if (!el) return;
+        el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+    }, []);
+
+    useEffect(() => {
+        if (loading || comments.length === 0) return;
+        if (highlightCommentId) return;
+        if (didAutoScrollRef.current) return;
+        scrollFeedToBottom(false);
+        didAutoScrollRef.current = true;
+    }, [loading, comments.length, highlightCommentId, scrollFeedToBottom]);
+
+    const handleFeedScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+        const el = e.currentTarget;
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        setIsScrolledUp(distanceFromBottom > 80);
+    }, []);
 
     // contenteditable auto-sizes from min/max-height CSS — no JS-driven resize
     // needed. Kept as a no-op so existing call sites don't break.
@@ -815,7 +857,12 @@ export function TaskCommentsSection({
             </p>
 
             {comments.length > 0 && (
-                <div ref={mentionContainerRef} className={`space-y-3 mb-3 overflow-y-auto ${size === 'regular' ? 'max-h-[28rem]' : 'max-h-80'}`}>
+                <div className="relative mb-3">
+                <div
+                    ref={setFeedRef}
+                    onScroll={handleFeedScroll}
+                    className={`space-y-3 overflow-y-auto ${size === 'regular' ? 'max-h-[28rem]' : 'max-h-80'}`}
+                >
                     {comments.map(c => {
                         const isEditing = editingId === c.id;
                         const editable = canEdit(c);
@@ -1131,6 +1178,17 @@ export function TaskCommentsSection({
                             </div>
                         );
                     })}
+                </div>
+                {isScrolledUp && (
+                    <button
+                        type="button"
+                        onClick={() => scrollFeedToBottom(true)}
+                        aria-label="Scroll to latest comment"
+                        className="absolute bottom-3 right-3 z-10 inline-flex items-center justify-center w-9 h-9 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition-colors"
+                    >
+                        <ChevronDown className="w-5 h-5" />
+                    </button>
+                )}
                 </div>
             )}
 
