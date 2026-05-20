@@ -32,11 +32,18 @@ locals {
   # Shared plain env — same value, both services. portal-web's SSR needs
   # these because hooks.server.ts validates sessions in-process via
   # @coms-portal/portal-api/services/auth.
+  #
+  # Spec 06 PR F — FORCE_PASSWORD_SETUP_ENABLED lives here (not on portal-api
+  # alone) because the redirect-to-/onboarding/set-password gate is evaluated
+  # inside portal-web's hooks.server.ts. The flag is read from process.env at
+  # module-load time of the in-process validateSession; without it on
+  # portal-web the gate stays closed even when portal-api has it set.
   portal_shared_env = {
-    GIP_PROJECT_ID         = var.gip_project_id
-    GIP_AUTH_DOMAIN        = var.gip_auth_domain
-    COMS_DOMAIN            = var.coms_domain
-    SESSION_COOKIE_MAX_AGE = var.session_cookie_max_age
+    GIP_PROJECT_ID               = var.gip_project_id
+    GIP_AUTH_DOMAIN              = var.gip_auth_domain
+    COMS_DOMAIN                  = var.coms_domain
+    SESSION_COOKIE_MAX_AGE       = var.session_cookie_max_age
+    FORCE_PASSWORD_SETUP_ENABLED = "true"
   }
 }
 
@@ -154,17 +161,9 @@ resource "google_cloud_run_v2_service" "coms_portal_api" {
         value = "true"
       }
 
-      # Spec 06 PR F — forced-first-set rollout switch.
-      # When true, identities with NULL password_set_at have their session
-      # payload mint with passwordSetupRequired=true; portal-web's
-      # hooks.server.ts then redirects them to /onboarding/set-password
-      # until they choose a password. Once every existing user has set one
-      # the flag becomes a no-op (no NULL rows left to gate) and can be
-      # left on indefinitely.
-      env {
-        name  = "FORCE_PASSWORD_SETUP_ENABLED"
-        value = "true"
-      }
+      # FORCE_PASSWORD_SETUP_ENABLED moved into local.portal_shared_env so
+      # portal-web's in-process validateSession sees it too. See the locals
+      # block at the top of the file for the Spec 06 PR F context.
 
       env {
         name = "DATABASE_URL"
