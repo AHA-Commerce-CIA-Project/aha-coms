@@ -85,6 +85,7 @@ mock.module('~/db', () => ({ db: mockDb }))
 // This matches the T1.2 implementation in access.ts exactly.
 // ---------------------------------------------------------------------------
 
+import type { SQL } from 'drizzle-orm'
 const { sql } = await import('drizzle-orm')
 const { db } = await import('~/db')
 
@@ -95,8 +96,9 @@ function buildBatchedAccessCleanupDelete(
 ) {
   if (memberUserIds.length === 0) return null
   const userIdParams = memberUserIds.map((id: string) => sql`${id}::uuid`)
-  const userIdList = userIdParams.reduce((acc: unknown, param: unknown, i: number) =>
-    i === 0 ? param : sql`${acc}, ${param}`
+  const userIdList = userIdParams.reduce(
+    (acc: SQL<unknown>, param: SQL<unknown>, i: number): SQL<unknown> =>
+      i === 0 ? param : sql`${acc}, ${param}`,
   )
   return sql`
     DELETE FROM member_app_role
