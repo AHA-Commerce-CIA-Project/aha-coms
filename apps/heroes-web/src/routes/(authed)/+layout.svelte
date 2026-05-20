@@ -80,18 +80,28 @@
     }),
   )
 
-  // Attach the heroes-internal main-nav items as the active pill's
-  // flyout children, so hovering/clicking the HEROES pill in the top
-  // bar reveals Dashboard / Points / Leaderboard / Rewards / Redemptions
-  // (matching fast's TopNav Tier-1 panel behavior). Admin-only routes
-  // stay reachable via the Sidebar; only the role-agnostic main-nav
-  // surfaces in the flyout for now.
+  // Cross-app flyout children. The active HEROES pill surfaces our own
+  // mainNavItems (Dashboard / Points / Leaderboard / Rewards / Redemptions).
+  // The inactive FAST pill surfaces fast's flattened top-level sub-routes
+  // — these are root-relative paths because both apps share the Firebase
+  // Hosting origin (the rewrite routes /fast/* to apps/fast).
+  const fastCrossAppChildren = [
+    { label: 'Dashboard', href: '/fast/dashboard' },
+    { label: 'Task', href: '/fast/tasks' },
+    { label: 'Message', href: '/fast/messages' },
+    { label: 'Analytics', href: '/fast/analytics' },
+    { label: 'Activity Log', href: '/fast/activity-log' },
+  ]
   const serviceBarServices = $derived(
-    baseServiceBarServices.map((s) =>
-      s.slug === 'heroes'
-        ? { ...s, children: mainNavItems.map((item) => ({ label: item.label, href: item.href })) }
-        : s,
-    ),
+    baseServiceBarServices.map((s) => {
+      if (s.slug === 'heroes') {
+        return { ...s, children: mainNavItems.map((item) => ({ label: item.label, href: item.href })) }
+      }
+      if (s.slug === 'fast') {
+        return { ...s, children: fastCrossAppChildren }
+      }
+      return s
+    }),
   )
 
   const isAdminOrHr = $derived(
