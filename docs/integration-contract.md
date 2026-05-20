@@ -44,7 +44,7 @@ For the *why* behind each rule, see the linked ADRs. This document describes the
 2. **One-time code via email** (`authMethod = 'personal_otp'`) — for personal email identities provisioned in the portal.
 3. **Email + password** (`authMethod = 'password'`) — added by Spec 06 PR F. Covers admin-created credential bags (`password_only_auth = TRUE` identities) and any workspace/personal user who has set a password via the change-password flow.
 
-For users whose `password_set_at` is `NULL` at the time `FORCE_PASSWORD_SETUP_ENABLED` is flipped on, the portal forces a one-time `/onboarding/set-password` step before any other route loads. After convergence, every user has a password and the sign-in surface stabilises at three coexisting methods.
+For users whose `password_set_at` is `NULL` at the time `FORCE_PASSWORD_SETUP_ENABLED` was flipped on (2026-05-20, `coms-portal-api-00028-nxz`), the portal forces a one-time `/onboarding/set-password` step before any other route loads. After convergence, every user has a password and the sign-in surface stabilises at three coexisting methods.
 
 Apps never see the password. The `authMethod` literal is the only signal exposed in `auth_sessions.auth_method`; no app-side branching should be required on it.
 

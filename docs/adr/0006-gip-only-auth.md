@@ -111,4 +111,5 @@ scope, tracked in `tasks/todo.md`.
 Refer to `docs/spec/06-portal-password-auth.md` for the implementation
 details, policy choices, and rollout discipline (the
 `FORCE_PASSWORD_SETUP_ENABLED` feature flag for the aggressive first-login
-rollout).
+rollout — live in production as of 2026-05-20, revision
+`coms-portal-api-00028-nxz`, applied via PR #64).
