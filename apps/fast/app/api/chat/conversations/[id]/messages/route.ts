@@ -105,7 +105,12 @@ export async function POST(
     // as no text at all.
     const trimmedContent = (content || '').trim();
     const plain = htmlToPlainText(trimmedContent);
-    const messageContent = plain.length > 0 ? trimmedContent : '';
+    // Forward payloads with no prose are HTML-comment-only
+    // (`<!--forward:{...}-->`) — htmlToPlainText returns '' for those, so a
+    // marker-only forward without a typed message would 400 here even
+    // though the receiver renders it as a real forward card.
+    const hasForwardMarker = /<!--forward:.*?-->/s.test(trimmedContent);
+    const messageContent = plain.length > 0 || hasForwardMarker ? trimmedContent : '';
     const messageAttachments = Array.isArray(attachments) ? attachments : [];
 
     // Must have content or attachments

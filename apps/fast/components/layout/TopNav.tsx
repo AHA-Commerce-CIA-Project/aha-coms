@@ -624,14 +624,17 @@ export function TopNav() {
                         );
                     }
                     // Non-FAST pills (HEROES, future apps) stay as plain
-                    // cross-origin links — no dropdown here.
+                    // cross-origin links — no dropdown here. Persistent
+                    // `bg-white/5` keeps the pill silhouette readable at rest
+                    // against the deep-indigo nav so it doesn't look like
+                    // raw text next to the solid white FAST pill.
                     return (
                         <a
                             key={app.slug}
                             href={app.url}
                             className={cn(
                                 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-bold uppercase tracking-wide rounded-full transition-colors whitespace-nowrap',
-                                'text-white/80 hover:text-white hover:bg-white/10',
+                                'text-white/80 bg-white/5 hover:text-white hover:bg-white/15',
                             )}
                         >
                             {PillIcon && <PillIcon className="w-3.5 h-3.5" />}
@@ -662,8 +665,8 @@ export function TopNav() {
                                 className={cn(
                                     'relative flex items-center gap-2 px-3 sm:px-4 h-16 text-sm sm:text-base font-bold transition-colors whitespace-nowrap',
                                     isActive
-                                        ? 'text-white bg-white/10'
-                                        : 'text-white/80 hover:text-white hover:bg-white/5'
+                                        ? 'text-white bg-white/20'
+                                        : 'text-white/80 bg-white/5 hover:text-white hover:bg-white/15'
                                 )}
                             >
                                 <Icon className="w-5 h-5 flex-shrink-0" />

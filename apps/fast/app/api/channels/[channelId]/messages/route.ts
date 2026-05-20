@@ -96,10 +96,14 @@ export async function POST(
 
   // Strip empty contenteditable HTML wrappers (e.g. "<br><div><br></div>") so
   // image-only sends don't persist invisible cruft and leak into channel
-  // previews.
+  // previews. Forward payloads with no prose are HTML-comment-only
+  // (`<!--forward:{...}-->`) — htmlToPlainText collapses those to '', so a
+  // marker-only forward without a typed message would otherwise 400 here
+  // even though the receiver renders it as a real forward card.
   const trimmedContent = (content || '').trim();
   const plainContent = htmlToPlainText(trimmedContent);
-  const messageContent = plainContent.length > 0 ? trimmedContent : '';
+  const hasForwardMarker = /<!--forward:.*?-->/s.test(trimmedContent);
+  const messageContent = plainContent.length > 0 || hasForwardMarker ? trimmedContent : '';
 
   if (!messageContent && attachments.length === 0) {
     return NextResponse.json({ error: 'Message content or attachments required' }, { status: 400 });
