@@ -7,9 +7,10 @@
 
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Hash, Lock, ChevronDown, ChevronRight, Plus, Search, MoreHorizontal, Check, ListFilter, ArrowDownAZ, Clock, MailCheck, Pin } from 'lucide-react';
+import { Hash, Lock, ChevronDown, ChevronRight, Plus, Search, MoreHorizontal, Check, ListFilter, ArrowDownAZ, Clock, MailCheck, Pin, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PresenceDot } from '@/components/PresenceDot';
+import { useDrafts } from '@/lib/useDrafts';
 
 export interface IndexChannel {
     id: string;
@@ -151,6 +152,10 @@ export function MessagesIndex({
     const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set());
     const [search, setSearch] = useState('');
     const [prefs, setPrefs] = useState<AllPrefs>(DEFAULT_PREFS);
+    // Reactive set of channel/conversation IDs with a non-empty composer
+    // draft in localStorage. Surfaces a small pencil on each row so users
+    // can see they have unsent text waiting in another channel/DM.
+    const draftIds = useDrafts();
     const [marking, setMarking] = useState<SectionKey | null>(null);
 
     useEffect(() => { setCollapsed(loadCollapsed()); }, []);
@@ -256,6 +261,7 @@ export function MessagesIndex({
                                 key={c.id}
                                 channel={c}
                                 active={c.id === activeChannelId}
+                                hasDraft={draftIds.has(c.id)}
                                 onClick={() => onSelectChannel(c)}
                             />
                         ))}
@@ -285,6 +291,7 @@ export function MessagesIndex({
                                 key={c.id}
                                 channel={c}
                                 active={c.id === activeChannelId}
+                                hasDraft={draftIds.has(c.id)}
                                 onClick={() => onSelectChannel(c)}
                             />
                         ))
@@ -311,6 +318,7 @@ export function MessagesIndex({
                                     key={c.id}
                                     channel={c}
                                     active={c.id === activeChannelId}
+                                    hasDraft={draftIds.has(c.id)}
                                     onClick={() => onSelectChannel(c)}
                                 />
                             ))
@@ -341,6 +349,7 @@ export function MessagesIndex({
                                 key={d.id}
                                 dm={d}
                                 active={d.id === activeDmId}
+                                hasDraft={draftIds.has(d.id)}
                                 onClick={() => onSelectDm(d)}
                             />
                         ))
@@ -577,7 +586,7 @@ function MenuOption({ icon, label, selected, onClick }: { icon: React.ReactNode;
     );
 }
 
-function ChannelItem({ channel, active, onClick }: { channel: IndexChannel; active: boolean; onClick: () => void }) {
+function ChannelItem({ channel, active, hasDraft, onClick }: { channel: IndexChannel; active: boolean; hasDraft: boolean; onClick: () => void }) {
     const hasUnread = (channel.unreadCount ?? 0) > 0;
     return (
         <button
@@ -613,6 +622,12 @@ function ChannelItem({ channel, active, onClick }: { channel: IndexChannel; acti
                     active ? 'text-white/80' : 'text-indigo-500',
                 )} />
             )}
+            {hasDraft && !active && (
+                <Pencil
+                    className="w-3 h-3 flex-shrink-0 text-indigo-500"
+                    aria-label="Unsent draft"
+                />
+            )}
             {hasUnread && !active && (
                 <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold text-white bg-rose-500 rounded-full">
                     {(channel.unreadCount ?? 0) > 99 ? '99+' : channel.unreadCount}
@@ -622,7 +637,7 @@ function ChannelItem({ channel, active, onClick }: { channel: IndexChannel; acti
     );
 }
 
-function DmItem({ dm, active, onClick }: { dm: IndexDm; active: boolean; onClick: () => void }) {
+function DmItem({ dm, active, hasDraft, onClick }: { dm: IndexDm; active: boolean; hasDraft: boolean; onClick: () => void }) {
     const hasUnread = (dm.unreadCount ?? 0) > 0;
     return (
         <button
@@ -652,6 +667,12 @@ function DmItem({ dm, active, onClick }: { dm: IndexDm; active: boolean; onClick
                 <PresenceDot lastSeenAt={dm.otherLastSeenAt || null} size="sm" />
             </div>
             <span className="flex-1 truncate text-left">{dm.otherName}</span>
+            {hasDraft && !active && (
+                <Pencil
+                    className="w-3 h-3 flex-shrink-0 text-indigo-500"
+                    aria-label="Unsent draft"
+                />
+            )}
             {hasUnread && !active && (
                 <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold text-white bg-rose-500 rounded-full">
                     {(dm.unreadCount ?? 0) > 99 ? '99+' : dm.unreadCount}

@@ -11,7 +11,6 @@ import { ImageLightbox } from '@/components/ImageLightbox';
 import { PresenceDot } from '@/components/PresenceDot';
 import { linkifyHtml } from '@/lib/linkify';
 import { htmlToPlainText } from '@/lib/sanitize';
-import { useDrafts } from '@/lib/useDrafts';
 import { useAppStore } from '@/lib/store';
 import { useCustomEmojiMap } from '@/lib/customEmojis';
 import { renderShortcodes } from '@/lib/renderShortcodes';
@@ -305,7 +304,6 @@ export function DmPane() {
     const [mobileShowThread, setMobileShowThread] = useState(false);
     const msgEndRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
-    const draftIds = useDrafts();
     const setProfileUser = useAppStore((s) => s.setProfileUser);
     // Tracks the conversation we last did the initial scroll for, so the
     // instant-jump-to-bottom only runs once per open instead of on every
