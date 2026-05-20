@@ -1,8 +1,6 @@
 import { Elysia } from 'elysia'
-import { db } from '~/db'
-import { appRegistry } from '~/db/schema'
-import { inArray } from 'drizzle-orm'
 import { authPlugin } from '../middleware/auth'
+import { getDashboardAppsForUser } from '../services/launcher'
 
 export const dashboardRoutes = new Elysia({ prefix: '/dashboard' })
   .use(authPlugin)
@@ -10,22 +8,7 @@ export const dashboardRoutes = new Elysia({ prefix: '/dashboard' })
   /**
    * GET /api/v1/dashboard
    * Returns apps the current user can access, based on the `apps` custom claim.
+   * Logic lives in the launcher service so portal-web's SSR layout can call it
+   * in-process — see apps/portal-api/src/services/launcher.ts.
    */
-  .get('/', async ({ authUser }) => {
-    if (authUser.apps.length === 0) return []
-
-    return db
-      .select({
-        id: appRegistry.id,
-        slug: appRegistry.slug,
-        name: appRegistry.name,
-        description: appRegistry.description,
-        url: appRegistry.url,
-        iconUrl: appRegistry.iconUrl,
-        status: appRegistry.status,
-        healthStatus: appRegistry.healthStatus,
-        lastHealthCheckAt: appRegistry.lastHealthCheckAt,
-      })
-      .from(appRegistry)
-      .where(inArray(appRegistry.slug, authUser.apps))
-  })
+  .get('/', async ({ authUser }) => getDashboardAppsForUser(authUser))

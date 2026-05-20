@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./middleware/auth": "./src/middleware/auth.ts",
     "./services/auth": "./src/services/auth.ts",
+    "./services/launcher": "./src/services/launcher.ts",
     "./src/db/schema/identity-users": "./src/db/schema/identity-users.ts",
     "./src/db/schema/teams": "./src/db/schema/teams.ts",
     "./src/db/schema/apps": "./src/db/schema/apps.ts"
