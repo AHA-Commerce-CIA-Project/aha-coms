@@ -12,6 +12,14 @@ export interface SessionUser {
   portalRole: PortalRole
   apps: string[]
   capabilities?: SessionUserCapabilities
+  /**
+   * Spec 06 PR F §1. Forwarded by /api/auth/me. `true` when the user has no
+   * local password set AND `FORCE_PASSWORD_SETUP_ENABLED` is on at session
+   * mint time. The portal-web `(authed)` layout uses this to redirect to
+   * /onboarding/set-password; the profile page reads it inversely to decide
+   * whether to surface the Change-password section.
+   */
+  passwordSetupRequired?: boolean
 }
 
 export async function fetchMe(): Promise<SessionUser | null> {

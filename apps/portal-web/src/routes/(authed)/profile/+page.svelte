@@ -8,6 +8,7 @@
     resendOwnedEmailOtp,
     setEmailPrimary,
     removeOwnedEmail,
+    setPassword,
     type UserinfoEmailEntry,
     type UserinfoResponse,
   } from '$lib/auth'
@@ -258,6 +259,54 @@
     if (entry.verified && verifiedCount <= 1) return false
     return true
   }
+
+  // ----------- Change password state -----------------------------------------
+  // Spec 06 PR F: users whose `passwordSetupRequired` is `true` are redirected
+  // to /onboarding/set-password by hooks.server.ts before they ever reach this
+  // page, so the section below assumes the user already has a password and
+  // requires their current one to authorize a change.
+  let pwCurrent = $state('')
+  let pwNew = $state('')
+  let pwConfirm = $state('')
+  let pwBusy = $state(false)
+  let pwError = $state<string | null>(null)
+  let pwSuccess = $state(false)
+
+  function resetPasswordForm() {
+    pwCurrent = ''
+    pwNew = ''
+    pwConfirm = ''
+  }
+
+  async function handleChangePassword() {
+    pwError = null
+    pwSuccess = false
+    if (pwNew !== pwConfirm) {
+      pwError = 'New password and confirmation do not match.'
+      return
+    }
+    pwBusy = true
+    const result = await setPassword(pwNew, pwCurrent)
+    pwBusy = false
+    if (result.kind === 'ok') {
+      pwSuccess = true
+      resetPasswordForm()
+      return
+    }
+    if (result.kind === 'weak_password') {
+      pwError = result.message || 'That password is too weak. Please choose a stronger one.'
+      return
+    }
+    if (result.kind === 'current_password_required') {
+      pwError = result.message || 'Enter your current password to confirm the change.'
+      return
+    }
+    if (result.kind === 'current_password_invalid') {
+      pwError = result.message || 'Current password is incorrect.'
+      return
+    }
+    pwError = result.message || 'Network error. Please try again.'
+  }
 </script>
 
 <div class="p-8">
@@ -375,6 +424,63 @@
         {/if}
       </CardContent>
     </Card>
+
+    {#if user.passwordSetupRequired === false}
+      <Card class="mt-6 max-w-2xl">
+        <CardContent class="space-y-4 pt-6">
+          <div>
+            <h2 class="text-base font-semibold">Change password</h2>
+            <p class="text-xs text-muted-foreground">Enter your current password, then choose a new one.</p>
+          </div>
+          <form onsubmit={(e) => { e.preventDefault(); handleChangePassword() }} class="space-y-3">
+            <div>
+              <Label for="pw-current" class="mb-1 block text-xs text-muted-foreground">Current password</Label>
+              <Input
+                id="pw-current"
+                type="password"
+                autocomplete="current-password"
+                required
+                bind:value={pwCurrent}
+                class="w-full"
+              />
+            </div>
+            <div>
+              <Label for="pw-new" class="mb-1 block text-xs text-muted-foreground">New password</Label>
+              <Input
+                id="pw-new"
+                type="password"
+                autocomplete="new-password"
+                required
+                bind:value={pwNew}
+                class="w-full"
+              />
+            </div>
+            <div>
+              <Label for="pw-confirm" class="mb-1 block text-xs text-muted-foreground">Confirm new password</Label>
+              <Input
+                id="pw-confirm"
+                type="password"
+                autocomplete="new-password"
+                required
+                bind:value={pwConfirm}
+                class="w-full"
+              />
+            </div>
+            {#if pwError}
+              <p class="text-xs text-destructive">{pwError}</p>
+            {/if}
+            {#if pwSuccess}
+              <p class="text-xs text-status-active">Password updated.</p>
+            {/if}
+            <div class="flex justify-end">
+              <Button type="submit" disabled={pwBusy || !pwCurrent || !pwNew || !pwConfirm}>
+                {pwBusy ? 'Saving…' : 'Update password'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    {/if}
 
     <Card class="mt-6 max-w-2xl">
       <CardContent class="space-y-4 pt-6">
