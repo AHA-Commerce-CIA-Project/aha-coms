@@ -104,9 +104,6 @@ surface (routes, features, schemas) lives in `apps/fast/README.md` and
   the load-bearing part of the format — keep them on every commit, even
   the small ones (use `Tested: typecheck` and `Related: none` if there is
   truly nothing more).
-- **The `Author: Mr. Door` anchor is reserved for the operator's
-  commits.** Do not append it to yours — it is @mrdoorba's personal
-  signature.
 - **Pre-commit hooks** that fire on every commit:
   - `Detect hardcoded secrets` — regex scan over the staged diff for
     common secret patterns. The pattern catalogue tightened during FU-15;
