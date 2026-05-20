@@ -12,8 +12,9 @@
     type UserinfoEmailEntry,
     type UserinfoResponse,
   } from '$lib/auth'
-  import { PORTAL_ROLE_LABELS } from '@coms-portal/shared'
+  import { PORTAL_ROLE_LABELS, PASSWORD_MIN_LENGTH } from '@coms-portal/shared'
   import { Button, Input, Label, Card, CardContent } from '@coms-portal/ui-svelte/primitives'
+  import PasswordStrengthMeter from '$lib/components/password-strength-meter.svelte'
   import {
     listSessions,
     revokeSessionById,
@@ -432,6 +433,16 @@
             <h2 class="text-base font-semibold">Change password</h2>
             <p class="text-xs text-muted-foreground">Enter your current password, then choose a new one.</p>
           </div>
+          <div class="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <p class="mb-1 font-medium text-foreground">Tip: pick a long passphrase, not a short tricky word.</p>
+            <p>
+              Four or more unrelated words read like a sentence but resist guessing — for example
+              <code class="rounded bg-background px-1 py-0.5 font-mono text-[11px]">coffee mountain candle truck</code>
+              or
+              <code class="rounded bg-background px-1 py-0.5 font-mono text-[11px]">silver-river-42-window</code>.
+              Minimum {PASSWORD_MIN_LENGTH} characters. Avoid your name, email, or anything you have used elsewhere.
+            </p>
+          </div>
           <form onsubmit={(e) => { e.preventDefault(); handleChangePassword() }} class="space-y-3">
             <div>
               <Label for="pw-current" class="mb-1 block text-xs text-muted-foreground">Current password</Label>
@@ -451,8 +462,14 @@
                 type="password"
                 autocomplete="new-password"
                 required
+                minlength={PASSWORD_MIN_LENGTH}
+                maxlength={256}
                 bind:value={pwNew}
                 class="w-full"
+              />
+              <PasswordStrengthMeter
+                password={pwNew}
+                userInputs={[user.email, user.name]}
               />
             </div>
             <div>
@@ -462,6 +479,8 @@
                 type="password"
                 autocomplete="new-password"
                 required
+                minlength={PASSWORD_MIN_LENGTH}
+                maxlength={256}
                 bind:value={pwConfirm}
                 class="w-full"
               />
