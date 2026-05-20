@@ -243,5 +243,11 @@ export async function registerManifest(manifest: ManifestDefinition): Promise<vo
 // ---------------------------------------------------------------------------
 
 export async function loadAllManifests(): Promise<(typeof appManifests.$inferSelect)[]> {
-  return db.select().from(appManifests)
+  // defensive: app_manifests has exactly one row per registered app; the
+  // catalogue is bounded by the count of platform-integrated apps (~5 today).
+  // A hard ceiling of 200 is chosen to match the outer app_registry limit and
+  // to prevent an unbounded scan if stale/duplicate rows accumulate before a
+  // cleanup migration runs. No legitimate codepath needs more than 200 manifest
+  // entries in a single call.
+  return db.select().from(appManifests).limit(200)
 }
