@@ -2,13 +2,10 @@
   import { Search } from '@lucide/svelte'
   import * as m from '$lib/paraglide/messages'
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte'
-  import NotificationsBadge from '$lib/components/NotificationsBadge.svelte'
 
   let {
-    unreadCount = 0,
     onOpenPalette,
   }: {
-    unreadCount?: number
     onOpenPalette?: () => void
   } = $props()
 </script>
@@ -52,8 +49,11 @@
     </kbd>
   </button>
 
+  <!-- Notification bell moved up into <ServiceBar>'s right snippet on
+       2026-05-20 so the top bar's right cluster matches FAST's
+       [Bell] → [Theme] → [Avatar] sequence; this row keeps the command
+       palette + language switcher as its sole utilities. -->
   <div class="flex items-center gap-2">
     <LanguageSwitcher />
-    <NotificationsBadge {unreadCount} />
   </div>
 </header>
