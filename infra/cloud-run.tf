@@ -154,6 +154,18 @@ resource "google_cloud_run_v2_service" "coms_portal_api" {
         value = "true"
       }
 
+      # Spec 06 PR F — forced-first-set rollout switch.
+      # When true, identities with NULL password_set_at have their session
+      # payload mint with passwordSetupRequired=true; portal-web's
+      # hooks.server.ts then redirects them to /onboarding/set-password
+      # until they choose a password. Once every existing user has set one
+      # the flag becomes a no-op (no NULL rows left to gate) and can be
+      # left on indefinitely.
+      env {
+        name  = "FORCE_PASSWORD_SETUP_ENABLED"
+        value = "true"
+      }
+
       env {
         name = "DATABASE_URL"
         value_source {
