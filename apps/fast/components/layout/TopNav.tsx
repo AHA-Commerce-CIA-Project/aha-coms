@@ -113,45 +113,6 @@ interface NotifItem {
     data: any;
 }
 
-interface SubItem {
-    label: string;
-    href: string;
-    requireLeader?: boolean;
-    // Nested level — when present, hovering this row reveals a side flyout.
-    subItems?: SubItem[];
-}
-
-interface ModuleTab {
-    key: string;
-    label: string;
-    href: string;
-    icon: any;
-    matchPaths: string[];
-    requireLeader?: boolean;
-    subItems?: SubItem[];
-}
-
-// In-app modules. The legacy `AHA Fast` entry (with its 7-item dropdown) was
-// folded out when the cross-app pills moved into this header — Sidebar +
-// BottomNav already cover Dashboard / Tasks / Messages / Channels / Analytics
-// / Activity Log / Later, so the top bar no longer carries a duplicate fast
-// menu.
-const MODULES: ModuleTab[] = [
-    {
-        key: 'request', label: 'Request Form', href: '/request', icon: FileText,
-        matchPaths: ['/request'],
-    },
-    {
-        key: 'users', label: 'User Control Panel', href: '/users', icon: Users,
-        matchPaths: ['/users'], requireLeader: true,
-        subItems: [
-            { label: 'Users', href: '/users' },
-            { label: 'Teams', href: '/users?tab=teams' },
-            { label: 'Roles', href: '/users?tab=roles' },
-        ],
-    },
-];
-
 export function TopNav() {
     const pathname = usePathname();
     const router = useRouter();
@@ -159,14 +120,16 @@ export function TopNav() {
     const { theme, toggleTheme } = useTheme();
     const [showNotifs, setShowNotifs] = useState(false);
     const [showAccount, setShowAccount] = useState(false);
+    // Settings row in the avatar popover expands inline to reveal three
+    // children: Profile Settings, Request Form, User Control Panel. The
+    // last two used to live in the in-app module tabs row directly under
+    // the top nav; they were folded in here on 2026-05-20 to reclaim
+    // header real estate.
+    const [settingsExpanded, setSettingsExpanded] = useState(false);
     const [notifications, setNotifications] = useState<NotifItem[]>([]);
     const [notifTab, setNotifTab] = useState<'all' | 'dms'>('all');
-    const [hoveredModule, setHoveredModule] = useState<string | null>(null);
-    const hoverCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    // FAST cross-app pill is also a sub-route dropdown when this app is
-    // the active one. Separate state from `hoveredModule` because the
-    // FAST dropdown opens off a different container (the cross-app row,
-    // not the in-app modules row).
+    // FAST cross-app pill is a sub-route dropdown when this app is the
+    // active one (Tier-1 + Tier-2 flyout described below).
     const [fastDropdownOpen, setFastDropdownOpen] = useState(false);
     const fastDropdownCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Tier-2 flyout state — keys off the group's `key` ('task' / 'message')
@@ -210,19 +173,7 @@ export function TopNav() {
     const isFirstFetchRef = useRef(true);
     const toastTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-    const openModuleDropdown = (key: string) => {
-        if (hoverCloseTimer.current) clearTimeout(hoverCloseTimer.current);
-        setHoveredModule(key);
-    };
-    const scheduleModuleClose = () => {
-        if (hoverCloseTimer.current) clearTimeout(hoverCloseTimer.current);
-        hoverCloseTimer.current = setTimeout(() => setHoveredModule(null), 120);
-    };
-
     const unreadCount = notifications.filter(n => !n.read).length;
-
-    const visibleModules = MODULES.filter(m => !m.requireLeader || isLeader);
-    const activeModule = visibleModules.find(m => m.matchPaths.some(p => pathname.startsWith(p)));
 
     const dismissToast = (id: string) => {
         setToasts(prev => prev.filter(t => t.id !== id));
@@ -643,90 +594,11 @@ export function TopNav() {
                 })}
             </nav>
 
-            {/* Horizontal in-app module tabs (Request Form, User Control Panel)
-                — scrollable on mobile so they don't crush the right cluster. */}
-            <nav className="flex items-center gap-0.5 sm:gap-1 flex-1 min-w-0 overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-                {visibleModules.map(m => {
-                    const isActive = activeModule?.key === m.key;
-                    const Icon = m.icon;
-                    const subItems = (m.subItems || []).filter(s => !s.requireLeader || isLeader);
-                    const hasDropdown = subItems.length > 0;
-                    const isOpen = hoveredModule === m.key;
-                    return (
-                        <div
-                            key={m.key}
-                            className="relative"
-                            onMouseEnter={() => hasDropdown && openModuleDropdown(m.key)}
-                            onMouseLeave={scheduleModuleClose}
-                        >
-                            <Link
-                                href={m.href}
-                                className={cn(
-                                    'relative flex items-center gap-2 px-3 sm:px-4 h-16 text-sm sm:text-base font-bold transition-colors whitespace-nowrap',
-                                    isActive
-                                        ? 'text-white bg-white/20'
-                                        : 'text-white/80 bg-white/5 hover:text-white hover:bg-white/15'
-                                )}
-                            >
-                                <Icon className="w-5 h-5 flex-shrink-0" />
-                                <span className="hidden sm:inline">{m.label}</span>
-                                {isActive && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />}
-                            </Link>
-                            {hasDropdown && isOpen && (
-                                <div
-                                    className="absolute left-0 top-full min-w-[240px] bg-white border border-slate-200 rounded-xl shadow-xl z-50"
-                                    onMouseEnter={() => openModuleDropdown(m.key)}
-                                    onMouseLeave={scheduleModuleClose}
-                                >
-                                    <div className="py-1">
-                                        {subItems.map(s => {
-                                            const nested = (s.subItems || []).filter((n) => !n.requireLeader || isLeader);
-                                            if (nested.length > 0) {
-                                                return (
-                                                    <div key={s.href} className="relative group/sub">
-                                                        <Link
-                                                            href={s.href}
-                                                            onClick={() => setHoveredModule(null)}
-                                                            className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                                                        >
-                                                            <span>{s.label}</span>
-                                                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                                                        </Link>
-                                                        <div className="absolute left-full top-0 hidden group-hover/sub:block pl-1 z-[60]">
-                                                            <div className="bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[200px]">
-                                                                {nested.map((n) => (
-                                                                    <Link
-                                                                        key={n.href}
-                                                                        href={n.href}
-                                                                        onClick={() => setHoveredModule(null)}
-                                                                        className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                                                                    >
-                                                                        {n.label}
-                                                                    </Link>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            }
-                                            return (
-                                                <Link
-                                                    key={s.href}
-                                                    href={s.href}
-                                                    onClick={() => setHoveredModule(null)}
-                                                    className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                                                >
-                                                    {s.label}
-                                                </Link>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-            </nav>
+            {/* In-app module tabs (Request Form, User Control Panel) were
+                folded out on 2026-05-20 — both destinations now live as
+                children under the Settings entry in the avatar popover.
+                A flex spacer keeps the right cluster pushed to the edge. */}
+            <div className="flex-1 min-w-0" />
 
             {/* Right cluster — bell, theme toggle, and account popover. The
                 suite ServiceBar that previously hosted theme + AccountWidget
@@ -907,19 +779,54 @@ export function TopNav() {
                                     >
                                         Manage account
                                     </a>
-                                    {/* Fast-internal destinations pulled out of the
-                                        sidebar footer in the chrome standardization
-                                        pass — Settings lives next to Manage account so
-                                        the whole "you" surface sits in one menu. */}
-                                    <Link
-                                        href="/profile"
-                                        onClick={() => setShowAccount(false)}
+                                    {/* Settings parent — click toggles an inline
+                                        expander revealing the three destinations
+                                        folded in from the in-app module tabs row:
+                                        Profile Settings, Request Form, and (for
+                                        leaders) User Control Panel. */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setSettingsExpanded(v => !v)}
+                                        aria-expanded={settingsExpanded}
                                         role="menuitem"
-                                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                        className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                                     >
                                         <Settings className="w-4 h-4 text-slate-500" />
-                                        Settings
-                                    </Link>
+                                        <span className="flex-1 text-left">Settings</span>
+                                        <ChevronDown className={cn('w-3.5 h-3.5 text-slate-400 transition-transform', settingsExpanded && 'rotate-180')} />
+                                    </button>
+                                    {settingsExpanded && (
+                                        <div className="ml-2 pl-3 border-l border-slate-100 space-y-0.5">
+                                            <Link
+                                                href="/profile"
+                                                onClick={() => { setShowAccount(false); setSettingsExpanded(false); }}
+                                                role="menuitem"
+                                                className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                            >
+                                                Profile Settings
+                                            </Link>
+                                            <Link
+                                                href="/request"
+                                                onClick={() => { setShowAccount(false); setSettingsExpanded(false); }}
+                                                role="menuitem"
+                                                className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                            >
+                                                <FileText className="w-3.5 h-3.5 text-slate-400" />
+                                                Request Form
+                                            </Link>
+                                            {isLeader && (
+                                                <Link
+                                                    href="/users"
+                                                    onClick={() => { setShowAccount(false); setSettingsExpanded(false); }}
+                                                    role="menuitem"
+                                                    className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                                >
+                                                    <Users className="w-3.5 h-3.5 text-slate-400" />
+                                                    User Control Panel
+                                                </Link>
+                                            )}
+                                        </div>
+                                    )}
                                     <button
                                         type="button"
                                         onClick={() => { setShowAccount(false); signOut(); }}
