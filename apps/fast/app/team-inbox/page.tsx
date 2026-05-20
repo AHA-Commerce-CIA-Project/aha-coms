@@ -1087,6 +1087,7 @@ function TeamInboxContent() {
                                                     {isMaster && (
                                                         <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Team</th>
                                                     )}
+                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Assigned To</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
@@ -1161,6 +1162,9 @@ function TeamInboxContent() {
                                                                     {t.assignedTeam?.name || '—'}
                                                                 </td>
                                                             )}
+                                                            <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
+                                                                {t.assignee?.name || '—'}
+                                                            </td>
                                                         </tr>
                                                     );
                                                 })}
