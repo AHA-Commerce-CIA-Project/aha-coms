@@ -54,11 +54,21 @@ function normalizeTimezone(value: unknown): string {
   }
 }
 
-export async function GET() {
+const TEMPLATES_DEFAULT_TAKE = 50;
+const TEMPLATES_MAX_TAKE = 200;
+
+export async function GET(request: Request) {
   const session = await requireFastAuth();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const { searchParams } = new URL(request.url);
+  const take = Math.min(
+    Math.max(1, parseInt(searchParams.get('take') ?? String(TEMPLATES_DEFAULT_TAKE), 10) || TEMPLATES_DEFAULT_TAKE),
+    TEMPLATES_MAX_TAKE,
+  );
+  const skip = Math.max(0, parseInt(searchParams.get('skip') ?? '0', 10) || 0);
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -76,6 +86,8 @@ export async function GET() {
       checklistItems: { orderBy: { position: 'asc' } },
     },
     orderBy: [{ frequency: 'asc' }, { name: 'asc' }],
+    take,
+    skip,
   });
 
   if (user?.role === 'admin') {

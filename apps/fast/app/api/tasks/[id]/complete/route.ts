@@ -54,11 +54,16 @@ export const PUT = withErrorHandler(async (
                 claimedById: null,
                 threshold: { lte: doneCount },
             },
+            select: { id: true },
         });
-        for (const m of eligible) {
-            // Atomic claim: only succeeds if still unclaimed.
+        if (eligible.length > 0) {
+            // Single atomic UPDATE — claimedById: null guard inside the WHERE
+            // clause preserves race-safety (TOCTOU window eliminated).
             await prisma.milestone.updateMany({
-                where: { id: m.id, claimedById: null },
+                where: {
+                    id: { in: eligible.map((m) => m.id) },
+                    claimedById: null,
+                },
                 data: { claimedById: session.user.id, claimedAt: new Date() },
             });
         }
