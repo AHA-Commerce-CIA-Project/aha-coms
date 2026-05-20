@@ -338,7 +338,7 @@ Expected flow:
    menu shows: name + email + portal role badge → "Manage account"
    (links to portal `/profile`) → app launcher list (same three apps,
    "Here" marker on AHA Fast) → "Sign out".
-7. **Sign-out** — click "Sign out". Portal's `/api/auth/sign-out`
+7. **Sign-out** — click "Sign out". Portal's `/api/auth/logout`
    clears the cookie and redirects to the post-logout destination
    (`https://aha-coms.web.app/`). Confirm you can't access
    `https://aha-coms.web.app/fast/dashboard` after — should bounce

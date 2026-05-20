@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { signOut as portalSignOut } from '@coms-portal/account-widget-react';
 
 /**
  * useAuth — client-side identity hook.
@@ -126,16 +127,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // referentially stable across renders — a fresh function literal here
     // would defeat the useMemo that wraps the provider value and ripple
     // back into every useEffect that depends on the context object.
+    // Delegates to the shared widget helper so the OIDC RP-initiated logout
+    // contract (`GET /api/auth/logout?post_logout_redirect_uri=…`) lives in
+    // one place. The hand-built URL this replaced hit `/api/auth/sign-out`
+    // with `returnTo=…`, which the portal does not serve — the dropdown
+    // landed on a raw NOT_FOUND page.
     const handleSignOut = useCallback(async () => {
         setProfile(null);
         const portalOrigin =
             process.env.NEXT_PUBLIC_PORTAL_ORIGIN ||
             (typeof window !== 'undefined' ? window.location.origin : '');
-        const returnTo =
+        const postLogoutRedirectUri =
             typeof window !== 'undefined' ? `${window.location.origin}/` : '/';
-        window.location.assign(
-            `${portalOrigin}/api/auth/sign-out?returnTo=${encodeURIComponent(returnTo)}`,
-        );
+        portalSignOut({ portalOrigin, postLogoutRedirectUri });
     }, []);
 
     // Memoised so the context object identity only changes when one of
