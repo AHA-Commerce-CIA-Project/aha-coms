@@ -25,7 +25,6 @@ import {
     Zap,
     Trophy,
     Settings,
-    Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth/use-auth';
 import { useTheme } from '@/lib/theme-context';
@@ -910,9 +909,8 @@ export function TopNav() {
                                     </a>
                                     {/* Fast-internal destinations pulled out of the
                                         sidebar footer in the chrome standardization
-                                        pass — Settings and Changelog now live next to
-                                        Manage account so the whole "you" surface sits
-                                        in one menu. */}
+                                        pass — Settings lives next to Manage account so
+                                        the whole "you" surface sits in one menu. */}
                                     <Link
                                         href="/profile"
                                         onClick={() => setShowAccount(false)}
@@ -921,15 +919,6 @@ export function TopNav() {
                                     >
                                         <Settings className="w-4 h-4 text-slate-500" />
                                         Settings
-                                    </Link>
-                                    <Link
-                                        href="/changelog"
-                                        onClick={() => setShowAccount(false)}
-                                        role="menuitem"
-                                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                                    >
-                                        <Sparkles className="w-4 h-4 text-slate-500" />
-                                        Changelog
                                     </Link>
                                     <button
                                         type="button"
