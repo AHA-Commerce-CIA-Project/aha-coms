@@ -50,16 +50,16 @@
   <Button
     type="submit"
     variant="ghost"
-    class="group flex w-full flex-col items-start gap-3 rounded-2xl card-surface card-hover p-5 transition-all tap-active text-left h-auto"
+    class="group flex w-full flex-col items-start justify-start gap-3 rounded-2xl card-surface card-hover p-5 transition-all tap-active text-left h-auto min-h-[160px] whitespace-normal"
   >
     {#if override}
       {@const Icon = override.icon}
       <div class="flex h-12 w-12 items-center justify-center rounded-xl {override.iconBg} transition-colors">
         <Icon class="h-6 w-6 {override.iconColor}" />
       </div>
-      <div class="text-left">
-        <p class="text-base font-bold text-foreground leading-tight">{override.title}</p>
-        <p class="mt-1.5 text-xs text-muted-foreground line-clamp-2">{override.subtitle}</p>
+      <div class="text-left w-full">
+        <p class="text-base font-bold text-foreground leading-tight whitespace-normal break-words">{override.title}</p>
+        <p class="mt-1.5 text-xs text-muted-foreground whitespace-normal break-words">{override.subtitle}</p>
         {#if app.healthStatus === 'unhealthy'}
           <div class="mt-2 flex items-center gap-1 text-xs text-red-500">
             <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
@@ -84,10 +84,10 @@
           <span class="sr-only">{initial}</span>
         {/if}
       </div>
-      <div class="text-left">
-        <p class="text-base font-bold text-foreground leading-tight">{app.name}</p>
+      <div class="text-left w-full">
+        <p class="text-base font-bold text-foreground leading-tight whitespace-normal break-words">{app.name}</p>
         {#if app.description}
-          <p class="mt-1.5 text-xs text-muted-foreground line-clamp-2">{app.description}</p>
+          <p class="mt-1.5 text-xs text-muted-foreground whitespace-normal break-words">{app.description}</p>
         {/if}
         {#if app.healthStatus === 'unhealthy'}
           <div class="mt-2 flex items-center gap-1 text-xs text-red-500">

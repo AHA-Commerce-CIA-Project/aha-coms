@@ -145,8 +145,11 @@
   {#each visibleServices as svc (svc.slug)}
     {@const isActive = svc.slug === currentApp}
     {@const baseTokens = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-bold uppercase tracking-wide whitespace-nowrap transition-colors'}
-    {@const hasFlyout = isActive && !!svc.children && svc.children.length > 0}
-    {#if isActive && hasFlyout}
+    {@const hasChildren = !!svc.children && svc.children.length > 0}
+    {@const isOpen = openFlyoutSlug === svc.slug}
+    {#if isActive && hasChildren}
+      <!-- Active pill with children: button toggles the flyout; no
+           cross-app navigation since you're already in this app. -->
       <div
         class="relative"
         onmouseenter={() => openFlyout(svc.slug)}
@@ -157,29 +160,29 @@
           type="button"
           onclick={() => toggleFlyout(svc.slug)}
           aria-haspopup="menu"
-          aria-expanded={openFlyoutSlug === svc.slug}
+          aria-expanded={isOpen}
           aria-current="page"
           class="{baseTokens} bg-white text-[#0F0E7F] shadow-sm select-none"
         >
           {svc.label}
-          <svg class="h-3.5 w-3.5 transition-transform" style:transform={openFlyoutSlug === svc.slug ? 'rotate(180deg)' : 'rotate(0deg)'} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg class="h-3.5 w-3.5 transition-transform" style:transform={isOpen ? 'rotate(180deg)' : 'rotate(0deg)'} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
-        {#if openFlyoutSlug === svc.slug}
+        {#if isOpen}
           <div
             role="menu"
             tabindex="-1"
             onmouseenter={() => openFlyout(svc.slug)}
             onmouseleave={scheduleFlyoutClose}
-            class="absolute top-full left-0 mt-1 min-w-[220px] bg-card border border-border rounded-xl shadow-xl py-1 z-[80]"
+            class="absolute top-full left-0 mt-2 min-w-[220px] bg-[#0F0E7F] rounded-lg shadow-xl ring-1 ring-white/10 py-1 z-50"
           >
             {#each svc.children ?? [] as child (child.href)}
               <a
                 href={child.href}
                 role="menuitem"
                 onclick={() => { openFlyoutSlug = null }}
-                class="block px-4 py-2 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground transition-colors"
+                class="block px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors"
               >
                 {child.label}
               </a>
@@ -193,6 +196,53 @@
         aria-current="page"
       >
         {svc.label}
+      </div>
+    {:else if hasChildren && svc.href}
+      <!-- Inactive cross-app pill WITH children: keeps its anchor for
+           click-to-navigate (and middle-click-to-open-in-new-tab), but
+           also reveals a hover flyout of the target app's sub-routes
+           so users can jump straight to a specific surface in the
+           other app. Form-action pills (portal-web's broker launches)
+           don't get this — sub-route deep-linking through the broker
+           needs a redirectTo query param the consumer has to wire up
+           per-link, out of scope here. -->
+      <div
+        class="relative"
+        onmouseenter={() => openFlyout(svc.slug)}
+        onmouseleave={scheduleFlyoutClose}
+        role="presentation"
+      >
+        <a
+          href={svc.href}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          class="{baseTokens} text-white/80 bg-white/5 hover:text-white hover:bg-white/15"
+        >
+          {svc.label}
+          <svg class="h-3.5 w-3.5 transition-transform" style:transform={isOpen ? 'rotate(180deg)' : 'rotate(0deg)'} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </a>
+        {#if isOpen}
+          <div
+            role="menu"
+            tabindex="-1"
+            onmouseenter={() => openFlyout(svc.slug)}
+            onmouseleave={scheduleFlyoutClose}
+            class="absolute top-full left-0 mt-2 min-w-[220px] bg-[#0F0E7F] rounded-lg shadow-xl ring-1 ring-white/10 py-1 z-50"
+          >
+            {#each svc.children ?? [] as child (child.href)}
+              <a
+                href={child.href}
+                role="menuitem"
+                onclick={() => { openFlyoutSlug = null }}
+                class="block px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                {child.label}
+              </a>
+            {/each}
+          </div>
+        {/if}
       </div>
     {:else if svc.formAction}
       <form method="POST" action={svc.formAction} class="contents">

@@ -98,6 +98,21 @@ const FAST_MENU_LEADER_EXTRA: FastTier1Item[] = [
     { kind: 'link', key: 'activity',  label: 'Activity Log', href: '/activity-log' },
 ];
 
+// Cross-app flyout children for inactive cross-app pills (the HEROES
+// pill from inside fast). Mirrors what the shared ServiceBar does in
+// heroes-web for the inactive FAST pill — keeps the hover-to-deep-link
+// behavior symmetrical across both stacks. Paths are root-relative
+// because both apps share the Firebase Hosting origin via rewrites.
+const CROSS_APP_CHILDREN: Record<string, { label: string; href: string }[]> = {
+    heroes: [
+        { label: 'Dashboard',  href: '/heroes/dashboard' },
+        { label: 'Points',     href: '/heroes/points' },
+        { label: 'Leaderboard',href: '/heroes/leaderboard' },
+        { label: 'Rewards',    href: '/heroes/rewards' },
+        { label: 'Redemptions',href: '/heroes/redemptions' },
+    ],
+};
+
 const PORTAL_ORIGIN =
     process.env.NEXT_PUBLIC_PORTAL_ORIGIN || 'https://aha-coms.web.app';
 
@@ -139,6 +154,11 @@ export function TopNav() {
     // panel closing mid-traversal.
     const [fastFlyoutKey, setFastFlyoutKey] = useState<string | null>(null);
     const fastFlyoutCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Cross-app pill hover flyout (HEROES dropdown when viewed from
+    // inside fast). Slug-keyed so future cross-app entries can use
+    // the same machinery without a per-app state bloom.
+    const [crossAppHoverSlug, setCrossAppHoverSlug] = useState<string | null>(null);
+    const crossAppHoverCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const notifRef = useRef<HTMLDivElement>(null);
     const accountRef = useRef<HTMLDivElement>(null);
 
@@ -573,11 +593,73 @@ export function TopNav() {
                             </div>
                         );
                     }
-                    // Non-FAST pills (HEROES, future apps) stay as plain
-                    // cross-origin links — no dropdown here. Persistent
-                    // `bg-white/5` keeps the pill silhouette readable at rest
-                    // against the deep-indigo nav so it doesn't look like
-                    // raw text next to the solid white FAST pill.
+                    // Non-FAST pills (HEROES, future apps) — anchor stays
+                    // primary navigation, but pills with cross-app children
+                    // (see CROSS_APP_CHILDREN) also reveal a flyout on hover
+                    // listing the target app's main sub-routes. Click on the
+                    // pill itself still navigates to the app root.
+                    const xChildren = CROSS_APP_CHILDREN[app.slug];
+                    const xOpen = crossAppHoverSlug === app.slug;
+                    const openCrossApp = () => {
+                        if (crossAppHoverCloseTimer.current) {
+                            clearTimeout(crossAppHoverCloseTimer.current);
+                            crossAppHoverCloseTimer.current = null;
+                        }
+                        setCrossAppHoverSlug(app.slug);
+                    };
+                    const scheduleCrossAppClose = () => {
+                        if (crossAppHoverCloseTimer.current) clearTimeout(crossAppHoverCloseTimer.current);
+                        crossAppHoverCloseTimer.current = setTimeout(() => setCrossAppHoverSlug(null), 200);
+                    };
+                    if (xChildren && xChildren.length > 0) {
+                        return (
+                            <div
+                                key={app.slug}
+                                className="relative"
+                                onMouseEnter={openCrossApp}
+                                onMouseLeave={scheduleCrossAppClose}
+                            >
+                                <a
+                                    href={app.url}
+                                    aria-haspopup="menu"
+                                    aria-expanded={xOpen}
+                                    className={cn(
+                                        'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-bold uppercase tracking-wide rounded-full transition-colors whitespace-nowrap',
+                                        'text-white/80 bg-white/5 hover:text-white hover:bg-white/15',
+                                    )}
+                                >
+                                    {PillIcon && <PillIcon className="w-3.5 h-3.5" />}
+                                    {app.label}
+                                    <ChevronDown
+                                        className={cn(
+                                            'w-3.5 h-3.5 transition-transform',
+                                            xOpen && 'rotate-180',
+                                        )}
+                                    />
+                                </a>
+                                {xOpen && (
+                                    <div
+                                        role="menu"
+                                        onMouseEnter={openCrossApp}
+                                        onMouseLeave={scheduleCrossAppClose}
+                                        className="absolute top-full left-0 mt-2 min-w-[220px] bg-[#0F0E7F] rounded-lg shadow-xl ring-1 ring-white/10 py-1 z-50"
+                                    >
+                                        {xChildren.map(child => (
+                                            <a
+                                                key={child.href}
+                                                href={child.href}
+                                                role="menuitem"
+                                                onClick={() => setCrossAppHoverSlug(null)}
+                                                className="block px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+                                            >
+                                                {child.label}
+                                            </a>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    }
                     return (
                         <a
                             key={app.slug}
