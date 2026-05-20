@@ -642,7 +642,7 @@ export function TopNav() {
                                         role="menu"
                                         onMouseEnter={openCrossApp}
                                         onMouseLeave={scheduleCrossAppClose}
-                                        className="absolute top-full left-0 mt-2 min-w-[220px] bg-[#0F0E7F] rounded-lg shadow-xl ring-1 ring-white/10 py-1 z-50"
+                                        className="absolute top-full left-0 mt-2 min-w-[220px] bg-white border border-slate-100 rounded-lg shadow-xl py-1 z-50"
                                     >
                                         {xChildren.map(child => (
                                             <a
@@ -650,7 +650,7 @@ export function TopNav() {
                                                 href={child.href}
                                                 role="menuitem"
                                                 onClick={() => setCrossAppHoverSlug(null)}
-                                                className="block px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+                                                className="block px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                                             >
                                                 {child.label}
                                             </a>
