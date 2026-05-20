@@ -966,6 +966,7 @@ export function ChannelPane() {
             currentUserId={session.user.id}
             onClose={() => setThreadMessage(null)}
             users={users}
+            teams={teams}
             onReplyCountChange={handleReplyCountChange}
             onOpenTaskDetail={openTaskDetail}
           />
