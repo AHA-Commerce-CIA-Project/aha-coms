@@ -11,18 +11,35 @@
    * tokens), and an optional notification bell that sits before the
    * theme toggle so the right cluster reads [Bell] → [Theme] → [Avatar].
    *
+   * 2026-05-20 flyout pass added optional sub-menu support per
+   * ServiceItem.children — when the ACTIVE pill carries children, the
+   * pill becomes a hover/click trigger and reveals a panel below
+   * listing the child routes (mirrors fast's TopNav Tier-1 panel).
+   * Inactive cross-app pills stay as plain navigation links even if
+   * `children` is provided — the consuming app doesn't have authority
+   * over another app's internal routes.
+   *
    * Host-agnostic: hosts pass brand href + logo asset path (each app
    * serves the AHA logo from its own static/public folder), an optional
    * notifications href + unread count, theme state, and an `right`
    * snippet for the account widget. Lucide is not imported here per
-   * spec-02 §Out of Scope — bell + theme glyphs are inline SVG.
+   * spec-02 §Out of Scope — bell + theme + chevron glyphs are inline SVG.
    */
+  interface ServiceChild {
+    label: string
+    href: string
+  }
+
   interface ServiceItem {
     slug: string
     label: string
     /** Either a top-level URL (cross-origin) or a local form action ("/api/auth/broker/launch/<slug>"). */
     href?: string
     formAction?: string
+    /** Sub-routes for an active app's pill. When present AND this is the active pill,
+     *  the pill becomes a flyout trigger instead of a static label. Ignored for
+     *  inactive pills. */
+    children?: ServiceChild[]
   }
 
   let {
@@ -56,7 +73,43 @@
 
   const resolvedTheme = $derived(resolveTheme(theme))
   const badgeDisplay = $derived(unreadCount > 99 ? '99+' : String(unreadCount))
+
+  // Flyout state — null when closed, holds the open pill's slug when open.
+  // Hover open / click toggle / mouse-leave close-with-grace so the cursor
+  // can travel from pill to panel without the panel folding mid-traversal.
+  let openFlyoutSlug = $state<string | null>(null)
+  let closeTimer: ReturnType<typeof setTimeout> | null = null
+
+  function openFlyout(slug: string) {
+    if (closeTimer) {
+      clearTimeout(closeTimer)
+      closeTimer = null
+    }
+    openFlyoutSlug = slug
+  }
+
+  function scheduleFlyoutClose() {
+    if (closeTimer) clearTimeout(closeTimer)
+    closeTimer = setTimeout(() => {
+      openFlyoutSlug = null
+      closeTimer = null
+    }, 200)
+  }
+
+  function toggleFlyout(slug: string) {
+    if (closeTimer) {
+      clearTimeout(closeTimer)
+      closeTimer = null
+    }
+    openFlyoutSlug = openFlyoutSlug === slug ? null : slug
+  }
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape') openFlyoutSlug = null
+  }
 </script>
+
+<svelte:window onkeydown={handleKeyDown} />
 
 <div
   class="fixed top-0 left-0 right-0 z-[70] h-16 hidden md:flex items-center bg-[#0F0E7F] px-4 gap-1 shadow-md"
@@ -78,14 +131,56 @@
     </div>
   </a>
 
-  <!-- Cross-app pills. Active pill = solid white with brand-navy text
-       (FAST's TopNav.tsx:494-497 active state); inactive = white/5
-       resting fill with white/15 hover (matches FAST's recent
-       inactive-pill polish in PR #89). -->
+  <!-- Cross-app pills. Active pill = solid white with brand-navy text;
+       inactive = white/5 resting fill with white/15 hover. When the
+       active pill carries children, it becomes a hover/click trigger
+       for a sub-menu flyout (see top of file). -->
   {#each services as svc (svc.slug)}
     {@const isActive = svc.slug === currentApp}
     {@const baseTokens = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-bold uppercase tracking-wide whitespace-nowrap transition-colors'}
-    {#if isActive}
+    {@const hasFlyout = isActive && !!svc.children && svc.children.length > 0}
+    {#if isActive && hasFlyout}
+      <div
+        class="relative"
+        onmouseenter={() => openFlyout(svc.slug)}
+        onmouseleave={scheduleFlyoutClose}
+        role="presentation"
+      >
+        <button
+          type="button"
+          onclick={() => toggleFlyout(svc.slug)}
+          aria-haspopup="menu"
+          aria-expanded={openFlyoutSlug === svc.slug}
+          aria-current="page"
+          class="{baseTokens} bg-white text-[#0F0E7F] shadow-sm select-none"
+        >
+          {svc.label}
+          <svg class="h-3.5 w-3.5 transition-transform" style:transform={openFlyoutSlug === svc.slug ? 'rotate(180deg)' : 'rotate(0deg)'} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {#if openFlyoutSlug === svc.slug}
+          <div
+            role="menu"
+            tabindex="-1"
+            onmouseenter={() => openFlyout(svc.slug)}
+            onmouseleave={scheduleFlyoutClose}
+            class="absolute top-full left-0 mt-1 min-w-[220px] bg-card border border-border rounded-xl shadow-xl py-1 z-[80]"
+          >
+            {#each svc.children ?? [] as child (child.href)}
+              <a
+                href={child.href}
+                role="menuitem"
+                onclick={() => { openFlyoutSlug = null }}
+                class="block px-4 py-2 text-sm font-medium text-foreground hover:bg-muted hover:text-foreground transition-colors"
+              >
+                {child.label}
+              </a>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {:else if isActive}
       <div
         class="{baseTokens} bg-white text-[#0F0E7F] shadow-sm cursor-default select-none"
         aria-current="page"

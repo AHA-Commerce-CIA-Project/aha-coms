@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, setContext } from 'svelte'
   import { page } from '$app/stores'
+  import { base } from '$app/paths'
   import { hasPortalRole } from '@coms-portal/shared'
   import { ServiceBar, Sidebar, MobileTopBar, MobileBottomNav, SlideOverNav } from '@coms-portal/ui-svelte/chrome'
   import { AccountWidget } from '@coms-portal/account-widget-svelte'
@@ -28,15 +29,19 @@
   // while keeping the auth boundary intact.
   const isOnboarding = $derived($page.url.pathname.startsWith('/onboarding/'))
 
-  // Service bar: portal first, then the registered apps the user can reach
-  const services = $derived([
-    { slug: 'portal', label: 'COMS' },
-    ...apps.map((a) => ({
+  // Service bar: registered apps the user can reach. The legacy `{ slug:
+  // 'portal', label: 'COMS' }` entry was dropped on 2026-05-20 — the new
+  // ServiceBar's AHA COMS wordmark + logo on the left is the canonical
+  // portal-home affordance, so a separate COMS pill duplicated that.
+  // With no portal entry, `currentApp="portal"` matches no pill and none
+  // gets active styling, which is correct on the portal home itself.
+  const services = $derived(
+    apps.map((a) => ({
       slug: a.slug,
       label: a.name,
       formAction: `/api/auth/broker/launch/${a.slug}`,
     })),
-  ])
+  )
 
   // super_admin is an internal portal role; collapse to 'admin' for hasPortalRole,
   // which is typed against the public PortalRole taxonomy ('employee' | 'admin').
@@ -110,8 +115,8 @@
       currentApp="portal"
       {theme}
       onToggleTheme={toggleTheme}
-      brandHref="/portal"
-      brandLogoSrc="/aha-logo.png"
+      brandHref={`${base}/`}
+      brandLogoSrc={`${base}/aha-logo.png`}
     >
       {#snippet right()}
         <AccountWidget

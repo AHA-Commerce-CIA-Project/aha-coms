@@ -72,12 +72,26 @@
   // /api/userinfo includes the COMS hub entry as a synthetic first item
   // (T47 follow-up to Findings 2 + 3). `deriveServiceBarServices` collapses
   // each entry's URL to a same-origin path when it matches `currentOrigin`.
-  const serviceBarServices = $derived(
+  const baseServiceBarServices = $derived(
     deriveServiceBarServices({
       catalog: data.appCatalog ?? [],
       currentApp: 'heroes',
       currentOrigin: $page.url.origin,
     }),
+  )
+
+  // Attach the heroes-internal main-nav items as the active pill's
+  // flyout children, so hovering/clicking the HEROES pill in the top
+  // bar reveals Dashboard / Points / Leaderboard / Rewards / Redemptions
+  // (matching fast's TopNav Tier-1 panel behavior). Admin-only routes
+  // stay reachable via the Sidebar; only the role-agnostic main-nav
+  // surfaces in the flyout for now.
+  const serviceBarServices = $derived(
+    baseServiceBarServices.map((s) =>
+      s.slug === 'heroes'
+        ? { ...s, children: mainNavItems.map((item) => ({ label: item.label, href: item.href })) }
+        : s,
+    ),
   )
 
   const isAdminOrHr = $derived(
