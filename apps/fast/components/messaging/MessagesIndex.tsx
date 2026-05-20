@@ -37,7 +37,7 @@ export interface IndexDm {
     snippet?: string;
 }
 
-type SectionKey = 'pinned' | 'channels' | 'assign_task' | 'dms';
+type SectionKey = 'pinned' | 'channels' | 'dms';
 type FilterMode = 'all' | 'unread';
 type SortMode = 'recency' | 'alpha';
 
@@ -52,7 +52,6 @@ const PREFS_KEY = 'messages-index-prefs-v1';
 const DEFAULT_PREFS: AllPrefs = {
     pinned: { filter: 'all', sort: 'recency' },
     channels: { filter: 'all', sort: 'recency' },
-    assign_task: { filter: 'all', sort: 'recency' },
     dms: { filter: 'all', sort: 'recency' },
 };
 
@@ -84,7 +83,6 @@ function loadPrefs(): AllPrefs {
         return {
             pinned: { ...DEFAULT_PREFS.pinned, ...(parsed?.pinned || {}) },
             channels: { ...DEFAULT_PREFS.channels, ...(parsed?.channels || {}) },
-            assign_task: { ...DEFAULT_PREFS.assign_task, ...(parsed?.assign_task || {}) },
             dms: { ...DEFAULT_PREFS.dms, ...(parsed?.dms || {}) },
         };
     } catch {
@@ -191,8 +189,10 @@ export function MessagesIndex({
                     fetch(`/fast/api/chat/conversations/${d.id}/read`, { method: 'PUT' }).catch(() => {})
                 ));
             } else {
-                const purpose = k === 'assign_task' ? 'assign_task' : 'discussion';
-                const targets = channels.filter((c) => (c.unreadCount ?? 0) > 0 && (c.purpose || 'discussion') === purpose);
+                // Merged 'channels' section covers every non-DM purpose now;
+                // mark-all-read fans out to every unread channel regardless
+                // of c.purpose.
+                const targets = channels.filter((c) => (c.unreadCount ?? 0) > 0);
                 await Promise.all(targets.map((c) =>
                     fetch(`/fast/api/channels/${c.id}/read`, { method: 'PUT' }).catch(() => {})
                 ));
@@ -207,26 +207,22 @@ export function MessagesIndex({
     const filteredDms = q ? dms.filter(d => d.otherName.toLowerCase().includes(q)) : dms;
 
     // Pinned channels float to the top in their own section. They're filtered
-    // OUT of the discussion / assign-task groups below so a channel never
-    // appears twice — only its row in Pinned remains. Pinned is always sorted
-    // by recency (most-recently-active first) regardless of section prefs.
+    // OUT of the unified Channels group below so a channel never appears
+    // twice — only its row in Pinned remains. Pinned is always sorted by
+    // recency (most-recently-active first) regardless of section prefs.
     const pinnedChannels = applyChannelPrefs(
         filteredChannels.filter(c => c.isPinned),
         prefs.pinned,
     );
 
-    // Two un-pinned channel groups: regular (discussion) + assign_task. The
-    // split keeps task channels visually distinct without forcing a hard tab
-    // switch like the old standalone /channels page did. Section prefs
-    // (filter/sort) are applied per group so a user can sort Channels A-Z
-    // while keeping Assign Task sorted by recency.
-    const discussionChannels = applyChannelPrefs(
-        filteredChannels.filter(c => !c.isPinned && c.purpose !== 'assign_task'),
+    // Unified Channels group — discussion and assign_task channels both
+    // render here under one heading after the 2026-05-20 sidebar
+    // consolidation. The c.purpose field is still meaningful at the data
+    // layer (drives composer + card-render behavior downstream), but the
+    // sidebar no longer surfaces a separate section for it.
+    const allChannels = applyChannelPrefs(
+        filteredChannels.filter(c => !c.isPinned),
         prefs.channels,
-    );
-    const assignTaskChannels = applyChannelPrefs(
-        filteredChannels.filter(c => !c.isPinned && c.purpose === 'assign_task'),
-        prefs.assign_task,
     );
     const sortedDms = applyDmPrefs(filteredDms, prefs.dms);
 
@@ -275,7 +271,7 @@ export function MessagesIndex({
                     onToggle={toggle}
                     onAdd={canCreateChannel ? onCreateChannel : undefined}
                     addTitle="Create channel"
-                    count={discussionChannels.reduce((s, c) => s + (c.unreadCount || 0), 0)}
+                    count={allChannels.reduce((s, c) => s + (c.unreadCount || 0), 0)}
                     prefs={prefs.channels}
                     onPrefsChange={(patch) => updatePrefs('channels', patch)}
                     onMarkAllRead={() => markSectionRead('channels')}
@@ -283,10 +279,10 @@ export function MessagesIndex({
                 >
                     {loading ? (
                         <ChannelSkeleton />
-                    ) : discussionChannels.length === 0 ? (
+                    ) : allChannels.length === 0 ? (
                         <EmptyHint text={q ? 'No matches' : prefs.channels.filter === 'unread' ? 'No unread channels' : 'No channels yet'} />
                     ) : (
-                        discussionChannels.map((c) => (
+                        allChannels.map((c) => (
                             <ChannelItem
                                 key={c.id}
                                 channel={c}
@@ -297,34 +293,6 @@ export function MessagesIndex({
                         ))
                     )}
                 </SectionGroup>
-
-                {(assignTaskChannels.length > 0 || loading || prefs.assign_task.filter === 'unread') && (
-                    <SectionGroup
-                        label="Assign Task"
-                        sectionKey="assign_task"
-                        collapsed={collapsed.has('assign_task')}
-                        onToggle={toggle}
-                        count={assignTaskChannels.reduce((s, c) => s + (c.unreadCount || 0), 0)}
-                        prefs={prefs.assign_task}
-                        onPrefsChange={(patch) => updatePrefs('assign_task', patch)}
-                        onMarkAllRead={() => markSectionRead('assign_task')}
-                        marking={marking === 'assign_task'}
-                    >
-                        {assignTaskChannels.length === 0 && !loading ? (
-                            <EmptyHint text={prefs.assign_task.filter === 'unread' ? 'No unread task channels' : 'No task channels'} />
-                        ) : (
-                            assignTaskChannels.map((c) => (
-                                <ChannelItem
-                                    key={c.id}
-                                    channel={c}
-                                    active={c.id === activeChannelId}
-                                    hasDraft={draftIds.has(c.id)}
-                                    onClick={() => onSelectChannel(c)}
-                                />
-                            ))
-                        )}
-                    </SectionGroup>
-                )}
 
                 <SectionGroup
                     label="Direct messages"
