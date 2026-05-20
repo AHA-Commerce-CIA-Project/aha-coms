@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm'
-import { heroesProfiles } from '@coms-portal/heroes-shared/db/schema'
+import { heroesProfiles, notifications } from '@coms-portal/heroes-shared/db/schema'
 import * as appealsRepo from '../repositories/appeals'
 import * as pointsRepo from '../repositories/points'
 import { writeAuditLog } from './audit'
@@ -82,17 +82,18 @@ export async function fileAppeal(
         ),
       )
 
-    for (const hr of hrUsers) {
-      await createNotification(
-        {
+    // Single batched notification INSERT for all HR users
+    if (hrUsers.length > 0) {
+      await db.insert(notifications).values(
+        hrUsers.map((hr) => ({
           branchKey: ctx.actor.branchKey,
           userId: hr.id,
           type: 'appeal_needs_resolution',
           title: `${ctx.actor.name} has appealed a Penalti — needs resolution`,
+          body: null,
           entityType: 'appeals',
           entityId: created.id,
-        },
-        db,
+        })),
       )
     }
 

@@ -1,5 +1,5 @@
-import { eq } from 'drizzle-orm'
-import { rewards } from '@coms-portal/heroes-shared/db/schema'
+import { eq, inArray } from 'drizzle-orm'
+import { redemptions as redemptionsTable, auditLogs, rewards } from '@coms-portal/heroes-shared/db/schema'
 import * as redemptionsRepo from '../repositories/redemptions'
 import { writeAuditLog } from './audit'
 import { createNotification } from './notifications'
@@ -209,23 +209,57 @@ export async function bulkResolveRedemptions(
     throw new InsufficientRoleError()
   }
 
-  const results: BulkResultItem[] = []
+  const now = new Date()
+  const newStatus = input.action === 'approve' ? 'approved' : 'rejected'
+  const action = input.action === 'approve' ? 'REDEMPTION_APPROVED' : 'REDEMPTION_REJECTED'
 
-  for (const id of input.ids) {
-    try {
-      if (input.action === 'approve') {
-        await approveRedemption(id, ctx)
-      } else {
-        await rejectRedemption(id, { status: 'rejected', rejectionReason: input.rejectionReason }, ctx)
-      }
-      results.push({ id, success: true })
-    } catch (err) {
-      results.push({ id, success: false, error: err instanceof Error ? err.message : 'Unknown error' })
-    }
+  const actorSnapshot = {
+    id: ctx.actor.id,
+    name: ctx.actor.name,
+    email: ctx.actor.email,
+    role: ctx.actor.role,
   }
 
-  const succeeded = results.filter((r) => r.success).length
-  return { processed: input.ids.length, succeeded, failed: input.ids.length - succeeded, results }
+  return withRLS(ctx.actor, async (db) => {
+    // Single batched status UPDATE for all ids
+    const statusData =
+      input.action === 'approve'
+        ? { status: 'approved' as const, approvedBy: ctx.actor.id, approvedAt: now, updatedAt: now }
+        : { status: 'rejected' as const, rejectionReason: input.rejectionReason ?? null, updatedAt: now }
+
+    await db
+      .update(redemptionsTable)
+      .set(statusData)
+      .where(inArray(redemptionsTable.id, input.ids))
+
+    // Single batched audit INSERT for all ids
+    const auditRows = input.ids.map((id) => ({
+      branchKey: ctx.actor.branchKey,
+      actorId: ctx.actor.id,
+      action,
+      entityType: 'redemptions' as const,
+      entityId: id,
+      oldValue: null,
+      newValue: {
+        status: newStatus,
+        ...(input.action === 'approve'
+          ? { approvedBy: ctx.actor.id }
+          : { rejectionReason: input.rejectionReason }),
+        _actor: actorSnapshot,
+      },
+      ipAddress: ctx.ipAddress ?? null,
+    }))
+
+    await db.insert(auditLogs).values(auditRows)
+
+    const results: BulkResultItem[] = input.ids.map((id) => ({ id, success: true }))
+    return {
+      processed: input.ids.length,
+      succeeded: input.ids.length,
+      failed: 0,
+      results,
+    }
+  })
 }
 
 // Domain errors

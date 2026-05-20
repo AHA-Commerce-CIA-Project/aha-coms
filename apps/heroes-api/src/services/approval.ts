@@ -1,3 +1,5 @@
+import { inArray } from 'drizzle-orm'
+import { achievementPoints, auditLogs } from '@coms-portal/heroes-shared/db/schema'
 import * as pointsRepo from '../repositories/points'
 import { writeAuditLog } from './audit'
 import { createNotification } from './notifications'
@@ -219,23 +221,50 @@ export async function bulkResolvePoints(
   input: BulkPointActionInput,
   ctx: ServiceContext,
 ): Promise<BulkResult> {
-  const results: BulkResultItem[] = []
+  const now = new Date()
+  const newStatus = input.action === 'approve' ? 'active' : 'rejected'
+  const action = input.action === 'approve' ? 'POINT_APPROVED' : 'POINT_REJECTED'
 
-  for (const id of input.ids) {
-    try {
-      if (input.action === 'approve') {
-        await approvePoint(id, { reason: input.reason }, ctx)
-      } else {
-        await rejectPoint(id, { reason: input.reason }, ctx)
-      }
-      results.push({ id, success: true })
-    } catch (err) {
-      results.push({ id, success: false, error: err instanceof Error ? err.message : 'Unknown error' })
-    }
+  const actorSnapshot = {
+    id: ctx.actor.id,
+    name: ctx.actor.name,
+    email: ctx.actor.email,
+    role: ctx.actor.role,
   }
 
-  const succeeded = results.filter((r) => r.success).length
-  return { processed: input.ids.length, succeeded, failed: input.ids.length - succeeded, results }
+  return withRLS(ctx.actor, async (db) => {
+    // Single batched status UPDATE for all ids
+    await db
+      .update(achievementPoints)
+      .set({ status: newStatus, approvedBy: ctx.actor.id, approvedAt: now })
+      .where(inArray(achievementPoints.id, input.ids))
+
+    // Single batched audit INSERT for all ids
+    const auditRows = input.ids.map((id) => ({
+      branchKey: ctx.actor.branchKey,
+      actorId: ctx.actor.id,
+      action,
+      entityType: 'achievement_points' as const,
+      entityId: id,
+      oldValue: null,
+      newValue: {
+        status: newStatus,
+        reason: input.reason ?? null,
+        _actor: actorSnapshot,
+      },
+      ipAddress: ctx.ipAddress ?? null,
+    }))
+
+    await db.insert(auditLogs).values(auditRows)
+
+    const results: BulkResultItem[] = input.ids.map((id) => ({ id, success: true }))
+    return {
+      processed: input.ids.length,
+      succeeded: input.ids.length,
+      failed: 0,
+      results,
+    }
+  })
 }
 
 // Domain errors
