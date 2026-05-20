@@ -124,26 +124,26 @@ export const accessRoutes = new Elysia()
 
     if (members.length > 0) {
       const memberUserIds = members.map((m) => m.userId)
-      // Only delete roles for users who don't have access via another team
-      for (const userId of memberUserIds) {
-        const otherAccess = await db
-          .select({ id: teamAppAccess.id })
-          .from(teamAppAccess)
-          .innerJoin(teamMembers, eq(teamMembers.teamId, teamAppAccess.teamId))
-          .where(
-            and(
-              eq(teamMembers.userId, userId),
-              eq(teamAppAccess.appId, params.appId),
-              sql`${teamAppAccess.teamId} != ${params.id}`,
-            ),
+      // Single DELETE: only remove roles for users who have no access via any other team (T1.2).
+      // NOT EXISTS guard lives inside the statement — race-safe per Spec 07 §4.
+      // Build the IN list as individual sql params — avoids sql.join.
+      const userIdParams = memberUserIds.map((id) => sql`${id}::uuid`)
+      const userIdList = userIdParams.reduce((acc, param, i) =>
+        i === 0 ? param : sql`${acc}, ${param}`
+      )
+      await db.execute(sql`
+        DELETE FROM member_app_role
+        WHERE app_id = ${params.appId}::uuid
+          AND user_id IN (${userIdList})
+          AND NOT EXISTS (
+            SELECT 1
+            FROM team_app_access
+            JOIN team_members ON team_members.team_id = team_app_access.team_id
+            WHERE team_members.user_id = member_app_role.user_id
+              AND team_app_access.app_id = ${params.appId}::uuid
+              AND team_app_access.team_id != ${params.id}::uuid
           )
-
-        if (otherAccess.length === 0) {
-          await db
-            .delete(memberAppRole)
-            .where(and(eq(memberAppRole.userId, userId), eq(memberAppRole.appId, params.appId)))
-        }
-      }
+      `)
     }
 
     await db

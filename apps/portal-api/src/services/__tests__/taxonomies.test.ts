@@ -79,14 +79,19 @@ const mockDb = {
   select: selectFn,
 
   insert: (_table: unknown) => ({
-    values: (row: Row) => ({
-      onConflictDoUpdate: () => ({
-        returning: async () => {
-          _insertRows.push(row)
-          return [row]
-        },
-      }),
-    }),
+    values: (rowOrRows: Row | Row[]) => {
+      // Support both single-row (upsertTaxonomyEntry) and batch (bulkUpsertTaxonomyEntries)
+      const rows = Array.isArray(rowOrRows) ? rowOrRows : [rowOrRows]
+      return {
+        onConflictDoUpdate: () => ({
+          returning: async () => {
+            _insertRows.push(...rows)
+            return rows
+          },
+        }),
+        onConflictDoNothing: async () => undefined,
+      }
+    },
   }),
 
   delete: (_table: unknown) => ({

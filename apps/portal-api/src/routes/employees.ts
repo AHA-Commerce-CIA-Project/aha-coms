@@ -24,7 +24,7 @@ import {
   diffEmployment,
   hasHrFieldChanges,
 } from '../services/employment-resolution'
-import { getDisplayEmail } from '../services/email-resolution'
+import { getDisplayEmail, getDisplayEmailsForUsers } from '../services/email-resolution'
 import {
   adminAddEmailToUser,
   adminEditEmailAddress,
@@ -176,14 +176,13 @@ export const employeeRoutes = new Elysia({ prefix: '/employees' })
         )
         .limit(10)
 
-      // Attach display email per Q8a for each result
-      const results = await Promise.all(
-        users.map(async (u) => ({
-          id: u.id,
-          name: u.name,
-          email: (await getDisplayEmail(u.id)) ?? '',
-        })),
-      )
+      // Attach display email per Q8a — one batched query for all results (T1.1)
+      const emailMap = await getDisplayEmailsForUsers(users.map((u) => u.id))
+      const results = users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: emailMap.get(u.id) ?? '',
+      }))
       return results
     },
     {

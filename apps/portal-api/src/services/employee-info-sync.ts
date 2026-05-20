@@ -4,7 +4,7 @@ import { eq, ilike } from 'drizzle-orm'
 import { readEmployeeInfoSheet, type EmployeeInfoSheetRow } from './sheets-client'
 import { findBestMatch } from './name-matching'
 import { emitUserProvisioned } from './provisioning-events'
-import { getDisplayEmail } from './email-resolution'
+import { getDisplayEmailsForUsers } from './email-resolution'
 import { logger } from '~/logger'
 
 export interface EmployeeInfoSyncResult {
@@ -73,6 +73,7 @@ async function applyMatchedSyncRow(
   row: EmployeeInfoSheetRow,
   match: EmployeeMatchCandidate,
   result: EmployeeInfoSyncResult,
+  emailMap: Map<string, string | null>,
 ): Promise<void> {
   await db
     .update(identityUsers)
@@ -87,7 +88,8 @@ async function applyMatchedSyncRow(
     await upsertTeamMembership(match.id, row.teamName)
   }
 
-  const displayEmail = await getDisplayEmail(match.id)
+  // Display email resolved from the pre-fetched batch map — no per-row query (T1.6)
+  const displayEmail = emailMap.get(match.id) ?? null
   result.matched.push({
     sheetName: row.fullName,
     dbName: match.name,
@@ -96,13 +98,14 @@ async function applyMatchedSyncRow(
   result.updated++
 }
 
-async function processSyncRow(
+async function processSyncRowWithMatch(
   row: EmployeeInfoSheetRow,
-  employees: EmployeeMatchCandidate[],
+  matchResult: ReturnType<typeof findBestMatch>,
   result: EmployeeInfoSyncResult,
   toCreate: EmployeeInfoSheetRow[],
+  emailMap: Map<string, string | null>,
 ): Promise<void> {
-  const { match, score, ambiguous } = findBestMatch(row.fullName, employees)
+  const { match, score, ambiguous } = matchResult
 
   if (ambiguous) {
     result.unmatched.push({
@@ -125,7 +128,7 @@ async function processSyncRow(
   }
 
   try {
-    await applyMatchedSyncRow(row, match, result)
+    await applyMatchedSyncRow(row, match, result, emailMap)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     result.errors.push(`Failed to update ${match.name}: ${message}`)
@@ -208,10 +211,23 @@ export async function syncEmployeeInfo(): Promise<EmployeeInfoSyncResult> {
     .from(identityUsers)
     .where(eq(identityUsers.status, 'active'))
 
+  // Match all rows upfront (single pass) so we can batch-fetch all display emails in one
+  // query instead of one per matched row (T1.6 — N+1 + duplicate query fix).
+  type MatchResult = ReturnType<typeof findBestMatch>
+  const rowMatches: MatchResult[] = sheetRows.map((row) => findBestMatch(row.fullName, employees))
+
+  const matchedUserIds = new Set<string>()
+  for (const { match, score, ambiguous } of rowMatches) {
+    if (!ambiguous && match && score > 0) {
+      matchedUserIds.add(match.id)
+    }
+  }
+  const emailMap = await getDisplayEmailsForUsers([...matchedUserIds])
+
   const toCreate: EmployeeInfoSheetRow[] = []
 
-  for (const row of sheetRows) {
-    await processSyncRow(row, employees, result, toCreate)
+  for (let i = 0; i < sheetRows.length; i++) {
+    await processSyncRowWithMatch(sheetRows[i], rowMatches[i], result, toCreate, emailMap)
   }
 
   await createEmployeesFromSheetRows(toCreate, result)
