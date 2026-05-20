@@ -818,7 +818,7 @@ function MyTasksContent() {
                                                     <span className="ml-auto font-mono text-[11px] text-indigo-500">{task.task_token || '—'}</span>
                                                 </div>
                                                 <p className="font-semibold text-slate-900 text-sm leading-snug mb-2 break-words flex items-start gap-1.5 flex-wrap">
-                                                    {task.needs_help && <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 border border-amber-300 text-amber-700 rounded-full">🙋</span>}
+                                                    {task.needs_help && <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded-full">🙋</span>}
                                                     {task.is_helper && <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 border border-emerald-300 text-emerald-700 rounded-full">Helping</span>}
                                                     {draftTaskIds.has(task.id) && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full">✏️ Draft</span>}
                                                     <span className="break-words">{task.title}</span>
@@ -904,7 +904,7 @@ function MyTasksContent() {
                                                         <td className="px-4 py-3">
                                                             <p className="text-sm text-slate-900 font-medium truncate max-w-[250px] flex items-center gap-1.5">
                                                                 {task.needs_help && (
-                                                                    <span title="Help requested" className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 border border-amber-300 text-amber-700 rounded-full shrink-0">
+                                                                    <span title="Help requested" className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded-full shrink-0">
                                                                         🙋
                                                                     </span>
                                                                 )}
@@ -993,7 +993,7 @@ function MyTasksContent() {
                                                     <span className="ml-auto font-mono text-[11px] text-indigo-500">{task.task_token || '—'}</span>
                                                 </div>
                                                 <p className="font-semibold text-slate-900 text-sm leading-snug mb-2 break-words flex items-start gap-1.5 flex-wrap">
-                                                    {task.needs_help && <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 border border-amber-300 text-amber-700 rounded-full">🙋</span>}
+                                                    {task.needs_help && <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded-full">🙋</span>}
                                                     {task.is_helper && <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 border border-emerald-300 text-emerald-700 rounded-full">Helping</span>}
                                                     {draftTaskIds.has(task.id) && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full">✏️ Draft</span>}
                                                     <span className="break-words">{task.title}</span>
@@ -1079,7 +1079,7 @@ function MyTasksContent() {
                                                         <td className="px-4 py-3">
                                                             <p className="text-sm text-slate-900 font-medium truncate max-w-[250px] flex items-center gap-1.5">
                                                                 {task.needs_help && (
-                                                                    <span title="Help requested" className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 border border-amber-300 text-amber-700 rounded-full shrink-0">
+                                                                    <span title="Help requested" className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded-full shrink-0">
                                                                         🙋
                                                                     </span>
                                                                 )}

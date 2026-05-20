@@ -892,7 +892,7 @@ function NexusContent() {
                                         highlightedTaskId === ticket.id
                                             ? 'border-indigo-300 ring-2 ring-indigo-200'
                                             : ticket.needs_help
-                                                ? 'border-amber-300 border-l-4'
+                                                ? 'border-amber-300 dark:border-amber-700 border-l-4 dark:bg-amber-950/20'
                                                 : 'border-slate-200'
                                     }`}
                                 >
@@ -990,7 +990,7 @@ function NexusContent() {
                                                 highlightedTaskId === ticket.id
                                                     ? 'bg-indigo-50 ring-2 ring-indigo-300 ring-inset'
                                                     : ticket.needs_help
-                                                        ? 'bg-amber-50/60 hover:bg-amber-50 border-l-4 border-l-amber-400'
+                                                        ? 'bg-amber-50/60 dark:bg-amber-950/30 hover:bg-amber-50 dark:hover:bg-amber-900/40 border-l-4 border-l-amber-400 dark:border-l-amber-500'
                                                         : 'hover:bg-slate-100/30'
                                             }`}
                                         >

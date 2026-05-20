@@ -27,7 +27,7 @@ function activityLabel(action: string): { text: string; color: string } {
     switch (action) {
         case 'task_claimed':             return { text: 'claimed the task',           color: 'text-indigo-700' };
         case 'task_assigned':            return { text: 'was assigned the task',      color: 'text-indigo-700' };
-        case 'task_help_requested':      return { text: 'requested help',              color: 'text-amber-700' };
+        case 'task_help_requested':      return { text: 'requested help',              color: 'text-amber-700 dark:text-amber-400' };
         case 'task_help_request_cancelled': return { text: 'cancelled the help request', color: 'text-slate-500' };
         case 'task_help_requested_to_join': return { text: 'offered to help',          color: 'text-emerald-700' };
         case 'task_help_approved':       return { text: 'approved a helper',            color: 'text-emerald-700' };
@@ -135,7 +135,7 @@ export function TaskHelpPanel({ taskId, assigneeId, currentUserId, needsHelp, on
     );
 
     return (
-        <div className={`rounded-xl border p-4 space-y-3 ${needsHelp ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+        <div className={`rounded-xl border p-4 space-y-3 ${needsHelp ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800' : 'bg-slate-50 border-slate-200'}`}>
             <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-2 min-w-0">
                     <Users className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
@@ -187,7 +187,7 @@ export function TaskHelpPanel({ taskId, assigneeId, currentUserId, needsHelp, on
                         disabled={loading}
                         className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5 disabled:opacity-50 ${
                             needsHelp
-                                ? 'bg-white border border-amber-300 text-amber-700 hover:bg-amber-100'
+                                ? 'bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40'
                                 : 'bg-indigo-600 text-white hover:bg-indigo-700'
                         }`}
                     >
@@ -207,8 +207,8 @@ export function TaskHelpPanel({ taskId, assigneeId, currentUserId, needsHelp, on
             </div>
 
             {isOwner && pendingRequests.length > 0 && (
-                <div className="bg-white rounded-lg border border-amber-200 p-3 space-y-2">
-                    <p className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">
+                <div className="bg-white dark:bg-slate-900 rounded-lg border border-amber-200 dark:border-amber-800 p-3 space-y-2">
+                    <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
                         Pending requests ({pendingRequests.length})
                     </p>
                     {pendingRequests.map(c => (

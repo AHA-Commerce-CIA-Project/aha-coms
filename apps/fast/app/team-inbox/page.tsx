@@ -1655,7 +1655,7 @@ function TeamInboxContent() {
                                                                 </span>
                                                             )}
                                                             {t.needsHelp && (
-                                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200 inline-flex items-center gap-0.5">
+                                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 inline-flex items-center gap-0.5">
                                                                     <Hand className="w-3 h-3" /> Help wanted
                                                                 </span>
                                                             )}
