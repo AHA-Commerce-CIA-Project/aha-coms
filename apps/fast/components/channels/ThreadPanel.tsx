@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { ReactionDisplay } from './ReactionDisplay';
 import { ChannelMessageComposer } from './ChannelMessageComposer';
+import type { MentionTeam } from './MentionAutocomplete';
 import { MentionTextarea } from './MentionTextarea';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { linkifyHtml, linkifyText } from '@/lib/linkify';
@@ -65,6 +66,10 @@ interface ThreadPanelProps {
   currentUserId: string;
   onClose: () => void;
   users: MentionUser[];
+  /** Same team-mention list the parent channel composer receives. Forwarded
+   *  through to the reply composer so `@team-name` autocomplete works in
+   *  threads, matching the primary chatbox behavior. */
+  teams?: MentionTeam[];
   onReplyCountChange: (messageId: string, count: number) => void;
   /** Open the task detail modal — forwarded to DirectAssignCard in the parent. */
   onOpenTaskDetail?: (taskId: string) => void;
@@ -86,6 +91,7 @@ export function ThreadPanel({
   currentUserId,
   onClose,
   users,
+  teams = [],
   onReplyCountChange,
   onOpenTaskDetail,
 }: ThreadPanelProps) {
@@ -274,6 +280,7 @@ export function ThreadPanel({
         placeholder="Reply..."
         onSend={handleSend}
         users={users}
+        teams={teams}
       />
     </div>
   );
