@@ -14,6 +14,14 @@ export const SYSTEM_BOT_ID = 'system-bot-ahabot';
 export const SYSTEM_BOT_NAME = 'AHABOT';
 export const SYSTEM_BOT_EMAIL = 'ahabot@system.local';
 
+// FU-12: the bot's canonical portal identity (identity_users.id) — seeded by
+// portal-api migration 0037_system_bot_identity.sql. Pre-T64 the bot's Fast
+// User.id is still SYSTEM_BOT_ID (synthetic, BetterAuth-era). During T64's
+// destructive `User.id → portal_sub` rewrite this UUID is the value the bot's
+// User row gets re-keyed to, alongside every human user's id getting re-keyed
+// to their own portal_sub. Keep this constant in lockstep with the migration.
+export const SYSTEM_BOT_PORTAL_SUB = 'b07b07b0-0000-4000-a000-000000000bb7';
+
 /** True if the given user id is the system bot. Cheap; safe to call in render. */
 export function isSystemBot(userId: string | null | undefined): boolean {
   return userId === SYSTEM_BOT_ID;

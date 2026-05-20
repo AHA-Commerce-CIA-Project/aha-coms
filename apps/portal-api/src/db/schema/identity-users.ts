@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 export const EMPLOYEE_PROVISIONING_STATUSES = ['ready', 'pending', 'processing', 'failed'] as const
 export type EmployeeProvisioningStatus = (typeof EMPLOYEE_PROVISIONING_STATUSES)[number]
 
-export const IDENTITY_USER_SOURCES = ['manual', 'csv_import', 'sheet_sync'] as const
+export const IDENTITY_USER_SOURCES = ['manual', 'csv_import', 'sheet_sync', 'system'] as const
 export type IdentityUserSource = (typeof IDENTITY_USER_SOURCES)[number]
 
 export const identityUsers = pgTable('identity_users', {
