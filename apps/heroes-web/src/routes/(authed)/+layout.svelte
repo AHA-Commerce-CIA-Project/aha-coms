@@ -143,29 +143,12 @@
     currentApp="heroes"
     theme={uiState.theme}
     onToggleTheme={() => uiState.setTheme(uiState.theme === 'dark' ? 'light' : 'dark')}
+    brandHref={`${$page.url.origin}/portal`}
+    brandLogoSrc={`${base}/aha-logo.png`}
+    notificationsHref={`${base}/notifications`}
+    unreadCount={data.unreadCount}
   >
     {#snippet right()}
-      <!-- Top-bar notification bell — 2026-05-20 alignment with apps/fast,
-           which renders [Bell] → [Theme] → [Avatar] in its top row. Theme
-           toggle is owned by ServiceBar itself (rendered between this
-           snippet and its services list), so adding the bell here gives
-           the same final sequence inside ServiceBar's right cluster.
-           Local routing only: bell links to heroes' own /notifications
-           view; does NOT subscribe to fast's task/comment/thread
-           notification payloads. White-on-navy styling matches
-           MobileTopBar's bell; gold badge preserves Heroes' brand. -->
-      <a
-        href="{base}/notifications"
-        class="relative flex h-9 w-9 items-center justify-center rounded-full text-white/70 hover:bg-white/8 hover:text-white transition-colors"
-        aria-label={m.nav_notifications()}
-      >
-        <Bell class="h-[18px] w-[18px]" />
-        {#if data.unreadCount > 0}
-          <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-gold text-[9px] leading-none font-bold text-gold-dark">
-            {data.unreadCount > 99 ? '99+' : data.unreadCount}
-          </span>
-        {/if}
-      </a>
       {#if widgetUser}
         <AccountWidget
           currentApp="heroes"
@@ -258,7 +241,7 @@
     <!-- footer snippet intentionally omitted: widget owns avatar/sign-out -->
   </Sidebar>
 
-  <div class="pt-0 md:pt-9 md:ml-[var(--sidebar-width)] transition-[margin-left] duration-200">
+  <div class="pt-0 md:pt-16 md:ml-[var(--sidebar-width)] transition-[margin-left] duration-200">
     <Header onOpenPalette={() => (paletteOpen = true)} />
     <PullToRefresh>
       <main class="page-transition pt-14 pb-24 md:pt-0 md:pb-8 px-4 md:px-6 max-w-5xl mx-auto">

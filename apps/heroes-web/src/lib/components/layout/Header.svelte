@@ -11,21 +11,18 @@
 </script>
 
 <!--
-  Sits flush under <ServiceBar> (top-0 h-9 navy gradient). Polish goals:
-    • Flat solid `bg-card` so the bar reads as a calm continuation of the
-      saturated ServiceBar above instead of frosted-glass with backdrop
-      artifacts.
-    • px-3 md:px-4 brings the search bar's left edge into rough alignment
-      with the ServiceBar logo (which sits in ServiceBar's own `px-3`)
-      so the two bars feel grid-aligned.
+  Sits flush under <ServiceBar> (top-0 h-16 solid #0F0E7F + shadow-md
+  after the 2026-05-20 shared-chrome unification pass). Polish goals:
+    • Flat solid `bg-card` so the bar reads as a calm continuation of
+      the saturated ServiceBar above instead of frosted-glass with
+      backdrop artifacts.
+    • px-3 md:px-4 keeps the search bar's left edge near the ServiceBar
+      logo column (ServiceBar uses px-4).
     • `border-b border-border/60` softens the separator below this row;
-      ServiceBar's own `border-b border-white/8` already provides the
-      top edge between the two bars.
-    • Dropped the light-mode hairline shadow — a flat bg + soft border
-      reads more premium and avoids a stacked-shadow seam under
-      ServiceBar.
+      ServiceBar's own shadow-md provides the top edge between the two
+      bars.
 -->
-<header class="sticky top-9 z-30 hidden md:flex h-14 items-center justify-between px-3 md:px-4
+<header class="sticky top-16 z-30 hidden md:flex h-14 items-center justify-between px-3 md:px-4
   bg-card border-b border-border/60">
 
   <!-- Command palette trigger. Wider max-w-sm (was xs) and a fuller

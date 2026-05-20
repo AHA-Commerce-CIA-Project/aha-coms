@@ -110,6 +110,8 @@
       currentApp="portal"
       {theme}
       onToggleTheme={toggleTheme}
+      brandHref="/portal"
+      brandLogoSrc="/aha-logo.png"
     >
       {#snippet right()}
         <AccountWidget
@@ -208,7 +210,7 @@
 
     </Sidebar>
 
-    <div class="pt-0 md:pt-9 md:ml-[var(--sidebar-width)] transition-[margin-left] duration-200">
+    <div class="pt-0 md:pt-16 md:ml-[var(--sidebar-width)] transition-[margin-left] duration-200">
       <main class="page-transition pt-14 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pt-6 md:pb-8 px-4 md:px-6 max-w-screen-xl mx-auto">
         {@render children()}
       </main>
