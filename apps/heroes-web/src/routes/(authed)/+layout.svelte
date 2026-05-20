@@ -28,7 +28,6 @@
   import { page } from '$app/stores'
   import { base } from '$app/paths'
   import * as m from '$lib/paraglide/messages'
-  import Header from '$lib/components/layout/Header.svelte'
   import PullToRefresh from '$lib/components/PullToRefresh.svelte'
   import CommandPalette from '$lib/components/CommandPalette.svelte'
   import { uiState } from '$lib/state/uiState.svelte'
@@ -145,6 +144,24 @@
     onToggleTheme={() => uiState.setTheme(uiState.theme === 'dark' ? 'light' : 'dark')}
   >
     {#snippet right()}
+      <!-- Notification bell — moved up from the secondary Header on
+           2026-05-20 chrome consolidation so the navy ServiceBar is the
+           single top bar on desktop, matching apps/fast's one-bar layout.
+           Style mirrors MobileTopBar's bell (white-on-navy) for visual
+           coherence across the suite; badge keeps Heroes' gold accent
+           rather than fast's rose so the brand identity stays intact. -->
+      <a
+        href="{base}/notifications"
+        class="relative flex h-9 w-9 items-center justify-center rounded-full text-white/70 hover:bg-white/8 hover:text-white transition-colors"
+        aria-label={m.nav_notifications()}
+      >
+        <Bell class="h-[18px] w-[18px]" />
+        {#if data.unreadCount > 0}
+          <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-gold text-[9px] leading-none font-bold text-gold-dark">
+            {data.unreadCount > 99 ? '99+' : data.unreadCount}
+          </span>
+        {/if}
+      </a>
       {#if widgetUser}
         <AccountWidget
           currentApp="heroes"
@@ -238,7 +255,11 @@
   </Sidebar>
 
   <div class="pt-0 md:pt-9 md:ml-[var(--sidebar-width)] transition-[margin-left] duration-200">
-    <Header unreadCount={data.unreadCount} onOpenPalette={() => (paletteOpen = true)} />
+    <!-- Desktop secondary Header was retired here on 2026-05-20 — its
+         notification badge moved into the ServiceBar above (its `right`
+         snippet), its LanguageSwitcher stays reachable from /profile,
+         and its ⌘K command-palette button is gone but the keyboard
+         shortcut (Cmd/Ctrl+K) remains bound at the layout level. -->
     <PullToRefresh>
       <main class="page-transition pt-14 pb-24 md:pt-0 md:pb-8 px-4 md:px-6 max-w-5xl mx-auto">
         {@render children()}
