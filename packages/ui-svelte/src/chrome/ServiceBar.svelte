@@ -74,6 +74,13 @@
   const resolvedTheme = $derived(resolveTheme(theme))
   const badgeDisplay = $derived(unreadCount > 99 ? '99+' : String(unreadCount))
 
+  // Defensive filter — the "portal" / COMS hub entry is the AHA COMS
+  // wordmark on the left now, so any service catalog that still
+  // synthesizes a `{slug: 'portal'}` pill (e.g. heroes-web's
+  // /api/userinfo-fed appCatalog) gets that pill suppressed here. Hosts
+  // that already pre-filter incur no extra work.
+  const visibleServices = $derived(services.filter((s) => s.slug !== 'portal'))
+
   // Flyout state — null when closed, holds the open pill's slug when open.
   // Hover open / click toggle / mouse-leave close-with-grace so the cursor
   // can travel from pill to panel without the panel folding mid-traversal.
@@ -135,7 +142,7 @@
        inactive = white/5 resting fill with white/15 hover. When the
        active pill carries children, it becomes a hover/click trigger
        for a sub-menu flyout (see top of file). -->
-  {#each services as svc (svc.slug)}
+  {#each visibleServices as svc (svc.slug)}
     {@const isActive = svc.slug === currentApp}
     {@const baseTokens = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-bold uppercase tracking-wide whitespace-nowrap transition-colors'}
     {@const hasFlyout = isActive && !!svc.children && svc.children.length > 0}
