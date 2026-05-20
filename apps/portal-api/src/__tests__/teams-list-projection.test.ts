@@ -93,7 +93,7 @@ describe('teams route GET / — T1.11 explicit projection', () => {
     const expectedKeys = ['id', 'name', 'description', 'memberCount', 'createdAt']
 
     // Simulate the route's select call directly
-    const { db } = await import('~/db')
+    const dbMock = (await import('~/db')).db as unknown as { select: (p: unknown) => { from: (t: unknown) => { leftJoin: (a: unknown, b: unknown) => { groupBy: (c: unknown) => Promise<unknown> } } } }
     const teams = { id: 'teams.id', name: 'teams.name', description: 'teams.description', createdAt: 'teams.createdAt' }
     const teamMembers = { id: 'teamMembers.id', teamId: 'teamMembers.teamId', userId: 'teamMembers.userId' }
     const { sql } = await import('drizzle-orm')
@@ -106,7 +106,7 @@ describe('teams route GET / — T1.11 explicit projection', () => {
       createdAt: teams.createdAt,
     }
 
-    await db.select(projection)
+    await dbMock.select(projection)
       .from({})
       .leftJoin({}, {})
       .groupBy({})
@@ -117,7 +117,7 @@ describe('teams route GET / — T1.11 explicit projection', () => {
   })
 
   test('projection does NOT include unexpected full-row columns like updatedAt', async () => {
-    const { db } = await import('~/db')
+    const dbMock = (await import('~/db')).db as unknown as { select: (p: unknown) => { from: (t: unknown) => { leftJoin: (a: unknown, b: unknown) => { groupBy: (c: unknown) => Promise<unknown> } } } }
     const teams = { id: 'teams.id', name: 'teams.name', description: 'teams.description', createdAt: 'teams.createdAt' }
     const teamMembers = { id: 'teamMembers.id' }
     const { sql } = await import('drizzle-orm')
@@ -130,7 +130,7 @@ describe('teams route GET / — T1.11 explicit projection', () => {
       createdAt: teams.createdAt,
     }
 
-    await db.select(projection)
+    await dbMock.select(projection)
       .from({})
       .leftJoin({}, {})
       .groupBy({})
