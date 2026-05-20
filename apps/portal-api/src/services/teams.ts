@@ -1,6 +1,6 @@
 import { db } from '~/db'
 import { teams, teamMembers, teamAppAccess, memberAppRole } from '~/db/schema'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { emitUserUpdated } from './provisioning-events'
 import { logger } from '~/logger'
 
@@ -18,14 +18,16 @@ export async function addTeamMembersBatch(
   teamId: string,
   members: Array<{ userId: string; roleInTeam?: string }>
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    for (const member of members) {
-      await tx
-        .insert(teamMembers)
-        .values({ teamId, userId: member.userId, ...(member.roleInTeam ? { roleInTeam: member.roleInTeam } : {}) })
-        .onConflictDoNothing()
-    }
-  })
+  if (members.length === 0) return
+  // Single batched insert — one round-trip regardless of members.length (T1.4)
+  await db
+    .insert(teamMembers)
+    .values(members.map((m) => ({
+      teamId,
+      userId: m.userId,
+      ...(m.roleInTeam ? { roleInTeam: m.roleInTeam } : {}),
+    })))
+    .onConflictDoNothing()
 
   for (const member of members) {
     emitUserUpdated(member.userId, ['teamIds', 'apps']).catch((err) => {
@@ -45,27 +47,29 @@ export async function removeTeamMember(teamId: string, userId: string): Promise<
     .delete(teamMembers)
     .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
 
-  // Clean up member app roles for apps the user no longer has access to
+  // Single DELETE: remove all member_app_role rows for this user across all affected apps,
+  // but only where the user has no remaining access via another team (T1.3).
+  // NOT EXISTS guard lives inside the statement — race-safe per Spec 07 §4.
   if (teamApps.length > 0) {
-    for (const { appId } of teamApps) {
-      // Check if user still has access via another team
-      const otherAccess = await db
-        .select({ id: teamAppAccess.id })
-        .from(teamAppAccess)
-        .innerJoin(teamMembers, eq(teamMembers.teamId, teamAppAccess.teamId))
-        .where(
-          and(
-            eq(teamMembers.userId, userId),
-            eq(teamAppAccess.appId, appId),
-          ),
+    const appIds = teamApps.map((a) => a.appId)
+    // Build the IN list as individual sql params — avoids sql.join which is
+    // unavailable in some drizzle-orm minor versions.
+    const appIdParams = appIds.map((id) => sql`${id}::uuid`)
+    const appIdList = appIdParams.reduce((acc, param, i) =>
+      i === 0 ? param : sql`${acc}, ${param}`
+    )
+    await db.execute(sql`
+      DELETE FROM member_app_role
+      WHERE user_id = ${userId}::uuid
+        AND app_id IN (${appIdList})
+        AND NOT EXISTS (
+          SELECT 1
+          FROM team_app_access
+          JOIN team_members ON team_members.team_id = team_app_access.team_id
+          WHERE team_members.user_id = ${userId}::uuid
+            AND team_app_access.app_id = member_app_role.app_id
         )
-
-      if (otherAccess.length === 0) {
-        await db
-          .delete(memberAppRole)
-          .where(and(eq(memberAppRole.userId, userId), eq(memberAppRole.appId, appId)))
-      }
-    }
+    `)
   }
 
   // Fan out user.updated — team removed, app access may have narrowed.

@@ -206,19 +206,32 @@ export async function bulkUpsertTaxonomyEntries(
     return { upserted: 0, entries: [] }
   }
 
-  const results: OrgTaxonomy[] = []
-  for (const entry of entries) {
-    const row = await upsertTaxonomyEntry({
-      taxonomyId,
-      key: entry.key,
-      value: entry.value,
-      metadata: entry.metadata ?? null,
-      updatedBy,
+  const now = new Date()
+  // Single batched upsert — one round-trip regardless of entries.length (T1.5)
+  const rows = await db
+    .insert(orgTaxonomies)
+    .values(
+      entries.map((entry) => ({
+        taxonomyId,
+        key: entry.key,
+        value: entry.value,
+        metadata: entry.metadata ?? null,
+        updatedBy,
+        updatedAt: now,
+      })),
+    )
+    .onConflictDoUpdate({
+      target: [orgTaxonomies.taxonomyId, orgTaxonomies.key],
+      set: {
+        value: sql`excluded.value`,
+        metadata: sql`excluded.metadata`,
+        updatedBy: sql`excluded.updated_by`,
+        updatedAt: sql`excluded.updated_at`,
+      },
     })
-    results.push(row)
-  }
+    .returning()
 
-  return { upserted: results.length, entries: results }
+  return { upserted: rows.length, entries: rows }
 }
 
 // ---------------------------------------------------------------------------
