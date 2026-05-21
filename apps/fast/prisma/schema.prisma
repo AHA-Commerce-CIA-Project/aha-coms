@@ -307,6 +307,11 @@ model Task {
   personalArchives UserArchivedTask[] @relation("TaskUserArchives")
   checklistItems   ChecklistItem[]
 
+  // Spec 07 Phase B / T2.3 — B-tree indexes for un-indexed filter columns.
+  // Pre-applied CONCURRENTLY via prisma/sql/0004_task_indexes_concurrent.sql
+  // before this schema change landed; db push on deploy is a no-op for these.
+  @@index([requesterName])
+  @@index([completedBy])
   @@map("tasks")
 }
 
@@ -409,6 +414,9 @@ model TaskReview {
   reviewerEmail String?  @map("reviewer_email") @db.VarChar(255)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  // Spec 07 Phase B / T2.3 — B-tree index for un-indexed filter column.
+  // Pre-applied CONCURRENTLY via prisma/sql/0004_task_indexes_concurrent.sql.
+  @@index([reviewerType])
   @@unique([taskId, reviewerType])
   @@map("task_reviews")
 }
