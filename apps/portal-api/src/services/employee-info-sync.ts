@@ -1,6 +1,6 @@
 import { db } from '~/db'
 import { identityUsers, teams, teamMembers, identityUserEmails } from '~/db/schema'
-import { eq, ilike } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { readEmployeeInfoSheet, type EmployeeInfoSheetRow } from './sheets-client'
 import { findBestMatch } from './name-matching'
 import { emitUserProvisioned } from './provisioning-events'
@@ -236,11 +236,11 @@ export async function syncEmployeeInfo(): Promise<EmployeeInfoSyncResult> {
 }
 
 async function upsertTeamMembership(userId: string, teamName: string): Promise<void> {
-  // Find team by name (case-insensitive)
+  // Find team by name (case-insensitive) — sargable against idx_teams_name_lower (T2.4)
   let [team] = await db
     .select({ id: teams.id })
     .from(teams)
-    .where(ilike(teams.name, teamName))
+    .where(eq(sql`lower(${teams.name})`, teamName.toLowerCase()))
     .limit(1)
 
   // Auto-create team if not found

@@ -64,13 +64,18 @@ mock.module('../name-matching', () => ({
 
 let selectCallCount = 0
 let updateCallCount = 0
+// Capture the last WHERE predicate argument so T2.4 tests can inspect it
+let lastWhereArg: unknown = undefined
 
 type SelectChain = Record<string, unknown>
 
 function makeSelectChain(rows: unknown[]): SelectChain {
   const chain: SelectChain = {}
   chain.from = () => chain
-  chain.where = () => chain
+  chain.where = (predicate: unknown) => {
+    lastWhereArg = predicate
+    return chain
+  }
   chain.orderBy = () => Promise.resolve(rows)
   chain.limit = (_n: number) => Promise.resolve(rows.slice(0, _n as number))
   chain.then = (onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
@@ -133,6 +138,7 @@ function reset() {
   matchCallIndex = 0
   mockSheetRows = []
   mockMatchResults = []
+  lastWhereArg = undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -211,5 +217,49 @@ describe('syncEmployeeInfo — T1.6 batch email resolution', () => {
     // The mocked emailMap has 'user-matched-1' → 'matched1@example.com'
     expect(result.matched).toHaveLength(1)
     expect(result.matched[0].email).toBe('matched1@example.com')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T2.4 — upsertTeamMembership uses eq(sql`lower(...)`, teamName.toLowerCase())
+//         so the WHERE predicate is sargable against idx_teams_name_lower
+// ---------------------------------------------------------------------------
+
+describe('upsertTeamMembership — T2.4 sargable lower() predicate', () => {
+  beforeEach(reset)
+
+  test('mixed-case teamName is lowercased on the JS side before the WHERE predicate', async () => {
+    // Give the row a non-lower teamName to verify the JS-side toLowerCase() fires
+    mockSheetRows = [
+      { fullName: 'Alice', personalEmail: '', teamName: 'AHA Commerce' },
+    ]
+    mockMatchResults = [
+      { match: { id: 'user-matched-1', name: 'Alice Smith' }, score: 1.0, ambiguous: false },
+    ]
+    await syncEmployeeInfo()
+
+    // lastWhereArg is the value passed to db.select().from().where(...)
+    // The fullDrizzleOrmMock renders: eq(left, right) → { type: 'eq', left, right }
+    // sql`lower(${teams.name})` → the mock sql proxy returns a string (template join)
+    // right should be 'aha commerce' (JS toLowerCase applied to 'AHA Commerce')
+    const where = lastWhereArg as { type: string; left: unknown; right: unknown } | undefined
+    expect(where).toBeDefined()
+    expect(where?.type).toBe('eq')
+    // The right-hand side must be the lowercased JS string — confirms T2.4 rewrite is active
+    expect(where?.right).toBe('aha commerce')
+  })
+
+  test('already-lower teamName is unchanged in the predicate', async () => {
+    mockSheetRows = [
+      { fullName: 'Bob', personalEmail: '', teamName: 'engineering' },
+    ]
+    mockMatchResults = [
+      { match: { id: 'user-matched-2', name: 'Bob Jones' }, score: 0.9, ambiguous: false },
+    ]
+    await syncEmployeeInfo()
+
+    const where = lastWhereArg as { type: string; right: unknown } | undefined
+    expect(where?.type).toBe('eq')
+    expect(where?.right).toBe('engineering')
   })
 })
