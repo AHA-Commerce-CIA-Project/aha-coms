@@ -23,12 +23,12 @@ Drive the codebase to:
 - `apps/fast/CLAUDE.md` — per-app persona rule + `[skip-db-push]` first-line gating
 - `tasks/archive/2026-05-20-snapshot.{plan,todo}.md` — historical narrative for Specs 01/02/05 + Spec 06 PR F + FUs 1–28
 
-## Current state (2026-05-20)
+## Current state (2026-05-21)
 
 - **Specs 01, 02, 05** — sealed; CP21 crossed 2026-05-14; heroes (Svelte) + fast (React) both prove cross-framework parity in production
 - **Spec 06 PR F** — shipped to prod through commits `eb13d13` → `cd5d593` → `7d65a72` → `ba83444` → `f1e143e`; `FORCE_PASSWORD_SETUP_ENABLED` live; profile rotation card + passphrase tip live
 - **Spec 03 + 04** — both still stubs ("not yet scoped in detail"); deferred to a future scoping pass (Phase E in this plan)
-- **Spec 07** — authored 2026-05-20; no code landed yet
+- **Spec 07** — **sealed 2026-05-21**. CHECKPOINT A closed via Phase A bundles (e5e1317 portal-api, fced927 heroes-api, 31182fe fast, 6579eb0 defenders); CHECKPOINT B closed via 9 Phase B PRs (#99–#107) covering T2.1–T2.7 + the portal-api GIN gap-close (#103). One restoration follow-up (#109 / `1592215`) added schema-side `@@index([col(ops: raw("gin_trgm_ops"))], type: Gin, map: …)` declarations after the post-PR-102 deploy showed Prisma's `db push` silently drops unmanaged indexes. 21 indexes live across the three databases. Post-mortem in `docs/spec/07-database-performance-remediation.md` §7.
 - **Spec 08** — authored 2026-05-20 (this session); no code landed yet
 - **Spec 09** — authored 2026-05-20 (this session, after ADR audit surfaced ADR 0007's unimplemented LISTEN/NOTIFY half); no code landed yet
 - **Carry-overs from CP21 walk** — T64 PK promotion (38 FK cascade), FU-12 (system bot rebind, folded into T64), F2/F5/F9/F11/F14 cosmetic findings

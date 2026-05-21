@@ -169,9 +169,17 @@ Read `docs/spec/07-database-performance-remediation.md` for the full audit conte
   - Persona: plain technical English commit; `[skip-db-push]` first line
   - Verification: type-check + lint + test + audit rerun
 
-- [x] (this PR) **T2.7: Verification pass — rerun audit, confirm all ilike sites have GIN coverage** (Audit gate; depends on T2.1, T2.3)
+- [x] (57a4658) **T2.7: Verification pass — rerun audit, confirm all ilike sites have GIN coverage** (Audit gate; depends on T2.1, T2.3)
   - Acceptance: rerun the rulebook against the full Spec 07 file:line list = zero findings; record the verification output in the PR body
   - Verification: this PR carries no code change; it's the gate that closes CHECKPOINT B
+
+### Phase B follow-up — restoration after Prisma db push regression
+
+- [x] (1592215) **B-PR-9: Re-declare fast pg_trgm GIN indexes in schema.prisma** (Post-mortem)
+  - Context: the deploy following PR #102's merge ran `prisma db push` and silently dropped all six fast pg_trgm GIN indexes — Prisma 5.x classifies indexes that exist in the live DB but not in schema.prisma as removable extras, no `--accept-data-loss` flag required for index drops
+  - Resolution: re-applied `0003_pg_trgm_gin.sql` manually via cloud-sql-proxy (idempotent — `IF NOT EXISTS`); added six `@@index([col(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_<table>_<col>_gin_trgm")` declarations in `apps/fast/prisma/schema.prisma`; next deploy's `db push` introspected and saw them as already-satisfied
+  - Lesson: future GIN/trigram/expression indexes in fast MUST land with both the raw SQL CONCURRENTLY pre-apply **and** a matching schema.prisma declaration (with `map:` byte-identical to the raw SQL's chosen name). Drizzle's forward-only migrate makes journal-absent raw SQL safe on heroes/portal; Prisma's introspection-based reconcile does not afford the same safety
+  - Documented in: `docs/spec/07-database-performance-remediation.md` §7 Phase B post-mortem
 
 ---
 
