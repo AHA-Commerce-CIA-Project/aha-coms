@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 #
-# Built with monorepo root as the docker context. See
-# apps/portal-api/cloudbuild.yaml for the invocation.
+# Built from the monorepo root by .github/workflows/deploy-portal-api.yml —
+# `docker build --file=apps/portal-api/Dockerfile --cache-from=<image>:latest .`
+# Auth via WIF, push to coms-portal-registry, deploy via `gcloud run deploy`.
 #
 # Four stages:
 #   deps-dev  : full workspace install — feeds the builder

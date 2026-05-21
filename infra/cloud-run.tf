@@ -13,8 +13,8 @@
 # DATABASE_URL for in-process auth lookups, broker secret for cookie
 # verification).
 #
-# Image tag is owned by Cloud Build (apps/portal-*/cloudbuild.yaml pushes
-# :<git-sha>). Tofu pins :latest at create time and ignores subsequent
+# Image tag is owned by GitHub Actions (.github/workflows/deploy-portal-{api,web}.yml
+# push :<git-sha>). Tofu pins :latest at create time and ignores subsequent
 # image changes so it does not fight the deploy pipeline.
 ############################################################
 

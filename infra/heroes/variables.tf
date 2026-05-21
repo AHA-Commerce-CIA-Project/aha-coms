@@ -60,10 +60,10 @@ variable "sheet_id_employees" {
 }
 
 variable "app_image" {
-  description = "Bootstrap Docker image URI for Cloud Run — overridden by Cloud Build at first deploy."
+  description = "Bootstrap Docker image URI for Cloud Run — overridden by the GHA deploy workflow at first deploy."
   type        = string
   # Placeholder to bootstrap Cloud Run before the first real image is pushed.
-  # After the first successful Cloud Build run (apps/heroes-{api,web}/cloudbuild.yaml),
+  # After the first successful run of .github/workflows/deploy-heroes-{api,web}.yml,
   # this value is irrelevant — `gcloud run deploy --image=...` overrides it
   # with the SHA-tagged image, and lifecycle.ignore_changes keeps Tofu from
   # fighting subsequent deploys.
@@ -73,7 +73,7 @@ variable "app_image" {
 variable "portal_service_account_email" {
   description = "SA email the portal Cloud Run runs as — used to verify inbound webhook Bearer tokens (Rev 2 §03)."
   type        = string
-  # Defaults to the SA in this project. The cloudbuild deploy command sources
+  # Defaults to the SA in this project. The GHA deploy workflow sources
   # the same value so a Cloud Run env update doesn't get reset on each deploy.
   # Override here if portal moves projects.
   default = "coms-portal-run-sa@fbi-dev-484410.iam.gserviceaccount.com"
