@@ -136,40 +136,40 @@ Read `docs/spec/07-database-performance-remediation.md` for the full audit conte
 
 > **Operator coordination required** per Spec 07 §6 *Ask first* — `pg_trgm` GIN index creation on `achievement_points`, `identity_users`, `identity_user_emails`, `heroes_profiles`, `tasks`, `ChannelMessage`, `ActivityLog` (>100k rows) takes minutes and locks writes. Schedule before merging. Default to NOT skipping `db:push`.
 
-- [ ] **T2.1: pg_trgm + GIN indexes on heroes-shared + fast search columns** (High)
+- [x] (f6be556 heroes-shared; 539edd5 fast; a863146 portal-api gap-close) **T2.1: pg_trgm + GIN indexes on heroes-shared + fast search columns** (High)
   - File: `packages/heroes-shared/src/db/migrations/*.sql` (raw SQL — pg_trgm GIN unmodelable by Drizzle); `apps/fast/prisma/sql/*.sql` (raw SQL — Prisma can't model pg_trgm GIN natively)
   - Acceptance: `CREATE EXTENSION IF NOT EXISTS pg_trgm`; GIN indexes on the ilike-search columns enumerated in the audit; verification query against `pg_stat_user_indexes` confirms each new index exists
   - Operator coordination: schedule the apply window; consider `CREATE INDEX CONCURRENTLY` where supported
   - Verification: migration applied locally against seeded DB; CI re-runs migrations; rerun audit shows ilike sites now have GIN coverage
 
-- [ ] **T2.2: Add `idx_identity_users_status`, `idx_teams_name_lower` to portal-api schema** (High)
+- [x] (64f6039) **T2.2: Add `idx_identity_users_status`, `idx_teams_name_lower` to portal-api schema** (High)
   - File: `apps/portal-api/src/db/schema/identity-users.ts` (add `index()` declarations); generated SQL committed alongside
   - Acceptance: Drizzle `index()` declarations; `bun run --filter @coms-portal/portal-api db:generate` emits the migration; verification query against `pg_stat_user_indexes` confirms both indexes
   - Verification: type-check + test + index existence + audit rerun
 
-- [ ] **T2.3: Add `@@index` on `Task.requesterName`, `Task.completedBy`, `TaskReview.reviewerType`** (High)
+- [x] (62f391d) **T2.3: Add `@@index` on `Task.requesterName`, `Task.completedBy`, `TaskReview.reviewerType`** (High)
   - File: `apps/fast/prisma/schema.prisma`
   - Acceptance: three `@@index` declarations; `bun run --filter @coms-portal/fast db:push` applies them; verification query confirms existence
   - Persona: plain technical English commit; **must NOT carry `[skip-db-push]`** (Phase B needs db-push to run)
   - Verification: type-check + lint + test + audit rerun
 
-- [ ] **T2.4: Rewrite `apps/portal-api/src/services/employee-info-sync.ts:227` → `eq(lower(teams.name), …)`** (High; depends on T2.2)
+- [x] (3921a11) **T2.4: Rewrite `apps/portal-api/src/services/employee-info-sync.ts:227` → `eq(lower(teams.name), …)`** (High; depends on T2.2)
   - Rule: non-sargable predicate now backed by the functional index from T2.2
   - Acceptance: SQL plan uses the `idx_teams_name_lower` index (EXPLAIN ANALYZE in PR body); behavior unchanged
   - Verification: type-check + test + audit rerun
 
-- [ ] **T2.5: Replace JS Levenshtein with pg_trgm similarity — `apps/portal-api/src/services/aliases.ts:172`** (High; depends on T2.1)
+- [x] (156b69b) **T2.5: Replace JS Levenshtein with pg_trgm similarity — `apps/portal-api/src/services/aliases.ts:172`** (High; depends on T2.1)
   - Rule: row over-fetch + non-sargable — JS-side fuzzy match required loading the whole table
   - Acceptance: rewrite as `SELECT ... WHERE similarity(name, $q) > $threshold ORDER BY similarity DESC LIMIT N`; the JS Levenshtein dependency removed; test covers the rewritten path
   - Verification: type-check + test + audit rerun
 
-- [ ] **T2.6: Rewrite fast search → `taskToken: { startsWith: q }` — `apps/fast/app/api/search/route.ts:51`** (High)
+- [x] (d94a58c code; 8ac28a7 gap-close) **T2.6: Rewrite fast search → `taskToken: { startsWith: q }` — `apps/fast/app/api/search/route.ts:51`** (High)
   - Rule: non-sargable — current pattern doesn't use a trigram index even after T2.1
   - Acceptance: Prisma `taskToken: { startsWith: q }` uses the B-tree prefix index naturally; existing search behavior preserved
   - Persona: plain technical English commit; `[skip-db-push]` first line
   - Verification: type-check + lint + test + audit rerun
 
-- [ ] **T2.7: Verification pass — rerun audit, confirm all ilike sites have GIN coverage** (Audit gate; depends on T2.1, T2.3)
+- [x] (this PR) **T2.7: Verification pass — rerun audit, confirm all ilike sites have GIN coverage** (Audit gate; depends on T2.1, T2.3)
   - Acceptance: rerun the rulebook against the full Spec 07 file:line list = zero findings; record the verification output in the PR body
   - Verification: this PR carries no code change; it's the gate that closes CHECKPOINT B
 
