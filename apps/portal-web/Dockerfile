@@ -7,7 +7,12 @@
 #   deps-dev  : full workspace install — feeds the builder
 #   builder   : `vite build` (svelte-adapter-bun emits build/ with inlined
 #               workspace + 3p deps)
-#   deps-prod : `bun install --production --filter` for just this workspace
+#   deps-prod : `bun install --filter` for just this workspace. NOTE: NOT
+#               --production — SvelteKit's emitted build/server/index.js
+#               imports @sveltejs/kit at runtime, and @sveltejs/kit lives
+#               in devDependencies. Dropping --production keeps the SSR
+#               runtime imports while still trimming every workspace
+#               outside portal-web's transitive tree.
 #   runtime   : ships build/ + prod node_modules only. No more double-copy of
 #               apps/portal-web/node_modules — the prod install fills it.
 #
@@ -73,7 +78,7 @@ COPY packages/account-widget-svelte/package.json packages/account-widget-svelte/
 COPY packages/account-widget-react/package.json packages/account-widget-react/
 COPY packages/heroes-shared/package.json packages/heroes-shared/
 COPY packages/ui-react/examples/smoketest/package.json packages/ui-react/examples/smoketest/
-RUN bun install --production --frozen-lockfile --filter @coms-portal/portal-web
+RUN bun install --frozen-lockfile --filter @coms-portal/portal-web
 
 FROM oven/bun:1-slim AS runtime
 LABEL org.opencontainers.image.title="COMS Portal Web" \
