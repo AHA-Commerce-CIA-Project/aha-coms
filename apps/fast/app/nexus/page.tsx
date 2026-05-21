@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth/use-auth';
 import { useCommentDraftTaskIds } from '@/lib/use-comment-drafts';
@@ -23,6 +23,7 @@ import { TaskHelpPanel } from '@/components/TaskHelpPanel';
 import { TaskCommentsSection } from '@/components/TaskCommentsSection';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { CreateTaskWizard } from '@/components/CreateTaskWizard';
+import { AssigneeMultiSelect } from '@/components/AssigneeMultiSelect';
 
 interface TicketRow {
     id: string;
@@ -143,6 +144,12 @@ function NexusContent() {
     const [priorityFilter, setPriorityFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [divisionFilter, setDivisionFilter] = useState('All Divisions');
+    // Multi-select filter for the "Assigned To" column. Empty Set means
+    // no filter (show all rows); a populated Set narrows to the union of
+    // the selected assignee IDs. Options are derived client-side from the
+    // currently-loaded tickets so the dropdown automatically scopes to the
+    // active team without needing a separate /api/users round-trip.
+    const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -353,6 +360,7 @@ function NexusContent() {
             setDivisionFilter('All Divisions');
             setDateFrom('');
             setDateTo('');
+            setAssigneeFilter(new Set());
 
             // Find which page the task is on (in default unfiltered list)
             const nonArchived = tickets.filter(t => t.status !== 'archived');
@@ -530,6 +538,23 @@ function NexusContent() {
         }
     };
 
+    // Distinct claimers across the currently-loaded ticket set, sorted by
+    // display name. Derived client-side from tickets so the dropdown scopes
+    // to whoever has work in this view (active team, division, etc.) without
+    // a separate /api/users round-trip; switching divisions doesn't lose
+    // options because the source is the unfiltered tickets array.
+    const availableAssignees = useMemo(() => {
+        const seen = new Map<string, string>();
+        for (const t of tickets) {
+            if (t.assignee_id && !seen.has(t.assignee_id)) {
+                seen.set(t.assignee_id, t.assignee?.name ?? 'Unknown');
+            }
+        }
+        return Array.from(seen, ([id, name]) => ({ id, name })).sort((a, b) =>
+            a.name.localeCompare(b.name),
+        );
+    }, [tickets]);
+
     // Filters
     // Default: hide archived unless explicitly filtering for them
     let preFiltered = statusFilter === 'archived'
@@ -546,6 +571,9 @@ function NexusContent() {
     }
     if (divisionFilter !== 'All Divisions') {
         preFiltered = preFiltered.filter(t => t.requester_division === divisionFilter);
+    }
+    if (assigneeFilter.size > 0) {
+        preFiltered = preFiltered.filter(t => t.assignee_id && assigneeFilter.has(t.assignee_id));
     }
     if (dateFrom) {
         preFiltered = preFiltered.filter(t => new Date(t.created_at) >= new Date(dateFrom));
@@ -826,7 +854,13 @@ function NexusContent() {
                         Clear
                     </button>
                 )}
-                <div className="w-full sm:w-auto sm:ml-auto">
+                <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-2">
+                    <AssigneeMultiSelect
+                        assignees={availableAssignees}
+                        selected={assigneeFilter}
+                        onChange={(next) => { setAssigneeFilter(next); setCurrentPage(1); }}
+                        placeholder="All assignees"
+                    />
                     <select
                         value={divisionFilter}
                         onChange={(e) => { setDivisionFilter(e.target.value); setCurrentPage(1); }}

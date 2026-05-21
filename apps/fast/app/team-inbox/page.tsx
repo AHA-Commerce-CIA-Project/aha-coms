@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
+import { Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Inbox, Paperclip, AlertTriangle, Hash, Clock, CheckCircle2, Circle, Hand, Check, RotateCcw, Loader2, MoreVertical, UserPlus, Bookmark, Forward, Archive, ArchiveRestore, PauseCircle, PlayCircle, X, ListChecks, Eye, ExternalLink, Plus, LayoutGrid, List as ListIcon } from 'lucide-react';
 import { useAuth } from '@/lib/auth/use-auth';
@@ -11,6 +11,7 @@ import { ForwardToChannelModal } from '@/components/channels/ForwardToChannelMod
 import { TeamInboxTaskModal, type TeamInboxTask } from '@/components/TeamInboxTaskModal';
 import { CreatePersonalCardModal } from '@/components/CreatePersonalCardModal';
 import { RoutineTaskDetailModal } from '@/components/channels/RoutineTaskDetailModal';
+import { AssigneeMultiSelect } from '@/components/AssigneeMultiSelect';
 
 interface Attachment {
     url: string;
@@ -221,6 +222,27 @@ function TeamInboxContent() {
     // Free-text filter applied to title + plain-text description before
     // bucketing. Client-side only; the API doesn't get a search param.
     const [searchQuery, setSearchQuery] = useState('');
+    // Multi-select claimer filter. Empty Set means "no filter" (show all
+    // rows); a populated Set narrows to the union of selected assignee IDs.
+    // Options are derived client-side from the currently-loaded tasks so
+    // the dropdown auto-scopes to the active team without an extra
+    // /api/users round-trip.
+    const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
+    // Distinct claimers across the currently-loaded tasks array, sorted
+    // by display name. Same pattern as /nexus's Task Queue filter — keeps
+    // the dropdown options scoped to whoever has work in this team
+    // without needing a /api/users round-trip.
+    const availableAssignees = useMemo(() => {
+        const seen = new Map<string, string>();
+        for (const t of tasks) {
+            if (t.assignee && !seen.has(t.assignee.id)) {
+                seen.set(t.assignee.id, t.assignee.name);
+            }
+        }
+        return Array.from(seen, ([id, name]) => ({ id, name })).sort((a, b) =>
+            a.name.localeCompare(b.name),
+        );
+    }, [tasks]);
     // Mark-as-Pending modal — opened from the 3-dot menu. Free-text reason
     // plus a structured tag so reporting can group blockers later.
     const [pendingModalTask, setPendingModalTask] = useState<InboxTask | null>(null);
@@ -738,6 +760,14 @@ function TeamInboxContent() {
                         aria-label="Search tasks"
                         className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 w-44 sm:w-56"
                     />
+                    {/* Multi-select claimer filter. Sits next to Search so the two
+                        client-side filters live in the same visual cluster. */}
+                    <AssigneeMultiSelect
+                        assignees={availableAssignees}
+                        selected={assigneeFilter}
+                        onChange={setAssigneeFilter}
+                        placeholder="All assignees"
+                    />
                     {isMaster && teams.length > 0 && (
                         <select
                             value={selectedTeamId || ''}
@@ -876,6 +906,13 @@ function TeamInboxContent() {
                       })
                     : pillFiltered;
 
+                // Claimer multi-select filter sits between search and the
+                // archive split so the stats strip and kanban react to it
+                // the same way they react to the search input.
+                const claimerFiltered = assigneeFilter.size === 0
+                    ? searched
+                    : searched.filter(t => t.assignee && assigneeFilter.has(t.assignee.id));
+
                 // Split off the archived rows so the regular four-column
                 // Kanban never sees them and the ARCHIVED chip / dedicated
                 // view always have their full set.
@@ -887,8 +924,8 @@ function TeamInboxContent() {
                 // doesn't care which fired; both flow to the Archive
                 // view via the same set.
                 const isArchivedRow = (t: InboxTask) => !!t.archivedByMe || !!t.autoArchivedByAge;
-                const archivedAll = searched.filter(isArchivedRow);
-                const visibleTasks = searched.filter(t => !isArchivedRow(t));
+                const archivedAll = claimerFiltered.filter(isArchivedRow);
+                const visibleTasks = claimerFiltered.filter(t => !isArchivedRow(t));
 
                 // Sort + timeframe filter for the Archive view. archivedAt
                 // is an ISO string from /api/team-inbox; missing values
