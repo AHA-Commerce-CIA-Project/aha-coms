@@ -582,7 +582,15 @@ function NexusContent() {
         preFiltered = preFiltered.filter(t => new Date(t.created_at) <= new Date(dateTo + 'T23:59:59'));
     }
     if (statusFilter === 'all') {
-        preFiltered = preFiltered.filter(t => t.status !== 'done');
+        // Default tab is "active work" — hide done rows so the table isn't
+        // dominated by completed history. Exception: when the user types a
+        // search query, surface results across every status (including
+        // done) so they don't have to remember to click the Completed
+        // chip to find a finished row by name. The status chips still let
+        // them narrow back if needed.
+        if (!searchQuery.trim()) {
+            preFiltered = preFiltered.filter(t => t.status !== 'done');
+        }
     } else if (statusFilter === 'queue') {
         preFiltered = preFiltered.filter(t => t.status === 'todo');
     } else if (statusFilter === 'in-progress') {
