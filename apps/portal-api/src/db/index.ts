@@ -14,6 +14,11 @@ function createClient() {
     return postgres(url.toString(), {
       host: socketPath,
       max: 3,
+      // Close idle connections after 30s so the per-instance baseline draw
+      // is traffic-proportional, not fleet-proportional. Cold-acquire on
+      // the first query after a >30s quiet window pays ~10-20ms once.
+      // See packages/heroes-shared/src/db/index.ts for the full ceiling math.
+      idle_timeout: 30,
       // Fail fast on connect — don't let a hung Cloud SQL proxy stall a request.
       connect_timeout: 5,
       // Disable named prepared statements. In serverless/pooled environments
@@ -25,6 +30,7 @@ function createClient() {
 
   return postgres(raw, {
     max: 3,
+    idle_timeout: 30,
     connect_timeout: 5,
     prepare: false,
   })
