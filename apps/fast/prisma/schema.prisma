@@ -179,6 +179,11 @@ model Team {
   assignedTasks    Task[]                @relation("TeamAssignedTasks")
   ownedChannels    Channel[]             @relation("TeamOwnedChannels")
 
+  // Spec 07 Phase B / T2.1 restore — GIN trigram on teams.name. Declared
+  // here with ops: raw("gin_trgm_ops") + map: so Prisma's db push sees
+  // the pre-applied index (prisma/sql/0003_pg_trgm_gin.sql) as already
+  // satisfied. Without the declaration, db push drops the unmanaged index.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_teams_name_gin_trgm")
   @@map("teams")
 }
 
@@ -317,6 +322,10 @@ model Task {
   // CONCURRENTLY via prisma/sql/0005_task_taskToken_index.sql before this
   // schema change landed; db push on deploy is a no-op.
   @@index([taskToken])
+  // Spec 07 Phase B / T2.1 restore — GIN trigram on tasks.title. See teams
+  // model's matching comment for the ops/map rationale (db push drops
+  // unmanaged indexes; this declaration locks the pre-applied one in).
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_tasks_title_gin_trgm")
   @@map("tasks")
 }
 
@@ -563,6 +572,8 @@ model Channel {
   // Per-user pins (Channel:User many-to-many via PinnedChannel join row).
   pinnedBy          PinnedChannel[]     @relation("ChannelPinnedBy")
 
+  // Spec 07 Phase B / T2.1 restore — GIN trigram on channels.name.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_channels_name_gin_trgm")
   @@map("channels")
 }
 
@@ -618,6 +629,8 @@ model ChannelMessage {
   directAssignTasks Task[]            @relation("DirectAssignMessage")
 
   @@index([channelId, createdAt])
+  // Spec 07 Phase B / T2.1 restore — GIN trigram on channel_messages.content.
+  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_channel_messages_content_gin_trgm")
   @@map("channel_messages")
 }
 
@@ -643,6 +656,8 @@ model ThreadReply {
   mirrorComment TaskComment? @relation("CommentReplyMirror")
 
   @@index([messageId, createdAt])
+  // Spec 07 Phase B / T2.1 restore — GIN trigram on thread_replies.content.
+  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_thread_replies_content_gin_trgm")
   @@map("thread_replies")
 }
 
@@ -904,6 +919,8 @@ model ActivityLog {
 
   @@index([createdAt])
   @@index([userId])
+  // Spec 07 Phase B / T2.1 restore — GIN trigram on activity_logs.description.
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_activity_logs_description_gin_trgm")
   @@map("activity_logs")
 }
 
