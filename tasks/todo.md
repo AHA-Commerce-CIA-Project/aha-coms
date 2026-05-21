@@ -29,66 +29,66 @@ Read `docs/spec/07-database-performance-remediation.md` for the full audit conte
 
 ### Phase A: Code-only fixes — Critical N+1s (parallelizable; 1 PR per task)
 
-- [ ] **T1.1: Fix N+1 — `apps/portal-api/src/routes/employees.ts:179-187`** (Critical)
+- [x] (e5e1317) **T1.1: Fix N+1 — `apps/portal-api/src/routes/employees.ts:179-187`** (Critical)
   - Rule: N+1 query in employee list/detail loader
   - Acceptance: batched query returns equivalent shape; new test asserts exactly one DB call to the employees model; `bun --filter @coms-portal/portal-api typecheck && test` green; audit rerun against this file:line produces no finding for this rule
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.2: Fix N+1 — `apps/portal-api/src/routes/access.ts:128-145`** (Critical)
+- [x] (e5e1317; test typecheck-fix be2076a) **T1.2: Fix N+1 — `apps/portal-api/src/routes/access.ts:128-145`** (Critical)
   - Rule: N+1 in access-cleanup loop
   - Acceptance: rewrite as single `db.execute(sql\`DELETE ... NOT EXISTS ...\`)` keeping the NOT EXISTS guard inside the single statement (race-safe per Spec 07 §4); new test covers the batched call counts
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.3: Fix N+1 — `apps/portal-api/src/services/teams.ts:50-67`** (Critical)
+- [x] (e5e1317) **T1.3: Fix N+1 — `apps/portal-api/src/services/teams.ts:50-67`** (Critical)
   - Rule: N+1 in team membership lookups
   - Acceptance: single batched query; race-safe atomic semantics preserved if applicable
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.4: Fix N+1 — `apps/portal-api/src/services/teams.ts:21-27`** (Critical)
+- [x] (e5e1317) **T1.4: Fix N+1 — `apps/portal-api/src/services/teams.ts:21-27`** (Critical)
   - Rule: N+1 in team enumeration
   - Acceptance: batched fetch; downstream callsites unchanged
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.5: Fix N+1 — `apps/portal-api/src/services/taxonomies.ts:210-220`** (Critical)
+- [x] (e5e1317) **T1.5: Fix N+1 — `apps/portal-api/src/services/taxonomies.ts:210-220`** (Critical)
   - Rule: N+1 in taxonomy expansion
   - Acceptance: batched fetch via `in()` or `inArray()` predicate
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.6: Fix N+1 + Dup — `apps/portal-api/src/services/employee-info-sync.ts:213,227`** (Critical)
+- [x] (e5e1317; line 227 deferred to T2.4) **T1.6: Fix N+1 + Dup — `apps/portal-api/src/services/employee-info-sync.ts:213,227`** (Critical)
   - Rule: N+1 AND duplicate-query pattern
   - Acceptance: single batched fetch; memoise the duplicate read; line 227's `eq(teams.name, …)` is left intact — its sargable rewrite is T2.4 (Phase B, depends on T2.2)
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.7: Fix N+1 — `apps/heroes-api/src/services/{redemptions,approval}.ts`** (Critical)
+- [x] (fced927) **T1.7: Fix N+1 — `apps/heroes-api/src/services/{redemptions,approval}.ts`** (Critical)
   - Rule: N+1 in batch redemption + approval handlers
   - Acceptance: single status UPDATE statement + single audit-log INSERT per batch; test with `ids.length === 3` confirms the assertion
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.8: Fix N+1 — `apps/heroes-api/src/services/{challenges,appeals}.ts`** (Critical)
+- [x] (fced927) **T1.8: Fix N+1 — `apps/heroes-api/src/services/{challenges,appeals}.ts`** (Critical)
   - Rule: N+1 in challenges + appeals batch variants
   - Acceptance: mirror T1.7's shape — single UPDATE + single audit INSERT per batch
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.12: Fix N+1 — `apps/fast/app/api/chat/conversations/route.ts:71-83`** (Critical)
+- [x] (31182fe) **T1.12: Fix N+1 — `apps/fast/app/api/chat/conversations/route.ts:71-83`** (Critical)
   - Rule: N+1 — groupBy unread counts loaded per conversation
   - Acceptance: Prisma `groupBy` or single batched count query; response shape preserved byte-identical
   - Persona: plain technical English commit per `apps/fast/CLAUDE.md`; consider `[skip-db-push]` in first line if no Prisma schema change
   - Verification: type-check + lint + test + audit rerun
 
-- [ ] **T1.13: Fix N+1 — `apps/fast/app/api/tasks/[id]/complete/route.ts:50-66`** (Critical)
+- [x] (31182fe) **T1.13: Fix N+1 — `apps/fast/app/api/tasks/[id]/complete/route.ts:50-66`** (Critical)
   - Rule: N+1 in milestone updates
   - **Race-safety pin** (Spec 07 §4): the `claimedById: null` guard MUST stay inside the single UPDATE WHERE clause — batching with the guard outside introduces a TOCTOU window
   - Acceptance: Prisma `updateMany({ where: { id: { in: ids }, claimedById: null }, data: {...} })`; test with 3 ids confirms single-statement
   - Persona: plain technical English commit; `[skip-db-push]` first line
   - Verification: type-check + lint + test + audit rerun
 
-- [ ] **T1.14: Fix N+1 — `apps/fast/app/api/orbit/analytics/route.ts:73-100`** (Critical)
+- [x] (31182fe) **T1.14: Fix N+1 — `apps/fast/app/api/orbit/analytics/route.ts:73-100`** (Critical)
   - Rule: N+1 in orbit analytics aggregation
   - Acceptance: Prisma `groupBy` with the aggregation moved to the DB
   - Persona: plain technical English commit; `[skip-db-push]` first line
   - Verification: type-check + lint + test + audit rerun
 
-- [ ] **T1.15: Fix N+1 — `apps/fast/app/api/admin/sync-hr/route.ts:80-86, 89-109`** (Critical)
+- [x] (31182fe) **T1.15: Fix N+1 — `apps/fast/app/api/admin/sync-hr/route.ts:80-86, 89-109`** (Critical)
   - Rule: N+1 — two N+1 sites (the team lookup AND the per-employee upsert loop)
   - Acceptance: `createMany({ skipDuplicates: true })` for inserts; `updateMany` for updates; single team-lookup query before the loop; the team `select` projection is also a Medium fix bundled here per the spec table
   - Persona: plain technical English commit; `[skip-db-push]` first line if no schema change
@@ -96,35 +96,35 @@ Read `docs/spec/07-database-performance-remediation.md` for the full audit conte
 
 ### Phase A: Code-only fixes — High severity (parallelizable)
 
-- [ ] **T1.9: Fix correlated subquery — `apps/heroes-api/src/repositories/teams.ts:25-30`** (High)
+- [x] (fced927) **T1.9: Fix correlated subquery — `apps/heroes-api/src/repositories/teams.ts:25-30`** (High)
   - Rule: correlated subquery → group-by
   - Acceptance: rewrite as single SELECT with GROUP BY; EXPLAIN ANALYZE before/after in PR body (non-obvious fix per Spec 07 §5)
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.10: Add pagination — `apps/heroes-api/src/repositories/teams.ts:getTeamMembers`** (High)
+- [x] (fced927) **T1.10: Add pagination — `apps/heroes-api/src/repositories/teams.ts:getTeamMembers`** (High)
   - Rule: row over-fetch — unbounded `getTeamMembers`
   - Acceptance: add `limit` + `offset` params; default limit 50, max 200; test requests page 2 with `limit=5` and asserts both honored
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.11: Fix row over-fetch — `apps/portal-api/src/routes/teams.ts:14-25`** (High)
+- [x] (verified-already-shipped; test-locked via e5e1317) **T1.11: Fix row over-fetch — `apps/portal-api/src/routes/teams.ts:14-25`** (High)
   - Rule: over-fetch — selects entire team rows when only a projection is needed
   - Acceptance: explicit Drizzle `.select({ ...only-needed-columns })`; only list columns the immediate caller reads downstream (Spec 07 §4); response builder re-adds any field a projection drops
   - Verification: type-check + test + audit rerun
 
 ### Phase A: Code-only fixes — Medium + Low (bundled)
 
-- [ ] **T1.16: Memoise + project — `apps/portal-api/src/services/email-resolution.ts`** (Medium — Dup + Column)
+- [x] (verified-already-shipped; helper consumed by T1.1 in e5e1317) **T1.16: Memoise + project — `apps/portal-api/src/services/email-resolution.ts`** (Medium — Dup + Column)
   - Rule: duplicate query + column over-fetch
   - Acceptance: introduce `getDisplayEmailsForUsers(ids: string[]): Promise<Map<string, string>>`; callers use the Map; new test asserts callsite produces the Map
   - Verification: type-check + test + audit rerun
 
-- [ ] **T1.17: Misc Mediums — fast** (Medium, bundled)
+- [x] (31182fe) **T1.17: Misc Mediums — fast** (Medium, bundled)
   - Surfaces: `apps/fast/app/api/channels/search/*` consolidation; `apps/fast/app/api/admin/sync-hr/route.ts` team `select` projection (overlaps T1.15 — may land together); `apps/fast/app/api/chat/users/*` + `apps/fast/app/api/orbit/templates/*` pagination
   - Acceptance: each surface's specific Medium finding closes; one PR bundling related Mediums is acceptable
   - Persona: plain technical English commit; `[skip-db-push]` first line
   - Verification: type-check + lint + test + audit rerun
 
-- [ ] **T1.18: Defensive `.limit()` defenders bundle** (Low, single PR)
+- [x] (6579eb0) **T1.18: Defensive `.limit()` defenders bundle** (Low, single PR)
   - Surfaces:
     - `apps/portal-api/src/routes/apps.ts:70`
     - `apps/portal-api/src/services/manifests-internal.ts:246` (`loadAllManifests`)
@@ -233,7 +233,7 @@ Read `tasks/archive/2026-05-20-snapshot.{plan,todo}.md` for the historical CP21 
 
 ### Phase D: Flip stale markers
 
-- [ ] **D.1: Flip 28 stale `[ ]` markers in `docs/spec/06-portal-password-auth.md`**
+- [x] (175bc73; this very commit's predecessor on the same branch) **D.1: Flip 28 stale `[ ]` markers in `docs/spec/06-portal-password-auth.md`**
   - Surface: PR F shipped to prod through commits `eb13d13` → `cd5d593` → `7d65a72` → `ba83444` → `f1e143e`. Spec doc still carries `[ ]` on Success criteria lines 43-58 and Phase 1-5 tasks T01-T15 (excluding T10 + T10a which were correctly flipped)
   - Acceptance: every `[ ]` in `06-portal-password-auth.md` flipped to `[x]` with the satisfying commit SHA cited inline (e.g., `[x] (eb13d13)`); FU-14's verification clause re-run end-to-end:
     1. Admin creates `test@anywhere.com` via `/admin/identities`
