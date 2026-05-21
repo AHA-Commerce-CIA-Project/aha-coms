@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 #
-# Built with monorepo root as the docker context. See
-# apps/heroes-web/cloudbuild.yaml for the invocation.
+# Built from the monorepo root by .github/workflows/deploy-heroes-web.yml —
+# `docker build --file=apps/heroes-web/Dockerfile --cache-from=<image>:latest .`
+# Auth via WIF, push to coms-heroes-repo, deploy via `gcloud run deploy`.
 #
 # Heroes-web uses svelte-adapter-bun; build/ ships a Bun-native server entry
 # that exposes `httpserver` via build/index.js. SSR + workspace deps are
