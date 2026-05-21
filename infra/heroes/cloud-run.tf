@@ -12,13 +12,13 @@
 # DATABASE_URL for SSR session lookups). Both share heroes' Cloud SQL proxy
 # via the /cloudsql socket mount.
 #
-# Image tag is owned by Cloud Build (apps/heroes-*/cloudbuild.yaml pushes
-# :<git-sha>). Tofu pins :latest at create time and ignores subsequent
+# Image tag is owned by GitHub Actions (.github/workflows/deploy-heroes-{api,web}.yml
+# push :<git-sha>). Tofu pins :latest at create time and ignores subsequent
 # image changes so it does not fight the deploy pipeline.
 ############################################################
 
 locals {
-  # Bootstrap placeholder. Heroes cloudbuild pipelines push to
+  # Bootstrap placeholder. The heroes GHA deploy workflows push to
   # coms-heroes-repo (declared in modules/artifact-registry/) and
   # `gcloud run deploy --image=...:<sha>` overrides this at first deploy.
   # lifecycle.ignore_changes pins both image fields, so Tofu does not fight
