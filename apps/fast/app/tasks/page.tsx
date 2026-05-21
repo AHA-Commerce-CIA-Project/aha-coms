@@ -96,6 +96,24 @@ const urgencyConfig: Record<string, { label: string; bg: string; style?: React.C
     '5-minute': { label: '5min', bg: '', style: { backgroundColor: '#56CDFC', color: '#ffffff' } },
 };
 
+// Status grouping order for the Direct Tasks / Open Queue tables in My
+// Tasks. Active work surfaces first so the user sees actionable rows
+// without scrolling past the completed ones. Within a status group the
+// table preserves the existing created_at-desc order from the API.
+const STATUS_RANK: Record<string, number> = {
+    'in-progress': 1,
+    'pending': 2,
+    'todo': 3,
+    'review': 4,
+    'done': 5,
+};
+const compareByStatusThenRecent = (a: ClaimedTask, b: ClaimedTask): number => {
+    const ra = STATUS_RANK[a.status] ?? 99;
+    const rb = STATUS_RANK[b.status] ?? 99;
+    if (ra !== rb) return ra - rb;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+};
+
 function MyTasksContent() {
     const { user, profile, isLeader } = useAuth();
     const draftTaskIds = useCommentDraftTaskIds();
@@ -692,20 +710,24 @@ function MyTasksContent() {
     // channel-null branch swept them into Direct Tasks and left Open
     // Queue empty. Source is the only column that cleanly partitions
     // the two user-facing categories.
-    const directRequestTasks = claimedTasksMatchingFilter.filter(t =>
-        t.assignee_id === user?.id
-        && (
-            t.source === 'direct_request'
-            || t.source === 'direct_assign'
-            || t.routine_template_id != null
-        ),
-    );
-    const queueTasks = claimedTasksMatchingFilter.filter(t =>
-        t.assignee_id === user?.id
-        && t.source !== 'direct_request'
-        && t.source !== 'direct_assign'
-        && t.routine_template_id == null,
-    );
+    const directRequestTasks = claimedTasksMatchingFilter
+        .filter(t =>
+            t.assignee_id === user?.id
+            && (
+                t.source === 'direct_request'
+                || t.source === 'direct_assign'
+                || t.routine_template_id != null
+            ),
+        )
+        .sort(compareByStatusThenRecent);
+    const queueTasks = claimedTasksMatchingFilter
+        .filter(t =>
+            t.assignee_id === user?.id
+            && t.source !== 'direct_request'
+            && t.source !== 'direct_assign'
+            && t.routine_template_id == null,
+        )
+        .sort(compareByStatusThenRecent);
 
     return (
         <div className="space-y-6">
