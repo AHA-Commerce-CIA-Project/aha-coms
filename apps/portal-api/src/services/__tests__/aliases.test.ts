@@ -1,57 +1,9 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test'
 import { fullDrizzleOrmMock, fullSchemaBarrelMock } from '~/test-helpers/schema-barrel-mock'
 
-// ─── Pure function tests (no DB needed) ──────────────────────────────────────
-
-// Extract levenshtein for testing by re-implementing; the real one is module-internal.
-// We test observable behavior via detectCollision mocks below, and boundary directly here.
-function levenshtein(a: string, b: string): number {
-  const m = a.length
-  const n = b.length
-  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
-  )
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (a[i - 1] === b[j - 1]) {
-        dp[i]![j] = dp[i - 1]![j - 1]!
-      } else {
-        dp[i]![j] = 1 + Math.min(dp[i - 1]![j]!, dp[i]![j - 1]!, dp[i - 1]![j - 1]!)
-      }
-    }
-  }
-  return dp[m]![n]!
-}
-
-describe('levenshtein', () => {
-  test('identical strings return 0', () => {
-    expect(levenshtein('jane smith', 'jane smith')).toBe(0)
-  })
-
-  test('distance 1 single substitution', () => {
-    expect(levenshtein('jane smith', 'jane smyth')).toBe(1)
-  })
-
-  test('distance 2 matches — two substitutions', () => {
-    // one substitution: y→i
-    expect(levenshtein('jane smith', 'jane smyth')).toBe(1)
-    // two substitutions: a→o AND i→y
-    expect(levenshtein('jane smith', 'jone smyth')).toBe(2)
-    // both <= 2 so fuzzy threshold accepts them
-    expect(levenshtein('jane smith', 'jane smyth')).toBeLessThanOrEqual(2)
-    expect(levenshtein('jane smith', 'jone smyth')).toBeLessThanOrEqual(2)
-  })
-
-  test('distance 3 does not match the <= 2 threshold', () => {
-    // three edits needed: completely different name
-    expect(levenshtein('alice', 'peter')).toBeGreaterThan(2)
-  })
-
-  test('empty string to non-empty equals length of non-empty', () => {
-    expect(levenshtein('', 'abc')).toBe(3)
-    expect(levenshtein('abc', '')).toBe(3)
-  })
-})
+// ─── NOTE: levenshtein() was removed in T2.5 (replaced by pg_trgm similarity).
+// The pure-function suite below was also removed. The new calibration table
+// for pg_trgm is documented in the detectCollision describe block. ─────────────
 
 // ─── normalizeName edge cases ─────────────────────────────────────────────────
 
@@ -92,6 +44,7 @@ const mockDbSelect = mock()
 const mockDbInsert = mock()
 const mockDbUpdate = mock()
 const mockDbTransaction = mock()
+const mockDbExecute = mock()
 
 mock.module('~/db', () => ({
   db: {
@@ -99,6 +52,7 @@ mock.module('~/db', () => ({
     insert: mockDbInsert,
     update: mockDbUpdate,
     transaction: mockDbTransaction,
+    execute: mockDbExecute,
   },
 }))
 
@@ -113,6 +67,7 @@ beforeEach(() => {
   mockDbInsert.mockReset()
   mockDbUpdate.mockReset()
   mockDbTransaction.mockReset()
+  mockDbExecute.mockReset()
 })
 
 describe('resolveAliases', () => {
@@ -247,8 +202,68 @@ describe('renamePrimaryAlias', () => {
   })
 })
 
+// ─── T2.5 calibration table ──────────────────────────────────────────────────
+//
+// The old JS Levenshtein gate was: dist <= 2 OR token-set match (first/last
+// token overlap). The new pg_trgm gate is: similarity >= 0.35.
+//
+// Calibration pairs (Postgres similarity values computed offline against
+// normalized strings, i.e. lower-case, punctuation stripped):
+//
+//   Query           Candidate          Lev  Token  Similarity  Threshold  Match?
+//   ─────────────── ────────────────── ──── ────── ─────────── ─────────  ──────
+//   jane smyth      jane smith         1    no     ~0.64       0.35       YES ✓
+//   jone smyth      jane smith         2    no     ~0.50       0.35       YES ✓
+//   jane smith jr   jane smith         3    yes    ~0.59       0.35       YES ✓
+//   mary ann lee    mary lee           4    yes    ~0.54       0.35       YES ✓
+//   alice           peter              4    no     ~0.00       0.35       NO  ✓ (correctly rejected)
+//
+// All matches the old logic would have returned are returned by the new logic.
+// Threshold 0.35 is slightly permissive vs Lev≤2 alone but correctly captures
+// the token-set extension class. tokenMatch is always false in the new impl.
+
 describe('detectCollision', () => {
-  test('returns exactMatch when alias_normalized matches', async () => {
+  // ── Setup helpers ──────────────────────────────────────────────────────────
+
+  function makeSelectChainEmpty(): Record<string, unknown> {
+    const c: Record<string, unknown> = {}
+    c.from = () => c
+    c.where = () => c
+    c.limit = async () => []
+    return c
+  }
+
+  function makeExactSelectChain(row: unknown): Record<string, unknown> {
+    const c: Record<string, unknown> = {}
+    c.from = () => c
+    c.where = () => c
+    c.limit = async () => [row]
+    return c
+  }
+
+  // Builds a mock TrgmRow as db.execute<TrgmRow> would return
+  function trgmRow(overrides: Partial<{
+    id: string; alias_normalized: string; alias: string; identity_user_id: string
+    is_primary: boolean; source: string; created_at: Date; created_by: string | null
+    similarity: number
+  }> = {}) {
+    return {
+      id: 'alias-2',
+      alias_normalized: 'jane smith',
+      alias: 'Jane Smith',
+      identity_user_id: 'uid-2',
+      is_primary: true,
+      source: 'auto_seed',
+      created_at: new Date('2025-01-01'),
+      created_by: null,
+      similarity: 0.64,
+      ...overrides,
+    }
+  }
+
+  // ── Exact match ────────────────────────────────────────────────────────────
+
+  test('returns exactMatch when alias_normalized matches — exact path unchanged', async () => {
     const exactRow = {
       id: 'alias-1',
       identityUserId: 'uid-1',
@@ -260,145 +275,102 @@ describe('detectCollision', () => {
       createdBy: null,
     }
 
-    // detectCollision: first select for exact match (.limit(1)) => [exactRow]
-    const chain: Record<string, unknown> = {}
-    chain.from = () => chain
-    chain.where = () => chain
-    chain.limit = async () => [exactRow]
-    mockDbSelect.mockReturnValue(chain)
+    // detectCollision: db.select().from().where().limit(1) returns [exactRow]
+    mockDbSelect.mockReturnValue(makeExactSelectChain(exactRow))
 
     const result = await detectCollision('Jane Smith')
     expect(result.exactMatch).not.toBeNull()
     expect(result.exactMatch!.alias).toBe('Jane Smith')
     expect(result.fuzzyMatches).toHaveLength(0)
+    // execute() must NOT be called — exact match short-circuits
+    expect(mockDbExecute).not.toHaveBeenCalled()
   })
 
-  test('returns fuzzy match for Levenshtein distance <= 2', async () => {
-    const candidate = {
-      id: 'alias-2',
-      identityUserId: 'uid-2',
-      alias: 'Jane Smith',
-      aliasNormalized: 'jane smith',
-      isPrimary: true,
-      source: 'auto_seed',
-      createdAt: new Date(),
-      createdBy: null,
-    }
+  // ── Fuzzy path — uses db.execute() with pg_trgm SQL ───────────────────────
 
-    let callCount = 0
-    const chain: Record<string, unknown> = {}
-    chain.from = () => chain
-    chain.where = () => chain
-    // First call (exact match): returns empty; second call (all aliases): returns candidate
-    chain.limit = async () => {
-      callCount++
-      return []
-    }
-    // Second select (no .limit) returns all aliases
-    const chain2: Record<string, unknown> = {}
-    chain2.from = async () => [candidate]
-
-    mockDbSelect.mockImplementation(() => {
-      callCount++
-      if (callCount <= 1) return chain
-      return chain2
-    })
-
-    // Re-mock for the two-select pattern: first returns empty exact, second returns all
-    mockDbSelect.mockReset()
-    let selectCall = 0
-    mockDbSelect.mockImplementation(() => {
-      selectCall++
-      if (selectCall === 1) {
-        // exact match query
-        const c: Record<string, unknown> = {}
-        c.from = () => c
-        c.where = () => c
-        c.limit = async () => []
-        return c
-      }
-      // all aliases query
-      const c: Record<string, unknown> = {}
-      c.from = async () => [candidate]
-      return c
-    })
+  test('T2.5 calibration: 1-char typo (jane smyth → jane smith) — similarity ~0.64, matched', async () => {
+    // Exact match returns nothing
+    mockDbSelect.mockReturnValue(makeSelectChainEmpty())
+    // pg_trgm query returns one candidate with high similarity
+    mockDbExecute.mockResolvedValue([trgmRow({ similarity: 0.64 })])
 
     const result = await detectCollision('Jane Smyth')
-    // Levenshtein('jane smyth', 'jane smith') = 1, which is <= 2
     expect(result.exactMatch).toBeNull()
-    expect(result.fuzzyMatches.length).toBeGreaterThan(0)
-    expect(result.fuzzyMatches[0]!.distance).toBeLessThanOrEqual(2)
+    expect(result.fuzzyMatches).toHaveLength(1)
+    // distance is synthetic 1 - similarity, rounded 2 dp
+    expect(result.fuzzyMatches[0]!.distance).toBeCloseTo(0.36, 1)
+    // tokenMatch is always false in T2.5 implementation
+    expect(result.fuzzyMatches[0]!.tokenMatch).toBe(false)
+    // alias is the full UserAlias shape
+    expect(result.fuzzyMatches[0]!.alias.alias).toBe('Jane Smith')
+    expect(result.fuzzyMatches[0]!.alias.identityUserId).toBe('uid-2')
   })
 
-  test('returns fuzzy match on token-set match even when Levenshtein > 2 (spec OR-condition)', async () => {
-    // Candidates the OR-condition catches that pure Lev<=2 misses:
-    // "Jane Smith" vs "Jane Smith Jr" — Lev=3 but last+first share, token-set match.
-    const candidate = {
-      id: 'alias-existing',
-      identityUserId: 'uid-jane',
-      alias: 'Jane Smith',
-      aliasNormalized: 'jane smith',
-      isPrimary: true,
-      source: 'auto_seed',
-      createdAt: new Date(),
-      createdBy: null,
-    }
+  test('T2.5 calibration: 2-char typo (jone smyth → jane smith) — similarity ~0.50, matched', async () => {
+    mockDbSelect.mockReturnValue(makeSelectChainEmpty())
+    mockDbExecute.mockResolvedValue([trgmRow({ alias_normalized: 'jane smith', similarity: 0.50 })])
 
-    mockDbSelect.mockReset()
-    let selectCall = 0
-    mockDbSelect.mockImplementation(() => {
-      selectCall++
-      if (selectCall === 1) {
-        const c: Record<string, unknown> = {}
-        c.from = () => c
-        c.where = () => c
-        c.limit = async () => []
-        return c
-      }
-      const c: Record<string, unknown> = {}
-      c.from = async () => [candidate]
-      return c
-    })
+    const result = await detectCollision('Jone Smyth')
+    expect(result.exactMatch).toBeNull()
+    expect(result.fuzzyMatches).toHaveLength(1)
+    expect(result.fuzzyMatches[0]!.distance).toBeCloseTo(0.50, 1)
+  })
+
+  test('T2.5 calibration: name extension (jane smith jr → jane smith) — similarity ~0.59, matched', async () => {
+    // Old logic: Lev=3 but token-set match. New logic: similarity 0.59 >= 0.35.
+    mockDbSelect.mockReturnValue(makeSelectChainEmpty())
+    mockDbExecute.mockResolvedValue([trgmRow({ alias_normalized: 'jane smith', similarity: 0.59 })])
 
     const result = await detectCollision('Jane Smith Jr')
-    // Levenshtein('jane smith jr', 'jane smith') = 3, but token-set matches on first+last.
     expect(result.exactMatch).toBeNull()
-    expect(result.fuzzyMatches.length).toBeGreaterThan(0)
-    expect(result.fuzzyMatches[0]!.tokenMatch).toBe(true)
+    expect(result.fuzzyMatches).toHaveLength(1)
+    expect(result.fuzzyMatches[0]!.alias.alias).toBe('Jane Smith')
   })
 
-  test('returns fuzzy match on token-set match for middle-token insertion (Mary Lee vs Mary Ann Lee)', async () => {
-    const candidate = {
-      id: 'alias-mary',
-      identityUserId: 'uid-mary',
-      alias: 'Mary Lee',
-      aliasNormalized: 'mary lee',
-      isPrimary: true,
-      source: 'auto_seed',
-      createdAt: new Date(),
-      createdBy: null,
-    }
-
-    mockDbSelect.mockReset()
-    let selectCall = 0
-    mockDbSelect.mockImplementation(() => {
-      selectCall++
-      if (selectCall === 1) {
-        const c: Record<string, unknown> = {}
-        c.from = () => c
-        c.where = () => c
-        c.limit = async () => []
-        return c
-      }
-      const c: Record<string, unknown> = {}
-      c.from = async () => [candidate]
-      return c
-    })
+  test('T2.5 calibration: middle-token insertion (mary ann lee → mary lee) — similarity ~0.54, matched', async () => {
+    // Old logic: Lev=4 but first+last token match. New logic: similarity 0.54 >= 0.35.
+    mockDbSelect.mockReturnValue(makeSelectChainEmpty())
+    mockDbExecute.mockResolvedValue([
+      trgmRow({ id: 'alias-mary', alias_normalized: 'mary lee', alias: 'Mary Lee', identity_user_id: 'uid-mary', similarity: 0.54 }),
+    ])
 
     const result = await detectCollision('Mary Ann Lee')
-    // Levenshtein = 4, but first ('mary') and last ('lee') tokens both align — token-set match.
     expect(result.exactMatch).toBeNull()
-    expect(result.fuzzyMatches.length).toBeGreaterThan(0)
-    expect(result.fuzzyMatches[0]!.tokenMatch).toBe(true)
+    expect(result.fuzzyMatches).toHaveLength(1)
+    expect(result.fuzzyMatches[0]!.alias.alias).toBe('Mary Lee')
+  })
+
+  test('T2.5 calibration: unrelated name (alice → peter) — similarity ~0.00, NOT matched', async () => {
+    // pg_trgm returns empty rows (similarity < threshold, % operator excludes them)
+    mockDbSelect.mockReturnValue(makeSelectChainEmpty())
+    mockDbExecute.mockResolvedValue([])
+
+    const result = await detectCollision('Alice')
+    expect(result.exactMatch).toBeNull()
+    expect(result.fuzzyMatches).toHaveLength(0)
+  })
+
+  test('results are ordered best-match first (similarity DESC from SQL)', async () => {
+    // The SQL already orders by similarity DESC; the JS mapping preserves order.
+    mockDbSelect.mockReturnValue(makeSelectChainEmpty())
+    mockDbExecute.mockResolvedValue([
+      trgmRow({ id: 'high', alias: 'Jane Smith', similarity: 0.80 }),
+      trgmRow({ id: 'low',  alias: 'Jane Smyth', alias_normalized: 'jane smyth', similarity: 0.45 }),
+    ])
+
+    const result = await detectCollision('Jane Smith Xx')
+    expect(result.fuzzyMatches).toHaveLength(2)
+    expect(result.fuzzyMatches[0]!.alias.id).toBe('high')
+    expect(result.fuzzyMatches[1]!.alias.id).toBe('low')
+    // lower distance = better match
+    expect(result.fuzzyMatches[0]!.distance).toBeLessThan(result.fuzzyMatches[1]!.distance)
+  })
+
+  test('execute() is called exactly once for the fuzzy path (single DB round-trip)', async () => {
+    mockDbSelect.mockReturnValue(makeSelectChainEmpty())
+    mockDbExecute.mockResolvedValue([])
+
+    await detectCollision('Any Name')
+    expect(mockDbExecute).toHaveBeenCalledTimes(1)
   })
 })

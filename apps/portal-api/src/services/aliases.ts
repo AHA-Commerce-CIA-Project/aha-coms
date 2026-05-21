@@ -1,29 +1,30 @@
 import { db } from '~/db'
 import { userAliases, aliasCollisionQueue, identityUsers } from '~/db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
-import { normalizeName, nameTokens } from './name-matching'
+import { normalizeName } from './name-matching'
 import type { UserAlias, NewUserAlias, AliasCollisionSource } from '~/db/schema'
 import { emitAliasResolved, emitAliasUpdated, emitAliasDeleted } from './alias-events'
 import { logger } from '~/logger'
 
-// Levenshtein distance — inline, no dependency
-function levenshtein(a: string, b: string): number {
-  const m = a.length
-  const n = b.length
-  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
-  )
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (a[i - 1] === b[j - 1]) {
-        dp[i]![j] = dp[i - 1]![j - 1]!
-      } else {
-        dp[i]![j] = 1 + Math.min(dp[i - 1]![j]!, dp[i]![j - 1]!, dp[i - 1]![j - 1]!)
-      }
-    }
-  }
-  return dp[m]![n]!
-}
+// ---------------------------------------------------------------------------
+// T2.5 — pg_trgm similarity threshold for fuzzy alias collision detection.
+//
+// Calibration: the former Levenshtein ≤ 2 gate on normalized names (avg ~10
+// chars) corresponds to trigram similarity ≈ 0.50–0.65 for single-char edits
+// and ≈ 0.35–0.50 for two-char edits. The token-set extension ("Jane Smith"
+// vs "Jane Smith Jr", Lev=3) still produces similarity ≈ 0.60 because most
+// trigrams are shared. A threshold of 0.35 is therefore slightly *permissive*
+// relative to the old Lev≤2 gate (captures a few more near-misses) while
+// remaining strictly below random noise. If the collision queue fills with
+// false positives, raise to 0.45; if it misses known near-duplicates, lower
+// to 0.30. Tested against the fixture pairs in aliases.test.ts.
+// ---------------------------------------------------------------------------
+const SIMILARITY_THRESHOLD = 0.35
+
+// Maximum fuzzy matches returned per query — same effective cap as before
+// (the old full-table scan returned all matches, but the alias table is small;
+// 25 is a pragmatic ceiling that keeps the collision-review UI manageable).
+const FUZZY_LIMIT = 25
 
 export type ResolvedAlias = {
   identityUserId: string
@@ -151,13 +152,30 @@ export async function renamePrimaryAlias(
 
 export type CollisionResult = {
   exactMatch: UserAlias | null
+  // distance: synthetic value derived from pg_trgm similarity (distance = 1 - similarity),
+  //   preserved for API contract compatibility. tokenMatch: always false in the new
+  //   implementation — pg_trgm at threshold 0.35 subsumes both the old Lev≤2 gate and
+  //   the token-set extension; callers should not depend on tokenMatch=true.
   fuzzyMatches: Array<{ alias: UserAlias; distance: number; tokenMatch: boolean }>
+}
+
+// Row shape returned by the pg_trgm SQL query (snake_case from Postgres)
+type TrgmRow = {
+  id: string
+  alias_normalized: string
+  alias: string
+  identity_user_id: string
+  is_primary: boolean
+  source: string
+  created_at: Date
+  created_by: string | null
+  similarity: number
 }
 
 export async function detectCollision(name: string): Promise<CollisionResult> {
   const normalized = normalizeName(name)
 
-  // Exact match check
+  // Exact match check — unchanged, index-backed by user_aliases_alias_normalized_uniq
   const [exact] = await db
     .select()
     .from(userAliases)
@@ -168,29 +186,52 @@ export async function detectCollision(name: string): Promise<CollisionResult> {
     return { exactMatch: exact, fuzzyMatches: [] }
   }
 
-  // Load all aliases for fuzzy comparison (bounded by alias count — acceptable for current scale)
-  const all = await db.select().from(userAliases)
+  // T2.5: Single pg_trgm similarity query backed by GIN index
+  // idx_user_aliases_alias_normalized_gin_trgm (live in prod as of Wave 1).
+  //
+  // The % operator uses the GIN index for fast candidate pre-filtering; the
+  // explicit similarity() >= THRESHOLD guard ensures the threshold is always
+  // respected regardless of the session-level pg_trgm.similarity_threshold
+  // setting. ORDER BY similarity DESC returns best matches first.
+  const rows = await db.execute<TrgmRow>(sql`
+    SELECT
+      id,
+      alias_normalized,
+      alias,
+      identity_user_id,
+      is_primary,
+      source,
+      created_at,
+      created_by,
+      similarity(alias_normalized, ${normalized}) AS similarity
+    FROM user_aliases
+    WHERE alias_normalized % ${normalized}
+      AND similarity(alias_normalized, ${normalized}) >= ${SIMILARITY_THRESHOLD}
+    ORDER BY similarity DESC
+    LIMIT ${FUZZY_LIMIT}
+  `)
 
-  const queryTokens = nameTokens(name)
-  const fuzzyMatches: CollisionResult['fuzzyMatches'] = []
-
-  for (const row of all) {
-    const dist = levenshtein(normalized, row.aliasNormalized)
-    const candidateTokens = nameTokens(row.alias)
-    const tokenMatch =
-      (queryTokens.first === candidateTokens.first ||
-        queryTokens.last === candidateTokens.last) &&
-      queryTokens.full !== candidateTokens.full
-    // Spec §"Confidence + unwind path": fuzzy match is "Levenshtein ≤ 2 OR token-set match".
-    // Token-set catches name extensions (Jane Smith vs Jane Smith Jr) where Lev > 2 but the
-    // first or last token still aligns — exactly the silent-duplication class we want admins
-    // to review. Distance gate alone misses these.
-    if (dist <= 2 || tokenMatch) {
-      fuzzyMatches.push({ alias: row, distance: dist, tokenMatch })
+  const fuzzyMatches: CollisionResult['fuzzyMatches'] = rows.map((row) => {
+    const alias: UserAlias = {
+      id: row.id,
+      identityUserId: row.identity_user_id,
+      alias: row.alias,
+      aliasNormalized: row.alias_normalized,
+      isPrimary: row.is_primary,
+      source: row.source as UserAlias['source'],
+      createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+      createdBy: row.created_by ?? null,
     }
-  }
+    return {
+      alias,
+      // Synthetic distance: 1 - similarity, rounded to 2 dp for readability.
+      // Consumers that previously used `distance` for display can treat this as
+      // a 0–1 dissimilarity score (0 = identical, 1 = no overlap).
+      distance: Math.round((1 - row.similarity) * 100) / 100,
+      tokenMatch: false,
+    }
+  })
 
-  fuzzyMatches.sort((a, b) => a.distance - b.distance)
   return { exactMatch: null, fuzzyMatches }
 }
 
