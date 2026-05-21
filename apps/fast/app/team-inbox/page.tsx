@@ -1111,29 +1111,19 @@ function TeamInboxContent() {
                             return (
                                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                                     <div className="overflow-x-auto">
-                                        {/* table-fixed + explicit colgroup widths keep the Token / Priority columns from
-                                            collapsing to 0 when the active tab carries empty values (e.g. Routine Reminders
-                                            has no token/priority), so Standard Tasks and Routine Reminders render with
-                                            identical column positions. Width budget sums to 100% in both isMaster paths;
-                                            the Title column absorbs the difference when Team is hidden. Same density and
-                                            header typography as the Task Queue table in apps/fast/app/tasks/page.tsx. */}
-                                        <table className="w-full table-fixed text-sm">
-                                            <colgroup>
-                                                <col style={{ width: '10%' }} />
-                                                <col style={{ width: '8%' }} />
-                                                <col style={{ width: isMaster ? '20%' : '24%' }} />
-                                                <col style={{ width: '13%' }} />
-                                                <col style={{ width: '10%' }} />
-                                                <col style={{ width: '10%' }} />
-                                                <col style={{ width: '10%' }} />
-                                                {isMaster && <col style={{ width: '8%' }} />}
-                                                <col style={{ width: isMaster ? '11%' : '15%' }} />
-                                            </colgroup>
+                                        {/* Layout matches the Task Queue (`/nexus`) desktop table: `w-max
+                                            min-w-full` lets each column grow to its content width and the parent
+                                            overflow-x-auto preserves a horizontal scroll if rows widen past the
+                                            viewport. The earlier PR-#112 table-fixed + colgroup percentages capped
+                                            the Team column at 8% which the long division names ("Factual Business
+                                            Intelligence (FBI)" etc) overran into the Assigned-To column. Per-cell
+                                            whitespace-nowrap still keeps individual cells single-line. */}
+                                        <table className="w-max min-w-full text-sm">
                                             <thead className="bg-slate-50">
                                                 <tr className="border-b border-slate-200">
                                                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Token</th>
                                                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Priority</th>
-                                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Title</th>
+                                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Title</th>
                                                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Requester</th>
                                                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Submitted</th>
                                                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Deadline</th>
@@ -1174,7 +1164,16 @@ function TeamInboxContent() {
                                                                 }
                                                             }}
                                                             tabIndex={0}
-                                                            className="hover:bg-slate-50 cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400"
+                                                            // Row-level help-wanted tint + amber left border, mirroring the
+                                                            // Task Queue treatment at apps/fast/app/nexus/page.tsx:1027 so a
+                                                            // claimer scanning the list spots "needs help" rows from the
+                                                            // gutter without reading every Status cell.
+                                                            className={cn(
+                                                                'cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400',
+                                                                t.needsHelp
+                                                                    ? 'bg-amber-50/60 hover:bg-amber-50 border-l-4 border-l-amber-400'
+                                                                    : 'hover:bg-slate-50',
+                                                            )}
                                                         >
                                                             <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">
                                                                 {t.taskToken || '—'}
@@ -1187,7 +1186,23 @@ function TeamInboxContent() {
                                                                 )}
                                                             </td>
                                                             <td className="px-4 py-3">
-                                                                <span className="text-sm font-medium text-slate-800 line-clamp-1">{t.title}</span>
+                                                                {/* Title cell mirrors Task Queue's emoji-on-the-left treatment
+                                                                    (apps/fast/app/nexus/page.tsx:1043) so the same flag reads
+                                                                    in two places when needsHelp is set — emoji here + the
+                                                                    "Help wanted" pill in the Status column. Belt-and-braces
+                                                                    is intentional: list-mode scans titles first, status
+                                                                    second. */}
+                                                                <p className="text-sm font-medium text-slate-800 line-clamp-1 flex items-center gap-1.5">
+                                                                    {t.needsHelp && (
+                                                                        <span
+                                                                            title="Help requested"
+                                                                            className="shrink-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 border border-amber-300 text-amber-700 rounded-full"
+                                                                        >
+                                                                            🙋
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="truncate">{t.title}</span>
+                                                                </p>
                                                             </td>
                                                             <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
                                                                 {requesterLabel}
