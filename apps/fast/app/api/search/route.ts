@@ -48,7 +48,7 @@ export async function GET(request: Request) {
             where: {
                 OR: [
                     { title: { contains: q, mode: 'insensitive' } },
-                    { taskToken: { contains: q, mode: 'insensitive' } },
+                    { taskToken: { startsWith: q.toUpperCase() } },
                 ],
             },
             select: {
