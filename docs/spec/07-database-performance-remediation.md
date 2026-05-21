@@ -1,6 +1,7 @@
 # Spec 07 — Database Performance Remediation
 
 **Authored:** 2026-05-20
+**Status:** sealed 2026-05-21 — 27/27 findings closed across 9 PRs (#99–#107) plus one restoration follow-up (#109). 21 indexes live in prod across the three databases. See the Phase B post-mortem at the end of this file.
 **Audit source:** Codebase Scan Rules: Database Query Optimization (v2 — severity tiers + safe havens).
 **Consumer:** `agent-skills:build` (and `agent-skills:plan` if a planning pass is wanted first).
 
@@ -181,3 +182,17 @@ packages/
 1. **All of Phase 1 first.** Tasks within Phase 1 are independent and parallelizable across PRs. Recommended grouping: one PR per task ID. Land Critical N+1s before High pagination, only for review-load reasons; mechanically they don't depend on each other.
 2. **Phase 2 begins only after Phase 1 is fully merged.** Migrations land in the order T2.1 → T2.2 → T2.3 (independent of each other), then the code switches T2.4, T2.5, T2.6 that depend on those indexes.
 3. **T2.7 is the gate.** Re-run the audit; the spec is complete when it produces zero findings against the changed files.
+
+---
+
+## 7. Phase B post-mortem (added 2026-05-21)
+
+Spec 07 sealed on 2026-05-21 but not on the first attempt. The CHECKPOINT B verification PR (#107 / B-PR-8) audited *source* state and called the gate closed, while the deploy that followed PR #102's merge silently dropped six pg_trgm GIN indexes from the fast database. PR #109 restored them plus locked them in with schema-side declarations. Three lessons:
+
+1. **Prisma `db push` reconciles unmanaged indexes.** Prisma 5.x classifies an index that exists in the live DB but not in `schema.prisma` as an "extra" eligible for deletion. Index drops don't trip the `--accept-data-loss` gate. The B-PR-3 (PR #102) judgement that "Prisma cannot model `gin_trgm_ops`" was wrong: Prisma 5.x **does** support it via the per-field `ops: raw("gin_trgm_ops")` syntax inside `@@index(type: Gin, …)`. Pattern for any future GIN/trigram/expression index in fast: pre-apply via raw SQL CONCURRENTLY **and** declare in `schema.prisma` with a `map:` argument that names the index byte-identically. The raw SQL avoids the write lock; the declaration prevents future reconciliation.
+
+2. **Drizzle is the contrasting model.** `drizzle-kit migrate` is forward-only — it only applies what's listed in `_journal.json` and never reconciles unmanaged DB objects. Journal-absent raw SQL files (PR #99's `0019_pg_trgm_gin.sql`, PR #103's `0039_portal_api_pg_trgm_gin.sql`) survive deploys indefinitely on the heroes/portal side. Don't generalise this safety to Prisma.
+
+3. **Verification gates must inspect runtime state, not just source state.** B-PR-8 read declarations and matched them against the spec; it never queried `pg_stat_user_indexes`. Future T2.7-style audit PRs should include a live-DB index count via `cloud-sql-proxy` as part of the acceptance criteria — declarations alone don't prove the artefact survived deploy.
+
+The restoration PR (#109 / commit `1592215`) added the six missing `@@index([col(ops: raw("gin_trgm_ops"))], type: Gin, map: "…")` lines for fast's GIN coverage. The four B-tree indexes (PR #101 + PR #106 gap-close) survived the same deploy because they *were* declared — Prisma renamed them in place via `ALTER INDEX RENAME` (older `Task_requesterName_idx` → 5.x default `tasks_requester_name_idx`) without dropping the underlying B-tree.
