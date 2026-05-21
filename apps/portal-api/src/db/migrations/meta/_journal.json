@@ -267,6 +267,13 @@
       "when": 1779251675117,
       "tag": "0037_system_bot_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1779327334140,
+      "tag": "0038_dashing_black_panther",
+      "breakpoints": true
     }
   ]
 }

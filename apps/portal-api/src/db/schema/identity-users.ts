@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, text, timestamp } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, boolean, text, timestamp, index } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const EMPLOYEE_PROVISIONING_STATUSES = ['ready', 'pending', 'processing', 'failed'] as const
@@ -7,32 +7,36 @@ export type EmployeeProvisioningStatus = (typeof EMPLOYEE_PROVISIONING_STATUSES)
 export const IDENTITY_USER_SOURCES = ['manual', 'csv_import', 'sheet_sync', 'system'] as const
 export type IdentityUserSource = (typeof IDENTITY_USER_SOURCES)[number]
 
-export const identityUsers = pgTable('identity_users', {
-  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  gipUid: text('gip_uid').unique(),
-  // email and personalEmail moved to identity_user_emails (multi-row) per spec-06.
-  // gipUid retained as a nullable audit-link to the Google identity for Workspace users.
-  name: varchar('name', { length: 255 }).notNull(),
-  phone: varchar('phone', { length: 20 }),
-  department: varchar('department', { length: 100 }),
-  position: varchar('position', { length: 100 }),
-  branch: varchar('branch', { length: 50 }),
-  portalRole: varchar('portal_role', { length: 20 }).notNull().default('employee'),
-  birthDate: varchar('birth_date', { length: 10 }),
-  leaderName: varchar('leader_name', { length: 255 }),
-  hasGoogleWorkspace: boolean('has_google_workspace').notNull().default(false),
-  source: varchar('source', { length: 20 }).notNull().default('manual'),
-  status: varchar('status', { length: 20 }).notNull().default('active'),
-  provisioningStatus: varchar('provisioning_status', { length: 20 }).notNull().default('ready'),
-  provisioningError: text('provisioning_error'),
-  // Spec 06 PR F — portal password auth
-  notes: text('notes'),
-  passwordSetAt: timestamp('password_set_at', { withTimezone: true }),
-  passwordOnlyAuth: boolean('password_only_auth').notNull().default(false),
-  passwordLockoutUntil: timestamp('password_lockout_until', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const identityUsers = pgTable(
+  'identity_users',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    gipUid: text('gip_uid').unique(),
+    // email and personalEmail moved to identity_user_emails (multi-row) per spec-06.
+    // gipUid retained as a nullable audit-link to the Google identity for Workspace users.
+    name: varchar('name', { length: 255 }).notNull(),
+    phone: varchar('phone', { length: 20 }),
+    department: varchar('department', { length: 100 }),
+    position: varchar('position', { length: 100 }),
+    branch: varchar('branch', { length: 50 }),
+    portalRole: varchar('portal_role', { length: 20 }).notNull().default('employee'),
+    birthDate: varchar('birth_date', { length: 10 }),
+    leaderName: varchar('leader_name', { length: 255 }),
+    hasGoogleWorkspace: boolean('has_google_workspace').notNull().default(false),
+    source: varchar('source', { length: 20 }).notNull().default('manual'),
+    status: varchar('status', { length: 20 }).notNull().default('active'),
+    provisioningStatus: varchar('provisioning_status', { length: 20 }).notNull().default('ready'),
+    provisioningError: text('provisioning_error'),
+    // Spec 06 PR F — portal password auth
+    notes: text('notes'),
+    passwordSetAt: timestamp('password_set_at', { withTimezone: true }),
+    passwordOnlyAuth: boolean('password_only_auth').notNull().default(false),
+    passwordLockoutUntil: timestamp('password_lockout_until', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_identity_users_status').on(t.status).concurrently()],
+)
 
 export type IdentityUser = typeof identityUsers.$inferSelect
 export type NewIdentityUser = typeof identityUsers.$inferInsert
