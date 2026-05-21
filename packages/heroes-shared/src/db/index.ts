@@ -56,7 +56,26 @@ function initDb() {
     // and 67fd193 confirming the live `databaseFlags=null` state). At
     // max=15 a single (heroes-api + heroes-web) pair could exceed 25 on
     // its own; the fleet's worst-case draw was 72 against a 25 ceiling.
+    //
+    // 2026-05-21 addendum: idle_timeout: 30 added below so the per-instance
+    // baseline draw is traffic-proportional rather than fleet-proportional.
+    // The theoretical -2 deficit above remains the upper bound for sizing
+    // decisions but isn't observed in practice — May 2026 baseline read of
+    // pg_stat_activity showed peak ~11 backends across all databases on
+    // this instance vs the 22 app-bucket ceiling. The bump from 25 → 30
+    // discussed in this corridor was deemed unnecessary against that data
+    // and is not applied; if peak ever crosses ~18 in a 7-day window,
+    // re-evaluate (see `gcloud sql instances patch coms-aha-heroes-db
+    // --database-flags=max_connections=30` for the runbook).
     max: Number(process.env.DB_POOL_MAX) || 3,
+
+    // Close idle pool connections after 30s. Pays a one-time ~10-20ms
+    // cold-acquire on the first query following a quiet window; in
+    // exchange the pool's idle baseline (visible in pg_stat_activity)
+    // drops from `pool.max × num_instances` down to whatever the current
+    // request fan-in needs. Mirrors the Cloud Run `min-instances=0`
+    // tradeoff applied at the DB pool layer.
+    idle_timeout: 30,
 
     // Fail fast on connect — don't let a hung Cloud SQL proxy stall a request.
     connect_timeout: 5,
