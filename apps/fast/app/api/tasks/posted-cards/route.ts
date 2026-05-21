@@ -4,30 +4,35 @@ import { requireFastAuth } from '@/lib/auth/require-fast-auth';
 
 // GET /api/tasks/posted-cards
 // Every task the current user initiated, regardless of how — channel-posted
-// Direct Assign cards (cross-division asks), leader-created direct
-// assignments to specific members, request-form submissions filed under
-// the user's own email, and DM-spawned tasks. Powers the /my-request
-// "Command Center" view so initiators have one place to track everything
-// they've asked for.
+// Direct Assign cards (cross-division asks) AND leader-created direct
+// assignments to specific members. Powers the /my-request "Command
+// Center" view so initiators have one place to track everything they've
+// asked of someone else.
 //
-// PR #55 canonical rule for "My Request":
+// Surface rule: a row belongs to "My Request" iff the caller is the
+// requester AND the task is something they asked *of another person*
+// (not a personal todo). Two populations satisfy that:
 //
-//     requesterEmail === me.email AND targetChannelId IS NOT NULL
+//   (a) Channel posts — targetChannelId IS NOT NULL. The original PR
+//       #55 "canonical channel-only" shape. SetNull cascades on
+//       channel delete leave target_channel_id intact, so rows whose
+//       channel has since been deleted still qualify.
 //
-// "My Request" is the channel-initiated requests command center —
-// every task the caller posted into a team channel (whether the
-// channel itself has since been deleted is fine; the
-// target_channel_id column is left intact under the SetNull cascade,
-// only the relation FK clears, so the row still satisfies the IS NOT
-// NULL predicate here). Channel-less tasks (Create Card personals,
-// queue form submissions, leader-direct-requests routed via DM)
-// belong to their own surfaces.
+//   (b) Direct Assignments to another teammate — targetChannelId IS
+//       NULL, source ∈ {'direct_request', 'direct_assign'}, and
+//       assigneeId ≠ requester. The source predicate filters out
+//       'queue' (form submissions land in the queue page) and the
+//       legacy DM-spawned flows that have their own surface; the
+//       assigneeId guard excludes self-assigned personal cards
+//       (Create Card → me), which live in My Tasks → Direct Tasks.
 //
-// The PR #53/#54 NOT-AND escape hatch that excluded self-assigned
-// personal cards is no longer necessary: those cards never had a
-// targetChannelId in the first place, so the channel predicate
-// already drops them. Cleaner query, same observable set, no risk of
-// the predicate silently dropping a legitimate row.
+// History: PR #23 broadened the filter to cover both populations,
+// PR #56 narrowed it back to channel-only ("canonical channel-aware
+// rules") but did not revert the MyRequestView UI changes — leaving
+// the badge palette and header copy advertising both populations
+// while the backend silently dropped Direct Assignments. This route
+// re-broadens to match the UI contract; if a future spec wants to
+// channel-only-ify "My Request" again, that's a UI change too.
 export async function GET() {
     const session = await requireFastAuth();
     if (!session) {
@@ -45,13 +50,23 @@ export async function GET() {
     const tasks = await prisma.task.findMany({
         where: {
             requesterEmail: me.email,
-            // Channel-initiated only — the canonical PR #55 rule. The
-            // implicit corollaries: Create Card personals (no channel),
-            // queue form submissions (no channel), and leader-direct
-            // requests routed via DM (no channel) all drop out. Each of
-            // those populations has its own home (Direct Tasks, the
-            // queue page, DMs respectively).
-            targetChannelId: { not: null },
+            OR: [
+                // (a) Channel posts — any task the user posted into a
+                // team channel via Direct Assign. SetNull-cascaded rows
+                // (deleted channels) still match because the column is
+                // intact even after the relation FK clears.
+                { targetChannelId: { not: null } },
+                // (b) Direct Assignments to another teammate. Self-
+                // assigned personals (assigneeId == me) and queue/form
+                // submissions (source == 'queue') drop out so the
+                // command-center scope stays "things I asked of
+                // someone else".
+                {
+                    targetChannelId: null,
+                    source: { in: ['direct_request', 'direct_assign'] },
+                    NOT: { assigneeId: session.user.id },
+                },
+            ],
         },
         orderBy: { createdAt: 'desc' },
         include: {
