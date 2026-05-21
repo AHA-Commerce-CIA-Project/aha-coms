@@ -1,0 +1,31 @@
+-- Spec 07 Phase B / T2.6 gap-close — B-tree index on tasks.task_token.
+--
+-- Why this file exists. The spec's T2.6 row carried an empty "Depends on"
+-- column and assumed task_token already had an index. It did not: in
+-- prisma/schema.prisma the column was declared as `taskToken String? @map
+-- ("task_token")` with no @unique and no @@index. The /api/search rewrite
+-- in B-PR-7 from `{ contains: q, mode: 'insensitive' }` to `{ startsWith:
+-- q.toUpperCase() }` makes the query SYNTACTICALLY sargable (LIKE 'Q%' can
+-- walk a B-tree), but without an index there is no B-tree to walk — the
+-- query still scans the whole tasks table. This file closes that gap.
+--
+-- Why CONCURRENTLY + why not db push. The tasks table is >100k rows (per
+-- Spec 07 §6 "Ask first"). Plain CREATE INDEX (what `prisma db push`
+-- emits) takes an AccessExclusiveLock for the duration of the build,
+-- blocking writes. CREATE INDEX CONCURRENTLY takes only
+-- ShareUpdateExclusiveLock, allowing reads and writes throughout — no
+-- production downtime. Prisma db push cannot emit CONCURRENTLY; the
+-- workaround used here mirrors PR #101's pattern: pre-apply via
+-- cloud-sql-proxy + psql, then declare @@index in schema.prisma. On the
+-- next deploy, db push sees the index already satisfies the @@index
+-- declaration and does nothing.
+--
+-- Index name "Task_taskToken_idx" follows Prisma's default pattern
+-- (<Model>_<field>_idx) so the @@index declaration in schema.prisma needs
+-- no map: argument — Prisma's introspection sees the same name and treats
+-- the constraint as already satisfied.
+--
+-- No BEGIN/COMMIT — CONCURRENTLY cannot run inside a transaction.
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "Task_taskToken_idx"
+  ON "tasks" ("task_token");
