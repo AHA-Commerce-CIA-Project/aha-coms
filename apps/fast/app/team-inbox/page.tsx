@@ -1153,9 +1153,25 @@ function TeamInboxContent() {
                                                                 )}
                                                             </td>
                                                             <td className="px-4 py-3 whitespace-nowrap">
-                                                                <span className={`inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border ${statusClass}`}>
-                                                                    {statusLabel}
-                                                                </span>
+                                                                {/* Status pill + optional Help wanted flag side-by-side.
+                                                                    Board view renders the same Hand-icon + rose pill at
+                                                                    line ~1661; list view lost the signal in earlier polish
+                                                                    passes so list-mode users couldn't see which claimed
+                                                                    rows had flipped to needs-help without re-opening every
+                                                                    card. */}
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className={`inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border ${statusClass}`}>
+                                                                        {statusLabel}
+                                                                    </span>
+                                                                    {t.needsHelp && (
+                                                                        <span
+                                                                            title="Help requested"
+                                                                            className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded border bg-rose-100 text-rose-700 border-rose-200"
+                                                                        >
+                                                                            <Hand className="w-3 h-3" /> Help wanted
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </td>
                                                             {isMaster && (
                                                                 <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
