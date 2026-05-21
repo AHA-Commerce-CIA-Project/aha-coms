@@ -14,17 +14,17 @@ resource "google_artifact_registry_repository" "docker" {
   # Dry-run false: policies are actively enforced
   cleanup_policy_dry_run = false
 
-  # KEEP: the 5 most recently pushed image versions
+  # KEEP: the 3 most recently pushed image versions
   cleanup_policies {
     id     = "keep-minimum-versions"
     action = "KEEP"
     most_recent_versions {
-      keep_count = 5
+      keep_count = 3
     }
   }
 
   # DELETE: every other version. tag_state = "ANY" matches all versions;
-  # the KEEP rule above takes precedence and protects the latest 5.
+  # the KEEP rule above takes precedence and protects the latest 3.
   # (older_than = "0s" looks equivalent but GCP drops it on read-back, causing
   # perpetual drift — use tag_state instead.)
   cleanup_policies {

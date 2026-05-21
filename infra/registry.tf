@@ -6,11 +6,11 @@ resource "google_artifact_registry_repository" "coms_portal" {
   labels        = local.portal_labels
 
   cleanup_policies {
-    id     = "keep-last-5"
+    id     = "keep-last-3"
     action = "KEEP"
 
     most_recent_versions {
-      keep_count = 5
+      keep_count = 3
     }
   }
 
