@@ -1074,20 +1074,37 @@ function TeamInboxContent() {
                             return (
                                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                                     <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
+                                        {/* table-fixed + explicit colgroup widths keep the Token / Priority columns from
+                                            collapsing to 0 when the active tab carries empty values (e.g. Routine Reminders
+                                            has no token/priority), so Standard Tasks and Routine Reminders render with
+                                            identical column positions. Width budget sums to 100% in both isMaster paths;
+                                            the Title column absorbs the difference when Team is hidden. Same density and
+                                            header typography as the Task Queue table in apps/fast/app/tasks/page.tsx. */}
+                                        <table className="w-full table-fixed text-sm">
+                                            <colgroup>
+                                                <col style={{ width: '10%' }} />
+                                                <col style={{ width: '8%' }} />
+                                                <col style={{ width: isMaster ? '20%' : '24%' }} />
+                                                <col style={{ width: '13%' }} />
+                                                <col style={{ width: '10%' }} />
+                                                <col style={{ width: '10%' }} />
+                                                <col style={{ width: '10%' }} />
+                                                {isMaster && <col style={{ width: '8%' }} />}
+                                                <col style={{ width: isMaster ? '11%' : '15%' }} />
+                                            </colgroup>
                                             <thead className="bg-slate-50">
                                                 <tr className="border-b border-slate-200">
-                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Token</th>
-                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Priority</th>
-                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Title</th>
-                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Requester</th>
-                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Submitted</th>
-                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Deadline</th>
-                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Status</th>
+                                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Token</th>
+                                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Priority</th>
+                                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Title</th>
+                                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Requester</th>
+                                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Submitted</th>
+                                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Deadline</th>
+                                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Status</th>
                                                     {isMaster && (
-                                                        <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Team</th>
+                                                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Team</th>
                                                     )}
-                                                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Assigned To</th>
+                                                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Assigned To</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
@@ -1123,7 +1140,7 @@ function TeamInboxContent() {
                                                             className="hover:bg-slate-50 cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400"
                                                         >
                                                             <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">
-                                                                {t.taskToken ? `#${t.taskToken}` : '—'}
+                                                                {t.taskToken || '—'}
                                                             </td>
                                                             <td className="px-4 py-3 whitespace-nowrap">
                                                                 {t.urgency && (
