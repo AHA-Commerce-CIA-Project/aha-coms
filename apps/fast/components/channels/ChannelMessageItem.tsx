@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { MessageSquare, Smile, Bookmark, BookmarkCheck, Download, Pencil, Trash2, Check, Forward, UserPlus, UserMinus, Hash, Pin, PinOff } from 'lucide-react';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { ReactionDisplay } from './ReactionDisplay';
@@ -611,9 +612,9 @@ export function ChannelMessageItem({
                           {fwd.channelName && (
                             <>
                               <span className="text-slate-400">Posted in</span>
-                              <a href={`/messages?channel=${fwd.channelId}`} className="font-semibold text-slate-600 hover:text-indigo-600 hover:underline">
+                              <Link href={`/messages?channel=${fwd.channelId}`} className="font-semibold text-slate-600 hover:text-indigo-600 hover:underline">
                                 # {fwd.channelName}
-                              </a>
+                              </Link>
                             </>
                           )}
                           {fwd.isTask && (
@@ -629,18 +630,18 @@ export function ChannelMessageItem({
                           )}
                           <span className="text-slate-300">|</span>
                           {fwd.channelId && fwd.messageId ? (
-                            <a href={`/messages?channel=${fwd.channelId}&highlight=${fwd.messageId}`}
+                            <Link href={`/messages?channel=${fwd.channelId}&highlight=${fwd.messageId}`}
                               className="text-indigo-500 hover:text-indigo-700 font-semibold hover:underline">
                               View message
-                            </a>
+                            </Link>
                           ) : fwd.isTask && (fwd.taskToken || fwd.taskId) ? (
-                            <a
+                            <Link
                               href={fwd.taskToken
                                 ? `/nexus?highlight_token=${fwd.taskToken}&open=true`
                                 : `/tasks?task=${fwd.taskId}`}
                               className="text-indigo-500 hover:text-indigo-700 font-semibold hover:underline">
                               View task
-                            </a>
+                            </Link>
                           ) : null}
                         </div>
                       </div>

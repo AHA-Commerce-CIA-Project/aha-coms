@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import Link from 'next/link';
 import { FileText, Download, ExternalLink, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { htmlToPlainText } from '@/lib/sanitize';
@@ -355,9 +356,9 @@ export function MessageThread({
                                                         <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 mt-2 text-xs">
                                                             <span className="text-slate-400">Forwarded from</span>
                                                             {fwd.channelName ? (
-                                                                <a href={`/messages?channel=${fwd.channelId || ''}`} className="font-semibold text-slate-700 hover:text-indigo-600 hover:underline">
+                                                                <Link href={`/messages?channel=${fwd.channelId || ''}`} className="font-semibold text-slate-700 hover:text-indigo-600 hover:underline">
                                                                     #{fwd.channelName}
-                                                                </a>
+                                                                </Link>
                                                             ) : fwd.isTask ? (
                                                                 <span className="font-semibold text-slate-700">
                                                                     {fwd.taskToken ? `Task ${fwd.taskToken}` : 'a task'}
@@ -375,21 +376,21 @@ export function MessageThread({
                                                                 <>
                                                                     <span className="text-slate-300">·</span>
                                                                     {fwd.channelId && fwd.messageId ? (
-                                                                        <a
+                                                                        <Link
                                                                             href={`/messages?channel=${fwd.channelId}&highlight=${fwd.messageId}`}
                                                                             className="text-indigo-600 hover:text-indigo-700 font-semibold hover:underline"
                                                                         >
                                                                             View message
-                                                                        </a>
+                                                                        </Link>
                                                                     ) : (
-                                                                        <a
+                                                                        <Link
                                                                             href={fwd.taskToken
                                                                                 ? `/nexus?highlight_token=${fwd.taskToken}&open=true`
                                                                                 : `/tasks?task=${fwd.taskId}`}
                                                                             className="text-indigo-600 hover:text-indigo-700 font-semibold hover:underline"
                                                                         >
                                                                             View task
-                                                                        </a>
+                                                                        </Link>
                                                                     )}
                                                                 </>
                                                             ) : null}
