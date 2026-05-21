@@ -1,14 +1,18 @@
-import { pgTable, uuid, varchar, text, timestamp, unique } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, timestamp, unique, index } from 'drizzle-orm/pg-core'
 import { sql, relations } from 'drizzle-orm'
 import { identityUsers } from './identity-users'
 
-export const teams = pgTable('teams', {
-  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar('name', { length: 100 }).notNull(),
-  description: text('description'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const teams = pgTable(
+  'teams',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    name: varchar('name', { length: 100 }).notNull(),
+    description: text('description'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_teams_name_lower').using('btree', sql`lower(${t.name})`)],
+)
 
 export const teamMembers = pgTable(
   'team_members',
