@@ -312,6 +312,11 @@ model Task {
   // before this schema change landed; db push on deploy is a no-op for these.
   @@index([requesterName])
   @@index([completedBy])
+  // Spec 07 Phase B / T2.6 gap-close — B-tree on taskToken makes the
+  // /api/search startsWith rewrite (route.ts:51) sargable. Pre-applied
+  // CONCURRENTLY via prisma/sql/0005_task_taskToken_index.sql before this
+  // schema change landed; db push on deploy is a no-op.
+  @@index([taskToken])
   @@map("tasks")
 }
 
