@@ -1558,7 +1558,11 @@ function NexusContent() {
                         };
                         return (
                             <>
-                                {/* ── Desktop / tablet (md+) — keep the dense 8-column table ── */}
+                                {/* ── Desktop / tablet (md+) — column order mirrors Open Queue
+                                       (token / priority / title / requester / submitted / deadline / status / assignee).
+                                       Open Queue has no analogue for Direct Requests' (pending) chip or the
+                                       Delegated counter, so those affordances ride along on the Assigned To
+                                       cell at the end of the row. ── */}
                                 <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                                     <table className="w-full text-sm">
                                         <thead>
@@ -1567,16 +1571,32 @@ function NexusContent() {
                                                 <th className="px-5 py-3">Priority</th>
                                                 <th className="px-5 py-3">Title</th>
                                                 <th className="px-5 py-3">Requester</th>
-                                                <th className="px-5 py-3">Assigned To</th>
                                                 <th className="px-5 py-3">Submitted</th>
                                                 <th className="px-5 py-3">Deadline</th>
                                                 <th className="px-5 py-3">Status</th>
+                                                <th className="px-5 py-3">Assigned To</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {pageItems.map(task => {
                                                 const urg = urgConfig[task.urgency || ''] || { label: task.urgency || '—', bg: 'bg-slate-200', text: 'text-slate-600' };
                                                 const st = statusConfig[task.status] || { label: task.status, color: 'text-slate-600 bg-slate-50 border-slate-200' };
+                                                // Deadline cell semantics depend on lifecycle stage:
+                                                //   - pending_approval → response_deadline (the approval-window timer)
+                                                //   - any other status → due_date (the task deadline the requester set;
+                                                //     this is the bug the screenshots flagged — the cell used to show
+                                                //     response_deadline even after approval, making it look like the
+                                                //     deadline "moved to whenever the request was approved")
+                                                const showCountdownToApproval =
+                                                    task.status === 'pending_approval' && task.response_deadline;
+                                                const taskDueDate = task.due_date || null;
+                                                // Auto-approved leader-created direct_requests skip the approval gate
+                                                // (status='in-progress' from creation, claimed_at=null). Public-form
+                                                // direct requests go through approve → claimed_at = approval moment.
+                                                // Only surface "Approved at" when claimed_at exists AND the task is no
+                                                // longer pending — that's the exact "pending → in-progress" event.
+                                                const showApprovedAt =
+                                                    task.claimed_at && task.status !== 'pending_approval';
                                                 return (
                                                     <tr
                                                         key={task.id}
@@ -1592,6 +1612,36 @@ function NexusContent() {
                                                             {task.requester_name || '—'}
                                                             {task.requester_division && <span className="block text-slate-400">{task.requester_division}</span>}
                                                         </td>
+                                                        <td className="px-5 py-3 text-xs">
+                                                            {/* Date over time, mirroring Open Queue. Optional "Approved …"
+                                                                third line surfaces the approval moment in-place so the
+                                                                requester / leader can see at a glance when the request
+                                                                stopped sitting in the approval queue. */}
+                                                            <div className="flex flex-col leading-tight">
+                                                                <span className="text-sm text-slate-700">{formatDate(task.created_at)}</span>
+                                                                <span className="text-[11px] text-slate-400">{formatTime(task.created_at)}</span>
+                                                                {showApprovedAt && (
+                                                                    <span className="text-[11px] text-emerald-600 mt-0.5">
+                                                                        Approved {formatDate(task.claimed_at)} {formatTime(task.claimed_at)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-5 py-3 text-xs">
+                                                            {showCountdownToApproval ? (
+                                                                <CountdownTimer deadline={task.response_deadline} compact />
+                                                            ) : taskDueDate ? (
+                                                                <div className="flex flex-col leading-tight">
+                                                                    <span className="text-sm text-slate-700">{formatDate(taskDueDate)}</span>
+                                                                    <span className="text-[11px] text-slate-400">{formatTime(taskDueDate)}</span>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-slate-400">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-5 py-3">
+                                                            <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border ${st.color}`}>{st.label}</span>
+                                                        </td>
                                                         <td className="px-5 py-3 text-slate-600 text-xs">
                                                             {task.status === 'pending_approval'
                                                                 ? <span className="text-amber-600 font-medium">{task.direct_assignee_name || '—'} <span className="text-slate-400">(pending)</span></span>
@@ -1602,20 +1652,6 @@ function NexusContent() {
                                                                     Delegated {task.delegations.length}x
                                                                 </span>
                                                             )}
-                                                        </td>
-                                                        <td className="px-5 py-3 text-slate-500 text-xs">
-                                                            {new Date(task.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                                        </td>
-                                                        <td className="px-5 py-3 text-xs">
-                                                            {task.response_deadline && task.status === 'pending_approval'
-                                                                ? <CountdownTimer deadline={task.response_deadline} compact />
-                                                                : task.response_deadline
-                                                                ? <span className="text-slate-400">{new Date(task.response_deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                                                                : <span className="text-slate-400">—</span>
-                                                            }
-                                                        </td>
-                                                        <td className="px-5 py-3">
-                                                            <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border ${st.color}`}>{st.label}</span>
                                                         </td>
                                                     </tr>
                                                 );
@@ -1668,18 +1704,27 @@ function NexusContent() {
                                                     <div>
                                                         <dt className="text-slate-400">Submitted</dt>
                                                         <dd className="text-slate-700">
-                                                            {new Date(task.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                            {formatDate(task.created_at)} <span className="text-slate-400">{formatTime(task.created_at)}</span>
                                                         </dd>
+                                                        {task.claimed_at && task.status !== 'pending_approval' && (
+                                                            <dd className="text-emerald-600 text-[10px]">
+                                                                Approved {formatDate(task.claimed_at)} {formatTime(task.claimed_at)}
+                                                            </dd>
+                                                        )}
                                                     </div>
                                                     <div>
                                                         <dt className="text-slate-400">Deadline</dt>
                                                         <dd className="text-slate-700">
-                                                            {task.response_deadline && task.status === 'pending_approval'
-                                                                ? <CountdownTimer deadline={task.response_deadline} compact />
-                                                                : task.response_deadline
-                                                                ? <span>{new Date(task.response_deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                                                                : <span className="text-slate-400">—</span>
-                                                            }
+                                                            {/* pending_approval → response_deadline (approval window).
+                                                                Any other status → due_date (the task deadline the
+                                                                requester set). Mirrors the desktop logic. */}
+                                                            {task.status === 'pending_approval' && task.response_deadline ? (
+                                                                <CountdownTimer deadline={task.response_deadline} compact />
+                                                            ) : task.due_date ? (
+                                                                <span>{formatDate(task.due_date)} <span className="text-slate-400">{formatTime(task.due_date)}</span></span>
+                                                            ) : (
+                                                                <span className="text-slate-400">—</span>
+                                                            )}
                                                         </dd>
                                                     </div>
                                                 </dl>
